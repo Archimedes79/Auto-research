@@ -20,6 +20,7 @@ files of `training/` are listed (the launcher's snapshot is a copy of the workin
 environment.
 """
 import argparse
+import numbers
 import ast
 import csv
 import dataclasses
@@ -45,7 +46,8 @@ from student_encoder import newest_checkpoint                   # noqa: E402
 
 SMOKE = dict(steps=20, warmup=5, eval_every=10, save_every=10, keep=1, log_every=5, keep_steps=[])      # keep_steps: the engine refuses a step above `steps` or off the save_every grid (t26 lists 6000 .. 36000)
 SMOKE_LOSS = dict(warmup_hold=0.0, warmup_ramp=0.01)           # the dt != 0 terms and the aux heads run inside 20 steps
-CKPT_GB = 0.45                                                 # one complete checkpoint (state + ema + Adam moments), measured 445.7 MB
+CKPT_GB = 0.46                                                 # one complete checkpoint (state + ema + Adam moments), measured 445.7 MB
+CKPT_GB_STUDENT = 0.54                                         # with a trainable camera student (t26 smoke: 541,673,853 bytes)
 
 
 def _abs(p, root):
@@ -163,8 +165,9 @@ def older_cache_findings(lane_images, cfg):
         return ["model.student_frames 'all': the config names no scenes (a split), so the older-frame cache cannot be checked against them: use a split"]
     if key not in built:
         return [f"model.student_frames 'all': {cfg.lane_images}/sweeps has no finished build for {key} (BUILT.json lists {sorted(built) or 'nothing'}; python training/lane_branch.py build-cache-older <config>)"]
-    if built[key].get("settings", build_settings()) != build_settings():
-        return [f"model.student_frames 'all': the build of {key} in {cfg.lane_images}/sweeps was made with {built[key]['settings']}, the builder now makes {build_settings()}: build it again in a new folder"]
+    if built[key].get("settings") != build_settings():
+        return [f"model.student_frames 'all': the build of {key} in {cfg.lane_images}/sweeps was made with {built[key].get('settings', 'no recorded settings (a marker of an older builder)')}, the builder now makes "
+                f"{build_settings()}: build it again (python training/lane_branch.py build-cache-older <config> in a new folder)"]
     missing = older_missing_scenes(lane_images, cfg.n_cam, cfg.cam_stride, scenes)
     return [f"model.student_frames 'all': the finished build of {key} in {cfg.lane_images}/sweeps lacks {len(missing)} of the config's {len(scenes)} scenes, e.g. {missing[:3]} "
             "(python training/lane_branch.py build-cache-older <config> with this config)"] if missing else []
@@ -179,18 +182,46 @@ def key_cache_findings(lane_images, cfg):
     if KEY not in built:
         return [f"model.student_frames 'all': {cfg.lane_images} has no finished key-frame build (BUILT.json lists {sorted(built) or 'nothing'}; python training/lane_branch.py build-cache <config>: "
                 "resumable, it writes the marker when every sample is through)"]
-    if built[KEY].get("settings", build_settings()) != build_settings():
-        return [f"model.student_frames 'all': the key frames in {cfg.lane_images} were made with {built[KEY]['settings']}, the builder now makes {build_settings()}"]
+    if built[KEY].get("settings") != build_settings():
+        return [f"model.student_frames 'all': the key frames in {cfg.lane_images} were made with {built[KEY].get('settings', 'no recorded settings (a marker of an older builder)')}, the builder now makes "
+                f"{build_settings()}: build them again (python training/lane_branch.py build-cache <config> in a new folder)"]
     missing = key_missing_scenes(lane_images, scenes)
     return [f"model.student_frames 'all': the finished key-frame build in {cfg.lane_images} lacks {len(missing)} of the config's {len(scenes)} scenes, e.g. {missing[:3]} "
             "(python training/lane_branch.py build-cache <config> with this config)"] if missing else []
+
+
+def read_resolved(path):
+    """T.read_config of a config file; a "split" is replaced by its scene lists first (splits.resolve: what the Training class does before the trainer reads a config - the trainer itself refuses an
+    unresolved one), so the check also runs on t20_base.json, t26_one.json and every other config that names a split"""
+    import splits
+    import tempfile
+    raw = json.load(open(path))
+    if "split" not in raw:
+        return T.read_config(path)
+    with tempfile.TemporaryDirectory() as d:
+        out = os.path.join(d, os.path.basename(path))
+        with open(out, "w") as fh:
+            json.dump(splits.resolve(raw), fh)
+        return T.read_config(out)
+
+
+def keep_steps_problem(cfg):
+    """the rule of trainkit.loop.fit for `keep_steps` (it refuses a bad list at its start): integers (no bool), each a multiple of save_every and not above steps"""
+    bad = [k for k in (cfg.keep_steps or ()) if not (isinstance(k, numbers.Integral) and not isinstance(k, bool) and 0 < k <= cfg.steps and cfg.save_every and k % cfg.save_every == 0)]
+    return [f"keep_steps {bad}: each must be an integer multiple of save_every ({cfg.save_every}) and not above steps ({cfg.steps})"] if bad else []
+
+
+def checkpoint_gb(cfg):
+    """the disk the checkpoints of a run take at their peak: the newest `keep`, every keep_steps one, and the one being written, each CKPT_GB (a trainable student's weights and moments make it CKPT_GB_STUDENT)"""
+    one = CKPT_GB_STUDENT if cfg.model.get("camera_student") and cfg.model.get("student_trainable") else CKPT_GB
+    return one, one * (cfg.keep + len(set(cfg.keep_steps or ())) + 1)
 
 
 def check(path, root=ROOT, require_clean=False, expect_gt=""):
     """(problems, notes) of the config file `path`; nothing is read from the data, no model is built, nothing is trained"""
     problems, notes = [], []
     try:
-        cfg = T.read_config(path)
+        cfg = read_resolved(path)
     except Exception as e:                                      # noqa: BLE001 - the message is the finding
         return [f"config does not parse: {e}"], notes
     repo = os.path.dirname(root)
@@ -265,9 +296,11 @@ def check(path, root=ROOT, require_clean=False, expect_gt=""):
             except OSError:
                 notes.append("no stored config.json in the run folder: the resume check could not be made")
     free = shutil.disk_usage(root).free / 1e9
-    need = CKPT_GB * (cfg.keep + 1)
+    problems += keep_steps_problem(cfg)
+    one, need = checkpoint_gb(cfg)
     if free < need + 5:
-        problems.append(f"free disk {free:.1f} GB on the run drive, the checkpoints need about {need:.1f} GB plus margin")
+        problems.append(f"free disk {free:.1f} GB on the run drive, the checkpoints need about {need:.1f} GB ({cfg.keep} kept + {len(set(cfg.keep_steps or ()))} keep_steps + the one being written, "
+                        f"{one} GB each) plus margin")
     # GT identity: the version the base was trained on (init_from's run, else --expect-gt) against the GtGenerator that would be imported
     base = expect_gt
     if not base and cfg.init_from:
@@ -366,7 +399,10 @@ def _selftest():
                 (dict(model=dict(stud, student_frames="all"), n_cam=1, **dual), "n_cam >= 2"),                                                          # t26 student_frames 'all': the older frames' images
                 (dict(model=dict(stud, student_frames="all"), n_cam=2, **dual), "build-cache-older"),                                                   # (no <lane_images>/sweeps yet)
                 (dict(model=stud, img_jitter=-0.1, **dual), "img_jitter"), (dict(model=stud, img_jitter_from=1.0, **dual), "img_jitter_from"),         # t26 image jitter
-                (dict(model={"pretrained": ""}, img_jitter=0.5), "needs model.camera_student")]
+                (dict(model={"pretrained": ""}, img_jitter=0.5), "needs model.camera_student"),
+                (dict(steps=100, save_every=10, keep_steps=[10, 200]), "keep_steps [200]"), (dict(steps=100, save_every=10, keep_steps=[10, 15]), "keep_steps [15]"),     # t26 keep_steps: the engine's rule
+                (dict(steps=100, save_every=10, keep_steps=[True]), "keep_steps [True]"), (dict(steps=100, save_every=10, keep_steps=[10.0]), "keep_steps [10.0]"),
+                (dict(split="small", train_scenes=["scene-a"]), "does not parse"), (dict(split="no_such_split"), "no split")]
         for kw, text in bad:
             pr, _ = check(write(**kw), tmp)
             assert has(pr, text), (kw, text, pr)
@@ -375,7 +411,7 @@ def _selftest():
         older = dict(model=dict(stud, student_frames="all"), n_cam=2, train_scenes=["scene-a"], val_scenes=["scene-b"], **dual)
         pr, _ = check(write(**older), tmp)
         assert has(pr, "no finished build"), pr                                    # the folder is there, no BUILT.json: a half-built cache
-        json.dump({"built": {older_key(2, T.TrainConfig.cam_stride): {"scenes": ["scene-a"]}}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))
+        json.dump({"built": {older_key(2, T.TrainConfig.cam_stride): {"scenes": ["scene-a"], "settings": build_settings()}}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))
         pr, _ = check(write(**dict(older, cam_stride=T.TrainConfig.cam_stride + 1)), tmp)
         assert has(pr, "no finished build"), pr                                    # a finished build for another stride does not count
         pr, _ = check(write(**older), tmp)
@@ -383,8 +419,8 @@ def _selftest():
         pr, _ = check(write(**dict(older, train_scenes=[], val_scenes=[])), tmp)
         assert has(pr, "names no scenes"), pr
         key = older_key(2, T.TrainConfig.cam_stride)
-        sweeps_marker = lambda **kw: json.dump({"built": {key: dict({"scenes": ["scene-b", "scene-a", "scene-c"]}, **kw)}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))  # noqa: E731
-        key_marker = lambda **kw: json.dump({"built": {KEY: dict({"scenes": ["scene-b", "scene-a", "scene-c"]}, **kw)}}, open(os.path.join(tmp, "data", "BUILT.json"), "w"))            # noqa: E731
+        sweeps_marker = lambda **kw: json.dump({"built": {key: dict({"scenes": ["scene-b", "scene-a", "scene-c"], "settings": build_settings()}, **kw)}}, open(os.path.join(tmp, "data", "sweeps", "BUILT.json"), "w"))  # noqa: E731
+        key_marker = lambda **kw: json.dump({"built": {KEY: dict({"scenes": ["scene-b", "scene-a", "scene-c"], "settings": build_settings()}, **kw)}}, open(os.path.join(tmp, "data", "BUILT.json"), "w"))            # noqa: E731
         sweeps_marker()
         pr, _ = check(write(**older), tmp)
         assert has(pr, "no finished key-frame build") and not has(pr, "sweeps"), pr                # the older frames are complete, the key frames have no marker (t26: 10,441 of 29,839 were missing)
@@ -397,8 +433,22 @@ def _selftest():
         sweeps_marker(settings=dict(build_settings(), hw=[128, 352]))
         pr, _ = check(write(**older), tmp)
         assert has(pr, "was made with") and has(pr, "sweeps"), pr
-        sweeps_marker(settings=build_settings())
-        key_marker(settings=build_settings())                                                        # both complete, with the builder's own constants
+        def without_settings(folder):                                                                # a marker of an older builder: no recorded settings
+            f = os.path.join(folder, "BUILT.json")
+            m = json.load(open(f))
+            for e in m["built"].values():
+                e.pop("settings", None)
+            json.dump(m, open(f, "w"))
+        sweeps_marker()
+        without_settings(os.path.join(tmp, "data", "sweeps"))
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "no recorded settings") and has(pr, "sweeps"), pr                              # refused, not passed (N1)
+        sweeps_marker()
+        key_marker()
+        without_settings(os.path.join(tmp, "data"))
+        pr, _ = check(write(**older), tmp)
+        assert has(pr, "no recorded settings") and has(pr, "key frames in"), pr
+        key_marker()                                                                                 # both complete, with the builder's own constants
         for kw in (dict(model=stud, **dual), dict(model=dict(stud, student_init="student_run"), student_anchor=1.0, **dual),                          # a student that trains, with and without a start
                    older, dict(model=stud, img_jitter=0.5, img_jitter_from=0.25, **dual)):                                                          # ... with the older frames' cache, with image jitter
             pr, _ = check(write(**kw), tmp)
@@ -429,6 +479,19 @@ def _selftest():
         finally:
             shutil.disk_usage = real_usage
         assert has(pr, "free disk"), pr
+        shutil.disk_usage = lambda p: shutil._ntuple_diskusage(100, 91, 8.5 * 10 ** 9)                  # 8.5 GB free: the budget counts keep_steps and a trainable student's checkpoint (t26: 0.54 GB each)
+        try:
+            t26ish = dict(model=stud, steps=2000, save_every=500, keep=2, keep_steps=[500, 1000, 1500, 2000], **dual)
+            pr, _ = check(write(**t26ish), tmp)
+            assert has(pr, "about 3.8 GB (2 kept + 4 keep_steps + the one being written, 0.54 GB each)"), pr
+            pr, _ = check(write(**dict(t26ish, keep_steps=[], model=dict(stud, student_trainable=False, student_init="student_run"), student_anchor=0.0)), tmp)
+            assert not has(pr, "free disk"), pr                                                       # 3 x 0.46 GB = 1.4 GB: fits
+        finally:
+            shutil.disk_usage = real_usage
+        pr, _ = check(write(steps=100, save_every=10, keep_steps=[10, 100]), tmp)
+        assert pr == [], pr                                                                          # a valid keep_steps list
+        pr, _ = check(write(split="small"), tmp)
+        assert pr == [], pr                                                                          # a config with a split is read as Training reads it (its lists filled in), not "does not parse"
         # relative paths are relative to the root, "~" expands
         os.makedirs(os.path.join(tmp, "rel_cache"))
         pr, _ = check(write(feature_cache="rel_cache"), tmp)
@@ -487,7 +550,7 @@ def _selftest():
         assert "<hypothesis of the card>" in start_lines(s, "t14_dc_ctl_s0") and "--id t14.dc_ctl_s0 " in start_lines(s, "t14_dc_ctl_s0")
         pr, _ = check(write(), tmp, require_clean=True)                                              # tmp lies in the outer repo's ignored temp/
         assert isinstance(pr, list)
-    print("startable selftest passed: 30 kinds of bad config (incl. the t22 camera student, its older frames' cache missing / half built / for other scenes, the image jitter) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
+    print("startable selftest passed: 36 kinds of bad config (incl. keep_steps, a split with lists, a marker without settings, the checkpoint disk budget; and the t22 camera student, its older frames' cache missing / half built / for other scenes, the image jitter) and a changed resume config are found, flags that do nothing are noted, relative paths and the disk check work, "
           "uncommitted files (rename, space, untracked folder) are listed, the GT identity is told against a tagged version (CRLF-safe), "
           "the smoke twin is a valid config, the start lines make up no card")
 
