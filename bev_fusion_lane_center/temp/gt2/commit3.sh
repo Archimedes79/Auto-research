@@ -1,0 +1,4 @@
+cd /mnt/c/Auto-research
+python3 autoresearch/tools/experiment.py check bev_fusion_lane_center/experiments/E314_pairs-on-sigma-0.7-maps/experiment.md 2>&1 | tail -n 1
+python3 autoresearch/tools/experiment.py check bev_fusion_lane_center/experiments/E312_combined-end-maps/experiment.md 2>&1 | tail -n 1
+python3 autoresearch/tools/commit_paths.py -m "E314 result (TIE: sigma 0.7 pairs +0.0027/-0.0018 over E312, E312 stays final), E312 chord control (scales worth +0.012), chord control card name in qends_eval, ledger notes" --trailer "Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>" bev_fusion_lane_center/experiments/E314_pairs-on-sigma-0.7-maps bev_fusion_lane_center/experiments/E312_combined-end-maps bev_fusion_lane_center/evaluation/qends_eval.py bev_fusion_lane_center/experiment_execution/LEDGER.csv bev_fusion_lane_center/experiment_execution/LEDGER.md 2>&1 | tail -n 2
