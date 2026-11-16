@@ -71,8 +71,8 @@ Card of 2026-11-15 14:10, version 2 of 14:30 after the first critic pass (REVISE
 
 ## 3. Summary
 <!-- e352-step0-begin -->
-**Step 0 (PROVISIONAL at 2026-11-16 02:55: seeds [0] so far (12 point rows), the rest of the chain is still running; no training, B's pyramid trunk edited at inference on the stored B dumps, whole GroupNorm groups replaced by the calibration mean; run ids `E352.s0_*`, 3 parallel streams `temp/day33/day33.sh` after the null gates `E352.s0_null_gate_s0 / s1` PASSED; VAL 873 frames, 22 scenes; the tool is `evaluation/jprune_b.py`; by hand: no tool decides, the kill and the windows are the card's):**
-**Result: the kill of step 0 did NOT fire (T1 does not lose on B's plain graph: seed 0: +0.0015 on B plain, +0.0014 snapped), so the trunk set T1 (e2 50 %, d2 25 %, e3 25 % of the hidden groups, 0.2975 GMACs = 3.6 % of the system) is free WITHOUT retraining, and so is its random control: the RANKING carries nothing at T1 (ranked minus the mean of three random draws about 0 on every read-out: the prediction 'at least +0.003' MISSED, the trunk is simply redundant at this level). T2 (T1 plus d0, e1, d1 at 25 - 50 %, 0.8426 GMACs = 10.3 %) is NOT free: seed 0: -0.1920 on B plain, -0.1036 snapped, far outside the window (-0.025 .. -0.002) - but its random control is far worse, so the importance ranking matters exactly where the loss is large: the shallow stages d0 / e1 / d1 cannot be narrowed without retraining (stage D / E of the card), and whether the T2 loss is recoverable is the question of the trained stage, not of step 0.**
+**Step 0 (PROVISIONAL at 2026-11-16 03:56: seeds [0, 1] so far (23 point rows), the rest of the chain is still running; no training, B's pyramid trunk edited at inference on the stored B dumps, whole GroupNorm groups replaced by the calibration mean; run ids `E352.s0_*`, 3 parallel streams `temp/day33/day33.sh` after the null gates `E352.s0_null_gate_s0 / s1` PASSED; VAL 873 frames, 22 scenes; the tool is `evaluation/jprune_b.py`; by hand: no tool decides, the kill and the windows are the card's):**
+**Result: the kill of step 0 did NOT fire on any seed (T1 loses at most 0.0030 topo F1 on B's plain graph against the kill bar 0.03). The trunk set T1 (e2 50 %, d2 25 %, e3 25 % of the hidden groups, 0.2975 GMACs = 3.6 % of the system) is nearly free WITHOUT retraining: B plain -0.0030 .. +0.0015, snapped -0.0058 .. +0.0014, PRIMARY -0.0042 .. -0.0005, attach-only -0.0040 .. +0.0007 (seeds [0, 1], Delta to the null); and its random control costs the same: ranked minus the mean of three random draws -0.0003 .. +0.0009 on B plain (the prediction 'at least +0.003' MISSED: the ranking carries nothing at this level; the trunk is simply redundant here). T2 (T1 plus d0, e1, d1 at 25 - 50 %, 0.8426 GMACs = 10.3 %) is NOT free: B plain -0.4938 .. -0.1920, snapped -0.4287 .. -0.1036, far outside the window (-0.025 .. -0.002); its random control is far worse (ranked minus random +0.2539 on B plain), so the importance ranking matters exactly where the loss is large, but the shallow stages d0 / e1 / d1 cannot be narrowed without retraining (stage D / E of the card): whether the T2 loss is recoverable is the question of the trained stage, not of step 0.**
 **The step-0 table (tool output, Delta = value - null of the same seed; groups = the judged variant, channels = the E345 anchor):**
 
 ### seed 0, topo_F1 (Delta = value - null: negative = worse; 'ranked - random' = ranked value - mean of the draws: positive = ranked better)
@@ -92,6 +92,23 @@ Card of 2026-11-15 14:10, version 2 of 14:30 after the first critic pass (REVISE
 | groups | r2d2 | 0.2046 | -0.4213 | 0.3592 | -0.3389 | 0.3467 | -0.3445 | 0.3463 | -0.3153 |
 | groups | t2 random mean | 0.1800 | -0.4459 | 0.3324 | -0.3657 | 0.3114 | -0.3799 | 0.3112 | -0.3504 |
 | groups | t2 ranked - random | +0.2539 | - | +0.2621 | - | +0.2717 | - | +0.2622 | - |
+| channels | t1 | 0.6260 | +0.0001 | 0.6959 | -0.0022 | - | - | - | - |
+
+### seed 1, topo_F1 (Delta = value - null: negative = worse; 'ranked - random' = ranked value - mean of the draws: positive = ranked better)
+
+| variant | point | B plain | Delta | snap | Delta | primary | Delta | attach | Delta |
+|---|---|---|---|---|---|---|---|---|---|
+| - | null | 0.6249 | - | 0.7010 | - | 0.6948 | - | 0.6647 | - |
+| groups | t1 | 0.6219 | -0.0030 | 0.6952 | -0.0058 | 0.6906 | -0.0042 | 0.6606 | -0.0040 |
+| groups | r1d0 | 0.6234 | -0.0015 | 0.6974 | -0.0036 | 0.6920 | -0.0028 | 0.6614 | -0.0032 |
+| groups | r1d1 | 0.6211 | -0.0039 | 0.6977 | -0.0033 | 0.6923 | -0.0025 | 0.6620 | -0.0027 |
+| groups | r1d2 | 0.6185 | -0.0064 | 0.6930 | -0.0080 | 0.6875 | -0.0074 | 0.6565 | -0.0082 |
+| groups | t1 random mean | 0.6210 | -0.0039 | 0.6961 | -0.0049 | 0.6906 | -0.0042 | 0.6600 | -0.0047 |
+| groups | t1 ranked - random | +0.0009 | - | -0.0009 | - | +0.0000 | - | +0.0007 | - |
+| groups | t2 | 0.1311 | -0.4938 | 0.2723 | -0.4287 | 0.2626 | -0.4323 | 0.2625 | -0.4022 |
+| groups | r2d0 | 0.0116 | -0.6134 | 0.1701 | -0.5309 | 0.1497 | -0.5451 | 0.1497 | -0.5149 |
+| groups | r2d1 | 0.0093 | -0.6157 | 0.1523 | -0.5487 | 0.1423 | -0.5526 | 0.1423 | -0.5224 |
+| groups | r2d2 | 0.3421 | -0.2828 | 0.4779 | -0.2231 | 0.4595 | -0.2354 | - | - |
 
 **The rule lines (the card's windows; HIT / MISS as printed by the tool):**
 (groups variant, the judged one)
@@ -101,6 +118,10 @@ Card of 2026-11-15 14:10, version 2 of 14:30 after the first critic pass (REVISE
 - seed 0 KILL (T1 loses more than 0.03 on B plain and the random mean loses no more): no
 - seed 0 t2: B plain -0.1920 (window -0.025 .. -0.002: MISS), junction snapped -0.1036 (window -0.018 .. -0.002: MISS)
 - seed 0 t2: ranked minus mean of the 3 random draws on B plain +0.2539 (prediction at least +0.003, window +0.000 .. +0.020: MISS)
+- seed 1 t1: B plain -0.0030 (window -0.012 .. +0.001: HIT), junction snapped -0.0058 (window -0.010 .. +0.002: HIT)
+- seed 1 t1: ranked minus mean of the 3 random draws on B plain +0.0009 (prediction at least +0.003, window +0.000 .. +0.020: MISS)
+- seed 1 KILL (T1 loses more than 0.03 on B plain and the random mean loses no more): no
+- seed 1 t2: B plain -0.4938 (window -0.025 .. -0.002: MISS), junction snapped -0.4287 (window -0.018 .. -0.002: MISS)
 
 **Reading.** (1) T1's 3.6 % of the system's MACs is a 'MACs only' saving by the card's own arithmetic (about 0.3 ms, below the 0.5 ms floor): not a candidate for a speed claim without a measurement and no reason to retrain for it alone. (2) The big lever would be T2-like savings (10.3 % of the MACs, shallow stages), and step 0 says they need retraining; the budget of that stage (stage D distillation 1000 steps + stage E 1500 steps per arm, cp / t1 / t2 x 2 seeds = 6 slot hours + the build-2 code and a critic pass) was NOT run tonight. (3) Random draws as free as the ranked set at T1 mean the importance ranking is not what makes T1 free; whether it makes T2 recoverable is the open question.
 **Not run (and why):** build 2 (pyramid edits, `--distill`), the training stages D / E, the 50-step timing gate, the quiet-host ms (all of them need GPU slots and a code critic pass; D107 asks only for finished experiments tonight, the priorities were D103 / D105 / E353; step 0 is the planned CPU part and it is complete for the points listed above). **D106 line:** no system exists yet (nothing to compare on parts / parameters / GMACs / ms); the first trained arm will carry it.
