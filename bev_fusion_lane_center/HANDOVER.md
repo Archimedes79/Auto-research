@@ -1,6 +1,6 @@
 # HANDOVER - 2026-11-16 21:00 (auto operation, D86 - D112)
 
-**SHUTDOWN (D111 / D112, Mirko): E362 is done (INCONCLUSIVE, committed bf1e7c6e); the report chat sends report 16g (E362 in it) by 21:40; then the lead runs `shutdown /s /t 60` (no run.py job, no fork turn, all committed; latest 23:00; he can move or cancel it). If this line is still here after a restart: nothing was running, start from run.py only.**
+**SHUTDOWN DONE (D111 / D112, Mirko's order): after E362 (INCONCLUSIVE, bf1e7c6e) and report 16g (sent 20:58) the computer was shut down with `shutdown /s /t 60` at about 21:00 on 2026-11-16; nothing was running, everything committed. After a restart: start jobs only through run.py; nothing is pending.**
 
 New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `decisions/`.
 
