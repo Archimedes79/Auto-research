@@ -1,4 +1,4 @@
-# HANDOVER - 2026-11-16 14:50 (auto operation, D86 - D111)
+# HANDOVER - 2026-11-16 17:40 (auto operation, D86 - D112)
 
 **SHUTDOWN POSTPONED (D111 / D112, Mirko): the shutdown command of 17:21 was aborted (17:22) because Mirko said 'Do one more Experiment'. ONE experiment runs: E362 (Fable; node-type head, 16000 steps, two seeds). When its result section + ledger notes are committed and no run.py job / fork turn is running: `shutdown /s /t 60` (target 21:30, latest 23:00; he can move or cancel it). Do not forget after a compaction.**
 
@@ -10,7 +10,7 @@ New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `decisio
 
 **D110 = OPEN QUESTION** (his criticism 'solution space that does not exist'); proposal: E2E system as reference, no cut for scoring below a rule-step system, adopt ties; his answer awaited; adopt-on-tie NOT applied. Token design (D111): E357 / E359 / E361 FAIL (E361 g1 0.491 / 0.484 by a hair), E362 text draft only.
 
-**Pushed 2026-11-16:** main b1b4f579 + 163 `lcr/*` tags (held back `autogt/prep-v13-l6-2026-11-10`). Report versions sent: 16b; 16f (or later) to be sent ~16:00 by the report chat. PROBLEM.md line proposed, needs his grant.
+**Pushed 2026-11-16:** main b1b4f579 + 163 `lcr/*` tags (held back `autogt/prep-v13-l6-2026-11-10`); later commits local. Report 16f sent (E362 not in it). PROBLEM.md line proposed, needs his grant.
 
 **E364 (cover drop R4 carries 0.027 - 0.030 topo F1, dup_frac +0.07 without it; pair mask R6 costs 2.6 % of true connectors; the pair stage is limited by END recall: only 67 - 68 % of true connectors have both ends matched).** **Next work block (E2E, one card each, critic first):** (1) refine the layer's duplicates (E363 guard) + ms of layer / stack on an idle GPU; (2) soft replacement of the cover drop (bar 0.027); (3) end recall of the pair stage; (4) pair run re-trained on B' nodes; (5) R3 / R7 need new dumps. Promote `temp/e346`, `temp/e358`, `temp/e364`, `temp/jr/build_ergebnis.py` + `pack_paket.py` (used several times) into code folders with tests; the first GPU use of `jstack.py` starts with its fixture dump. Memory: `lane-e2e-day-d109-d111-2026-11-16.md`.
 
