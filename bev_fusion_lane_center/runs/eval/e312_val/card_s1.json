@@ -1,0 +1,512 @@
+{
+ "split": "val",
+ "run": "e312_p_s1",
+ "seed": 1,
+ "frames": 873,
+ "scenes": 22,
+ "thr": 0.1,
+ "close_step": "close:1.5@0.5",
+ "date": "2026-11-15 05:57",
+ "variants": {
+  "unsnapped": {
+   "base": "plain",
+   "curves": 11842,
+   "wired_both_ends": 6408,
+   "numbers": {
+    "base": {
+     "Q": 0.656059742274902,
+     "F1@1.0": 0.81597242070117,
+     "lanes_found": 0.6136519104856836,
+     "topo_F1": 0.6249397829261198,
+     "topo_P": 0.6928283824509329,
+     "topo_R": 0.569168336178599,
+     "junction_F1": 0.24950790019683994,
+     "junction_P": 0.16612354774723717,
+     "junction_R": 0.5009613330484939,
+     "dup_frac": 0.20079920905748222,
+     "vert100_dp": 20.084210364218734
+    },
+    "head": {
+     "Q": 0.6767255263433123,
+     "F1@1.0": 0.8683473920833503,
+     "lanes_found": 0.7484608619173263,
+     "topo_F1": 0.6481125415849269,
+     "topo_P": 0.6204300738811686,
+     "topo_R": 0.6783806596065719,
+     "junction_F1": 0.247353992435021,
+     "junction_P": 0.14766324163075903,
+     "junction_R": 0.761375774407178,
+     "dup_frac": 0.14025821160705407,
+     "vert100_dp": 20.274459425470628
+    }
+   },
+   "difference": {
+    "Q": 0.020665784068410242,
+    "F1@1.0": 0.05237497138218028,
+    "lanes_found": 0.13480895143164273,
+    "topo_F1": 0.02317275865880708,
+    "topo_P": -0.07239830856976437,
+    "topo_R": 0.10921232342797293,
+    "junction_F1": -0.0021539077618189517,
+    "junction_P": -0.018460306116478142,
+    "junction_R": 0.2604144413586841,
+    "dup_frac": -0.06054099745042815,
+    "vert100_dp": 0.1902490612518939
+   },
+   "rule_d79_this_seed": {
+    "holds": true,
+    "conditions": {
+     "topo_F1": true,
+     "F1_1": true,
+     "dup_frac": true,
+     "vert100_dp": true,
+     "junction_F1": true
+    }
+   }
+  },
+  "snapped": {
+   "base": "plain",
+   "curves": 11842,
+   "wired_both_ends": 6408,
+   "numbers": {
+    "base": {
+     "Q": 0.656059742274902,
+     "F1@1.0": 0.81597242070117,
+     "lanes_found": 0.6136519104856836,
+     "topo_F1": 0.6249397829261198,
+     "topo_P": 0.6928283824509329,
+     "topo_R": 0.569168336178599,
+     "junction_F1": 0.24950790019683994,
+     "junction_P": 0.16612354774723717,
+     "junction_R": 0.5009613330484939,
+     "dup_frac": 0.20079920905748222,
+     "vert100_dp": 20.084210364218734
+    },
+    "head": {
+     "Q": 0.6993288789982149,
+     "F1@1.0": 0.868367364264291,
+     "lanes_found": 0.7418645558487247,
+     "topo_F1": 0.6864118697467354,
+     "topo_P": 0.6863372965341816,
+     "topo_R": 0.6864864591663884,
+     "junction_F1": 0.314456630109671,
+     "junction_P": 0.20508485597242992,
+     "junction_R": 0.673787652211066,
+     "dup_frac": 0.15529753265602322,
+     "vert100_dp": 20.103971641301644
+    }
+   },
+   "difference": {
+    "Q": 0.043269136723312895,
+    "F1@1.0": 0.05239494356312091,
+    "lanes_found": 0.1282126453630411,
+    "topo_F1": 0.06147208682061556,
+    "topo_P": -0.0064910859167512935,
+    "topo_R": 0.11731812298778943,
+    "junction_F1": 0.06494872991283107,
+    "junction_P": 0.03896130822519275,
+    "junction_R": 0.17282631916257207,
+    "dup_frac": -0.045501676401458996,
+    "vert100_dp": 0.01976127708291031
+   },
+   "rule_d79_this_seed": {
+    "holds": true,
+    "conditions": {
+     "topo_F1": true,
+     "F1_1": true,
+     "dup_frac": true,
+     "vert100_dp": true,
+     "junction_F1": true
+    }
+   }
+  }
+ },
+ "maneuver": {
+  "plain": {
+   "maneuvers": 10991,
+   "realised": 5396,
+   "recall": 0.4909471385679192,
+   "frame_recall_mean": 0.5255572192565897,
+   "frames_none": 2,
+   "frames_all": 59,
+   "junction_precision": 0.956711032707399,
+   "frames": 826
+  },
+  "p0.1": {
+   "maneuvers": 10991,
+   "realised": 7757,
+   "recall": 0.7057592575743791,
+   "frame_recall_mean": 0.7299069064536725,
+   "frames_none": 0,
+   "frames_all": 145,
+   "junction_precision": 0.9442163754772376,
+   "frames": 826
+  },
+  "p0.1s": {
+   "maneuvers": 10991,
+   "realised": 7701,
+   "recall": 0.7006641797834592,
+   "frame_recall_mean": 0.7265870922126509,
+   "frames_none": 0,
+   "frames_all": 129,
+   "junction_precision": 0.9456652993758243,
+   "frames": 826
+  }
+ },
+ "paired": {
+  "unsnapped": {
+   "Q": {
+    "a": 0.6767255263433123,
+    "b": 0.656059742274902,
+    "diff": 0.020665784068410242,
+    "lo": 0.007576374325622054,
+    "hi": 0.03840994963639768,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "F1@1.0": {
+    "a": 0.8683473920833503,
+    "b": 0.81597242070117,
+    "diff": 0.05237497138218028,
+    "lo": 0.03506515908545008,
+    "hi": 0.0720614870225097,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "lanes_found": {
+    "a": 0.7484608619173263,
+    "b": 0.6136519104856836,
+    "diff": 0.13480895143164273,
+    "lo": 0.1109337017087043,
+    "hi": 0.16032952653764648,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "topo_F1": {
+    "a": 0.6481125415849269,
+    "b": 0.6249397829261198,
+    "diff": 0.02317275865880708,
+    "lo": 0.006751653287842775,
+    "hi": 0.04287429256359639,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "topo_P": {
+    "a": 0.6204300738811686,
+    "b": 0.6928283824509329,
+    "diff": -0.07239830856976437,
+    "lo": -0.08929652386802121,
+    "hi": -0.054188884178160576,
+    "p_gt0": 0.0,
+    "p_a_better": 0.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "topo_R": {
+    "a": 0.6783806596065719,
+    "b": 0.569168336178599,
+    "diff": 0.10921232342797293,
+    "lo": 0.08786780327231061,
+    "hi": 0.13012428684024727,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "junction_F1": {
+    "a": 0.247353992435021,
+    "b": 0.24950790019683994,
+    "diff": -0.0021539077618189517,
+    "lo": -0.0236609052062955,
+    "hi": 0.02741792101160314,
+    "p_gt0": 0.424,
+    "p_a_better": 0.424,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "junction_P": {
+    "a": 0.14766324163075903,
+    "b": 0.16612354774723717,
+    "diff": -0.018460306116478142,
+    "lo": -0.03558623532788794,
+    "hi": 1.181192020404893e-05,
+    "p_gt0": 0.025,
+    "p_a_better": 0.025,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "junction_R": {
+    "a": 0.761375774407178,
+    "b": 0.5009613330484939,
+    "diff": 0.2604144413586841,
+    "lo": 0.20763428592493616,
+    "hi": 0.32046580177885564,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "dup_frac": {
+    "a": 0.14025821160705407,
+    "b": 0.20079920905748222,
+    "diff": -0.06054099745042815,
+    "lo": -0.0851041655593693,
+    "hi": -0.03724022746051299,
+    "p_gt0": 0.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "vert100_dp": {
+    "a": 20.274459425470628,
+    "b": 20.084210364218734,
+    "diff": 0.1902490612518939,
+    "lo": -0.17115570929472115,
+    "hi": 0.47340381392436104,
+    "p_gt0": 0.864,
+    "p_a_better": 0.136,
+    "n_valid": 1000,
+    "n_draws": 1000
+   }
+  },
+  "snapped": {
+   "Q": {
+    "a": 0.6993288789982149,
+    "b": 0.656059742274902,
+    "diff": 0.043269136723312895,
+    "lo": 0.030567415841245654,
+    "hi": 0.05848672036371859,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "F1@1.0": {
+    "a": 0.868367364264291,
+    "b": 0.81597242070117,
+    "diff": 0.05239494356312091,
+    "lo": 0.0361748826413552,
+    "hi": 0.07094074744322693,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "lanes_found": {
+    "a": 0.7418645558487247,
+    "b": 0.6136519104856836,
+    "diff": 0.1282126453630411,
+    "lo": 0.1068616787231503,
+    "hi": 0.15205760051775755,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "topo_F1": {
+    "a": 0.6864118697467354,
+    "b": 0.6249397829261198,
+    "diff": 0.06147208682061556,
+    "lo": 0.04445438433121386,
+    "hi": 0.07948674981222356,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "topo_P": {
+    "a": 0.6863372965341816,
+    "b": 0.6928283824509329,
+    "diff": -0.0064910859167512935,
+    "lo": -0.02318874501465033,
+    "hi": 0.010292798601758715,
+    "p_gt0": 0.207,
+    "p_a_better": 0.207,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "topo_R": {
+    "a": 0.6864864591663884,
+    "b": 0.569168336178599,
+    "diff": 0.11731812298778943,
+    "lo": 0.09542511141753346,
+    "hi": 0.13988390913813417,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "junction_F1": {
+    "a": 0.314456630109671,
+    "b": 0.24950790019683994,
+    "diff": 0.06494872991283107,
+    "lo": 0.04705175730809397,
+    "hi": 0.0872050539524454,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "junction_P": {
+    "a": 0.20508485597242992,
+    "b": 0.16612354774723717,
+    "diff": 0.03896130822519275,
+    "lo": 0.027884253841876924,
+    "hi": 0.05283922867432033,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "junction_R": {
+    "a": 0.673787652211066,
+    "b": 0.5009613330484939,
+    "diff": 0.17282631916257207,
+    "lo": 0.1318639511000828,
+    "hi": 0.21841231539791145,
+    "p_gt0": 1.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "dup_frac": {
+    "a": 0.15529753265602322,
+    "b": 0.20079920905748222,
+    "diff": -0.045501676401458996,
+    "lo": -0.06521542257852964,
+    "hi": -0.024733402981502686,
+    "p_gt0": 0.0,
+    "p_a_better": 1.0,
+    "n_valid": 1000,
+    "n_draws": 1000
+   },
+   "vert100_dp": {
+    "a": 20.103971641301644,
+    "b": 20.084210364218734,
+    "diff": 0.01976127708291031,
+    "lo": -0.37360932410987074,
+    "hi": 0.30938988998581235,
+    "p_gt0": 0.549,
+    "p_a_better": 0.451,
+    "n_valid": 1000,
+    "n_draws": 1000
+   }
+  }
+ },
+ "paired_note": "variant minus its plain delivered graph (B or c2 + the close-node step), 1000 scene draws of 22 scenes, same draws for both (autoresearch/Evaluation/stats.py)",
+ "rehearsal_check": {
+  "ok": false,
+  "lines": [
+   "CHECK unsnapped: max abs difference of the numbers 8.24e-03 (/head/vert100_dp), of the differences 4.31e-03; curves 11842 / 11849, wired 6408 / 6407 (OUT)  <-- DIFFERENCE",
+   "CHECK snapped: max abs difference of the numbers 6.61e-03 (/head/vert100_dp), of the differences 2.67e-03; curves 11842 / 11849, wired 6408 / 6407 (OUT)  <-- DIFFERENCE",
+   "CHECK maneuver plain: realised 5396 / 5394 of 10991 / 10991, max abs difference 2.00e+00 (/realised)",
+   "CHECK maneuver p0.1: realised 7757 / 7760 of 10991 / 10991, max abs difference 3.00e+00 (/realised)",
+   "CHECK maneuver p0.1s: realised 7701 / 7703 of 10991 / 10991, max abs difference 2.00e+00 (/realised)"
+  ],
+  "failed": [
+   "unsnapped",
+   "snapped"
+  ]
+ },
+ "device": "cpu",
+ "code_sha256": {
+  "autoresearch/Evaluation/__init__.py": "0a95c802d48d586140a8b28034d82f0510da9643af082fcb4bec857c90769a15",
+  "autoresearch/Evaluation/cli.py": "f425f1dd87dc7a16fa42a8cec8d1e4cc64e67e63802d9400ddd189618b597e36",
+  "autoresearch/Evaluation/contracts.py": "d4876ebd5269e477c752f28e7f4b7a92b41a8331449671edc5c15776e520589f",
+  "autoresearch/Evaluation/render/__init__.py": "3ae15171664302365e10ca12c944efa44e230220c5d989735500c41db8ea8b8f",
+  "autoresearch/Evaluation/render/figure.py": "c93be35a35ef0ccd6ea8f791b4366794f58f2bd3b7dda35d54e141a1eee21cb9",
+  "autoresearch/Evaluation/stats.py": "75c817657da504106b576addb512d04621ee1344ed4cd5217b36c2c0d0691168",
+  "autoresearch/Evaluation/suite.py": "92af34c834955562949a83e269dd33cedddb20b944c5ba96f72bc59b79406b21",
+  "bev_fusion_lane_center/evaluation/gpu_gate.py": "783d13d5206c4af3fe0cd5f8a045812da1d05d0666918da35d6665b5aec25d61",
+  "bev_fusion_lane_center/evaluation/jends_eval.py": "ea7641ef31b35a667622483b1fbd319ca666fd4f7a2c61f4ab2d994b1d9741d5",
+  "bev_fusion_lane_center/evaluation/jmaneuver.py": "c4941bb30f58e58a62c3eb2c86d744564079489b1a2a464cd272ec9dfb02efba",
+  "bev_fusion_lane_center/evaluation/jrule_control.py": "cb67ecafa1668614268d0aa6c75b7d40a57a2f74dac65e3b97e305abf45bffde",
+  "bev_fusion_lane_center/evaluation/jtest_eval.py": "40b604da079be7907e123d65cfcccefaff7efe513983616b273f382fddcd3b3e",
+  "bev_fusion_lane_center/evaluation/lane_suite.py": "e993d79573b779b3229621d2bcc5897c50133cf9db2847c04036efdaa1371419",
+  "bev_fusion_lane_center/evaluation/lane_task/__init__.py": "61e242e35059e0c6cc937d9d057706eeb17ad14a6e283b0040017a2679bc0088",
+  "bev_fusion_lane_center/evaluation/lane_task/causes.py": "ac1b44f16c8f71e47fd43e7af54d36e7c9411d6fa128d8c10c642d2c63c73d7d",
+  "bev_fusion_lane_center/evaluation/lane_task/geometry.py": "a0cca65192ecc2a0c2a2be4cf32be46f6a72acc406634464b8c466d1acc6b659",
+  "bev_fusion_lane_center/evaluation/lane_task/measures.py": "1839494a128e9834c93b328c5305303cf325a4b9716c23067798871b6026e082",
+  "bev_fusion_lane_center/evaluation/lane_task/raster.py": "a43368da9d00d304a884b92fb8939fca5d7795863139fec7da06c46efe6fac72",
+  "bev_fusion_lane_center/evaluation/lane_task/task.py": "0ea582d4b0d03f716f443c09d3ef171f393fe9cf9cf3413f65e52c4a96d4efae",
+  "bev_fusion_lane_center/evaluation/lane_task/views.py": "6808dd3aeeb81f04de45cc8472dbb22e4238d69d9eefc021e4680adbcf2a0a77",
+  "bev_fusion_lane_center/evaluation/qends_eval.py": "2f1d6444ac3e8528910f69fd694253034683187bed2907f5a546e03cd57b0581",
+  "bev_fusion_lane_center/evaluation/qgraph_eval.py": "3b43e2eb687e8660ce0c5ba6e36fef0d22549046f7b0516776d5c9b8aad45ec7",
+  "bev_fusion_lane_center/evaluation/qgraph_readout.py": "36263b63ab86408d2af1413ebe2438b560bb67139db0f3c6a8731e7aa2a2bbb1",
+  "bev_fusion_lane_center/evaluation/sparse_lanes/bootstrap.py": "9e7956a33af52b2a30df13ac5df71a769da5242ad326127dc4c1a841a1c0d54a",
+  "bev_fusion_lane_center/evaluation/sparse_lanes/graph_eval.py": "7472b5899f0b8513703816d656c48961e03532e3ffb6116b9bcac3c7301e755d",
+  "bev_fusion_lane_center/evaluation/sparse_lanes/sparse_metrics.py": "03dbd66eb76ac4d341fdd713ae123c11351de12aaae28b944b70e2b484306b48",
+  "bev_fusion_lane_center/evaluation/sparse_lanes/topo_metrics.py": "171452a4ea7f8e6c4914bca51268f9eb06ba2caf221eff6ab7f81695a5a09093",
+  "bev_fusion_lane_center/evaluation/tests/test_lane_suite.py": "ed6edccba115302074153a258561dd907fa7cc28788c502ac7552b871fbe2ba8",
+  "bev_fusion_lane_center/tools/video/make_video.py": "22112f9922d261ab033d6cd6bb637628a2c228cd4cb413d454bf1bd5a83eed26",
+  "bev_fusion_lane_center/tools/viz/qgraph_view.py": "dd8e158f05fa5eecc1390bb995c2eebfbcafba3d505b1035f7e8f3cf449f30e9",
+  "bev_fusion_lane_center/tools/viz/render.py": "d486cd7c96b8438b67a9ad640410be4a04f3067e2ce3b73ed1b7748ff05c4e68",
+  "bev_fusion_lane_center/tools/viz/viz_graph.py": "e1da7bbd9f27e80d99aa1f6c53521a74d1127a5e7d25f207c67ba116933ac95c",
+  "bev_fusion_lane_center/training/bflc_paths.py": "f8e3ad04f57c34adac09d82e9723217ea922bbc18208fb9a3c47d7e32c7d7b30",
+  "bev_fusion_lane_center/training/data/assoc_lib.py": "ba7c6689761108aa816aa07f7934e8baba250b0cc92374f7d13a52d364687a02",
+  "bev_fusion_lane_center/training/data/lane_gt_data.py": "5acd06489d262514dcb8bd7ea640f9d8b585a5518f5616493f2e78e3f7748e16",
+  "bev_fusion_lane_center/training/data/p16_data.py": "07995b4ad2d3eae74fe929e517566a4e73446a4776b24f3ac03026230adc5e9f",
+  "bev_fusion_lane_center/training/data/p8_lib.py": "99453bc7e03341cf6009b1cfdba82f61a36405fdad2293fc51f86ea9c6932d0a",
+  "bev_fusion_lane_center/training/data/prep/junction_paint.py": "23e01bf0de940b61ec72234cd1f110b3df2d9aae4dd400edd76a1557086c21a4",
+  "bev_fusion_lane_center/training/data/sd_lib.py": "5991986a659baf249c0cd46014f7651437ae9e2d2c03507823366affdabad69e",
+  "bev_fusion_lane_center/training/grid/head.py": "7b85de50a6a93c71245967e67fdf873ff039b75eaa1047d541ccc0950b014ce4",
+  "bev_fusion_lane_center/training/grid/jends.py": "77429728a39a2fe8329584581a94c6dce139253febd0b5d54033aa11e24c2fae",
+  "bev_fusion_lane_center/training/grid/jgt.py": "a3a37d59c39e5d732d24ab76575772c26fd19bd66a2ef7dc3bc92be711b076c8",
+  "bev_fusion_lane_center/training/grid/jmaps.py": "998d3ea280e7c936be549a16c6ff1c6976a1e2c03b3b54b763f769d925476cbc",
+  "bev_fusion_lane_center/training/grid/jwire.py": "160a54f90d3bd1d9a1e243144ab47302298c686712c4955efa7a778fb19f5bf6",
+  "bev_fusion_lane_center/training/grid/jwire_head.py": "1712b1e735230ba87f932ff4465eb659af3352a02d1448300b4fc62ee2798c9b",
+  "bev_fusion_lane_center/training/grid/losses.py": "25e0c826456dda32681834682219f6c9e21cd85cb14de043cb2ec4d6d8609f4b",
+  "bev_fusion_lane_center/training/grid/map_sim.py": "d5c48fb4bf7476525b6f6d907d510530f531a96fdbaf2dfd4982165c2a40fa6e",
+  "bev_fusion_lane_center/training/grid/pyramid.py": "7274c32ef15b7ab6205e6324c4f091832ef19de6482b5770a662c53eb871652f",
+  "bev_fusion_lane_center/training/grid/qassign.py": "9adcf393a371b3ce3ebe26d48e5f8a3fc9386fc1a1c0bbc656f68d710e3d0bbb",
+  "bev_fusion_lane_center/training/grid/qendnet.py": "63eab9ba49b30e845ace68e2d75aa5772715186ca3ca728c4d821fc504a36b1f",
+  "bev_fusion_lane_center/training/grid/qends.py": "65227e296cfe95449cf5b229650060990dfa57cde216baf39ee852be094be358",
+  "bev_fusion_lane_center/training/grid/qformat.py": "1e1ec752f3f9fc2fe6fdc86452b181cdb27b61d4d062dc83b3ae3f37b07e40e8",
+  "bev_fusion_lane_center/training/grid/qgraph.py": "700d4fdd469c6b752abb6130d76bf383b366b6411c219bb4378d3474903aadbc",
+  "bev_fusion_lane_center/training/grid/qjunction.py": "78d6a7e8c8e440213fd5fd3cab55b6eddac726a3954c49bd44f5aed9c0d3c1df",
+  "bev_fusion_lane_center/training/grid/qlinks.py": "ab6d86d030275d80f893dd0bc543479a89b0fdcbeb528393759ef3cf4c3a1d7d",
+  "bev_fusion_lane_center/training/grid/qmnms.py": "189a1dbfe33b9484b66fef7ec9d1e88286cf0cd1f30c93d658601942c79dcab5",
+  "bev_fusion_lane_center/training/grid/qnodes.py": "45fe1d61a8b1052adf34ca0fb04dc8640b24e1bc1f3aade04778c21636a85dbe",
+  "bev_fusion_lane_center/training/grid/qpredict.py": "5813b6d1db6342008c80969b6ef79d2f61f0ffacb60455fcc89f110ab9df4b3d",
+  "bev_fusion_lane_center/training/grid/qraster.py": "ef3563aa0714c60a2c6a0d312b4232d6259624e4a553cd9250c0c997d4e9d240",
+  "bev_fusion_lane_center/training/grid/qtargets.py": "84491c9e3fba9bcddbd11c58828063a0684d36ba18c4ea578ad23cb1560d9b3b",
+  "bev_fusion_lane_center/training/grid/qzones.py": "950206e04d310a61b07316d6d657b6796a45185d990549c05c46527e98907da8",
+  "bev_fusion_lane_center/training/grid/sections.py": "a562992ca34af55975744b7d470faec6e05aa304b1008193244e735f9bcaf77d",
+  "bev_fusion_lane_center/training/grid/soft_lines.py": "b4835fdbbda57fe7dbfbd4bbcd12eef4a233d22d31988f5b1b028921193fbc50",
+  "bev_fusion_lane_center/training/grid/targets.py": "bd819519cb035c0b0346d5b9b7afcf14190a3928e43ee97e12cb8a21f6a0e686",
+  "bev_fusion_lane_center/training/models/p10_expert.py": "3e54ef9bf16045c874cfe59e0400f0005846578f0512ac9cfc777e4ada8103fa",
+  "bev_fusion_lane_center/training/models/p10_net.py": "c99df7cfcf56d07c031a15b9ae91d49e34f435591179e94632c8f4f5d0576f34",
+  "bev_fusion_lane_center/training/models/p10_wave.py": "edeb802814410425afc9536a16ad7711d7fac2b01706d2372f408cfd70081dde",
+  "bev_fusion_lane_center/training/pipeline/p10_infer.py": "44d291d3b9b7960eeade8f79eac25e798bd669f2cc328f8bc8430cabc2294304",
+  "bev_fusion_lane_center/training/probe.py": "15a612af310531db330eb125a3df556d3d5925e35f2cd29031b00c5acd9765e1",
+  "bev_fusion_lane_center/training/train/jends_train.py": "1b4ff17b422d203487d1d61ba043e2a715707f1a8b92a0bc755b23f1bf4f5230",
+  "bev_fusion_lane_center/training/trainer.py": "1bc00441f9beee52aff0584487e12643fe1c6b95cad05ed35ce88d9b13abb1a5"
+ },
+ "code_digest": "889d2d9387e0ba636bf08717c2a5c3fb73ab2b509300d2de81c98b02a1b3ebbd",
+ "code_drift": [],
+ "environment": {
+  "files": {
+   "data/splits.json": "0fee02a42759b393801e46a67adabe27fb2c5ad23e7ac4bb60907ee7ab1c4713",
+   "poses_val.npz": "86c46fe4e1ea407a5f069c6dcd96b7c983a33c0747570779792a2be328ca7f1e",
+   "runs/e273_p_s0/config.json": null,
+   "runs/e273_p_s1/config.json": null,
+   "runs/e312_p_s0/config.json": "5d8d891d7a6d7340f9d87d5be9e7480b5403545979eee5ad21c0d732c0fc6570",
+   "runs/e312_p_s1/config.json": "dc2749ff22c1112ec8230c171e29fc1679ef72040ffd106b3792e778c259823e",
+   "val_tokens.json": "33e629787b4e9895303ee874f79b32735dcf52d4aac56f43919025b1a3e83e50"
+  },
+  "versions": {
+   "torch": "2.8.0+cu129",
+   "numpy": "1.26.4",
+   "shapely": "2.0.7"
+  }
+ },
+ "undigested_modules": []
+}

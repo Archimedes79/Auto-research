@@ -1,0 +1,92 @@
+{
+ "tag": "e354_quiet_1116_0444",
+ "label": "QUIET",
+ "pairs": {
+  "e354_z_s0 - e341_p_s0": [
+   1.38907336577391,
+   0.7760840264650491,
+   2.1363164279705438
+  ],
+  "e354_r_s0 - e341_p_s0": [
+   0.9970057499714386,
+   0.518818555581264,
+   1.601878358156253
+  ],
+  "e354_r_s0 - e354_z_s0": [
+   -0.39206761580247146,
+   -1.3253002666510068,
+   0.5167291590800647
+  ]
+ },
+ "pair_unit": "ms, mean of the per-keyframe medians over the repeats, 95 % bootstrap over the keyframes 1 .. n-1",
+ "load_before": 1.02,
+ "load_after": 0.96,
+ "gpu_before": {
+  "util_max": 0.0,
+  "mem_mib": 658.0,
+  "temp_c": 50.0,
+  "sm_clock_mhz": 210.0
+ },
+ "gpu_after": {
+  "util_max": 0.0,
+  "mem_mib": 1164.0,
+  "temp_c": 55.0,
+  "sm_clock_mhz": 391.4
+ },
+ "forced": false,
+ "repeats": 4,
+ "n_frames": 40,
+ "scene": 0,
+ "rows": [
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46,
+  47,
+  48,
+  49,
+  50,
+  51,
+  52,
+  53,
+  54,
+  55,
+  56,
+  57,
+  58,
+  59,
+  60,
+  61,
+  62,
+  63,
+  64,
+  65,
+  66,
+  67,
+  68,
+  69,
+  70,
+  71,
+  72,
+  73,
+  74,
+  75,
+  76,
+  77,
+  78
+ ],
+ "precision": "bf16 autocast, batch 1, no_grad",
+ "cudnn_benchmark": false,
+ "pair_via": "frozen",
+ "runs": [
+  "e341_p_s0",
+  "e354_z_s0",
+  "e354_r_s0"
+ ],
+ "device": "NVIDIA GeForce RTX 3060",
+ "timed_region": "one call of the whole model on the cached input (pyramid + maps head [+ state warp + fusion] + pair head); the new state is taken out inside it"
+}

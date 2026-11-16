@@ -1,0 +1,127 @@
+{
+ "runs": [
+  "e312_p_s0",
+  "e324_s_s0"
+ ],
+ "rounds": 10,
+ "iters": 30,
+ "frames": 24,
+ "warm": 20,
+ "precision": "bf16 autocast, batch 1, no_grad",
+ "cudnn_benchmark": false,
+ "device": "NVIDIA GeForce RTX 3060",
+ "timed_region": "c: the model's eager forward; g1: copy into the static input + graph replay + eager pair head + clone of every returned tensor",
+ "gpu_before": {
+  "util_max": 0.0,
+  "mem_mib": 792.0,
+  "temp_c": 43.0,
+  "sm_clock_mhz": 210.0
+ },
+ "gpu_after": {
+  "util_max": 0.0,
+  "mem_mib": 1442.0,
+  "temp_c": 54.8,
+  "sm_clock_mhz": 537.0
+ },
+ "gpu_idle_at_start": true,
+ "load_before": 0.81,
+ "load_after": 0.75,
+ "quiet": true,
+ "quiet_line": "host load (1 min) before 0.81 after 0.75, limit 3.0; GPU before util max 0 %, after util max 0 % (idle: at most 5 %): QUIET",
+ "equality_precheck": {
+  "e312_p_s0": {
+   "frames": 24,
+   "tensors": 528,
+   "other_leaves": 0,
+   "identical": true,
+   "keys_differing": 0,
+   "differing": {}
+  },
+  "e324_s_s0": {
+   "frames": 24,
+   "tensors": 672,
+   "other_leaves": 0,
+   "identical": true,
+   "keys_differing": 0,
+   "differing": {}
+  }
+ },
+ "block_medians_ms": {
+  "e312_p_s0/c": [
+   14.62067174911499,
+   15.076319694519043,
+   15.999568462371826,
+   14.678975582122803,
+   15.430592060089111,
+   15.552000045776367,
+   14.609920024871826,
+   14.525055885314941,
+   14.772223949432373,
+   14.688767910003662
+  ],
+  "e312_p_s0/g1": [
+   13.489664077758789,
+   13.443007946014404,
+   13.233312129974365,
+   12.901999950408936,
+   12.875360012054443,
+   13.599743843078613,
+   14.089695930480957,
+   12.609087944030762,
+   13.135136127471924,
+   13.462352275848389
+  ],
+  "e324_s_s0/c": [
+   19.80137538909912,
+   21.38107204437256,
+   19.734688758850098,
+   19.81385612487793,
+   19.93062400817871,
+   19.928160667419434,
+   19.776384353637695,
+   21.81814479827881,
+   20.584464073181152,
+   20.6561279296875
+  ],
+  "e324_s_s0/g1": [
+   17.63379192352295,
+   17.703935623168945,
+   17.49235248565674,
+   17.07251262664795,
+   16.855040550231934,
+   17.101200103759766,
+   17.04032039642334,
+   17.076095581054688,
+   17.03270435333252,
+   18.02344036102295
+  ]
+ },
+ "systems": {
+  "e312_p_s0": {
+   "c_median_ms": 14.730495929718018,
+   "g1_median_ms": 13.338160037994385,
+   "paired_g1_minus_c": [
+    -1.7114735126495362,
+    -2.096512628793717,
+    -1.3218452179431917
+   ],
+   "percent": -11.618573609573636,
+   "min_effect_ms": 2.2095743894577025,
+   "speed_half": "TIE",
+   "reason": "the interval excludes 0 but the change -1.71 ms is not a drop of the minimum effect 2.21 ms"
+  },
+  "e324_s_s0": {
+   "c_median_ms": 19.929392337799072,
+   "g1_median_ms": 17.088647842407227,
+   "paired_g1_minus_c": [
+    -3.039350414276123,
+    -3.525183937549591,
+    -2.6302795124053953
+   ],
+   "percent": -15.250592505580517,
+   "min_effect_ms": 2.989408850669861,
+   "speed_half": "ADOPT",
+   "reason": "the drop 3.04 ms is at least 2.99 ms (15 % of 19.93) and the interval excludes 0"
+  }
+ }
+}

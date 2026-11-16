@@ -1,0 +1,42 @@
+{
+ "tag": "smoke_e354_quiet_1116_0444",
+ "label": "QUIET",
+ "pairs": {},
+ "pair_unit": "ms, mean of the per-keyframe medians over the repeats, 95 % bootstrap over the keyframes 1 .. n-1",
+ "load_before": 0.98,
+ "load_after": 0.85,
+ "gpu_before": {
+  "util_max": 0.0,
+  "mem_mib": 658.0,
+  "temp_c": 50.0,
+  "sm_clock_mhz": 210.0
+ },
+ "gpu_after": {
+  "util_max": 0.0,
+  "mem_mib": 944.0,
+  "temp_c": 51.2,
+  "sm_clock_mhz": 320.8
+ },
+ "forced": false,
+ "repeats": 1,
+ "n_frames": 8,
+ "scene": 0,
+ "rows": [
+  39,
+  40,
+  41,
+  42,
+  43,
+  44,
+  45,
+  46
+ ],
+ "precision": "bf16 autocast, batch 1, no_grad",
+ "cudnn_benchmark": false,
+ "pair_via": "frozen",
+ "runs": [
+  "e354_r_s0"
+ ],
+ "device": "NVIDIA GeForce RTX 3060",
+ "timed_region": "one call of the whole model on the cached input (pyramid + maps head [+ state warp + fusion] + pair head); the new state is taken out inside it"
+}
