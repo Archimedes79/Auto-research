@@ -17,7 +17,7 @@ Card of 2026-11-16, **version 2 at 23:07 (system clock) after the first critic p
  "band": 0.01,
  "prediction": {"value": 0.04, "vs": "ref"},
  "arms": {
-  "ref": {"recipe": "plain B = the delivered graph of the frozen lane head B (E273 p_s0 / p_s1) with the E275 hard close-node step, connectors at p >= 0.1 and B's own section head, stored in runs/eval/e324s_val/card_s0.json / card_s1.json (variants primary, numbers.base), VAL 873: topo F1 0.6259 / 0.6249, F1@1.0 0.8282 / 0.8160, lanes found 0.6266 / 0.6137 (dup_frac 0.2008 on seed 1); the E2E system of record E324 s at the E2E read-out (0.6912 / 0.6948) and the E358 / E363 stack are reported next to it, not bars"},
+  "ref": {"recipe": "plain B = the delivered graph of the frozen lane head B (E273 p_s0 / p_s1) with the E275 hard close-node step, no connectors and B's own section head (the `plain` graph of the E324 s card), stored in runs/eval/e324s_val/card_s0.json / card_s1.json (variants primary, numbers.base; reproduced to 1e-6 by `jtoken_eval.py check-layer1` on both seeds from the dump `temp/e343/val/predfull_e273_p_s<S>.pkl`), VAL 873: topo F1 0.6259 / 0.6249, F1@1.0 0.8282 / 0.8160, lanes found 0.6266 / 0.6137 (dup_frac 0.2008 on seed 1); the E2E system of record E324 s at the E2E read-out (0.6912 / 0.6948) and the E358 / E363 stack are reported next to it, not bars"},
   "s1": {"recipe": "`jtoken_train.py --name e365_s1_s<S> --seed S --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--K 384]` through `_pyr.sh` on the predicted-node cache (section 2a; `--cache` is the cache ROOT, default runs/e365_cache; the plain-B arm is `--ident e273_p`), read out with `jtoken_eval.py` (dump, score, diag, controls, timing)", "run_ids": ["E365.s1_s0", "E365.s1_s1"]}
  },
  "control": "ref",
