@@ -1,0 +1,10 @@
+p = "temp/e309/sens.py"
+s = open(p).read()
+s = s.replace('RUNS = {"e284": f"e284_h2_s{seed}", "e287p2": f"e287_p2_s{seed}"}', 'RUNS = {"e312": f"e312_p_s{seed}"}')
+s = s.replace("ia, ib = np.nonzero(p >= 0.5)", "ia, ib = np.nonzero(p >= 0.1)")
+s = s.replace("np.asarray(pred[\"links\"][\"long\"], bool), pairs)", "np.asarray(pred[\"links\"][\"long\"], bool), pairs, snap=True)")
+s = s.replace('(e["kp_pos"][i], e["kp_dir"][i], e["kp_pos"][kk + j], e["kp_dir"][kk + j]) for', '(e["kp_pos"][i], e["kp_dir"][i], e["kp_pos"][kk + j], e["kp_dir"][kk + j]) + (tuple(e["scale"][i, j]) if e.get("scale") is not None else ()) for')
+s = s.replace('for var in ("B", "e284", "e287p2"):', 'for var in ("B", "e312"):')
+s = s.replace('"no direction": dict(COS_SNAP=-1.0),\n', '').replace('       "reach 15": dict(REACH=15.0)}', '       "tol 3 (snap 4)": dict(TOL=3.0, SNAP=4.0)}')
+s = s.replace('sens_s{seed}.json', 'sens_e312_s{seed}.json')
+open(p, "w").write(s)
