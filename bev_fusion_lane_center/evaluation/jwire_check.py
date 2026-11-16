@@ -1,15 +1,18 @@
 """E350 (promoted from the scratch checks of E325, `cmp_twin.py` and `live_cmp.py`): the two checks of the read-out path on a pair run that come before any wiring head is trained or scored on it.
 
-    wsl bash tools/env/_py14.sh jwire_check.py twin --run e324_s_s0 --seed 0 --tag twin [--thr 0.1]            # CPU: the card of `jends_eval.py score --run <run> --seed <seed> --thr 0.1 --snap --wire twin --tag <tag>` against the
-                                                                                                                 # stored card of the same run (`ends_card_snap_thr<thr>.json`)
-    wsl bash tools/env/_py14.sh jwire_check.py live --seed 0 --pair-run e324_s_s0 [--max 24] [--workers 2] [--device cpu]   # the live pass (B and the pair run, `jwire_data.live_records`) on the first 24 `val_clean` frames against the
-                                                                                                                 # records of the stored dump (`jwire_data.py val --seed <seed> --pair-run <run>` first); on a GPU (the default when there is
-                                                                                                                 # one) it waits for room like `jends_eval.py dump` (`gpu_gate`); `--device cpu` needs neither (24 frames, a few minutes)
+    wsl bash tools/env/_py14.sh jwire_check.py twin --run e324_s_s0 --seed 0 --tag twin [--thr 0.1] [--read-out snap|primary]   # CPU: the card of `jends_eval.py score --run <run> --seed <seed> --thr 0.1 --snap --wire twin --tag <tag>` against the
+                                                                                                                 # stored card of the same run (`ends_card_snap_thr<thr>.json`); `--read-out primary` (E358, with `--attach --snap-nogeom` in the
+                                                                                                                 # scoring): the cards `ends_card_[<tag>_]snap_nogeom_attach_thr<thr>.json`
+    wsl bash tools/env/_py14.sh jwire_check.py live --seed 0 --pair-run e324_s_s0 [--ends kp|att] [--max 24] [--workers 2] [--device cpu]   # the live pass (B and the pair run, `jwire_data.live_records`) on the first 24 `val_clean` frames against the
+                                                                                                                 # records of the stored dump (`jwire_data.py val --seed <seed> --pair-run <run> [--ends att]` first); on a GPU (the default when
+                                                                                                                 # there is one) it waits for room like `jends_eval.py dump` (`gpu_gate`); `--device cpu` needs neither (24 frames, a few minutes)
     wsl bash tools/env/_py14.sh jwire_check.py selftest
+`--read-out` and `--ends` are one choice (snap = kp, primary = att): either fixes the other on both commands, both given must agree, none = snap / kp (E325 / E350).
 
 Acceptance rules (the exit code is 0 when they hold):
   twin: EVERY field of the twin card equals the stored card (all keys of the stored card except `tag`, `wire`, `wire_run`, which differ by design; a key only the twin card has, `full` / `spec` of the scorer since E292, was
-        not recorded in E312's stored cards and is not compared; the twin card must say `wire` = twin and the tag asked for, the stored card must be the rule's, both of the run and seed asked for): numbers, curves, wired
+        not recorded in E312's stored cards and is not compared; the twin card must say `wire` = twin and the tag asked for, the stored card must be the rule's, both of the run and seed asked for and of the read-out asked for:
+        `attach` and `snap_nogeom` (in `snap_options`) true under primary, false under snap): numbers, curves, wired
         ends, `ends_within_1m...`, the options; and the per-frame counts of its `.counts.pkl` (scenes, base and head of every frame) equal the stored ones. Exact equality, no tolerance (the zero-parameter twin is the rule bit for bit).
   live: all fields of all frames' records (ends, attrs, pairs, kp_p, gts; atol 2e-3) equal, except at most ONE pair in ONE frame: the pair lists of that frame differ by exactly one row (a pair near p = 0.1 that one pass kept
         and the other dropped: numerics of another batch size, accepted in E325 step 2), the other rows of pairs / kp_p / gts, and ends / attrs, are equal. A second such frame, a pair that differs in value, or any other field
@@ -30,7 +33,15 @@ for sub in ("evaluation", "training", "training/grid", "training/data", "trainin
 
 IGNORED = ("tag", "wire", "wire_run")                                                                 # keys of a card that differ between the twin and the stored card by design
 FIELDS = ("ends", "attrs", "pairs", "kp_p", "gts")                                                    # the arrays of a record (`jwire_data.record_of`)
+READ_OUT_ENDS = dict(snap="kp", primary="att")                                                        # the read-out of a stored card and the end kind of the records of its pair run (as `jwire_verdict.READ_OUT_ENDS`)
 ATOL = 2e-3
+
+
+def read_out_ends(read_out=None, ends=None):
+    """-> (read_out, ends) from the two options of the command line: either one fixes the other, both given must agree, none = (snap, kp)"""
+    read_out = read_out or {v: k for k, v in READ_OUT_ENDS.items()}.get(ends, "snap")
+    assert ends in (None, READ_OUT_ENDS[read_out]), f"--read-out {read_out} and --ends {ends} name different things (snap = kp, primary = att)"
+    return read_out, READ_OUT_ENDS[read_out]
 
 
 def same(x, y):
@@ -56,10 +67,11 @@ def counts_diff(a, b):
     return sorted(k for k in set(a) | set(b) if not same(a.get(k), b.get(k)))
 
 
-def twin_check(run, seed, tag, thr=0.1):
-    """-> (identical, [what differs]) for the twin card `<tag>` of a run against its stored snapped card"""
+def twin_check(run, seed, tag, thr=0.1, read_out="snap"):
+    """-> (identical, [what differs]) for the twin card `<tag>` of a run against its stored card of the read-out (snap: `ends_card_snap_thr<thr>.json`; primary: `ends_card_snap_nogeom_attach_thr<thr>.json`)"""
     import qends_eval as QE
-    names = [QE.card_name(NS(snap=True, thr=thr, tag=t)) for t in (None, tag)]
+    primary = read_out == "primary"
+    names = [QE.card_name(NS(snap=True, thr=thr, tag=t, attach=primary, snap_nogeom=primary)) for t in (None, tag)]
     d = os.path.join(ROOT, "runs", run)
     cards = [json.load(open(os.path.join(d, n))) for n in names]
     counts = [pickle.load(open(os.path.join(d, n[:-5] + ".counts.pkl"), "rb")) for n in names]
@@ -70,6 +82,8 @@ def twin_check(run, seed, tag, thr=0.1):
             diff.append(f"the {what} card is of run {c['run']}, not {run}")
         if c["seed"] != seed:
             diff.append(f"the {what} card is of seed {c['seed']}, not {seed}")
+        if bool(c.get("attach")) != primary or ("snap_nogeom" in (c.get("snap_options") or [])) != primary:
+            diff.append(f"the {what} card is not the {read_out} read-out (attach {c.get('attach')}, snap_options {c.get('snap_options')})")
     if twin.get("wire") != "twin" or twin.get("tag") != tag:
         diff.append(f"the card is not the twin's (wire {twin.get('wire')}, tag {twin.get('tag')})")
     if stored.get("wire") is not None:
@@ -106,21 +120,23 @@ def compare_records(live, ref, atol=ATOL):
     return ok, len(live), diff
 
 
-def live_check(seed, pair_run, nmax=24, workers=2, device=None):
+def live_check(seed, pair_run, nmax=24, workers=2, device=None, ends="kp"):
     import jwire_data as JD
-    path = JD.cache_path("val", seed, pair_run=pair_run)
-    assert os.path.exists(path), f"{path} is missing: `jwire_data.py val --seed {seed} --pair-run {pair_run}` builds the stored-dump records first"
-    ref = {r["row"]: r for r in JD.load_records(path, seed, pair_run)}
+    path = JD.cache_path("val", seed, pair_run=pair_run, ends=ends)
+    assert os.path.exists(path), f"{path} is missing: `jwire_data.py val --seed {seed} --pair-run {pair_run} --ends {ends}` builds the stored-dump records first"
+    ref = {r["row"]: r for r in JD.load_records(path, seed, pair_run, ends)}
     import torch
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
     if dev.startswith("cuda"):                                                                            # D100: next to two trainings a pass can crash one of them (CUDA unknown error), as `jends_eval.dump` waits
         import gpu_gate
         gpu_gate.wait_for_room(who=f"jwire_check live {pair_run}")
-    live = JD.live_records(seed, "val_clean", 0.1, nmax, workers, device=dev, pair_run=pair_run)
+    live = JD.live_records(seed, "val_clean", 0.1, nmax, workers, device=dev, pair_run=pair_run, ends=ends)
     return compare_records(live, ref)
 
 
 def _selftest():
+    import contextlib
+    import io
     import tempfile
     # live: planted differences against a stored dump of 4 frames
     rng = np.random.default_rng(0)
@@ -185,8 +201,8 @@ def _selftest():
             card = lambda **k: dict(dict(run="rx", seed=0, thr=0.1, frames=3, curves=100, wired_both_ends=60, numbers=dict(head=dict(topo_F1=0.7, dup_frac=0.18), base=dict(topo_F1=0.6)), snap=True, full="f.pkl", tag=None, wire=None), **k)  # noqa: E731
             counts = lambda x=1: dict(scenes=[1, 2, 3], base=[dict(tp=1.0, n=2)] * 3, head=[dict(tp=x, n=2)] * 3)  # noqa: E731
 
-            def put(stored, twin, cs, ct):
-                for stem, c, k in (("ends_card_snap_thr0.1", stored, cs), ("ends_card_twin_snap_thr0.1", twin, ct)):
+            def put(stored, twin, cs, ct, st="snap_", tag="twin"):
+                for stem, c, k in ((f"ends_card_{st}thr0.1", stored, cs), (f"ends_card_{tag}_{st}thr0.1", twin, ct)):
                     json.dump(c, open(os.path.join(t, "runs", "rx", stem + ".json"), "w"))
                     pickle.dump(k, open(os.path.join(t, "runs", "rx", stem + ".counts.pkl"), "wb"))
             twin = card(tag="twin", wire="twin", wire_run=None)
@@ -222,6 +238,68 @@ def _selftest():
             put(card(), twin, counts(), counts())
             ok, d = twin_check("rx", 1, "twin")
             assert not ok and "seed" in d[0], d                                                        # the seed asked for must be the card's
+            # E358, the PRIMARY read-out: the cards are named `..._snap_nogeom_attach_...` (as the scorer names them), the options of both must be attach + snap_nogeom, nothing falls back to the snapped names
+            import qends_eval as QE
+            assert QE.card_name(NS(snap=True, thr=0.1, tag=None, attach=True, snap_nogeom=True)) == "ends_card_snap_nogeom_attach_thr0.1.json" and QE.card_name(NS(snap=True, thr=0.1, tag="twinatt", attach=True, snap_nogeom=True)) == "ends_card_twinatt_snap_nogeom_attach_thr0.1.json"
+            assert QE.card_name(NS(snap=True, thr=0.1, tag=None)) == "ends_card_snap_thr0.1.json" and QE.card_name(NS(snap=True, thr=0.1, tag="twin")) == "ends_card_twin_snap_thr0.1.json"
+            prim = dict(attach=True, snap_options=["snap_nogeom"])
+            ptwin = card(tag="twinatt", wire="twin", wire_run=None, **prim)
+            pt = lambda: twin_check("rx", 0, "twinatt", read_out="primary")  # noqa: E731
+            pput = lambda stored, twin, cs=None, ct=None: put(stored, twin, cs or counts(), ct or counts(), "snap_nogeom_attach_", "twinatt")  # noqa: E731
+            try:
+                pt()                                                                                     # only the snapped names exist so far: the primary read-out does not fall back to them
+                raise AssertionError("the primary read-out must not read the snapped cards")
+            except FileNotFoundError:
+                pass
+            pput(card(**prim), ptwin)
+            assert pt() == (True, []), pt()
+            pput(card(), ptwin)                                                                          # a stored SNAPPED card under the primary name
+            assert pt()[1] == ["the stored card is not the primary read-out (attach None, snap_options None)"], pt()
+            pput(card(**prim), dict(ptwin, attach=False))
+            assert pt()[1] == ["card attach", "the twin card is not the primary read-out (attach False, snap_options ['snap_nogeom'])"], pt()
+            pput(card(**prim), dict(ptwin, snap_options=[]))
+            assert pt()[1] == ["card snap_options", "the twin card is not the primary read-out (attach True, snap_options [])"], pt()
+            pput(card(**prim), dict(ptwin, numbers=dict(head=dict(topo_F1=0.7 + 1e-12, dup_frac=0.18), base=dict(topo_F1=0.6))))
+            assert pt()[1] == ["card numbers"], pt()                                                      # the primary twin is compared as strictly as the snapped one
+            pput(card(**prim), ptwin, ct=counts(1.5))
+            assert pt()[1] == ["counts head"], pt()
+            put(card(**prim), dict(twin, **prim), counts(), counts())                                      # a card with attach / snap_nogeom is not the snapped read-out either
+            assert twin_check("rx", 0, "twin")[1] == ["the stored card is not the snap read-out (attach True, snap_options ['snap_nogeom'])", "the twin card is not the snap read-out (attach True, snap_options ['snap_nogeom'])"], twin_check("rx", 0, "twin")
+            # the command line: either option fixes the other, both must agree
+            assert [read_out_ends(*x) for x in ((None, None), ("snap", None), ("primary", None), (None, "kp"), (None, "att"), ("primary", "att"), ("snap", "kp"))] == [("snap", "kp"), ("snap", "kp"), ("primary", "att"), ("snap", "kp"), ("primary", "att"), ("primary", "att"), ("snap", "kp")]
+            for bad in (("primary", "kp"), ("snap", "att")):
+                try:
+                    read_out_ends(*bad)
+                    raise AssertionError(f"{bad} must be refused")
+                except AssertionError as e:
+                    assert "name different things" in str(e), e
+            pput(card(**prim), ptwin)
+            with contextlib.redirect_stdout(io.StringIO()) as out:
+                for argv in (["--read-out", "primary"], ["--ends", "att"], ["--read-out", "primary", "--ends", "att"]):
+                    assert main(["twin", "--run", "rx", "--seed", "0", "--tag", "twinatt"] + argv) == 0, argv
+                assert main(["twin", "--run", "rx", "--seed", "0", "--tag", "twin"]) == 1, "the snapped read-out of cards that are primary ones"
+            assert out.getvalue().count("against the stored primary card: IDENTICAL") == 3 and "against the stored snap card: DIFFERENT" in out.getvalue(), out.getvalue()
+            # live: the end kind reaches the cache of the stored records, its meta check, the live pass and the message of a missing cache
+            import jwire_data as JD
+            from unittest import mock
+            seen, recs = [], [dict(row=1, **{k: np.zeros((1, 2)) for k in FIELDS})]
+            cache = os.path.join(t, "cache.pkl")
+            open(cache, "wb").write(b"x")
+            with mock.patch.object(JD, "cache_path", lambda kind, seed, nmax=0, thr=0.1, pair_run=None, ends="kp": seen.append(("path", kind, seed, pair_run, ends)) or cache), \
+                    mock.patch.object(JD, "load_records", lambda path, seed, pair_run=None, ends="kp": seen.append(("load", seed, pair_run, ends)) or recs), \
+                    mock.patch.object(JD, "live_records", lambda seed, split, thr, nmax, workers, device=None, pair_run=None, ends="kp": seen.append(("live", split, nmax, pair_run, ends)) or recs):
+                assert live_check(0, "e324_s_s0", 24, 2, "cpu", "att")[0] and live_check(0, "e324_s_s0", 24, 2, "cpu")[0]
+            assert seen == [("path", "val", 0, "e324_s_s0", "att"), ("load", 0, "e324_s_s0", "att"), ("live", "val_clean", 24, "e324_s_s0", "att"), ("path", "val", 0, "e324_s_s0", "kp"), ("load", 0, "e324_s_s0", "kp"), ("live", "val_clean", 24, "e324_s_s0", "kp")], seen
+            calls = []
+            with mock.patch.object(sys.modules[__name__], "live_check", lambda *x: calls.append(x) or (True, 24, {})), contextlib.redirect_stdout(io.StringIO()):
+                assert main(["live", "--seed", "0", "--pair-run", "e324_s_s0", "--read-out", "primary"]) == 0 and main(["live", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att"]) == 0 and main(["live", "--seed", "0", "--pair-run", "e312_p_s0"]) == 0
+            assert [c[0:2] + c[-1:] for c in calls] == [(0, "e324_s_s0", "att"), (0, "e324_s_s0", "att"), (0, "e312_p_s0", "kp")], calls
+            with mock.patch.object(JD, "cache_path", lambda *x, **k: os.path.join(t, "missing.pkl")):
+                try:
+                    live_check(0, "e324_s_s0", 24, 2, "cpu", "att")
+                    raise AssertionError("a missing stored-dump cache must be refused")
+                except AssertionError as e:
+                    assert "--ends att" in str(e) and "builds the stored-dump records" in str(e), e
         finally:
             ROOT = old
     print("jwire_check selftest ok")
@@ -241,17 +319,21 @@ def main(argv=None):
     v.add_argument("--max", type=int, default=24)
     v.add_argument("--workers", type=int, default=2)
     v.add_argument("--device", default=None)
+    for s in (t, v):
+        s.add_argument("--read-out", default=None, choices=tuple(READ_OUT_ENDS), help="snap (default): the snapped read-out, keypoint ends; primary (E358): the end-to-end read-out, attached ends")
+        s.add_argument("--ends", default=None, choices=tuple(READ_OUT_ENDS.values()), help="the end kind of the read-out: kp = snap (default), att = primary")
     sub.add_parser("selftest")
     a = ap.parse_args(argv)
     if a.cmd == "selftest":
         _selftest()
         return 0
+    read_out, ends = read_out_ends(a.read_out, a.ends)
     if a.cmd == "twin":
-        ok, diff = twin_check(a.run, a.seed, a.tag, a.thr)
-        print(f"twin {a.tag} of {a.run} (seed {a.seed}, thr {a.thr}) against the stored snapped card: " + ("IDENTICAL (numbers, curves, wired ends, per-frame counts)" if ok else "DIFFERENT: " + "; ".join(diff)))
+        ok, diff = twin_check(a.run, a.seed, a.tag, a.thr, read_out)
+        print(f"twin {a.tag} of {a.run} (seed {a.seed}, thr {a.thr}) against the stored {read_out} card: " + ("IDENTICAL (numbers, curves, wired ends, per-frame counts)" if ok else "DIFFERENT: " + "; ".join(diff)))
         return 0 if ok else 1
-    ok, n, diff = live_check(a.seed, a.pair_run, a.max, a.workers, a.device)
-    print(f"live pass of {a.pair_run} (seed {a.seed}) on {n} val_clean frames against the stored-dump records: " + ("ACCEPTED" if ok else "REFUSED") + (f"; frames that differ: {diff}" if diff else "; all fields equal"))
+    ok, n, diff = live_check(a.seed, a.pair_run, a.max, a.workers, a.device, ends)
+    print(f"live pass of {a.pair_run} (seed {a.seed}, {ends} ends) on {n} val_clean frames against the stored-dump records: " + ("ACCEPTED" if ok else "REFUSED") + (f"; frames that differ: {diff}" if diff else "; all fields equal"))
     return 0 if ok else 1
 
 
