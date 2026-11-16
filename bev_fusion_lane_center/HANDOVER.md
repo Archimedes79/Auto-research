@@ -1,6 +1,6 @@
 # HANDOVER - 2026-11-16 14:50 (auto operation, D86 - D111)
 
-**SHUTDOWN (D111, Mirko): today 17:30 (the lead chose the time): at 17:20 - 17:30 check no run.py job, no fork mid-turn, everything committed (incl. the ledger), then `shutdown /s /t 60` (Windows); a running job is waited for until 19:00, nothing killed; no GPU job after 15:30. Do not forget after a compaction.**
+**SHUTDOWN DONE (D111, Mirko's order): the computer was shut down on 2026-11-16 at about 17:25 (`shutdown /s /t 60`), nothing was running, everything committed (HANDOVER, cards, ledger, runs/eval cards). If you read this the machine was started again: start the WSL jobs only from run.py; the page-cache guard of the lane chat ended 17:30.**
 
 New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `decisions/`.
 
