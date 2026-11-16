@@ -3,7 +3,7 @@
     wsl bash tools/env/_py14.sh jwire_check.py twin --run e324_s_s0 --seed 0 --tag twin [--thr 0.1] [--read-out snap|primary]   # CPU: the card of `jends_eval.py score --run <run> --seed <seed> --thr 0.1 --snap --wire twin --tag <tag>` against the
                                                                                                                  # stored card of the same run (`ends_card_snap_thr<thr>.json`); `--read-out primary` (E358, with `--attach --snap-nogeom` in the
                                                                                                                  # scoring): the cards `ends_card_[<tag>_]snap_nogeom_attach_thr<thr>.json`
-    wsl bash tools/env/_py14.sh jwire_check.py live --seed 0 --pair-run e324_s_s0 [--ends kp|att] [--max 24] [--workers 2] [--device cpu]   # the live pass (B and the pair run, `jwire_data.live_records`) on the first 24 `val_clean` frames against the
+    wsl bash tools/env/_py14.sh jwire_check.py live --seed 0 --pair-run e324_s_s0 [--ends kp|att] [--max 24] [--workers 2] [--device cpu] [--bs 4|8 | --faithful]   # the live pass (B and the pair run, `jwire_data.live_records`) on the first 24 `val_clean` frames against the
                                                                                                                  # records of the stored dump (`jwire_data.py val --seed <seed> --pair-run <run> [--ends att]` first); on a GPU (the default when
                                                                                                                  # there is one) it waits for room like `jends_eval.py dump` (`gpu_gate`); `--device cpu` needs neither (24 frames, a few minutes)
     wsl bash tools/env/_py14.sh jwire_check.py selftest
@@ -108,6 +108,25 @@ def frame_diff(a, b, atol=ATOL):
     return bad
 
 
+def deviation_report(live, ref, diff):
+    """-> {row: {field: largest absolute difference (shape mismatch: 'shape a vs b')}} of the frames named in `diff` (a diagnostic printed with a REFUSED check; it decides nothing)"""
+    out = {}
+    byrow = {r["row"]: r for r in live}
+    for row in diff:
+        a, b = byrow.get(row), ref.get(row)
+        if a is None or b is None:
+            continue
+        d = {}
+        for k in FIELDS:
+            x, y = np.asarray(a[k], float), np.asarray(b[k], float)
+            if x.shape != y.shape:
+                d[k] = f"shape {x.shape} vs {y.shape}"
+            elif x.size and not np.allclose(x, y, atol=ATOL, equal_nan=True):
+                d[k] = float(np.nanmax(np.abs(x - y)))
+        out[row] = d
+    return out
+
+
 def compare_records(live, ref, atol=ATOL):
     """-> (accepted, frames compared, {row: what differs}) for the live records against the records of the stored dump (`ref`: row -> record); the rule is the module docstring's"""
     diff = {}
@@ -120,7 +139,7 @@ def compare_records(live, ref, atol=ATOL):
     return ok, len(live), diff
 
 
-def live_check(seed, pair_run, nmax=24, workers=2, device=None, ends="kp"):
+def live_check(seed, pair_run, nmax=24, workers=2, device=None, ends="kp", bs=4, faithful=False):
     import jwire_data as JD
     path = JD.cache_path("val", seed, pair_run=pair_run, ends=ends)
     assert os.path.exists(path), f"{path} is missing: `jwire_data.py val --seed {seed} --pair-run {pair_run} --ends {ends}` builds the stored-dump records first"
@@ -130,8 +149,11 @@ def live_check(seed, pair_run, nmax=24, workers=2, device=None, ends="kp"):
     if dev.startswith("cuda"):                                                                            # D100: next to two trainings a pass can crash one of them (CUDA unknown error), as `jends_eval.dump` waits
         import gpu_gate
         gpu_gate.wait_for_room(who=f"jwire_check live {pair_run}")
-    live = JD.live_records(seed, "val_clean", 0.1, nmax, workers, device=dev, pair_run=pair_run, ends=ends)
-    return compare_records(live, ref)
+    live = JD.live_records(seed, "val_clean", 0.1, nmax, workers, bs=bs, device=dev, pair_run=pair_run, ends=ends, faithful=faithful)
+    res = compare_records(live, ref)
+    if not res[0]:
+        print("deviations of the frames that differ (largest absolute difference per field, DIAGNOSTIC ONLY: the rule is the tolerance of the module docstring): " + str(deviation_report(live, ref, res[2])))
+    return res
 
 
 def _selftest():
@@ -294,13 +316,20 @@ def _selftest():
             open(cache, "wb").write(b"x")
             with mock.patch.object(JD, "cache_path", lambda kind, seed, nmax=0, thr=0.1, pair_run=None, ends="kp": seen.append(("path", kind, seed, pair_run, ends)) or cache), \
                     mock.patch.object(JD, "load_records", lambda path, seed, pair_run=None, ends="kp": seen.append(("load", seed, pair_run, ends)) or recs), \
-                    mock.patch.object(JD, "live_records", lambda seed, split, thr, nmax, workers, device=None, pair_run=None, ends="kp": seen.append(("live", split, nmax, pair_run, ends)) or recs):
-                assert live_check(0, "e324_s_s0", 24, 2, "cpu", "att")[0] and live_check(0, "e324_s_s0", 24, 2, "cpu")[0]
-            assert seen == [("path", "val", 0, "e324_s_s0", "att"), ("load", 0, "e324_s_s0", "att"), ("live", "val_clean", 24, "e324_s_s0", "att"), ("path", "val", 0, "e324_s_s0", "kp"), ("load", 0, "e324_s_s0", "kp"), ("live", "val_clean", 24, "e324_s_s0", "kp")], seen
+                    mock.patch.object(JD, "live_records", lambda seed, split, thr, nmax, workers, bs=4, device=None, pair_run=None, ends="kp", faithful=False: seen.append(("live", split, nmax, pair_run, ends, bs, faithful)) or recs):
+                assert live_check(0, "e324_s_s0", 24, 2, "cpu", "att")[0] and live_check(0, "e324_s_s0", 24, 2, "cpu", bs=8)[0] and live_check(0, "e324_s_s0", 24, 2, "cpu", "att", faithful=True)[0]
+            assert seen == [("path", "val", 0, "e324_s_s0", "att"), ("load", 0, "e324_s_s0", "att"), ("live", "val_clean", 24, "e324_s_s0", "att", 4, False), ("path", "val", 0, "e324_s_s0", "kp"), ("load", 0, "e324_s_s0", "kp"), ("live", "val_clean", 24, "e324_s_s0", "kp", 8, False), ("path", "val", 0, "e324_s_s0", "att"), ("load", 0, "e324_s_s0", "att"), ("live", "val_clean", 24, "e324_s_s0", "att", 4, True)], seen                  # the batch size of the live pass reaches the loader (default 4, E358: 8 = the dump's)
             calls = []
-            with mock.patch.object(sys.modules[__name__], "live_check", lambda *x: calls.append(x) or (True, 24, {})), contextlib.redirect_stdout(io.StringIO()):
+            with mock.patch.object(sys.modules[__name__], "live_check", lambda *x, **k: calls.append(x + (k.get("bs"), k.get("faithful"))) or (True, 24, {})), contextlib.redirect_stdout(io.StringIO()):
                 assert main(["live", "--seed", "0", "--pair-run", "e324_s_s0", "--read-out", "primary"]) == 0 and main(["live", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att"]) == 0 and main(["live", "--seed", "0", "--pair-run", "e312_p_s0"]) == 0
-            assert [c[0:2] + c[-1:] for c in calls] == [(0, "e324_s_s0", "att"), (0, "e324_s_s0", "att"), (0, "e312_p_s0", "kp")], calls
+            assert [c[0:2] + c[5:6] for c in calls] == [(0, "e324_s_s0", "att"), (0, "e324_s_s0", "att"), (0, "e312_p_s0", "kp")], calls
+            with mock.patch.object(sys.modules[__name__], "live_check", lambda *x, **k: calls.append(x + (k.get("bs"), k.get("faithful"))) or (True, 24, {})), contextlib.redirect_stdout(io.StringIO()):
+                assert main(["live", "--seed", "1", "--pair-run", "e324_s_s1", "--ends", "att", "--bs", "8"]) == 0
+                assert main(["live", "--seed", "1", "--pair-run", "e324_s_s1", "--ends", "att", "--faithful"]) == 0
+                assert main(["live", "--seed", "1", "--pair-run", "e324_s_s1", "--ends", "att", "--faithful", "--bs", "8"]) == 2          # the faithful pass fixes the batch sizes: --bs with it is refused before anything runs
+            assert calls[-2][0] == 1 and calls[-2][-2] == 8, calls[-2]                                         # --bs 8 reaches live_check (E358 attempt 3)
+            assert [c[-2] for c in calls] == [4, 4, 4, 8, 4]                                                    # --bs defaults to 4 (E325 / E350)
+            assert [c[-1] for c in calls] == [False, False, False, False, True], calls                          # --faithful (E358 attempt 4) reaches live_check, and only when given
             with mock.patch.object(JD, "cache_path", lambda *x, **k: os.path.join(t, "missing.pkl")):
                 try:
                     live_check(0, "e324_s_s0", 24, 2, "cpu", "att")
@@ -309,6 +338,14 @@ def _selftest():
                     assert "--ends att" in str(e) and "builds the stored-dump records" in str(e), e
         finally:
             ROOT = old
+    # deviation report: the size of a planted difference, a shape mismatch is named, equal frames are empty
+    la = dict(row=7, **{k: np.zeros((2, 2)) for k in FIELDS})
+    la8 = dict(la, row=8)
+    lb = dict(la, pairs=np.array([[0.0, 0.0], [0.0, 0.0125]]))
+    lc = dict(la8, ends=np.zeros((3, 2)))
+    rep = deviation_report([lb, lc], {7: la, 8: la8}, {7: ["pairs"], 8: ["ends"]})
+    assert rep == {7: {"pairs": 0.0125}, 8: {"ends": "shape (3, 2) vs (2, 2)"}}, rep
+    assert deviation_report([lb], {7: la}, {}) == {} and deviation_report([lb], {7: la}, {9: ["pairs"]}) == {}
     print("jwire_check selftest ok")
 
 
@@ -325,6 +362,8 @@ def main(argv=None):
     v.add_argument("--pair-run", required=True)
     v.add_argument("--max", type=int, default=24)
     v.add_argument("--workers", type=int, default=2)
+    v.add_argument("--faithful", action="store_true", help="E358 attempt 4: the live pass replays HOW the stored dumps were made (B on a loader of its dump's settings, the pair model on a loader of the pair dump's settings, joined by row; `jwire_data.DUMP_B` / `DUMP_PAIR`; at most 64 frames); constants, not options")
+    v.add_argument("--bs", type=int, default=None, help="the batch size of the live pass (default 4 as E325; E358 attempt 3 used 8); not with --faithful, which fixes the batch sizes of the two dumps")
     v.add_argument("--device", default=None)
     for s in (t, v):
         s.add_argument("--read-out", default=None, choices=tuple(READ_OUT_ENDS), help="snap (default): the snapped read-out, keypoint ends; primary (E358): the end-to-end read-out, attached ends")
@@ -339,8 +378,12 @@ def main(argv=None):
         ok, diff = twin_check(a.run, a.seed, a.tag, a.thr, read_out)
         print(f"twin {a.tag} of {a.run} (seed {a.seed}, thr {a.thr}) against the stored {read_out} card: " + ("IDENTICAL (numbers, curves, wired ends, per-frame counts)" if ok else "DIFFERENT: " + "; ".join(diff)))
         return 0 if ok else 1
-    ok, n, diff = live_check(a.seed, a.pair_run, a.max, a.workers, a.device, ends)
-    print(f"live pass of {a.pair_run} (seed {a.seed}, {ends} ends) on {n} val_clean frames against the stored-dump records: " + ("ACCEPTED" if ok else "REFUSED") + (f"; frames that differ: {diff}" if diff else "; all fields equal"))
+    if a.faithful and a.bs is not None:
+        print("--bs and --faithful exclude each other: the faithful pass fixes the batch sizes of the two stored dumps (jwire_data.DUMP_B / DUMP_PAIR)")
+        return 2
+    a.bs = 4 if a.bs is None else a.bs
+    ok, n, diff = live_check(a.seed, a.pair_run, a.max, a.workers, a.device, ends, bs=a.bs, faithful=a.faithful)
+    print(f"live pass of {a.pair_run} (seed {a.seed}, {ends} ends, {'faithful two-loader replay (B bs 4 exact, pair model bs 8 error)' if a.faithful else 'batch size ' + str(a.bs)}) on {n} val_clean frames against the stored-dump records: " + ("ACCEPTED" if ok else "REFUSED") + (f"; frames that differ: {diff}" if diff else "; all fields equal"))
     return 0 if ok else 1
 
 

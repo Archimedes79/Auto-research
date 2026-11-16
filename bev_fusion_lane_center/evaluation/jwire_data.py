@@ -169,14 +169,23 @@ def frame_dict(o, i, ends="kp"):
     return e
 
 
-def live_records(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None, ends="kp"):
+# E358 attempt 4 (card section 5, pre-stated before the run): the settings the two STORED dumps were made with, constants and not parameters; the check `jwire_check.py live --faithful` replays both
+DUMP_B = dict(bs=4, map_mode="exact")                      # B's full dump `temp/e276/predfull_e273_p_s<seed>.pkl`: `qgraph_run_eval.py:89` (`LD.loader("val_clean", bs=4, ..., map_mode=<exact>, pixels=False, strict=True)`)
+DUMP_PAIR = dict(bs=8, map_mode="error", workers=2)        # the pair dump `runs/<pair run>/ends_val.pkl`: `jends_eval.py:42` (`dump`: `DEFAULT_JUNCTION = True; LD.loader("val_clean", bs=8, workers=2, shuffle=False, map_mode="error", pixels=False)`)
+FAITHFUL_MAX = 64                                          # the faithful pass keeps B's predictions of all its frames in memory: a check, not a TRAIN pass
+
+
+def live_records(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None, ends="kp", faithful=False):
     """the records of the frames of a split from a LIVE pass of B (`runs/e273_p_s<seed>`, exact-map pass, the graph read out with close:1.5@0.5 as the card of record does) and the pair run (`runs/<pair_run>`, default
     e312_p_s<seed>) on the loader of `split` ('train' for the training of the head, 'val_clean' to check that this pass reproduces the records of the stored dumps): GPU, about 10 minutes for the 8414 TRAIN frames"""
     assert split in SPLITS, f"split {split!r}: only {SPLITS} (TEST is never read by a pass of this module)"
     check_ends(ends, seed, pair_run)
+    assert not faithful or (split == "val_clean" and 0 < nmax <= FAITHFUL_MAX), f"faithful (the two-loader replay of the stored dumps' settings, E358) is a check of at most {FAITHFUL_MAX} val_clean frames, not a TRAIN pass"
     import torch
     dev = device or ("cuda" if torch.cuda.is_available() else "cpu")
     mb, mp = load_models(seed, resolve_pair_run(seed, pair_run), dev)
+    if faithful:
+        return _live_records_faithful(thr, nmax, workers, dev, mb, mp, ends)
     import lane_gt_data as LD
     import qgraph_eval as QE
     import qgraph_readout as QR
@@ -204,6 +213,56 @@ def live_records(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=N
     out = out[: nmax or None]
     assert len({r["row"] for r in out}) == len(out), "a row was visited twice"
     assert nmax or len(out) == len(ds), f"{len(out)} records for {len(ds)} frames of {split}"
+    return out
+
+
+def _live_records_faithful(thr, nmax, workers, dev, mb, mp, ends):
+    """E358 attempt 4: the live records of the first `nmax` val_clean frames with BOTH models run the way their stored dumps were made: B on a loader of its dump's settings (`DUMP_B`), the pair model on a loader of the
+    pair dump's settings (`DUMP_PAIR`), the two joined by the frame's `row` (the GT ends of the record come from B's loader, as in `live_records`). The record construction after the two forwards is the same as there."""
+    import torch
+    import lane_gt_data as LD
+    import qgraph_eval as QE
+    import qgraph_readout as QR
+    import qpredict as QP
+    spec = QR.parse("close:1.5@0.5")
+    old_ends = getattr(LD.QData, "DEFAULT_ENDS", False)
+    LD.QData.DEFAULT_ENDS = True
+    ds, dl = LD.loader("val_clean", bs=DUMP_B["bs"], workers=workers, shuffle=False, map_mode=DUMP_B["map_mode"], pixels=False, strict=True, ends=True)
+    assert ds.missing == 0, f"{ds.missing} frames of val_clean have no stored lane GT"
+    b_side = {}
+    for b in dl:                                                                                           # pass 1: B (QP.predict) on its dump's loader
+        for i, pr in enumerate(QP.predict(mb, b)):
+            b_side[int(b["row"][i])] = (pr, dict(ent=b["ent"][i].numpy(), ent_m=b["ent_m"][i].numpy(), ext=b["ext"][i].numpy(), ext_m=b["ext_m"][i].numpy()))
+        if len(b_side) >= nmax:
+            break
+    rows = list(b_side)[:nmax]
+    assert len(rows) == nmax, f"B's loader gave {len(rows)} frames, {nmax} asked"
+    LD.QData.DEFAULT_ENDS = old_ends
+    old_junction = getattr(LD.QData, "DEFAULT_JUNCTION", False)
+    LD.QData.DEFAULT_JUNCTION = True                                                                       # as `jends_eval.dump` sets it before its loader; put back below
+    try:
+        ds2, dl2 = LD.loader("val_clean", bs=DUMP_PAIR["bs"], workers=DUMP_PAIR["workers"], shuffle=False, map_mode=DUMP_PAIR["map_mode"], pixels=False)
+        assert ds2.missing == 0, f"{ds2.missing} frames of val_clean have no stored lane GT (the dump asserts it too)"
+        by_row = {}
+        for b in dl2:                                                                                      # pass 2: the pair model on its dump's loader; a frame is kept when B's pass saw it
+            with torch.no_grad():
+                _, _, o = mp(b["x"].to(dev).float(), gt=None)
+            for i in range(len(b["row"])):
+                if int(b["row"][i]) in b_side and int(b["row"][i]) not in by_row:
+                    by_row[int(b["row"][i])] = frame_dict(o, i, ends)
+            if all(r in by_row for r in rows):
+                break
+    finally:
+        LD.QData.DEFAULT_JUNCTION = old_junction
+    assert all(r in by_row for r in rows), f"the pair loader did not reach the rows {[r for r in rows if r not in by_row]} of B's pass"
+    out = []
+    for r in rows:
+        pr, g = b_side[r]
+        pred = QR.apply(dict(nodes=dict(pos=pr["nodes"]["pos"], dirv=pr["nodes"]["dirv"], e=pr["nodes"]["e"], flags=pr["nodes"]["flags"], section=pr["nodes"]["section"], s=pr["nodes"].get("s")),
+                             links=dict(src=pr["links"]["src"], dst=pr["links"]["dst"], p=pr["links"]["p"], long=pr["links"]["long"], a=pr["links"]["a"], b=pr["links"]["b"])), spec)
+        graph, bk = QE.readout(pred, 0.5, 0.5)
+        out.append(record_of(pred, graph, bk, by_row[r], g, thr, r, -1, ends))
+    assert len({x["row"] for x in out}) == len(out) == nmax, "a row was visited twice or a frame is missing"
     return out
 
 
@@ -660,6 +719,112 @@ def _test_ends():
             globals()["val_records"], globals()["live_records"] = old_vr, old_lr
 
 
+def _test_faithful():
+    """E358 attempt 4 (`live_records(..., faithful=True)`): both models run on loaders with the settings of THEIR stored dumps (`DUMP_B`, `DUMP_PAIR`), the two joined by the frame's row although the batches differ in size, the
+    GT ends of the record come from B's loader, the flags of the loader class are set for the pair loader the way the dump set them, it is a check of at most FAITHFUL_MAX val_clean frames, and the default path is untouched"""
+    import types
+    from types import SimpleNamespace as NS
+    import torch
+    rows = [10, 11, 12, 13, 14, 15]
+    calls, seen, pcalls = [], [], []
+
+    miss = []                                                                                              # the pair loader's dataset has frames without stored lane GT
+    reverse = []                                                                                           # the pair loader hands the frames out in REVERSED order (the join must not depend on it)
+
+    def make(bs, coded):
+        out = []
+        order = rows[::-1] if (coded and reverse) else rows
+        for a in range(0, len(order), bs):
+            r = order[a:a + bs]
+            t = torch.tensor(r, dtype=torch.float32)
+            out.append(dict(x=t[:, None], row=torch.tensor(r), ent=t[:, None, None].repeat(1, 1, 4), ent_m=torch.zeros(len(r), 1, dtype=torch.bool), ext=t[:, None, None].repeat(1, 1, 4), ext_m=torch.zeros(len(r), 1, dtype=torch.bool)))
+        return out
+    QData = NS(DEFAULT_ENDS=False, DEFAULT_JUNCTION=False)
+
+    def loader(split, bs=0, workers=0, shuffle=None, map_mode=None, pixels=None, strict=False, ends=False):
+        calls.append(dict(split=split, bs=bs, workers=workers, shuffle=shuffle, map_mode=map_mode, pixels=pixels, strict=strict, ends=ends, flags=(QData.DEFAULT_ENDS, QData.DEFAULT_JUNCTION)))
+        return NS(missing=1 if (len(calls) == 2 and miss) else 0), make(bs, len(calls) == 2)
+    fakes = dict(lane_gt_data=NS(QData=QData, loader=loader), qgraph_eval=NS(readout=lambda pred, a, b: (pred, "bk")), qgraph_readout=NS(parse=lambda s: s, apply=lambda d, spec: d["nodes"]["pos"]),
+                 qpredict=NS(predict=lambda mb, b: pcalls.append(len(b["row"])) or [dict(nodes=dict(pos=float(b["x"][i, 0]), dirv=0, e=0, flags=0, section=0), links=dict(src=0, dst=0, p=0, long=0, a=0, b=0)) for i in range(len(b["row"]))]))
+
+    def model(x, gt=None):                                                                                 # the pair model: every output is coded with the frame's row
+        n = x.shape[0]
+        o = dict(kp_pos=x[:, :, None].repeat(1, 4, 2), kp_dir=torch.zeros(n, 4, 2), kp_p=torch.zeros(n, 4), valid=torch.ones(n, 2, 2, dtype=torch.bool), logit=torch.zeros(n, 2, 2), allowed=torch.ones(n, 2, 2, dtype=torch.bool),
+             att_pos=100.0 + x[:, :, None].repeat(1, 4, 2), att_dir=torch.zeros(n, 4, 2))
+        return None, None, o
+    saved = {k: sys.modules.get(k) for k in fakes}
+    real_record_of, real_lm = record_of, load_models
+    try:
+        for k, v in fakes.items():
+            sys.modules[k] = types.ModuleType(k)
+            sys.modules[k].__dict__.update(vars(v))
+        globals()["record_of"] = lambda pred, graph, bk, e, g, thr=0.1, row=-1, scene=-1, ends="kp": seen.append((pred, float(e["kp_pos"][0, 0]), float(g["ent"][0, 0]), row, ends, float(e["att_pos"][0, 0]) if "att_pos" in e else None)) or toy_record(row, scene)
+        globals()["load_models"] = lambda seed, pair_run, dev: ("B", model)
+        recs = live_records(0, "val_clean", 0.1, 5, device="cpu", pair_run="e324_s_s0", ends="att", faithful=True)
+        assert [r["row"] for r in recs] == rows[:5], [r["row"] for r in recs]
+        assert seen == [(float(r), float(r), float(r), r, "att", 100.0 + r) for r in rows[:5]], seen             # B's prediction, the pair model's output (keypoints AND attached ends) and the GT ends of every record belong to the SAME row
+        assert len(calls) == 2, calls
+        b_call, p_call = calls
+        assert (b_call["split"], b_call["bs"], b_call["map_mode"], b_call["pixels"], b_call["strict"], b_call["ends"], b_call["shuffle"]) == ("val_clean", DUMP_B["bs"], DUMP_B["map_mode"], False, True, True, False) == ("val_clean", 4, "exact", False, True, True, False), b_call
+        assert (p_call["split"], p_call["bs"], p_call["workers"], p_call["map_mode"], p_call["pixels"], p_call["shuffle"]) == ("val_clean", DUMP_PAIR["bs"], DUMP_PAIR["workers"], DUMP_PAIR["map_mode"], False, False) == ("val_clean", 8, 2, "error", False, False), p_call
+        assert b_call["flags"] == (True, False) and p_call["flags"] == (False, True), (b_call["flags"], p_call["flags"])      # B's loader: ends flag on; the pair loader as the dump set it: junction flag on, the ends flag back where it was
+        assert (QData.DEFAULT_ENDS, QData.DEFAULT_JUNCTION) == (False, False), "both loader flags are put back after the pass"
+        reverse.append(1)
+        calls.clear()
+        recs_r = live_records(0, "val_clean", 0.1, 5, device="cpu", pair_run="e324_s_s0", ends="att", faithful=True)
+        assert [r["row"] for r in recs_r] == rows[:5] and sorted(seen[-5:]) == sorted((float(r), float(r), float(r), r, "att", 100.0 + r) for r in rows[:5]) and [s[3] for s in seen[-5:]] == rows[:5], seen[-5:]      # a reversed pair loader joins the same way
+        reverse.clear()
+        calls.clear()
+        miss.append(1)
+        assert "no stored lane GT" in (refusal(live_records, 0, "val_clean", 0.1, 5, device="cpu", pair_run="e324_s_s0", ends="att", faithful=True) or ""), "the pair loader's dataset is checked like the dump does"
+        miss.clear()
+        assert (QData.DEFAULT_ENDS, QData.DEFAULT_JUNCTION) == (False, False), "the flags are put back also when the pair pass is refused"
+        calls.clear()
+        pcalls[:] = [4, 2]
+        calls.extend([b_call, p_call])
+        assert pcalls == [4, 2], pcalls                                                                        # B's loader was read until nmax = 5 frames were there (two batches)
+        pcalls.clear()
+        r4 = live_records(0, "val_clean", 0.1, 4, device="cpu", pair_run="e324_s_s0", ends="att", faithful=True)
+        assert [r["row"] for r in r4] == rows[:4] and pcalls == [4], (pcalls, "B's loader stops as soon as nmax frames are there")
+        calls[:] = calls[:2]
+        assert DUMP_B == dict(bs=4, map_mode="exact") and DUMP_PAIR == dict(bs=8, map_mode="error", workers=2) and FAITHFUL_MAX == 64
+        # the guards: only a check of val_clean frames, never a TRAIN pass, never without nmax or above FAITHFUL_MAX
+        n_calls = len(calls)
+        for kw in (dict(split="train", nmax=5), dict(split="val_clean", nmax=0), dict(split="val_clean", nmax=FAITHFUL_MAX + 1)):
+            assert "faithful" in (refusal(live_records, 0, kw["split"], 0.1, kw["nmax"], device="cpu", pair_run="e324_s_s0", ends="att", faithful=True) or ""), kw
+        assert len(calls) == n_calls, "refused before any loader was built"
+        # a pair loader that never reaches a row of B's pass is an error, not a short result
+        globals()["load_models"] = lambda seed, pair_run, dev: ("B", model)
+        short_rows, rows[:] = rows[:], rows[:4]
+        try:
+            fakes_loader = sys.modules["lane_gt_data"].loader
+            first = []
+
+            def loader2(split, bs=0, **k):
+                ds, b = fakes_loader(split, bs=bs, **k)
+                first.append(bs)
+                if len(first) == 2:
+                    b = b[:0]                                                                              # the pair loader gives nothing
+                return ds, b
+            sys.modules["lane_gt_data"].loader = loader2
+            rows[:] = short_rows
+            assert "pair loader" in (refusal(live_records, 0, "val_clean", 0.1, 5, device="cpu", pair_run="e324_s_s0", ends="att", faithful=True) or ""), "missing rows on the pair side"
+        finally:
+            sys.modules["lane_gt_data"].loader = fakes_loader
+            rows[:] = short_rows
+        # the default path (faithful off) builds ONE loader, exactly as before
+        calls.clear()
+        live_records(0, "val_clean", 0.1, 4, device="cpu", pair_run="e324_s_s0", ends="att")
+        assert len(calls) == 1 and calls[0]["bs"] == 4 and calls[0]["map_mode"] == "exact", calls
+    finally:
+        globals()["record_of"], globals()["load_models"] = real_record_of, real_lm
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+
 def _selftest():
     import jwire_head as H
     up = np.array([0.0, 1.0])
@@ -691,6 +856,7 @@ def _selftest():
     assert len(direct) == len(viarec) and all(np.allclose(x["feat"], y["feat"], atol=1e-5) and x["label"] == y["label"] for x, y in zip(direct, viarec)), "records and direct instances differ"
     _test_pair_run()
     _test_ends()
+    _test_faithful()
     print("jwire_data selftest ok")
 
 
