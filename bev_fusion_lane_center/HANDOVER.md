@@ -1,4 +1,6 @@
-# HANDOVER - 2026-11-16 10:30 (auto operation, D86 - D110)
+# HANDOVER - 2026-11-16 09:00 (auto operation, D86 - D111)
+
+**SHUTDOWN (D111, Mirko): this afternoon at 17:30 (the lead chose the time): at 17:20 - 17:30 check no run.py job, no fork mid-turn, everything committed, then `shutdown /s /t 60` (Windows); a running job is waited for until 19:00, nothing killed; no GPU job after 15:30. Do not forget after a compaction.**
 
 New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `decisions/`.
 
