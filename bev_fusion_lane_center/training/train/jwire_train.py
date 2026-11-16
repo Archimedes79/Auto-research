@@ -1,15 +1,18 @@
 """E325 step 2: training and diagnostics of the wiring head `Wire` (`training/grid/jwire_head.py`) on records of `evaluation/jwire_data.py`.
 
-    wsl bash tools/env/_py14.sh jwire_train.py cv --seed 0 [--pair-run e312_p_s0] [--folds 5] [--epochs 60]   # DIAGNOSTIC (card section 1, step 2 of the guard): a scene-wise cross-validation on the VAL records: the head is
+    wsl bash tools/env/_py14.sh jwire_train.py cv --seed 0 [--pair-run e312_p_s0] [--ends kp|att] [--folds 5] [--epochs 60]   # DIAGNOSTIC (card section 1, step 2 of the guard): a scene-wise cross-validation on the VAL records: the head is
                                                                                                  # trained on the labelled ends of a part of the VAL scenes and judged on the rest: IN-SAMPLE on VAL, never a claim; it only
                                                                                                  # decides whether the TRAIN dumps are built. Also the distance-only ablation (features d, along, across only).
-    wsl bash tools/env/_py14.sh jwire_train.py run --seed 0 [--name e325_w_s0 | --pair-run e324_s_s0 --name e350_w_s0] [--heads 3] [--epochs 60] [--max-train N]   # the head of the card: through run.py (E325.w_s<S>): TRAIN records (a live pass, GPU) -> the pilot, the jitter ->
-                                                                                                 # the heads (3 head seeds + the distance-only ablation) -> `runs/<name>/model.pt` (head seed 0 = the arm), `model_h<k>.pt`, `wire_agreement.json`
+    wsl bash tools/env/_py14.sh jwire_train.py run --seed 0 [--name e325_w_s0 | --pair-run e324_s_s0 [--ends att] --name e358_w_s0] [--heads 3] [--epochs 60] [--max-train N]   # the head of the card: through run.py (E325.w_s<S>): TRAIN records (a live pass, GPU) -> the pilot, the jitter ->
+                                                                                                 # the heads (3 head seeds + the distance-only ablation + the no-jitter head `wn`) -> `runs/<name>/model.pt` (head seed 0 = the arm), `model_h<k>.pt`, `model_wn.pt`, `wire_agreement.json`
     wsl bash tools/env/_py14.sh jwire_train.py selftest
 
 The PAIR RUN (default E312's `e312_p_s<seed>`; E350: `--pair-run e324_s_s<seed>`) is the run whose keypoints the records hold: it reaches the VAL records, the live pass and the cache names (`jwire_data.cache_path`), the caches are
 checked against their meta, and the head's checkpoint args and `wire_agreement.json` carry `pair_run` and `seed`. A run folder that already holds a `wire_agreement.json` or a
 `model.pt` is refused in EVERY case (`trainer.Run` has no overwrite guard; the default name e325_w_s<seed> is E325's run); with `--pair-run` the run needs its own `--name`; a name is a folder name.
+The END KIND (E358, `--ends kp|att`, default kp): the records hold the keypoints (E325, E350) or the ATTACHED ends of the pair run (`jwire_data`: att needs `--pair-run` of an attach model), it reaches the VAL records, the live pass, the cache
+names and metas, and the head's checkpoint args and `wire_agreement.json` (`ends`). The jitter is calibrated on the error of the pair ends of the records (the attached ends under att). The no-jitter head `wn` (E358, reported only) is the
+same training on the records without any perturbation of the pair ends: `model_wn.pt` and `wire_agreement.json['no_jitter_head']`; it never replaces a head file.
 
 The agreement = the share of the ends with an ORACLE label (a matched GT end that finds a piece in reach and whose place is among the keypoint's places) on which the argmax place equals the label place; `real choices` = the ends
 with two or more places; the rule's agreement is the share of label place 0 (the twin). Loss: cross entropy over the places of the labelled ends only.
@@ -122,11 +125,12 @@ def cv(records, folds=5, epochs=60, seed=0):
     return res
 
 
-def run_target(seed, name, pair_run=None):
+def run_target(seed, name, pair_run=None, ends="kp"):
     """-> (run name, pair run) of a training run. Default (pair_run None): E312's records and the name e325_w_s<seed> (E325); with a pair run `name` is mandatory. A name is a folder name, and a run folder that already
-    holds a `wire_agreement.json` or a `model.pt` is refused in EVERY case (`trainer.Run` has no overwrite guard: a second call with the default name would overwrite E325's run)"""
+    holds a `wire_agreement.json` or a `model.pt` is refused in EVERY case (`trainer.Run` has no overwrite guard: a second call with the default name would overwrite E325's run); ends att needs a pair run with attached ends"""
     given = pair_run is not None
     pair_run = JD.resolve_pair_run(seed, pair_run)
+    JD.check_ends(ends, seed, pair_run)
     assert name is not None or not given, f"--name is mandatory with --pair-run (the default name e325_w_s{seed} would overwrite E325's run)"
     name = f"e325_w_s{seed}" if name is None else name
     assert re.fullmatch(r"[A-Za-z0-9_-]+", name), f"--name {name!r}: a run folder name"
@@ -135,23 +139,23 @@ def run_target(seed, name, pair_run=None):
     return name, pair_run
 
 
-def run_pipeline(seed, name, heads=3, epochs=60, workers=3, max_train=0, draws=3, pair_run=None):
-    """the training run of the card (E325.w_s<seed>, E350.w_s<seed> with another pair run): see the module docstring; the kill numbers of the card (agreement against the rule on the VAL real choices and on the TRAIN
-    ends with the jitter) are written to `wire_agreement.json` and logged"""
+def run_pipeline(seed, name, heads=3, epochs=60, workers=3, max_train=0, draws=3, pair_run=None, ends="kp"):
+    """the training run of the card (E325.w_s<seed>, E350.w_s<seed> with another pair run, E358.w_s<seed> with the attached ends of it): see the module docstring; the kill numbers of the card (agreement against the rule on the
+    VAL real choices and on the TRAIN ends with the jitter) are written to `wire_agreement.json` and logged"""
     import json
     import trainer as T
-    name, pair_run = run_target(seed, name, pair_run)                                                    # before anything is created or computed
+    name, pair_run = run_target(seed, name, pair_run, ends)                                              # before anything is created or computed
     run = T.Run(name, root=os.path.join(ROOT, "runs"))
-    run.log(f"E325 head, seed {seed}, pair run {pair_run}: records of the TRAIN frames (live pass of B and the pair run), jitter calibrated on the keypoint error, {heads} head seeds + the distance-only ablation")
-    vpath = JD.cache_path("val", seed, pair_run=pair_run)
-    val = JD.cached_records(vpath, seed, pair_run, lambda: JD.val_records(seed, pair_run))
+    run.log(f"E325 head, seed {seed}, pair run {pair_run}, {ends} ends: records of the TRAIN frames (live pass of B and the pair run), jitter calibrated on the error of the pair ends, {heads} head seeds + the distance-only ablation + the no-jitter head")
+    vpath = JD.cache_path("val", seed, pair_run=pair_run, ends=ends)
+    val = JD.cached_records(vpath, seed, pair_run, lambda: JD.val_records(seed, pair_run, ends=ends), ends)
     assert len(val) == 873 and len({r["row"] for r in val}) == 873, f"{vpath}: {len(val)} VAL records (873 needed, unique rows)"
-    tpath = JD.cache_path("train", seed, max_train, pair_run=pair_run)
-    train = JD.cached_records(tpath, seed, pair_run, lambda: JD.live_records(seed, "train", 0.1, max_train, workers, pair_run=pair_run))
+    tpath = JD.cache_path("train", seed, max_train, pair_run=pair_run, ends=ends)
+    train = JD.cached_records(tpath, seed, pair_run, lambda: JD.live_records(seed, "train", 0.1, max_train, workers, pair_run=pair_run, ends=ends), ends)
     assert len({r["row"] for r in train}) == len(train) and (max_train or len(train) >= 8000), f"{tpath}: {len(train)} TRAIN records"
     pt, pv = JD.pilot_stats(train), JD.pilot_stats(val)
     scale, med = JD.calibrate_jitter(train, pv["err_median"])
-    info = dict(seed=seed, pair_run=pair_run, train_frames=len(train), pilot_train={k: v for k, v in pt.items() if k != "counts"}, pilot_val={k: v for k, v in pv.items() if k != "counts"}, jitter_scale=scale, jitter_median_error=med)
+    info = dict(seed=seed, pair_run=pair_run, ends=ends, train_frames=len(train), pilot_train={k: v for k, v in pt.items() if k != "counts"}, pilot_val={k: v for k, v in pv.items() if k != "counts"}, jitter_scale=scale, jitter_median_error=med)
     run.log("pilot TRAIN", json.dumps(info["pilot_train"]), "VAL", json.dumps(info["pilot_val"]), f"-> jitter scale {scale:.3f} m (median error {med:.3f} m, VAL {pv['err_median']:.3f} m); the keypoint probabilities are blind columns of the head (jwire_head.BLIND)")
     parts = [tensors(train, JD.make_jitter(scale, d)) for d in range(draws)]
     feat, mask, label, orc, npl = (torch.cat([p[i] for p in parts]) for i in range(5))
@@ -170,7 +174,13 @@ def run_pipeline(seed, name, heads=3, epochs=60, workers=3, max_train=0, draws=3
         if h == 0:
             out["calibration_val_labelled_ends"] = calibration(w, vf, vm, vl, vo)
         if cols is None:
-            torch.save(dict(state=w.state_dict(), args=dict(seed=seed, pair_run=pair_run, head_seed=h, jitter_scale=scale, epochs=epochs)), run.path("model.pt" if h == 0 else f"model_h{h}.pt"))
+            torch.save(dict(state=w.state_dict(), args=dict(seed=seed, pair_run=pair_run, ends=ends, head_seed=h, jitter_scale=scale, epochs=epochs)), run.path("model.pt" if h == 0 else f"model_h{h}.pt"))
+    nf, nm, nl, no, nn, _ = tensors(train)                                                               # the no-jitter ablation (reported only): head seed 0 on the unperturbed records, as many rows as the jittered draws
+    w = fit(nf.repeat(draws, 1, 1), nm.repeat(draws, 1), nl.repeat(draws), epochs, seed=0)
+    av, at = agree(predict(w, vf, vm), vl, vo, vn), agree(predict(w, nf, nm), nl, no, nn)
+    out["no_jitter_head"] = dict(val=av, train=at)
+    torch.save(dict(state=w.state_dict(), args=dict(seed=seed, pair_run=pair_run, ends=ends, head_seed="wn", jitter_scale=0.0, epochs=epochs, no_jitter=True)), run.path("model_wn.pt"))
+    run.log(f"no-jitter head (wn): VAL overall {av['head_same'] / av['oracle']:.3f} (rule {av['rule_same'] / av['oracle']:.3f}) real choices {av['head_multi_same'] / max(av['multi'], 1):.3f} (rule {av['rule_multi_same'] / max(av['multi'], 1):.3f}); TRAIN real choices {at['head_multi_same'] / max(at['multi'], 1):.3f} (rule {at['rule_multi_same'] / max(at['multi'], 1):.3f})")
     h0 = out["heads"][0]
     kill, k_val, k_train = kill_fired(h0["val"], h0["train_jitter"])
     out["kill_fired"], out["kill_on_val"], out["kill_on_train"] = kill, k_val, k_train
@@ -216,6 +226,7 @@ def _selftest():
     sc, md = JD.calibrate_jitter(toy, 1.0)
     assert abs(md - 1.0) < 0.1 and sc > 0, (sc, md)
     _test_pair_run()
+    _test_ends()
     print(f"jwire_train selftest ok (a head sees feature 5: {acc:.2f}; the distance-only ablation does not: {accd:.2f})")
 
 
@@ -230,12 +241,12 @@ def _test_pair_run():
     global ROOT
     seen = dict(val=[], live=[])
 
-    def val_stub(seed, run, thr=0.1, nmax=0):
-        seen["val"].append((seed, run))
+    def val_stub(seed, run, thr=0.1, nmax=0, ends="kp"):
+        seen["val"].append((seed, run, ends))
         return [JD.toy_record(i, i % 22) for i in range(873)]
 
-    def live_stub(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None):
-        seen["live"].append((seed, split, nmax, pair_run))
+    def live_stub(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None, ends="kp"):
+        seen["live"].append((seed, split, nmax, pair_run, ends))
         return [JD.toy_record(i, i % 22) for i in range(nmax)]
 
     def refused(f, *a, **k):
@@ -254,7 +265,7 @@ def _test_pair_run():
             assert "mandatory" in (refused(main, ["run", "--seed", "0", "--pair-run", "e324_s_s0"]) or ""), "--pair-run without --name must be refused"
             assert seen == dict(val=[], live=[]), "the refusal must come before anything is computed"
             main(["run", "--seed", "0", "--pair-run", "e324_s_s0", "--name", "e350_w_s0", "--heads", "1", "--epochs", "1", "--max-train", "30"])
-            assert seen == dict(val=[(0, "e324_s_s0")], live=[(0, "train", 30, "e324_s_s0")]), seen              # the pair run arrives at val_records AND at live_records
+            assert seen == dict(val=[(0, "e324_s_s0", "kp")], live=[(0, "train", 30, "e324_s_s0", "kp")]), seen   # the pair run arrives at val_records AND at live_records
             names = sorted(os.listdir(cache("")))
             assert names == ["train_records_v1_s0_max30_pair_e324_s_s0.pkl", "val_records_v1_s0_pair_e324_s_s0.pkl"], names     # and into both cache names (E325's names are not used)
             for f in names:
@@ -262,6 +273,8 @@ def _test_pair_run():
             ck = torch.load(os.path.join(d, "runs", "e350_w_s0", "model.pt"), map_location="cpu")
             wa = json.load(open(os.path.join(d, "runs", "e350_w_s0", "wire_agreement.json")))
             assert ck["args"]["pair_run"] == "e324_s_s0" and ck["args"]["seed"] == 0 and wa["pair_run"] == "e324_s_s0" and wa["seed"] == 0, (ck["args"], wa["pair_run"])
+            assert ck["args"]["ends"] == wa["ends"] == "kp" and os.path.exists(os.path.join(d, "runs", "e350_w_s0", "model_wn.pt")) and "no_jitter_head" in wa, "the end kind and the no-jitter head of every run"
+            assert "kp ends" in open(os.path.join(d, "runs", "e350_w_s0", "log.txt")).read() and "no-jitter head (wn)" in open(os.path.join(d, "runs", "e350_w_s0", "log.txt")).read()
             assert "pair run e324_s_s0" in open(os.path.join(d, "runs", "e350_w_s0", "log.txt")).read(), "the run log names the pair run"
             # a finished run is never overwritten; a folder with only a model.pt too; nothing is computed
             assert "exists" in (refused(run_pipeline, 0, "e350_w_s0", pair_run="e324_s_s0") or "")
@@ -285,7 +298,7 @@ def _test_pair_run():
             assert "meta" in (refused(main, ["cv", "--seed", "0", "--pair-run", "e324_s_s0"]) or ""), "cv must refuse a cache of another seed"
             # E325's default path: E312's run, E325's cache names, the default run name; a SECOND call with the same (default) name is refused and the first run's files stay byte for byte
             run_pipeline(0, None, heads=1, epochs=1, max_train=30, draws=1)
-            assert seen["val"][-1] == (0, "e312_p_s0") and seen["live"][-1] == (0, "train", 30, "e312_p_s0"), seen
+            assert seen["val"][-1] == (0, "e312_p_s0", "kp") and seen["live"][-1] == (0, "train", 30, "e312_p_s0", "kp"), seen
             assert os.path.exists(cache("val_records_v1_s0.pkl")) and JD.load_records(cache("val_records_v1_s0.pkl"), 0) and os.path.exists(cache("train_records_v1_s0_max30.pkl")), "E325's cache names"
             rd = os.path.join(d, "runs", "e325_w_s0")
             files = lambda: {f: hashlib.sha256(open(os.path.join(rd, f), "rb").read()).hexdigest() for f in sorted(os.listdir(rd))}  # noqa: E731
@@ -311,17 +324,101 @@ def _test_pair_run():
             ROOT = old_root
 
 
+def _test_ends():
+    """E358 plumbing (stubs on the records, a temp ROOT, as `_test_pair_run`): `--ends att` reaches the VAL records, the live pass, the cache names and metas, the checkpoint args and `wire_agreement.json`; att without an attach
+    pair run is refused before anything is computed; a cache of the other kind is refused on load; `cv` reads the cache of its kind; the no-jitter head `wn` is trained on the unperturbed records and never replaces a head file"""
+    import contextlib
+    import io
+    import json
+    import pickle
+    global ROOT
+    seen = dict(val=[], live=[])
+
+    def val_stub(seed, run, thr=0.1, nmax=0, ends="kp"):
+        seen["val"].append((seed, run, ends))
+        return [JD.toy_record(i, i % 22) for i in range(873)]
+
+    def live_stub(seed, split="train", thr=0.1, nmax=0, workers=3, bs=4, device=None, pair_run=None, ends="kp"):
+        seen["live"].append((seed, split, nmax, pair_run, ends))
+        return [JD.toy_record(i, i % 22) for i in range(nmax)]
+    old_root, old_stubs, old_fns = ROOT, (JD.val_records, JD.live_records), (globals()["tensors"], globals()["fit"])
+    with JD.tmp_root() as d, contextlib.redirect_stdout(io.StringIO()):
+        ROOT = d
+        JD.val_records, JD.live_records = val_stub, live_stub
+        cache = lambda f: os.path.join(d, "temp", "jwire", f)  # noqa: E731
+        att_run = ["run", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att", "--name", "e358_w_s0", "--heads", "1", "--epochs", "1", "--max-train", "30"]
+        try:
+            # att without an attach pair run (no --pair-run, or E312's own) and without its own name: refused before anything is computed or created
+            for argv in (["run", "--seed", "0", "--ends", "att", "--name", "e358_w_s0"], ["run", "--seed", "0", "--pair-run", "e312_p_s0", "--ends", "att", "--name", "e358_w_s0"], ["cv", "--seed", "0", "--ends", "att"]):
+                assert "attached ends" in (JD.refusal(main, argv) or ""), argv
+            assert "mandatory" in (JD.refusal(main, ["run", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att"]) or "")
+            assert seen == dict(val=[], live=[]) and not os.path.exists(os.path.join(d, "runs")) and not os.path.exists(cache("")), "a refused call computed or created something"
+            with contextlib.redirect_stderr(io.StringIO()):
+                try:
+                    main(["run", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "attached", "--name", "x"])
+                    raise AssertionError("a bad end kind must be refused")
+                except SystemExit as e:
+                    assert e.code == 2
+            # the att run: the kind reaches val_records, live_records, both cache names and metas, the checkpoint args, the json and the log; wn is trained on the unperturbed records (the same number of rows as the draws)
+            calls = dict(tensors=[], fit=[])
+            real_tensors, real_fit = old_fns
+            globals()["tensors"] = lambda records, jitter=None: calls["tensors"].append((len(records), jitter is not None)) or real_tensors(records, jitter)
+            globals()["fit"] = lambda feat, mask, label, epochs=60, lr=3e-3, bs=512, seed=0, cols=None, wd=1e-4: calls["fit"].append((len(label), seed, cols)) or real_fit(feat, mask, label, epochs, lr, bs, seed, cols, wd)
+            main(att_run)
+            globals()["tensors"], globals()["fit"] = old_fns
+            assert seen == dict(val=[(0, "e324_s_s0", "att")], live=[(0, "train", 30, "e324_s_s0", "att")]), seen
+            assert sorted(os.listdir(cache(""))) == ["train_records_v1_s0_max30_pair_e324_s_s0_ends_att.pkl", "val_records_v1_s0_pair_e324_s_s0_ends_att.pkl"], os.listdir(cache(""))
+            for f in os.listdir(cache("")):
+                assert pickle.load(open(cache(f), "rb"))["meta"] == JD.meta_of(0, "e324_s_s0", "att") and JD.load_records(cache(f), 0, "e324_s_s0", "att")
+            rd = os.path.join(d, "runs", "e358_w_s0")
+            wa = json.load(open(os.path.join(rd, "wire_agreement.json")))
+            ck, wn = (torch.load(os.path.join(rd, f), map_location="cpu") for f in ("model.pt", "model_wn.pt"))
+            assert wa["ends"] == ck["args"]["ends"] == wn["args"]["ends"] == "att" and ck["args"]["pair_run"] == wn["args"]["pair_run"] == "e324_s_s0" and "att ends" in open(os.path.join(rd, "log.txt")).read()
+            assert ck["args"]["head_seed"] == 0 and wn["args"]["head_seed"] == "wn" and wn["args"]["no_jitter"] and wn["args"]["jitter_scale"] == 0.0 and "no_jitter" not in ck["args"], (ck["args"], wn["args"])
+            assert set(wa["no_jitter_head"]) == {"val", "train"} and wa["no_jitter_head"]["val"]["oracle"] == wa["heads"][0]["val"]["oracle"] and {"log.txt", "model.pt", "model_wn.pt", "wire_agreement.json"} <= set(os.listdir(rd)), os.listdir(rd)
+            assert not os.path.exists(os.path.join(rd, "model_h1.pt")), "heads = 1: the second one is the ablation and is not saved"
+            n_unjit = len(real_tensors([JD.toy_record(i, i % 22) for i in range(30)])[2])
+            assert calls["tensors"] == [(30, True)] * 3 + [(873, False), (30, False)], calls["tensors"]            # three jittered draws, VAL, then the unperturbed TRAIN records of wn
+            assert [c[1:] for c in calls["fit"]] == [(0, None), (1, DIST_ONLY), (0, None)] and calls["fit"][2][0] == 3 * n_unjit, calls["fit"]      # head 0, the ablation, wn: head seed 0, all columns, the unperturbed rows once per draw
+            # a cache of the other kind is refused: a kp cache under the att name, an att cache under the kp name (val and train), also by cv
+            for kind, fname in (("train", "train_records_v1_s0_max30_pair_e324_s_s0_ends_att.pkl"), ("val", "val_records_v1_s0_pair_e324_s_s0_ends_att.pkl")):
+                os.remove(cache(fname))
+                JD.save_records(cache(fname), [JD.toy_record(i, i % 22) for i in range(873 if kind == "val" else 30)], 0, "e324_s_s0")      # the meta of kp
+                assert "meta" in (JD.refusal(run_pipeline, 0, "e358_w_s9", 1, 1, 3, 30, 1, pair_run="e324_s_s0", ends="att") or ""), kind
+                if kind == "val":
+                    assert "meta" in (JD.refusal(main, ["cv", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att"]) or "")
+            kpv = cache("val_records_v1_s0_pair_e324_s_s0.pkl")
+            pickle.dump(dict(meta=JD.meta_of(0, "e324_s_s0", "att"), records=[JD.toy_record(1, 1)]), open(kpv, "wb"))
+            assert "meta" in (JD.refusal(main, ["cv", "--seed", "0", "--pair-run", "e324_s_s0"]) or ""), "cv: an att cache under the kp name"
+            # cv reads the cache of its kind: the att cache (rebuilt with its meta) and not the kp one
+            os.remove(cache("val_records_v1_s0_pair_e324_s_s0_ends_att.pkl"))
+            JD.save_records(cache("val_records_v1_s0_pair_e324_s_s0_ends_att.pkl"), [JD.toy_record(i, i % 22) for i in range(60)], 0, "e324_s_s0", "att")
+            os.remove(kpv)
+            main(["cv", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att", "--folds", "2", "--epochs", "1"])
+            try:
+                main(["cv", "--seed", "0", "--pair-run", "e324_s_s0", "--folds", "2", "--epochs", "1"])
+                raise AssertionError("cv without --ends must not read the att cache")
+            except FileNotFoundError:
+                pass
+        finally:
+            JD.val_records, JD.live_records = old_stubs
+            globals()["tensors"], globals()["fit"] = old_fns
+            ROOT = old_root
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
     s = sub.add_parser("cv")
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--pair-run", default=None, help="the pair run of the VAL records (default e312_p_s<seed>)")
+    s.add_argument("--ends", default="kp", choices=JD.ENDS, help="the pair ends of the records: the keypoints (default) or the ATTACHED ends of the pair run (needs --pair-run of an attach model)")
     s.add_argument("--folds", type=int, default=5)
     s.add_argument("--epochs", type=int, default=60)
     r = sub.add_parser("run")
     r.add_argument("--seed", type=int, required=True)
     r.add_argument("--pair-run", default=None, help="the pair run whose keypoints the records hold (default e312_p_s<seed>, E325); another one needs its own --name")
+    r.add_argument("--ends", default="kp", choices=JD.ENDS, help="the pair ends of the records: the keypoints (default) or the ATTACHED ends of the pair run (E358: needs --pair-run of an attach model)")
     r.add_argument("--name", default=None, help="the run folder (default e325_w_s<seed>; mandatory with --pair-run)")
     r.add_argument("--heads", type=int, default=3)
     r.add_argument("--epochs", type=int, default=60)
@@ -330,14 +427,14 @@ def main(argv=None):
     sub.add_parser("selftest")
     a = ap.parse_args(argv)
     if a.cmd == "run":
-        run_pipeline(a.seed, a.name, a.heads, a.epochs, a.workers, a.max_train, pair_run=a.pair_run)
+        run_pipeline(a.seed, a.name, a.heads, a.epochs, a.workers, a.max_train, pair_run=a.pair_run, ends=a.ends)
         return
     if a.cmd == "selftest":
         _selftest()
         return
-    recs = JD.load_records(JD.cache_path("val", a.seed, pair_run=a.pair_run), a.seed, a.pair_run)
+    recs = JD.load_records(JD.cache_path("val", a.seed, pair_run=a.pair_run, ends=a.ends), a.seed, a.pair_run, a.ends)
     res = cv(recs, a.folds, a.epochs, seed=0)
-    print(f"seed {a.seed}, pair run {a.pair_run or JD.default_pair_run(a.seed)}: scene-wise {a.folds}-fold cross-validation on VAL (IN-SAMPLE, diagnostic)")
+    print(f"seed {a.seed}, pair run {a.pair_run or JD.default_pair_run(a.seed)}, {a.ends} ends: scene-wise {a.folds}-fold cross-validation on VAL (IN-SAMPLE, diagnostic)")
     for name, r in res.items():
         print(f"  {name:9s} ends with an oracle label {r['oracle']}: head {r['head_same'] / r['oracle']:.3f}, rule {r['rule_same'] / r['oracle']:.3f} | real choices {r['multi']}: head {r['head_multi_same'] / max(r['multi'], 1):.3f}, rule {r['rule_multi_same'] / max(r['multi'], 1):.3f}")
 
