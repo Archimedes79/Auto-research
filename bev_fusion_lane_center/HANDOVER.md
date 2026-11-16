@@ -1,6 +1,6 @@
 # HANDOVER - 2026-11-16 14:50 (auto operation, D86 - D111)
 
-**SHUTDOWN DONE (D111, Mirko's order): the computer was shut down on 2026-11-16 at about 17:25 (`shutdown /s /t 60`), nothing was running, everything committed (HANDOVER, cards, ledger, runs/eval cards). If you read this the machine was started again: start the WSL jobs only from run.py; the page-cache guard of the lane chat ended 17:30.**
+**SHUTDOWN POSTPONED (D111 / D112, Mirko): the shutdown command of 17:21 was aborted (17:22) because Mirko said 'Do one more Experiment'. ONE experiment runs: E362 (Fable; node-type head, 16000 steps, two seeds). When its result section + ledger notes are committed and no run.py job / fork turn is running: `shutdown /s /t 60` (target 21:30, latest 23:00; he can move or cancel it). Do not forget after a compaction.**
 
 New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `decisions/`.
 
