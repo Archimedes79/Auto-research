@@ -13,8 +13,8 @@ Modes (one frame per forward, batch 1, the cache order = the stream order (scene
 Every other mode goes to the SIBLING run folder `runs/R_<mode>/` (stream: `runs/R/`): `token_<split>[_n<N>].pkl` with meta['run'] = `R_<mode>`, and `model.pt` = a copy of R's (an existing one must be the same bytes), so that `jtoken_eval.py score --run R_<mode>`
 and `sweep` read it as they read a run (they need model.pt for its args and the dump named as above; their cards land in the sibling folder; the parameter count they print is that of the E365 head without the block).
 TRAIN (873 evenly spaced frames, as `jtoken_eval.sample`): the stream runs through the whole split, only the sampled frames are dumped. The key weight of the past is the head's own 1 - p_none (the switch of 1000 steps is over in a trained head).
-The dump of `jtoken_eval.dump` (meta + frames of `batch_dump`) with meta['use'] = per dumped frame has_prev, position in the scene, ego shift (m), sums d2 / x2 / n of the kill measure u = RMS(block(x, past) - block(x, none key only)) / RMS(x) (0 without a past) and state_ss / state_n = sum of squares and count of the CARRIED state (the head's final token states x of that frame, valid tokens).
-`use` writes u and the RMS of the carried state per stream position (0 = the cold start, 1, 2, ... frames since the last reset), the stream against off (what the past changed) and the frame indices of the first 5 frames of every scene against the later ones (the card's topo-F1 split).
+The dump of `jtoken_eval.dump` (meta + frames of `batch_dump`) with meta['use'] = per dumped frame has_prev, position in the scene, ego shift (m), the sums of the kill measures (`jpast.SUMS`: d2_none / x2 / n against the none key only, d2_other / x2_other / n_other against the past of ANOTHER SCENE = the donor of `donor_plan`, VAL and a block only; 0 without a past) and state_ss / state_n = sum of squares and count of the CARRIED state (the head's final token states x of that frame, valid tokens).
+`use` writes u = RMS(update with the past - update with another scene's past) / RMS(x) (the kill measure of the card; 0 when the block ignores the past content), u_none (against the none key only: any content-free attention satisfies it, reported next to u, no verdict) and the RMS of the carried state per stream position (0 = the cold start, 1, 2, ... frames since the last reset), the stream against off (what the past changed) and the frame indices of the first 5 frames of every scene against the later ones (the card's topo-F1 split).
 Tests: training/grid/test_jpast_train.py (the modes by hand on the stub head, the donor plan, the use report)
 """
 import argparse
@@ -95,9 +95,10 @@ def is_cold(mode, has_prev, pos_in_scene, window):
 
 def iter_outputs(m, batches, mode="stream", window=3, dev="cpu", donor=None, states=None, frame_of=None):
     """the head on the frames of `batches` (batch size 1: `lane_past_data.loader(..., stream=True)`: dict(frames=[frame], rel_R (1, 1, 2, 2), rel_t (1, 1, 2), has_prev (1, 1), idx (1, 1))) in order, the state carried as `mode` says -> yields
-    (cache index, frame batch on the CPU, the head's output, dict(has_prev, pos = position in the scene, shift = the ego shift in m, d2 / x2 / n = the sums of the kill measure, state_ss / state_n = the sum of squares and the count of the final
-    token states x of the frame's valid tokens: the state that is carried on)). shuffled: `donor` = `donor_plan`, `states` = cache index -> (x, w) of a
-    stream pass (CPU tensors), `frame_of(j)` = the frame batch of cache index j. A head without a block (arm z) runs every frame cold"""
+    (cache index, frame batch on the CPU, the head's output, dict(has_prev, pos = position in the scene, shift = the ego shift in m, the sums of the kill measures `jpast.SUMS` (d2_none, x2, n: against the none key only; d2_other, x2_other, n_other: against
+    the past of another scene), state_ss / state_n = the sum of squares and the count of the final token states x of the frame's valid tokens: the state that is carried on)). `donor` = `donor_plan`, `states` = cache index -> (x, w) of a stream pass (CPU tensors),
+    `frame_of(j)` = the frame batch of cache index j: in mode shuffled the donor's state IS the past; in the other modes it is the OTHER scene's past that the block's update is compared with (u; a batch of one sample has no other sample in it; without
+    `donor` only u_none is measured). A head without a block (arm z) runs every frame cold"""
     block = getattr(m, "past_block", None)
     meter = JP.UseMeter(block) if block is not None else None
     out_prev, fr_prev, pos_in_scene = None, None, 0
@@ -113,18 +114,22 @@ def iter_outputs(m, batches, mode="stream", window=3, dev="cpu", donor=None, sta
             past = {}
             if block is not None and not is_cold(mode, hp, pos_in_scene, window):
                 learned = m._step_py >= JK.SWITCH
-                if mode == "shuffled":
+                other = None
+                if donor is not None and donor[i] is not None:
                     j = donor[i]
-                    if j is not None:
-                        x, w = states[j]
-                        past = JP.make_past(dict(x=x.to(dev), w=w.to(dev)), JKT.to_device(frame_of(j), dev), frd, R, t, learned)
+                    other = JP.make_past(dict(x=states[j][0].to(dev), w=states[j][1].to(dev)), JKT.to_device(frame_of(j), dev), frd, R, t, learned)
+                if mode == "shuffled":
+                    past = other or {}
                 else:
                     past = JP.make_past(out_prev, fr_prev, frd, R, t, learned)
+                    meter.donor = other
             with torch.no_grad():
                 out = m(frd, past) if block is not None else m(frd)
-            d2, x2, n = meter.take_sums() if meter is not None else (0.0, 0.0, 0)
+            sums = meter.take_sums() if meter is not None else dict.fromkeys(JP.SUMS, 0)
+            if meter is not None:
+                meter.donor = None
             v = out["valid"][0].bool()
-            yield i, fr, out, dict(has_prev=hp, pos=pos_in_scene, shift=float(b["rel_t"][0, 0].norm()), d2=d2, x2=x2, n=n, state_ss=float((out["x"][0].float() ** 2)[v].sum()), state_n=int(v.sum()) * int(out["x"].shape[-1]))
+            yield i, fr, out, dict(has_prev=hp, pos=pos_in_scene, shift=float(b["rel_t"][0, 0].norm()), state_ss=float((out["x"][0].float() ** 2)[v].sum()), state_n=int(v.sum()) * int(out["x"].shape[-1]), **sums)
             out_prev, fr_prev = out, frd
     finally:
         if meter is not None:
@@ -133,12 +138,12 @@ def iter_outputs(m, batches, mode="stream", window=3, dev="cpu", donor=None, sta
 
 def dump_frames(m, batches, keep, mode="stream", window=3, dev="cpu", donor=None, states=None, frame_of=None, log=print):
     """the dump frames (`jtoken_eval.batch_dump`) of the cache indices in `keep` (a set) + meta['use'] arrays; the stream runs on through the frames that are not kept (the state is carried through them) and stops after the last kept one"""
-    last, frames, use = max(keep), [], dict(idx=[], has_prev=[], pos=[], shift=[], d2=[], x2=[], n=[], state_ss=[], state_n=[])
+    last, frames, use = max(keep), [], {k: [] for k in ("idx", "has_prev", "pos", "shift", "state_ss", "state_n") + JP.SUMS}
     for i, fr, out, info in iter_outputs(m, batches, mode, window, dev, donor, states, frame_of):
         if i in keep:
             frames += JE.batch_dump(out, fr)
             use["idx"].append(i)
-            for k in ("has_prev", "pos", "shift", "d2", "x2", "n", "state_ss", "state_n"):
+            for k in ("has_prev", "pos", "shift", "state_ss", "state_n") + JP.SUMS:
                 use[k].append(info[k])
             if len(frames) % 100 == 0:
                 log(f"   {len(frames)}/{len(keep)} frames", flush=True)
@@ -165,7 +170,7 @@ def dump(a, runs=JE.RUNS):
     assert not os.path.exists(path), f"a stored dump is never overwritten: {path}"
     sibling(runs, a.run, a.mode)
     donor = states = frame_of = None
-    if a.mode == "shuffled":
+    if a.split == "val" and a.mode != "off" and not args.get("no_past"):                  # the states of a whole stream pass: the past of mode shuffled, the other scene's past that u compares with in the other modes (TRAIN: u_none only)
         states = {i: (out["x"].cpu(), out["w"].cpu()) for i, _, out, _ in iter_outputs(m, dl, "stream", dev=dev)}
         donor, frame_of = donor_plan(ds.prev), (lambda j: LP.collate([ds.tok[j]]))
     frames, use = dump_frames(m, dl, set(int(i) for i in idx), a.mode, a.window, dev, donor, states, frame_of)
@@ -174,19 +179,23 @@ def dump(a, runs=JE.RUNS):
     assert use["idx"] == idx.tolist() and [f["token"] for f in frames] == meta["tokens"], "the dump is not the frames asked for, in order"
     with open(path, "wb") as fh:
         pickle.dump(dict(meta=meta, frames=frames), fh)
-    used = sum(1 for n in use["n"] if n)
-    u_txt = f"u {math.sqrt(sum(use['d2']) / max(sum(use['x2']), 1e-30)):.4f} over {used} frames with a past" if used else "no past read (mode off or arm z)"
+    used, used_o = sum(1 for n in use["n"] if n), sum(1 for n in use["n_other"] if n)
+    u_txt = (f"u_none {math.sqrt(sum(use['d2_none']) / max(sum(use['x2']), 1e-30)):.4f} over {used} frames with a past" + (f", u {math.sqrt(sum(use['d2_other']) / max(sum(use['x2_other']), 1e-30)):.4f} (against another scene's past) over {used_o}" if used_o else "")
+             if used else "no past read (mode off or arm z)")
     print(f"written {os.path.relpath(path, ROOT)}: {len(frames)} frames, mode {a.mode}, kept nodes per frame {np.mean([f['keep'].sum() for f in frames]):.1f}, {u_txt}, device {dev}")
     return path
 
 
 def use_report(stream, off=None):
-    """u of the kill measure overall and by stream position, and (with the dump of mode off) what the past changed: the dumps are the dicts of `dump` (meta + frames) -> dict"""
+    """the kill measures overall and by stream position, and (with the dump of mode off) what the past changed: the dumps are the dicts of `dump` (meta + frames) -> dict. u = RMS(update with the past - update with the past of ANOTHER scene) / RMS(x) (the frames
+    that have an other-scene past: VAL, a block, a mode with a past; NaN else), u_none = the same against the none key only (any content-free attention satisfies it: no test of use)"""
     u = stream["meta"]["use"]
-    d2, x2, pos, hp, sq, sn = (np.asarray(u[k], float) for k in ("d2", "x2", "pos", "has_prev", "state_ss", "state_n"))
-    ratio = lambda m: float(math.sqrt(d2[m].sum() / max(x2[m].sum(), 1e-30))) if m.any() and x2[m].sum() > 0 else float("nan")  # noqa: E731
-    rep = dict(run=stream["meta"]["run"], split=stream["meta"]["split"], mode=stream["meta"].get("mode", "stream"), frames=len(d2), frames_with_past=int(hp.sum()), u=ratio(hp > 0),
-               u_by_position={f"{lo}-{hi}" if hi < 10 ** 9 else f"{lo}+": ratio((pos >= lo) & (pos <= hi) & (hp > 0)) for lo, hi in BUCKETS},
+    d2n, x2, d2o, x2o, pos, hp, sq, sn = (np.asarray(u[k], float) for k in ("d2_none", "x2", "d2_other", "x2_other", "pos", "has_prev", "state_ss", "state_n"))
+    ratio = lambda d2, xx, m: float(math.sqrt(d2[m].sum() / max(xx[m].sum(), 1e-30))) if m.any() and xx[m].sum() > 0 else float("nan")  # noqa: E731
+    bucket = {f"{lo}-{hi}" if hi < 10 ** 9 else f"{lo}+": (pos >= lo) & (pos <= hi) & (hp > 0) for lo, hi in BUCKETS}
+    has_o = np.asarray(u["n_other"], float) > 0
+    rep = dict(run=stream["meta"]["run"], split=stream["meta"]["split"], mode=stream["meta"].get("mode", "stream"), frames=len(d2n), frames_with_past=int(hp.sum()), frames_with_other_past=int(has_o.sum()), u=ratio(d2o, x2o, has_o), u_none=ratio(d2n, x2, hp > 0),
+               u_by_position={k: ratio(d2o, x2o, mk & has_o) for k, mk in bucket.items()}, u_none_by_position={k: ratio(d2n, x2, mk) for k, mk in bucket.items()},
                state_rms_by_position=[float(math.sqrt(sq[pos == p].sum() / sn[pos == p].sum())) if sn[pos == p].sum() > 0 else float("nan") for p in range(int(pos.max()) + 1)] if len(pos) else [],
                position_per_frame=pos.astype(int).tolist(), frame_idx_first5=[int(i) for i, p in zip(stream["meta"]["idx"], pos) if p < FIRST], frame_idx_later=[int(i) for i, p in zip(stream["meta"]["idx"], pos) if p >= FIRST])
     if off is not None:
