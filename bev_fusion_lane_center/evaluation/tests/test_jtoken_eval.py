@@ -17,8 +17,10 @@ every file name, a dump of the other weights refused), ref_run (E376 score --ref
 the card's own cell = the default, at another cell = --ref-cell of that cell; an empty reference = the card's own numbers; the _vs_<run>[_rc<cell>] names beside the card without them; refused: another cache seed, another cache
 of the same seed (`same_tokens` end to end), --model with --ref-run), anatomy (E376: a hand frame with every category, the medians, the AP with ties, the recall ceiling and the existence AP by hand; the mass concentration by hand
 and on a stub head with a hand y; textual mutants: dup / wrong swapped, false_end on both ends, ties broken optimistically, the existence label from p_none, the max over all candidates, G without the class gate; cache: the
-command on 3 frames, delivered = the decode's long links, never overwritten), argmax_keep (E376 score --argmax --keep-thr: the rebuilt argmax = the dump's on a real head and a hand frame with ties and p_none at the threshold, a
-winner below the floor refused above the record keep, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring, self-pairs with --ref-run at the rec / argmax / argmax kt0.6 decodes).
+command on 3 frames, delivered = the decode's long links, the near_none section's none tokens = the cache's, never overwritten), near_none (E377, the anatomy's section: a hand frame with a twin at 1.0 m, one at exactly 2.0 m,
+one at 2.01 m, one at 1.0 m with heading cosine 0.4, a near and a far duplicate, a token near a none token only and padding; every count, share and median by hand; textual mutants of `jtoken.near_none` read through the
+anatomy (radius <, heading test dropped, assigned test dropped) and the duplicates from the row of y), argmax_keep (E376 score --argmax --keep-thr: the rebuilt argmax = the dump's on a real head and a hand frame with ties and
+p_none at the threshold, a winner below the floor refused above the record keep, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring, self-pairs with --ref-run at the rec / argmax / argmax kt0.6 decodes).
 """
 import contextlib
 import json
@@ -212,12 +214,13 @@ def test_decode_variant():
 
 
 def _mutant(fn, old, new):
-    """the function `fn` of jtoken_eval with one text replaced (found exactly once), compiled in the module's namespace: a textual mutant"""
+    """the function `fn` (of jtoken_eval or another module) with one text replaced (found exactly once), compiled in its module's namespace: a textual mutant"""
     import inspect
     src = inspect.getsource(fn)
     assert src.count(old) == 1, old
-    ns = dict(vars(E))
-    exec(compile(src.replace(old, new), E.__file__, "exec"), ns)
+    mod = sys.modules[fn.__module__]
+    ns = dict(vars(mod))
+    exec(compile(src.replace(old, new), mod.__file__, "exec"), ns)
     return ns[fn.__name__]
 
 
@@ -1100,11 +1103,65 @@ def test_anatomy():
         assert doc["delivered"] == want > 0 and sum(x["n"] for x in doc["categories"].values()) == want and doc["frames"] == 3 and doc["gt_long_links"] > 0, (doc["delivered"], want)
         assert doc["valid_tokens"] == sum(int(ds[i]["tokens_np"]["valid"].sum()) for i in range(3)) and doc["dump"]["sha256"], doc["valid_tokens"]
         assert sorted(doc["concentration"]) == ["long", "short"] and all(x["sources"] > 0 and 0 < x["share_median"] <= 1 for x in doc["concentration"].values()), doc["concentration"]
+        nc = doc["near_none"]["counts"]
+        assert nc["near"] + nc["far"] == nc["none"] == sum(int((ds[i]["tokens_np"]["valid"] & (ds[i]["ytype"] == 0)).sum()) for i in range(3)) > 0 and doc["near_none"]["frames"] == 3, nc
         must_fail(E.anatomy, E.parse_args(args), runs, out)
     print(f"anatomy: a hand frame (delivered 5 of 3 GT long links: tp / dup / wrong / false 1 / 1 / 2 / 1, medians of p / typed / B' evidence, long AP 1/3 with a pessimistic tie, recall ceiling 2/3, existence AP 11/12, keep 0.5 drops two "
           f"nodes), AP 5/12 on a hand list ({len(mutants)} textual mutants caught: {', '.join(mutants)}); the mass concentration by hand (shares 0.75 / 1 / 1, candidates >= 0.3: 2 / 2 / 0; the max over all candidates caught) and on a stub head with a hand y (short shares 0.588 / 1, "
           f"a zero-mass group per class counted, not a NaN; G without the class gate caught); "
-          f"the command on 3 cache frames: {doc['delivered']} delivered = the decode's long links, the concentration of both classes (a CPU forward that agrees with the dump), never overwritten: ok")
+          f"the command on 3 cache frames: {doc['delivered']} delivered = the decode's long links, the concentration of both classes (a CPU forward that agrees with the dump), near + far = the cache's {nc['none']} valid none tokens, "
+          "never overwritten: ok")
+
+
+def _near_toy():
+    """E377 hand frame of 12 tokens (metres; heading +y unless said): assigned T0 (0, 0), T1 (20, 0), T11 (40, 0); none tokens: T2 a twin 1.0 m beside T0 and T3 exactly 2.0 m ahead of T0 (near), T4 2.01 m behind T0 (far), T5 1.0 m
+    beside T0 with heading cosine 0.4 (far), T6 0.5 m beside T1 and in G(0) (near, a duplicate), T7 in G(1) and near nothing (a far duplicate, heading +x), T10 1.0 m beside T7 (near a NONE token only, heading +x); T8 (0.5 m beside
+    T0) and T9 padding. Kept (p_none < 0.6): T0 T1 T2 T4 T6 T10 T11 (T3 0.7, T5 0.9, T7 0.65 not). Delivered (short >= 0.3, long >= 0.2, both ends kept): 0->1 L, 0->2 S, 4->0 S, 6->1 S, 1->11 L, 4->10 L, 10->4 L, 11->10 L; not:
+    2->3 and 5->0 (an end dropped), 4->2 S 0.25, 0->6 L 0.15. Degree >= 3: T0, T1, T4, T10 -> (dump frame, valid, cache item)"""
+    f32 = np.float32
+    pos = np.array([[0, 0], [20, 0], [1, 0], [0, 2], [0, -2.01], [-1, 0], [20.5, 0], [-15, 30], [0.5, 0], [0, 0], [-15, 31], [40, 0]], float)
+    dirv = np.tile([0.0, 1.0], (12, 1))
+    dirv[5] = [np.sqrt(1 - 0.4 ** 2), 0.4]
+    dirv[[7, 10]] = [1.0, 0.0]
+    valid = np.ones(12, bool)
+    valid[[8, 9]] = False
+    ytype = np.zeros(12, np.int64)
+    ytype[[0, 1, 11]] = [1, 2, 3]
+    y = np.zeros((12, 12), np.uint8)
+    y[[0, 0, 1, 1], [1, 6, 11, 7]] = 1
+    cand = [(0, 1, 0.5, 1), (0, 2, 0.4, 0), (0, 6, 0.15, 1), (1, 11, 0.3, 1), (2, 3, 0.9, 0), (4, 0, 0.35, 0), (4, 2, 0.25, 0), (4, 10, 0.3, 1), (5, 0, 0.8, 0), (6, 1, 0.6, 0), (10, 4, 0.3, 1), (11, 10, 0.4, 1)]
+    c = dict(src=np.array([x[0] for x in cand], np.int16), dst=np.array([x[1] for x in cand], np.int16), p=np.array([x[2] for x in cand], f32), long=np.array([x[3] for x in cand], bool),
+             a=np.full(len(cand), THIRD, f32), b=np.full(len(cand), THIRD, f32))
+    f = dict(token="t", pnone=np.array([0.1, 0.1, 0.5, 0.7, 0.3, 0.9, 0.55, 0.65, 0.0, 0.0, 0.2, 0.1], f32), none_cls=np.zeros((2, 12), f32), cand=c)
+    return f, valid, dict(tokens_np=dict(pos=pos, dirv=dirv), ytype=ytype, y=y)
+
+
+def test_near_none():
+    """the anatomy's section near_none (E377) on the hand frame `_near_toy`: every count, share and median by hand, a second frame of padding only (per frame = count / 2, an empty pool = shares 0 and medians None), the long threshold
+    reaches the delivered graph; textual mutants of the label `jtoken.near_none` read through the anatomy and of the duplicates fail"""
+    f, valid, item = _near_toy()
+    part = E.near_frame(f, valid, item, 0.6, 0.2)
+    want = dict(none=7, near=3, far=4, dup=2, dup_near=1, kept_near=2, kept_far=2, kept_dup=1, deg3=4, deg3_touch_near=2, deg3_touch_far=3, deg3_touch_dup=1)
+    assert part["counts"] == want, part["counts"]
+    empty = E.near_frame(f, np.zeros(12, bool), item, 0.6, 0.2)
+    n = E.near_numbers([part, empty])
+    assert n["frames"] == 2 and n["per_frame"] == {k: x / 2 for k, x in want.items()}, n["per_frame"]
+    assert n["shares"] == dict(kept_near=2 / 3, kept_far=0.5, kept_dup=0.5, dup_near=0.5, deg3_touch_near=0.5, deg3_touch_far=0.75, deg3_touch_dup=0.25), n["shares"]
+    f32 = lambda x: float(np.float32(x))  # noqa: E731
+    assert n["median_pnone"]["near"] == f32(0.55) and abs(n["median_pnone"]["far"] - (f32(0.3) + f32(0.65)) / 2) < 1e-12, n["median_pnone"]       # near: 0.5 / 0.7 / 0.55; far: 0.3 / 0.9 / 0.65 / 0.2
+    e = E.near_numbers([empty])
+    assert set(e["shares"].values()) == {0.0} and e["median_pnone"] == dict(near=None, far=None), e
+    assert E.near_frame(f, valid, item, 0.6, 0.1)["counts"]["deg3_touch_dup"] == 2, "long 0.1 delivers 0 -> 6: T0 touches a duplicate"
+    label = {"< instead of <= at 2.0 m": ("d2 <= NEAR_R ** 2", "d2 < NEAR_R ** 2"), "the heading test dropped": (" & (cos >= NEAR_COS)", ""),
+             "the assigned test dropped (near any other valid token)": ("asg[:, None, :]", "(valid[:, None, :] & ~torch.eye(valid.shape[-1], dtype=torch.bool))")}
+    for what, (old, new) in label.items():
+        with patched((JK, "near_none", _mutant(JK.near_none, old, new))):
+            assert E.near_frame(f, valid, item, 0.6, 0.2)["counts"] != want, what
+    row = _mutant(E.near_frame, '(np.asarray(item["y"]) > 0).any(0)', '(np.asarray(item["y"]) > 0).any(1)')
+    assert row(f, valid, item, 0.6, 0.2)["counts"] != want, "the duplicates from the row of y"
+    print(f"near_none: the hand frame (near 3 / far 4 none tokens: a twin at 1.0 m, exactly 2.0 m near; 2.01 m, cosine 0.4, a token near a none token only far; padding not counted; duplicates 2, 1 near; kept near / far / dup "
+          f"2 / 2 / 1; degree >= 3 tokens 4, touching a near / far / duplicate link 2 / 3 / 1; median p_none near 0.55, far 0.475), pooled with a padding frame (per frame / 2), an empty pool, the long threshold wired; "
+          f"{len(label) + 1} textual mutants caught ({', '.join(label)}, the duplicates from the row of y): ok")
 
 
 def test_argmax_keep():
@@ -1183,7 +1240,7 @@ def test_argmax_keep():
 
 
 TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_decode_perclass, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max,
-         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_anatomy, test_argmax_keep]
+         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_anatomy, test_near_none, test_argmax_keep]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
