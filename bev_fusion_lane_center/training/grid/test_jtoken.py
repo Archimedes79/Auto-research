@@ -13,7 +13,7 @@ key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the dec
 import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none), pos_loss_trainer (E376:
 --pos-loss sum = the champion's 20 smoke steps bit for bit, max differs), prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
 read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), live_inputs (S4: the default = the forward of before bit for bit, outputs and parameter gradients, no input gradient; live: the same values, a gradient on every float
-input; textual mutants; build_head / load_model read it, absent = False), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
+input, the full gradient against float64 central differences; textual mutants; build_head / load_model read it, absent = False), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
 head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 """
 import json
@@ -966,12 +966,15 @@ def _maps_hook_ok(mod):
     assert all(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in mg.map_block.parameters()), "no gradient into the map block"
 
 
-def _mutant(*edits):
-    """jtoken.py with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual mutant"""
+def _mutant(*edits, double=False):
+    """jtoken.py with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual mutant; double: then every `.float()` becomes `.double()` (the float64 copy of
+    `_live_fd_ok`)"""
     src = open(JK.__file__, encoding="utf-8").read()
     for old, new in edits:
         assert src.count(old) == 1, old
         src = src.replace(old, new)
+    if double:
+        src = src.replace(".float()", ".double()")
     mod, path = types.ModuleType("jtoken_mutant"), list(sys.path)
     mod.__file__ = JK.__file__
     try:
@@ -1010,15 +1013,44 @@ def _live_ok(mod, before):
         m_mod.jtoken_loss(out, x, none_weight=0.25)[0].backward()
         return out, {n: p.grad for n, p in m.named_parameters()}, {k: x[k].grad for k in JK.INPUTS if x[k].is_floating_point()}
     ref, dflt, live = run(before), run(mod), run(mod, live_inputs=True)
-    same = lambda r: all(torch.equal(ref[0][k], r[0][k]) for k in ("logp", "types", "types1", "scale", "x", "w")) and all(torch.equal(g, r[1][n]) for n, g in ref[1].items())  # noqa: E731
+    same = lambda r: set(r[0]) == set(ref[0]) and all(torch.equal(ref[0][k], r[0][k]) for k in ref[0]) and all(torch.equal(g, r[1][n]) for n, g in ref[1].items())  # noqa: E731
     assert same(dflt) and all(g is None for g in dflt[2].values()), "the default is not the head of before (outputs, parameter gradients), or a gradient reached an input"
     assert same(live) and all(g is not None and float(g.abs().sum()) > 0 for g in live[2].values()), {k: None if g is None else float(g.abs().sum()) for k, g in live[2].items()}
     return {k: float(g.abs().sum()) for k, g in live[2].items()}
 
 
+FD_H, FD_TOL = 1e-6, 1e-4                                                     # `_live_fd_ok`: the step of the central difference, the tolerance relative to the analytic directional derivative
+
+
+def _live_fd_ok(mod):
+    """the FULL live gradient of `mod` (the float64 copy of jtoken, `_mutant(..., double=True)`, or a mutant of it): a synthetic batch of 2 frames x 64 tokens with the valid positions jittered by about 1 cm (the synthetic lanes
+    have pairs at exactly 8.0 m = SHORT, where the class flips with rounding, and duplicates exactly beside their token), the live head at step 0 and after the switch, the champion's loss; per float input a central difference
+    with h = FD_H along a random direction on the valid tokens against the analytic directional derivative (|fd - an| <= FD_TOL |an|: a zero analytic derivative fails too) -> the largest relative error"""
+    b = {k: (v.double() if v.is_floating_point() else v) for k, v in JK.synthetic_batch(2, 64, seed=0).items()}
+    gen, vm = torch.Generator().manual_seed(7), b["valid"].double()
+    b["pos"] = b["pos"] + 0.01 * torch.randn(b["pos"].shape, generator=gen, dtype=torch.float64) * vm[..., None]
+    keys, worst = [k for k in JK.INPUTS if b[k].is_floating_point()], 0.0
+    for step in (0, JK.SWITCH + 1):
+        torch.manual_seed(0)
+        m = mod.JTokenHead(live_inputs=True).to(torch.float64).eval()      # eval: the step counter stays where it is set
+        m.set_step(step)
+        loss = lambda bb: mod.jtoken_loss(m(bb), bb, none_weight=0.25)[0]  # noqa: E731
+        x = dict(b, **{k: b[k].clone().requires_grad_(True) for k in keys})
+        loss(x).backward()
+        for k in keys:
+            v = torch.randn(b[k].shape, generator=gen, dtype=torch.float64) * vm.view(*vm.shape, *[1] * (b[k].dim() - 2))
+            with torch.no_grad():
+                fd = float(loss(dict(b, **{k: b[k] + FD_H * v})) - loss(dict(b, **{k: b[k] - FD_H * v}))) / (2 * FD_H)
+            an = float((x[k].grad * v).sum())
+            assert abs(fd - an) <= FD_TOL * abs(an), (step, k, fd, an)
+            worst = max(worst, abs(fd - an) / abs(an))
+    return worst
+
+
 def test_live_inputs():
-    """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach dropped under the default); `build_head` reads it from a run's
-    args (absent = False, also through `load_model`); `arch` and the state keys do not hold it (an --init of a cached-input head is accepted)"""
+    """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach dropped under the default); `_live_fd_ok` (the full gradient of
+    every float input, float64 finite differences) on jtoken and two textual mutants (the geometry path cut, the key weight of layers 2 - 3 cut before the switch); `build_head` reads it from a run's args (absent = False,
+    also through `load_model`); `arch` and the state keys do not hold it (an --init of a cached-input head is accepted)"""
     line = "b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}"
     before = _mutant((line, "b = {k: _const(batch[k]) for k in INPUTS}"))
     g = _live_ok(JK, before)
@@ -1026,6 +1058,11 @@ def test_live_inputs():
                "the detach dropped under the default": [("else _const(batch[k])", "else batch[k]")]}
     for edits in mutants.values():
         must_fail(_live_ok, _mutant(*edits), before)
+    fd = _live_fd_ok(_mutant(double=True))
+    fd_mutants = {"the geometry path cut": [("JT.pair_geometry(pos, dirv, valid, e=w_in)", "JT.pair_geometry(pos.detach(), dirv.detach(), valid, e=w_in.detach())")],
+                  "the key weight of layers 2 - 3 cut before the switch": [("lw(w1 if learned else w_in)", "lw(w1 if learned else w_in.detach())")]}
+    for edits in fd_mutants.values():
+        must_fail(_live_fd_ok, _mutant(*edits, double=True))
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         os.makedirs(os.path.join(runs, "live"))
         torch.save(dict(state=JK.JTokenHead().state_dict(), args=dict(live_inputs=True), steps=0), os.path.join(runs, "live", "model.pt"))
@@ -1033,8 +1070,9 @@ def test_live_inputs():
     assert JKT.build_head({}).live_inputs is False and JKT.build_head(vars(JKT.parse_args(["--name", "x"]))).live_inputs is False and JKT.arch(dict(live_inputs=True)) == JKT.arch({})
     assert set(JK.JTokenHead(live_inputs=True).state_dict()) == set(JK.JTokenHead().state_dict())
     print(f"live_inputs: the default = the head of before bit for bit (outputs, every parameter gradient; the champion's loss after the switch), no gradient into the inputs; live_inputs=True: the same outputs and parameter "
-          f"gradients, a gradient on every float input (sum |grad|: {', '.join(f'{k} {v:.2e}' for k, v in g.items())}); textual mutants ({', '.join(mutants)}) fail; build_head / load_model read it from the args (absent = False), "
-          f"not in arch or the state keys: ok")
+          f"gradients, a gradient on every float input (sum |grad|: {', '.join(f'{k} {v:.2e}' for k, v in g.items())}); textual mutants ({', '.join(mutants)}) fail; the full live gradient of every float input against "
+          f"float64 central differences (h {FD_H:g}, step 0 and after the switch): largest relative error {fd:.1e} <= {FD_TOL:g}, textual mutants ({', '.join(fd_mutants)}) fail; build_head / load_model read it from the args "
+          f"(absent = False), not in arch or the state keys: ok")
 
 
 def test_teacher():
