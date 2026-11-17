@@ -1,0 +1,6 @@
+#!/bin/bash
+cd "$(dirname "$0")/../.."
+python3 ../autoresearch/tools/ledger.py note E312.p_s0 --notes "E322 gate G0 (2026-11-13, CPU read-out of this checkpoint, jwiring.py): the snapped read-out with the piece chosen by the rule at the matched GT end instead of the keypoint end: topo F1 0.6817 vs c 0.6825 (-0.0007 [-0.0030, +0.0011]); no headroom for a learned selection; positive control (second nearest piece) -0.0311. Card E322."
+python3 ../autoresearch/tools/ledger.py note E312.p_s1 --notes "E322 gate G0 (2026-11-13, CPU read-out of this checkpoint, jwiring.py): oracle selection topo F1 0.6878 vs c 0.6864 (+0.0013 [-0.0003, +0.0032]); no headroom for a learned selection; positive control -0.0301. Card E322."
+python3 ../autoresearch/tools/ledger.py note E320.a_s0 --notes "E323 (2026-11-13, CPU read-outs, card E323): at an equal number of curves (E312 read out at E320's count 0.083, E320 at E312's 0.120) the duplicate excess stays: dup_frac a - c(t1) +0.0172 [+0.0120, +0.0216], not the count; CUT stands in both directions."
+python3 ../autoresearch/tools/ledger.py note E320.a_s1 --notes "E323 (2026-11-13, CPU read-outs, card E323): equal count (E312 at 0.09, E320 at 0.111): dup_frac a - c(t1) +0.0089 [+0.0031, +0.0149] (D2 +0.0083), held; the excess is not the count; CUT stands."
