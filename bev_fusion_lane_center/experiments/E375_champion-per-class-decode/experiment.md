@@ -48,7 +48,7 @@ Card of 2026-11-17 (version 2, 08:35 system clock, after a short fresh critic (c
 | option | `--link-thr-long` in `jtoken_eval.py` score / sweep / graphs (default = `--link-thr`: the current behaviour bit for bit), a per-class grid for `sweep` (`--grid perclass`) whose rows carry junction_F1 / junction_P / junction_R and the junction points per frame, `score --ref-cell` writing the paired scene-bootstrap interval of topo F1 and junction F1 against the champion's cell on the same dump, tests | coder | tests green, committed |
 | sweeps | the per-class grid on the TRAIN samples of runs/e367_b25_s0 / s1 (existing new-format dumps `token_train_every3.pkl`) | `run.py --id E375.sweep_s<S>` (CPU) | tables |
 | choose | the rule above, by hand | Fable | the cell written here |
-| VAL | the chosen cell once on VAL: the E367 heads (`E375.val_s<S>`), the E373 fresh heads (`E375.cf_s<S>`) | run.py (CPU) | cards |
+| VAL | the chosen cell once on VAL with `--ref-cell 0.2,0.2,0.6,off` on its FIRST score (the reference cell is not in the card name and cards are never overwritten: the paired interval exists only if the first score has it): the E367 heads (`E375.val_s<S>`), the E373 fresh heads (`E375.cf_s<S>`); before choosing, the 9 diagonal cells of each per-class table must equal the gate-off cells of the stored 24-cell tables (code critic of 0668d3f308: a cheap consistency check) | run.py (CPU) | cards |
 | decide | the verdict above | by hand | result section, ledger notes, commit, one line to the lead |
 
 ## 3. Summary
