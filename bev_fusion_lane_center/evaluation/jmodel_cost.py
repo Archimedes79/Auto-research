@@ -5,7 +5,7 @@
     wsl bash tools/env/_py14.sh jmodel_cost.py selftest
 
 MACs = FLOPs / 2 of the multiply-add ops the counter knows (convolution, matmul, linear, attention); element-wise ops, norms, the bilinear sampling (`grid_sample`) and the top-K keypoint choice are not counted: they are small next to the convolutions but not zero.
-The ms per frame of the same blocks come from `temp/jr/timing_junction.py` on an idle GPU (batch 1, bf16); B's own stage times are in `runs/e273/<run>/timing.json`.
+The ms per frame of the same blocks come from `jtiming.py` (the successor of the scratch `temp/jr/timing_junction.py` of E330) on an idle GPU (batch 1, bf16); B's own stage times are in `runs/e273/<run>/timing.json`.
 """
 import argparse
 import json
