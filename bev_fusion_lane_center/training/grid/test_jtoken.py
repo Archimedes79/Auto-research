@@ -12,7 +12,8 @@ key_bias (the head's own p_none gets gradient from layer 2 on after the switch a
 key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches, kill, resume, another recipe refused, no loader
 import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none), pos_loss_trainer (E376:
 --pos-loss sum = the champion's 20 smoke steps bit for bit, max differs), prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
-read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
+read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), live_inputs (S4: the default = the forward of before bit for bit, outputs and parameter gradients, no input gradient; live: the same values, a gradient on every float
+input; textual mutants; build_head / load_model read it, absent = False), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
 head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 """
 import json
@@ -598,7 +599,7 @@ def test_arch_options():
     torch.manual_seed(0)
     old = JK.JTokenHead()
     torch.manual_seed(0)
-    expl = JK.JTokenHead(prior=None, past_block=None, map_block=None)                                      # the new constructor arguments at their defaults
+    expl = JK.JTokenHead(prior=None, past_block=None, map_block=None, live_inputs=False)                   # the new constructor arguments at their defaults
     for h in (new, expl):
         assert list(h.state_dict()) == list(old.state_dict()) and all(torch.equal(v, old.state_dict()[k]) for k, v in h.state_dict().items()), "default options must build the old head"
     assert JK.count_params(new) == 127131 and JKT.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
@@ -994,6 +995,48 @@ def test_maps():
           f"between layer 2 and layer 3, with the S2 hook layer 1 -> past -> layer 2 -> map -> layer 3, the loss reaches a zero block, a 1-layer head refused); {len(mutants)} textual mutants fail ({', '.join(mutants)}): ok")
 
 
+def _live_ok(mod, before):
+    """S4 (E372) `live_inputs` of `mod.JTokenHead` (jtoken itself or a textual mutant): a synthetic batch, the head after the switch (the champion's state), the champion's loss (none weight 0.25), the float INPUTS as leaves
+    with requires_grad. `before` = the module with the forward's input line of before (`_const` on every input). The default = before bit for bit (every output, every parameter gradient), no gradient into an input;
+    live_inputs=True: the same outputs and parameter gradients, a nonzero gradient on every float input -> {input: the sum of |grad|} of the live head"""
+    b = _batch(2)
+
+    def run(m_mod, **kw):
+        torch.manual_seed(0)
+        m = m_mod.JTokenHead(**kw)
+        m.set_step(JK.SWITCH + 1)
+        x = {k: (v.clone().requires_grad_(True) if v.is_floating_point() else v) for k, v in b.items()}
+        out = m(x)
+        m_mod.jtoken_loss(out, x, none_weight=0.25)[0].backward()
+        return out, {n: p.grad for n, p in m.named_parameters()}, {k: x[k].grad for k in JK.INPUTS if x[k].is_floating_point()}
+    ref, dflt, live = run(before), run(mod), run(mod, live_inputs=True)
+    same = lambda r: all(torch.equal(ref[0][k], r[0][k]) for k in ("logp", "types", "types1", "scale", "x", "w")) and all(torch.equal(g, r[1][n]) for n, g in ref[1].items())  # noqa: E731
+    assert same(dflt) and all(g is None for g in dflt[2].values()), "the default is not the head of before (outputs, parameter gradients), or a gradient reached an input"
+    assert same(live) and all(g is not None and float(g.abs().sum()) > 0 for g in live[2].values()), {k: None if g is None else float(g.abs().sum()) for k, g in live[2].items()}
+    return {k: float(g.abs().sum()) for k, g in live[2].items()}
+
+
+def test_live_inputs():
+    """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach dropped under the default); `build_head` reads it from a run's
+    args (absent = False, also through `load_model`); `arch` and the state keys do not hold it (an --init of a cached-input head is accepted)"""
+    line = "b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}"
+    before = _mutant((line, "b = {k: _const(batch[k]) for k in INPUTS}"))
+    g = _live_ok(JK, before)
+    mutants = {"the detach kept under live_inputs": [("batch[k] if self.live_inputs", "batch[k].detach() if self.live_inputs")], "the option ignored": [("self.live_inputs = live_inputs", "self.live_inputs = False")],
+               "the detach dropped under the default": [("else _const(batch[k])", "else batch[k]")]}
+    for edits in mutants.values():
+        must_fail(_live_ok, _mutant(*edits), before)
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        os.makedirs(os.path.join(runs, "live"))
+        torch.save(dict(state=JK.JTokenHead().state_dict(), args=dict(live_inputs=True), steps=0), os.path.join(runs, "live", "model.pt"))
+        assert JKT.load_model("live", "cpu", runs)[0].live_inputs is True
+    assert JKT.build_head({}).live_inputs is False and JKT.build_head(vars(JKT.parse_args(["--name", "x"]))).live_inputs is False and JKT.arch(dict(live_inputs=True)) == JKT.arch({})
+    assert set(JK.JTokenHead(live_inputs=True).state_dict()) == set(JK.JTokenHead().state_dict())
+    print(f"live_inputs: the default = the head of before bit for bit (outputs, every parameter gradient; the champion's loss after the switch), no gradient into the inputs; live_inputs=True: the same outputs and parameter "
+          f"gradients, a gradient on every float input (sum |grad|: {', '.join(f'{k} {v:.2e}' for k, v in g.items())}); textual mutants ({', '.join(mutants)}) fail; build_head / load_model read it from the args (absent = False), "
+          f"not in arch or the state keys: ok")
+
+
 def test_teacher():
     """E370 stage A: `rule_teacher` = c-rule's links inside the gate, B''s own types, the out-of-gate rule link left out of its class (not 'none'); the stage-A loss reads no GT key and no yscale; on 3 cache frames the targets
     are the links of the scored control `jtoken_eval.rule_frame` inside the gate"""
@@ -1146,7 +1189,7 @@ def test_head_seed():
 
 
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_none_weight_near, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
-         test_none_weight_near_trainer, test_prior, test_past, test_maps, test_teacher, test_init, test_head_seed]
+         test_none_weight_near_trainer, test_prior, test_past, test_maps, test_live_inputs, test_teacher, test_init, test_head_seed]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
