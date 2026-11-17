@@ -29,6 +29,7 @@ def cache_dir(split, seed, ident="e292_a", K=None, cache=LC.CACHE):
     """the directory of the cache of run `ident`_s`seed` for the split: exactly one K must exist unless K is given"""
     import lane_tok_data as LT
     sig = os.path.basename(LT.LD.lane_store()[1])
+    cache = cache if os.path.isabs(cache) else os.path.join(ROOT, cache)                  # a cache root given relative to the problem folder (a second K lives in its own root)
     pat = os.path.join(cache, f"b{ident}_{seed}_K{'*' if K is None else K}_{sig}_{LC.VERSION}", split)
     hits = [h for h in sorted(glob.glob(pat)) if os.path.exists(os.path.join(h, "manifest.json"))]
     assert len(hits) == 1, f"{len(hits)} finished caches match {pat}: {hits}; give K"
