@@ -11,7 +11,7 @@ key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the dec
 import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none),
 prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
 read_types), past (the S2 hook), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots).
-head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2; --head-seed = --seed is the default run).
+head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 """
 import json
 import math
@@ -806,13 +806,15 @@ def test_init():
         mb, ab = JKT.load_model("b", "cpu", runs)
         assert ab["init"] == a_pt and ab["init_sha256"] == JKT.file_sha256(a_pt) and mb._step_py == 40 and set(mb.state_dict()) == set(JK.JTokenHead().state_dict()), (mb._step_py, ab["init"])
         for n in (0, 5, 10):
-            assert JKT.load_model("b", "cpu", runs, name=f"model_step{n}.pt")[0]._step_py >= 20
+            assert JKT.load_model("b", "cpu", runs, name=f"model_step{n}.pt")[0]._step_py == 20 + n, n                    # the init's 20 forwards + n updates
+        evals = {r["step"]: r["val"] for r in map(json.loads, open(os.path.join(runs, "b", "log.jsonl"))) if "total" not in r}
+        assert evals == {5: {"snapshot": 5.0}, 10: {"snapshot": 10.0}, 15: {}, 20: {}}, evals                              # the eval rows of the snapshot hook (jtoken_train docstring)
         must_fail(JKT.train, JKT.parse_args(["--name", "b", "--init", os.path.join(runs, "big", "model.pt"), "--snapshots", "0,5,10"] + base), runs, 5, 48)      # another init in the same folder
         for other in ("big", "pri"):
             must_fail(JKT.train, JKT.parse_args(["--name", f"c_{other}", "--init", os.path.join(runs, other, "model.pt")] + base), runs, 5, 48)                 # another architecture (d 96, the prior)
         must_fail(JKT.parse_args, ["--name", "x", "--init", os.path.join(runs, "nothing.pt")])
     print("init: weights and step buffer bit for bit (step-0 snapshot = the stage-A head, step 20 -> 40 after 20 more), ckpt.pt first on a resume, path + sha256 in the recipe, another init / d 96 / the prior refused; the teacher run "
-          "and the stage-B run have the S1 state keys and load with load_model; snapshots 0 / 5 / 10 written once, read by load_model: ok")
+          "and the stage-B run have the S1 state keys and load with load_model; snapshots 0 / 5 / 10 written once, read by load_model with step buffer 20 + n; the eval rows of the hook (no 'total') at 5 / 10 / 15 / 20: ok")
 
 
 def test_head_seed():
@@ -830,17 +832,25 @@ def test_head_seed():
         a = JKT.load_model("s0h2", "cpu", runs)[1]
         assert (a["seed"], a["head_seed"]) == (0, 2) and JKT.load_model("s0", "cpu", runs)[1]["head_seed"] is None
         must_fail(JKT.check_start, dict(a, head_seed=3), os.path.join(runs, "s0h2"))                           # another head seed in the same folder
-        seen = {}
+        # cache-free: a fake loader that returns a SHUFFLING DataLoader over 16 named synthetic batches; --seed chooses the cache, the head seed the batch order
+        seen, order, now, loss_real = {}, {}, [None], JK.jtoken_loss
 
         def fake_loader(split, seed, bs, workers, **k):
-            seen.update(seed=seed, **k)
-            return None, [JK.synthetic_batch(bs, 48, seed=s) for s in range(3)]
+            seen[now[0]] = dict(seed=seed, **k)
+            return None, torch.utils.data.DataLoader([dict(JK.synthetic_batch(bs, 48, seed=s), token=[f"batch{s}"] * bs) for s in range(16)], batch_size=None, shuffle=True)
+
+        def first_batch(out, batch, **k):
+            order.setdefault(now[0], batch["token"][0])
+            return loss_real(out, batch, **k)
         sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
         try:
-            JKT.train(JKT.parse_args(["--name", "real", "--seed", "0", "--head-seed", "2", "--steps", "2", "--bs", "2", "--workers", "0"]), runs, 3)
+            for name, extra in (("f0", []), ("f0h0", ["--head-seed", "0"]), ("f0h2", ["--head-seed", "2"])):
+                now[0] = name
+                patched(JK, "jtoken_loss", first_batch, JKT.train, JKT.parse_args(["--name", name, "--seed", "0", "--steps", "1", "--bs", "2", "--workers", "0"] + extra), runs, 3)
         finally:
             del sys.modules["lane_ptok_data"]
-        assert seen["seed"] == 0 and seen["ident"] == "e292_a", "--seed chooses the cache of B' seed 0"
+        assert all(s["seed"] == 0 and s["ident"] == "e292_a" for s in seen.values()) and len(seen) == 3, "--seed chooses the cache of B' seed 0"
+        assert order["f0h0"] == order["f0"] != order["f0h2"], f"the batch order follows the head seed, --head-seed 0 = the default: {order}"
         log = open(os.path.join(runs, "s0h2", "train.log"), encoding="utf-8").read()
         assert "cache seed 0, head seed 2" in log and "trainable 127131 parameters" in log and "cache seed 0, head seed 0" in open(os.path.join(runs, "s0", "train.log"), encoding="utf-8").read(), log[:400]
         # the real loader of the cache (when it is there): the cache directory is B' seed 0's for both runs, the frames of the first batch follow the head seed
@@ -866,7 +876,7 @@ def test_head_seed():
             assert first["c0"] != first["c0h2"], first
             real = f"real loader: both runs read {os.path.basename(os.path.dirname(dirs['c0']))}, first batch {first['c0']} vs {first['c0h2']}"
     print(f"head_seed: --seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2 (step-0 weights and the loss curve equal), not as --seed 0; --head-seed 0 = the default run bit for bit; "
-          f"head_seed in the recipe (another one refused); the log names both seeds and 127131 parameters; {real}: ok")
+          f"head_seed in the recipe (another one refused); the log names both seeds and 127131 parameters; a shuffling DataLoader as the loader: first batch {order['f0']} (default, --head-seed 0) vs {order['f0h2']} (--head-seed 2); {real}: ok")
 
 
 TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_prior, test_past, test_teacher, test_init, test_head_seed]
