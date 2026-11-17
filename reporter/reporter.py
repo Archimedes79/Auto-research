@@ -314,8 +314,9 @@ def pack(folder, out=None):
     out = out or os.path.join(folder, spec.get("package", "package.zip"))
     code = []
     for g in pk.get("code", []):
-        code += [f for f in sorted(glob.glob(rel(folder, g), recursive=True)) if os.path.isfile(f)]
-    strip = rel(folder, pk["strip"]) if pk.get("strip") else None
+        code += [f for f in sorted(glob.glob(rel(folder, g), recursive=True)) if os.path.isfile(f) and "__pycache__" not in f and not f.endswith(".pyc")]
+    strip = os.path.abspath(rel(folder, pk["strip"])) if pk.get("strip") else None
+    code = [os.path.abspath(f) for f in code]
     utils = [rel(folder, u["path"]) for u in spec.get("utilities", []) if os.path.isfile(rel(folder, u["path"]))]
     if pk.get("require_clean_git") and (code or utils):
         for f in code + utils:
@@ -323,7 +324,8 @@ def pack(folder, out=None):
             if dirty:
                 sys.exit("refused: uncommitted change in %s" % f)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=9) as z:
-        z.write(html, "report.html")
+        if pk.get("include_report", True):               # False: the zip holds code + utilities only (the html is sent next to it)
+            z.write(html, "report.html")
         media = os.path.join(os.path.dirname(os.path.abspath(html)), "media")
         if os.path.isdir(media):
             for f in sorted(os.listdir(media)):
@@ -331,11 +333,13 @@ def pack(folder, out=None):
         if pk.get("readme"):
             z.writestr("README.txt", pk["readme"])
         for f in code:
-            name = os.path.relpath(f, strip) if strip and f.startswith(strip) else os.path.basename(f)
+            name = os.path.relpath(f, strip) if strip and f.startswith(strip + os.sep) else os.path.basename(f)
             z.write(f, "code/" + name.replace("\\", "/"))
         for f in utils:
             z.write(f, "utilities/" + os.path.basename(f))
     n = os.path.getsize(out)
+    if not pk.get("include_report", True):
+        n += os.path.getsize(html)                       # the limit then counts report + package together
     print("%s  %d bytes (%.2f MB), %d code file(s), %d utilitie(s)" % (out, n, n / 1e6, len(code), len(utils)))
     if n >= limit:
         sys.exit("refused: package is %d bytes, limit %d" % (n, limit))

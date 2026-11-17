@@ -23,6 +23,8 @@ E369 (`JTokenHead(prior="rule")`): c-rule's links r and B''s existence as a FIXE
 `dest` start at zero and the handle scales at c-rule's 1/3, so the step-0 head delivers c-rule (inside the gate). E370 (`rule_teacher`): c-rule's links and B''s own types as the TARGETS of `jtoken_loss` (stage A; no GT key read).
 S2 hook: `JTokenHead(past_block=m)`, `forward(batch, past)`: after self-attention layer 1, x = m(x, pos, dirv, valid, past); `past` is passed UNTOUCHED (this file reads none of its keys); out['x'] (B, K, D) = the final
 token states, out['w'] (B, K) = 1 - p_none of the last reading.
+S3 hook: `JTokenHead(map_block=m)`, `forward(batch, past, maps)`: after self-attention layer 2, x = m(x, pos, dirv, valid, maps); `maps` is passed UNTOUCHED (this file reads none of its keys; `{}` = no map: the block
+itself must then act as the identity, the head does not special-case it). Order with both hooks: layer 1 -> past -> layer 2 -> map -> layer 3. No block, or past / maps None: the plain head bit for bit.
 """
 import math
 import os
@@ -153,11 +155,13 @@ def rule_teacher(out, batch):
 
 
 class JTokenHead(nn.Module):
-    """prior: None or "rule" (E369, module docstring; lam / mu are buffers); past_block: None or a module called after layer 1 as past_block(x, pos, dirv, valid, past) when `forward` gets a `past` (the S2 hook)"""
+    """prior: None or "rule" (E369, module docstring; lam / mu are buffers); past_block: None or a module called after layer 1 as past_block(x, pos, dirv, valid, past) when `forward` gets a `past` (the S2 hook);
+    map_block: None or a module called after layer 2 as map_block(x, pos, dirv, valid, maps) when `forward` gets `maps` (the S3 hook)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, prior=None, lam=LAM, mu=MU, past_block=None):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, prior=None, lam=LAM, mu=MU, past_block=None, map_block=None):
         super().__init__()
         assert prior in (None, "rule"), prior
+        assert map_block is None or layers >= 2, "the map hook sits after layer 2"
         self.dq = dq
         self.proj = nn.Linear(TOK, d)
         self.mlp = nn.Sequential(nn.Linear(NIN, d), nn.GELU(), nn.Linear(d, d))
@@ -181,6 +185,7 @@ class JTokenHead(nn.Module):
             nn.init.zeros_(self.sc_o.weight)                                # the handle scales start at c-rule's 1/3 (other scales change topo F1: the E369 fixture)
             nn.init.constant_(self.sc_o.bias, math.log((1 / 3 - 0.05) / (1.25 - 1 / 3)))
         self.past_block = past_block
+        self.map_block = map_block
 
     def set_step(self, n):
         self.step.fill_(n)
@@ -197,7 +202,7 @@ class JTokenHead(nn.Module):
             t = torch.cat([t[..., :1] + none_prior[..., None], t[..., 1:]], -1)
         return t, 1.0 - t.softmax(-1)[..., 0]                               # logits, 1 - p_none
 
-    def forward(self, batch, past=None):
+    def forward(self, batch, past=None, maps=None):
         b = {k: _const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
@@ -211,8 +216,10 @@ class JTokenHead(nn.Module):
         if self.past_block is not None and past is not None:
             x = self.past_block(x, pos, dirv, valid, past)
         types1, w1 = self.read_types(x, tp)
-        for layer in self.layers[1:]:
+        for n, layer in enumerate(self.layers[1:], 2):
             x = layer(x, g, lw(w1 if learned else w_in), valid)
+            if n == 2 and self.map_block is not None and maps is not None:
+                x = self.map_block(x, pos, dirv, valid, maps)
         types3, w3 = self.read_types(x, tp)
         # the wiring layer
         B, K, _ = x.shape

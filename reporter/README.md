@@ -63,7 +63,7 @@ The line `Table: ...` before a table becomes its numbered caption; the alt text 
 - **Numbers come from files.** `{{name}}` is filled from `values` (a JSON key path with a format, or a literal), also in the abstract and captions. A missing file or key, an unknown name or a missing picture becomes a visible, highlighted **PENDING** mark, never an empty cell.
 - **`check`** takes every decimal number in the text (abstract, captions, chapters; after filling; code blocks excluded) and looks for it in the `sources`: found exactly, or as a rounded form of a source number; everything else is listed with its line.
 - **Utilities.** `utilities` lists the helper scripts that stay with the work; chapter B shows name, what it does (the first line of its docstring unless `what` is given) and how to run it; `pack` ships them in `utilities/`.
-- **Size.** `pack` refuses a zip at or above `pack.limit` and, with `require_clean_git`, code or utilities with uncommitted changes. Videos are not embedded in the html; they travel in `media/` (and in the zip).
+- **Size.** With `pack.include_report: false` the zip holds code + utilities only (the html is sent next to it) and the limit counts html + zip together. `pack` refuses a zip at or above `pack.limit` and, with `require_clean_git`, code or utilities with uncommitted changes. Videos are not embedded in the html; they travel in `media/` (and in the zip).
 - **Nothing is sent.** The tool writes files only.
 
 ## Files
