@@ -13,7 +13,11 @@ comparison inside / outside its tolerance, the matching of two token sets by cel
 reference cell (another value in every field) and the paired topo / junction F1), parity_timing (cache: the check-parity and the timing code paths on a tiny head, CPU: stamped files, K from the cache), score_max (cache: `ctl --max` / `dump --max` / `score --max` end to end, g1 by hand),
 fixture (E369 / E370 verdicts at their boundaries; the untrained prior head on 3 VAL frames PASSes, lam 0 FAILs; a teacher smoke head read as stage A), ctl_train (c-rule on the TRAIN sample, never read as a VAL control), graphs (pass1 schema, systems added,
 a duplicate refused, the per-frame table; frame-order and GT-field mutants; a kill between the two renames completed by a rerun), snapshot (cache: --model model_step<N>.pt through dump / score / sweep / fixture / graphs, _step<N> in
-every file name, a dump of the other weights refused).
+every file name, a dump of the other weights refused), ref_run (E376 score --ref-run: other frames / cells / valid tokens refused; cache: the run itself as reference = diff 0, interval [0, 0] at a variant cell; --ref-run-cell at
+the card's own cell = the default, at another cell = --ref-cell of that cell; an empty reference = the card's own numbers; the _vs_<run>[_rc<cell>] names beside the card without them; another cache seed refused), anatomy (E376:
+a hand frame with every category, the medians, the AP with ties, the recall ceiling and the existence AP by hand; the mass concentration by hand; textual mutants: dup / wrong swapped, false_end on both ends, ties broken
+optimistically, the existence label from p_none, the max over all candidates; cache: the command on 3 frames, delivered = the decode's long links, never overwritten), argmax_keep (E376 score --argmax --keep-thr: the rebuilt argmax
+= the dump's on a real head and a hand frame with ties, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring).
 """
 import contextlib
 import json
@@ -206,14 +210,14 @@ def test_decode_variant():
           "the thresholds (p = 0.3, p = p(none), p_none = 0.6) kills the mutants p > thr, p > p(none), p_none <= keep: ok")
 
 
-def _variant_mutant(old, new):
-    """`decode_variant` with one text replaced (found exactly once), compiled in the module's namespace: a textual mutant"""
+def _mutant(fn, old, new):
+    """the function `fn` of jtoken_eval with one text replaced (found exactly once), compiled in the module's namespace: a textual mutant"""
     import inspect
-    src = inspect.getsource(E.decode_variant)
+    src = inspect.getsource(fn)
     assert src.count(old) == 1, old
     ns = dict(vars(E))
     exec(compile(src.replace(old, new), E.__file__, "exec"), ns)
-    return ns["decode_variant"]
+    return ns[fn.__name__]
 
 
 def _by_class(d):
@@ -248,7 +252,7 @@ def test_decode_perclass():
                "the class by the GT chord": ('[c["long"].astype(int)]                 #', '[c["gt_long"].astype(int)]                 #'),
                "None = the record's threshold": ("thr_long = link_thr if", "thr_long = LINK_THR if")}
     for old, new in mutants.values():
-        assert [got(_variant_mutant(old, new), **k) for k in cases] != answers, new
+        assert [got(_mutant(E.decode_variant, old, new), **k) for k in cases] != answers, new
     # a real head (random weights), none gate off: per frame, the long threshold moves only long links, the short threshold only short ones; the dump's class is the token chord
     torch.manual_seed(0)
     m = JK.JTokenHead().eval()
@@ -925,8 +929,221 @@ def test_snapshot():
           "model and steps 10 recorded, the dump differs from model.pt's; refused: other names, --model without --run, model.pt's dump read as the snapshot's: ok")
 
 
+def _floor_run(runs, name="h", seed=0):
+    """a run folder `runs/<name>` with the smoke checkpoint carrying the untrained head (it keeps nodes and links; args seed = `seed`)"""
+    os.makedirs(os.path.join(runs, name))
+    ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
+    ck["state"], ck["args"] = E.floor_model().state_dict(), dict(ck["args"], seed=seed)
+    torch.save(ck, os.path.join(runs, name, "model.pt"))
+
+
+def test_ref_run():
+    """score --ref-run (E376): `same_tokens` refuses other frames, cells or valid tokens; on 3 cache frames of the untrained head with planted p_none: the run itself as reference at a variant cell (which differs from the record)
+    gives its own numbers, diff 0 and the interval [0, 0]; a reference with no node delivers nothing, so the diff is the card's own number (record decode: both cards); the card _vs_<run> sits beside the card without it, neither
+    is overwritten; a reference of another cache seed is refused"""
+    import pickle
+    import shutil
+    r = dict(idx=np.arange(2), fr=[dict(token="a", cell=np.arange(4)), dict(token="b", cell=np.arange(4) + 9)], valid=[np.ones(4, bool), np.ones(4, bool)])
+    E.same_tokens(r, pickle.loads(pickle.dumps(r)))
+    muts = dict(frames=lambda x: x["fr"][1].update(token="c"), idx=lambda x: x.update(idx=np.arange(1, 3)), cells=lambda x: x["fr"][0]["cell"].__setitem__(2, 99), valid=lambda x: x["valid"][1].__setitem__(0, False))
+    for mut in muts.values():
+        x = pickle.loads(pickle.dumps(r))
+        mut(x)
+        must_fail(E.same_tokens, r, x)
+    if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(E.planb_path(0)):
+        print("ref_run: same_tokens ok, the cache part SKIPPED (no cache, smoke model or stored plain B)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
+        out = os.path.join(scratch, "out")
+        os.makedirs(out)
+        for name, seed in (("h", 0), ("g", 0), ("g1", 1)):
+            _floor_run(runs, name, seed)
+        shutil.copy(E.planb_path(0), os.path.join(scratch, "planb_s0.pkl"))
+        with patched((E, "SCRATCH", scratch)):
+            E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+            toks = [E.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
+            d, _ = _plant_pnone(os.path.join(runs, "h", "token_val_n3.pkl"), toks)
+            g = pickle.loads(pickle.dumps(d))                                                                  # g: the same frames and tokens, no node kept at any threshold
+            g["meta"]["run"] = "g"
+            for f, t in zip(g["frames"], toks):
+                f["pnone"][:] = 1.0
+                f["keep"][:] = False
+                f["rec"], f["argmax"] = E.decode_variant(f, t["valid"])["rec"], {k: v[:0] for k, v in f["argmax"].items()}
+            pickle.dump(g, open(os.path.join(runs, "g", "token_val_n3.pkl"), "wb"))
+            shutil.copy(os.path.join(runs, "h", "token_val_n3.pkl"), os.path.join(runs, "g1", "token_val_n3.pkl"))
+            base, var = ["score", "--run", "h", "--seed", "0", "--max", "3"], ["--link-thr", "0.3", "--link-thr-long", "0.05", "--keep-thr", "0.6", "--no-none-gate"]
+            plain = E.score(E.parse_args(base + var), runs, out)["rec"]
+            own = E.score(E.parse_args(base + var + ["--ref-run", "h"]), runs, out)["rec"]
+            stem = "h_token_card_rec_lt0.3_ltl0.05_kt0.6_nng_n3"
+            assert os.path.exists(os.path.join(out, stem + ".json")) and os.path.exists(os.path.join(out, stem + "_vs_h.json")) and "ref_run" not in plain["info"], os.listdir(out)
+            must_fail(E.score, E.parse_args(base + var + ["--ref-run", "h"]), runs, out)                       # never overwritten
+            rf, pr = own["info"]["ref_run"], own["info"]["paired_vs_ref_run"]
+            assert any(own["info"]["record"][k] != own["metrics"][k] for k in E.KEYS), "the variant cell differs from the record on these frames"
+            assert all(own["metrics"][k] == plain["metrics"][k] == rf[k] for k in E.KEYS + ("junction_P", "junction_R")) and rf["run"] == "h" and rf["dump"]["sha256"], rf
+            assert all((pr[k]["diff"], pr[k]["lo"], pr[k]["hi"]) == (0.0, 0.0, 0.0) for k in ("topo_F1", "junction_F1", "junction_P")) and rf["cell"] == "the decode of this card", {k: pr[k] for k in ("topo_F1", "junction_F1")}
+            must_fail(E.score, E.parse_args(base + var + ["--ref-run", "h", "--ref-run-cell", "0.3,0.05,0.6,off"]), runs, out)     # the card's own cell: the default's name (no _rc), never overwritten
+            # E376 v2: the reference read at ANOTHER cell = the --ref-cell of the same cell on the same dump (a self-pair across two cells: a hand-known pair)
+            cross = E.score(E.parse_args(base + var + ["--ref-cell", "0.1,0.2,0.5,on", "--ref-run", "h", "--ref-run-cell", "0.1,0.2,0.5,on"]), runs, out)["rec"]
+            ci = cross["info"]
+            assert os.path.exists(os.path.join(out, stem + "_vs_h_rc0.1_0.2_0.5_on.json")) and ci["ref_run"]["cell"] == dict(link_thr=0.1, link_thr_long=0.2, keep_thr=0.5, none_gate=True), ci["ref_run"]["cell"]
+            assert all(ci["ref_run"][k] == ci["ref_cell"][k] for k in E.KEYS + ("junction_P", "junction_R")) and ci["paired_vs_ref_run"] == ci["paired_vs_ref_cell"] and ci["paired_vs_ref_run"]["topo_F1"]["diff"] != 0, ci["paired_vs_ref_run"]["topo_F1"]
+            emp = E.score(E.parse_args(base + var + ["--ref-run", "g"]), runs, out)["rec"]
+            rf, pr = emp["info"]["ref_run"], emp["info"]["paired_vs_ref_run"]
+            assert (rf["topo_F1"], rf["junction_F1"]) == (0.0, 0.0) and emp["metrics"]["topo_F1"] > 0, rf
+            assert all(abs(pr[k]["diff"] - emp["metrics"][k]) < 1e-12 for k in ("topo_F1", "junction_F1")), "this run minus the reference: the card's own number"
+            cards = E.score(E.parse_args(base + ["--ref-run", "g"]), runs, out)                                  # the record decode: both cards, each against the reference's same decode
+            assert sorted(cards) == ["argmax", "rec"] and all(os.path.exists(os.path.join(out, f"h_token_card_{x}_n3_vs_g.json")) for x in cards), os.listdir(out)
+            assert all(c["info"]["ref_run"]["topo_F1"] == 0.0 and abs(c["info"]["paired_vs_ref_run"]["topo_F1"]["diff"] - c["metrics"]["topo_F1"]) < 1e-12 for c in cards.values())
+            must_fail(E.score, E.parse_args(base + var + ["--ref-run", "g1"]), runs, out)                       # a run of another cache seed
+            must_fail(E.score, E.parse_args(base + var + ["--ref-run-cell", "0.1,0.2,0.5,on"]), runs, out)      # a reference cell without a reference run
+    print(f"ref_run: same_tokens refuses other frames / idx / cells / valid tokens ({len(muts)} mutants); on 3 cache frames the run itself as reference at a variant cell (not the record's numbers) = its own numbers, diff 0, interval [0, 0]; "
+          f"--ref-run-cell at the card's own cell = the default (same name); at another cell (_rc0.1_0.2_0.5_on) = --ref-cell of that cell exactly (numbers and interval); an empty reference = 0, so the diff is the card's own number "
+          f"(topo F1 {emp['metrics']['topo_F1']:.4f}; record decode: rec and argmax); _vs_<run> beside the card without it, never overwritten; another cache seed and a cell without a run refused: ok")
+
+
+def _anatomy_toy():
+    """a hand frame of 8 tokens (heading +y) and 5 GT nodes: GT long links G0 -> G1, G2 -> G3, G4 -> G3 (no token near G4), a short GT link G1 -> G3; T0 = G0, T1 = G1, T2 a duplicate of T1 (unassigned), T3 = G3, T4 near no GT
+    node (p_none 0.5), T5 = G2 (p_none 0.55: kept at 0.6, not at 0.5), T6 invalid, T7 a duplicate of T3 (p_none 0.7: not kept). Long candidates: 0 -> 1 tp 0.5, 0 -> 2 dup 0.5, 0 -> 3 wrong 0.5, 0 -> 4 false 0.3, 5 -> 1 wrong 0.4, 5 -> 3 tp 0.1,
+    5 -> 7 0.9 (an end not kept); 1 -> 2 0.9 short. -> (dump frame, valid, GT side)"""
+    f32 = np.float32
+    pos = np.array([[0, 0], [0, 20], [0.5, 20], [10, 20], [30, 30], [10, 0], [40, 0], [10.3, 20]], float)
+    tok = dict(pos=pos, dirv=np.tile([0.0, 1.0], (8, 1)))
+    valid = np.array([1, 1, 1, 1, 1, 1, 0, 1], bool)
+    table = dict(pos=np.array([[0, 0], [0, 20], [10, 0], [10, 20], [20, 0]], float), dirv=np.tile([0.0, 1.0], (5, 1)), src=np.array([0, 2, 4, 1]), dst=np.array([1, 3, 3, 3]), long=np.array([1, 1, 1, 0], bool))
+    gt_id = np.array([0, 1, -1, 3, -1, 2, -1, -1])
+    pt = np.zeros((8, JK.NTYPE), np.float16)
+    pt[[0, 5], E.ENTRY] = [0.5, 0.25]
+    pt[[1, 2, 3, 4], E.EXIT] = [0.5, 0.125, 0.25, 0.0625]
+    cand = [(0, 1, 0.5, 1), (0, 2, 0.5, 1), (0, 3, 0.5, 1), (0, 4, 0.3, 1), (5, 1, 0.4, 1), (5, 3, 0.1, 1), (5, 7, 0.9, 1), (1, 2, 0.9, 0)]
+    c = dict(src=np.array([x[0] for x in cand], np.int16), dst=np.array([x[1] for x in cand], np.int16), p=np.array([x[2] for x in cand], f32), long=np.array([x[3] for x in cand], bool), a=np.full(8, THIRD, f32), b=np.full(8, THIRD, f32))
+    f = dict(token="t", pnone=np.array([0.1, 0.2, 0.3, 0.1, 0.5, 0.55, 0.05, 0.7], f32), ptype=pt, none_cls=np.zeros((2, 8), f32), cand=c)
+    uout = np.zeros(8)
+    uout[0] = np.log(3.0)                                                                                       # sigmoid 0.75 on T0, 0.5 elsewhere
+    return f, valid, E.gt_labels(tok, valid, table, gt_id, uout, np.zeros(8))
+
+
+def test_anatomy():
+    """the anatomy (E376) on a hand frame (`_anatomy_toy`) with every number by hand; average_precision on a hand list with a tie (pessimistic 5/12, optimistic 7/12, a tie scored as one step 1/2); textual mutants; cache: the
+    command on 3 frames of the untrained head"""
+    import pickle
+    assert abs(E.average_precision([0.8, 0.5, 0.5, 0.5], [0, 1, 0, 1]) - 5 / 12) < 1e-12 and E.average_precision([0.3, 0.2], [0, 0]) is None
+    f, valid, lab = _anatomy_toy()
+    run = lambda kt=0.6: E.anatomy_numbers([E.anatomy_frame(f, valid, lab, kt)], len(lab["gt_long"]), 0.2)  # noqa: E731
+    n = run()
+    cats = n["categories"]
+    assert (n["gt_long_links"], n["delivered"], [cats[k]["n"] for k in E.LONG_CATS]) == (3, 5, [1, 1, 2, 1]), (n["delivered"], cats)
+    assert [cats[k]["share"] for k in E.LONG_CATS] == [0.2, 0.2, 0.4, 0.2] and abs(n["tp_over_gt_long"] - 1 / 3) < 1e-12
+    assert [cats[k]["median_p"] for k in E.LONG_CATS] == [0.5, 0.5, float(np.median(np.float32([0.5, 0.4]))), float(np.float32(0.3))], [cats[k]["median_p"] for k in E.LONG_CATS]
+    assert [cats[k]["median_typed"] for k in E.LONG_CATS] == [0.25, 0.0625, 0.125, 0.03125], [cats[k]["median_typed"] for k in E.LONG_CATS]
+    assert np.allclose([cats[k]["median_b_long"] for k in E.LONG_CATS], [0.375, 0.375, 0.3125, 0.375], atol=1e-12)
+    assert abs(n["ap_long"] - 1 / 3) < 1e-12 and (n["long_candidates"], n["long_candidates_tp"]) == (6, 2) and abs(n["recall_ceiling"] - 2 / 3) < 1e-12, n      # pessimistic: the tp of the 0.5 tie ranks third
+    assert abs(n["ap_existence"] - 11 / 12) < 1e-12 and (n["valid_tokens"], n["assigned_tokens"]) == (7, 4), n                                                      # 0.9 0.9 0.8 + . . 0.45 + . (T6 invalid)
+    deliv = E.decode_variant(f, valid, 0.3, 0.6, False, 0.2)["rec"]
+    assert {(s, d) for s, d, lg in zip(deliv["src"].tolist(), deliv["dst"].tolist(), deliv["long"]) if lg} == {(0, 1), (0, 2), (0, 3), (0, 4), (5, 1)}, "delivered = the long links of the D115 decode"
+    n5 = run(0.5)
+    assert (n5["delivered"], n5["long_candidates"], n5["categories"]["wrong_pair"]["n"]) == (3, 3, 1), "keep 0.5 drops T4 (p_none exactly 0.5) and T5 with their links"
+    mutants = {"dup / wrong swapped": (E.link_category, "return 1 if any((int(x), int(y)) in gt_long for x in ns for y in nd) else 2", "return 2 if any((int(x), int(y)) in gt_long for x in ns for y in nd) else 1"),
+               "false_end only with both ends far": (E.link_category, "len(ns) == 0 or len(nd) == 0", "len(ns) == 0 and len(nd) == 0"),
+               "ties broken optimistically": (E.average_precision, "np.lexsort((label, -np.asarray", "np.lexsort((~label, -np.asarray"),
+               "existence label from p_none": (E.anatomy_frame, 'ex_label=lab["gt_id"][v] >= 0', 'ex_label=np.asarray(f["pnone"])[v] < 0.5')}
+    for what, (fn, old, new) in mutants.items():
+        with patched((E, fn.__name__, _mutant(fn, old, new))):
+            m = run()
+        assert ([m["categories"][k]["n"] for k in E.LONG_CATS], m["ap_long"], m["ap_existence"]) != ([1, 1, 2, 1], n["ap_long"], n["ap_existence"]), what
+    with patched((E, "average_precision", _mutant(E.average_precision, *mutants["ties broken optimistically"][1:]))):
+        assert abs(E.average_precision([0.8, 0.5, 0.5, 0.5], [0, 1, 0, 1]) - 7 / 12) < 1e-12
+    # the mass concentration on a hand class: source 0: G = {1 (0.3), 2 (0.1)} and a non-member 3 at 0.5; source 1: G = {4 (0.6)}, a non-member at 0.35; source 2: no GT successor (0.9 to 3); source 3: G = {4 (0.2)}
+    p, G, cand = np.zeros((5, 5)), np.zeros((5, 5), bool), np.zeros((5, 5), bool)
+    for i, j, pv, g in ((0, 1, 0.3, 1), (0, 2, 0.1, 1), (0, 3, 0.5, 0), (1, 2, 0.35, 0), (1, 4, 0.6, 1), (2, 3, 0.9, 0), (3, 4, 0.2, 1)):
+        p[i, j], cand[i, j], G[i, j] = pv, True, bool(g)
+    share, above = E.group_concentration(p, G, cand)
+    assert np.allclose(share, [0.75, 1.0, 1.0]) and above.tolist() == [2, 2, 0], (share, above)
+    cn = E.concentration_numbers(share, above)
+    assert cn["sources"] == 3 and cn["share_median"] == 1.0 and abs(cn["share_mean"] - 2.75 / 3) < 1e-12 and abs(cn["above_mean"] - 4 / 3) < 1e-12 and abs(cn["above_2plus"] - 2 / 3) < 1e-12 and cn["above_mean_given_one"] == 2.0, cn
+    over_all = _mutant(E.group_concentration, "top = np.where(G, p, 0.0)", "top = np.where(cand, p, 0.0)")             # the max over all candidates instead of the group
+    assert not np.allclose(over_all(p, G, cand)[0], share), "the largest member is taken within G(i)"
+    if not CACHE_OK or not os.path.exists(SMOKE):
+        print("anatomy: the hand frame and mutants ok, the cache part SKIPPED (no cache or no smoke model)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, out = os.path.join(tmp, "runs"), os.path.join(tmp, "out")
+        _floor_run(runs)
+        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        args = ["anatomy", "--run", "h", "--seed", "0", "--max", "3", "--link-thr-long", "0.05"]
+        doc = json.load(open(E.anatomy(E.parse_args(args), runs, out)))
+        assert os.listdir(out) == ["h_token_anatomy_long_ltl0.05_kt0.6_n3.json"], os.listdir(out)
+        d = pickle.load(open(os.path.join(runs, "h", "token_val_n3.pkl"), "rb"))
+        ds = E.open_cache("val", 0)
+        want = sum(int(E.decode_variant(f_, ds[i]["tokens_np"]["valid"], 0.3, 0.6, False, 0.05)["rec"]["long"].sum()) for i, f_ in enumerate(d["frames"]))
+        assert doc["delivered"] == want > 0 and sum(x["n"] for x in doc["categories"].values()) == want and doc["frames"] == 3 and doc["gt_long_links"] > 0, (doc["delivered"], want)
+        assert doc["valid_tokens"] == sum(int(ds[i]["tokens_np"]["valid"].sum()) for i in range(3)) and doc["dump"]["sha256"], doc["valid_tokens"]
+        assert sorted(doc["concentration"]) == ["long", "short"] and all(x["sources"] > 0 and 0 < x["share_median"] <= 1 for x in doc["concentration"].values()), doc["concentration"]
+        must_fail(E.anatomy, E.parse_args(args), runs, out)
+    print(f"anatomy: a hand frame (delivered 5 of 3 GT long links: tp / dup / wrong / false 1 / 1 / 2 / 1, medians of p / typed / B' evidence, long AP 1/3 with a pessimistic tie, recall ceiling 2/3, existence AP 11/12, keep 0.5 drops two "
+          f"nodes), AP 5/12 on a hand list ({len(mutants)} textual mutants caught: {', '.join(mutants)}); the mass concentration by hand (shares 0.75 / 1 / 1, candidates >= 0.3: 2 / 2 / 0; the max over all candidates caught); "
+          f"the command on 3 cache frames: {doc['delivered']} delivered = the decode's long links, the concentration of both classes (a CPU forward that agrees with the dump), never overwritten: ok")
+
+
+def test_argmax_keep():
+    """score --argmax --keep-thr K (E376): `decode_argmax_variant` at the record keep = the dump's argmax decode of a real head (3 synthetic frames); a hand frame: a tie with the none slot goes to the candidate, a tie of two candidates
+    to the lower destination, keep 0.6 adds the links of a token at p_none 0.55, a stored argmax link that the candidates cannot give is refused (`check_argmax`); textual mutants; cache: on a toy dump the argmax card at keep 0.5 = its
+    stored argmax card, at keep 0.6 = a direct scoring; --argmax with a link threshold refused"""
+    import pickle
+    import shutil
+    torch.manual_seed(0)
+    m = JK.JTokenHead().eval()
+    m.set_step(JK.SWITCH)
+    sb = JK.synthetic_batch(3, 48, seed=2)
+    toks = [dict(pos=sb["pos"][b].double().numpy(), cell=np.arange(48)) for b in range(3)]
+    frames = E.batch_dump(E.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
+    E.check_argmax(frames, sb["valid"].numpy())
+    n_real = sum(len(f["argmax"]["src"]) for f in frames)
+    f32 = np.float32
+    pairs = [(0, 1, 0.4, 0), (0, 2, 0.4, 0), (0, 5, 0.35, 1), (1, 3, 0.3, 0), (1, 5, 0.2, 1), (2, 4, 0.5, 0), (4, 5, 0.6, 0)]          # in the dump's order (source, destination)
+    c = dict(src=np.array([x[0] for x in pairs], np.int16), dst=np.array([x[1] for x in pairs], np.int16), p=np.array([x[2] for x in pairs], f32), long=np.array([x[3] for x in pairs], bool), a=np.full(7, THIRD, f32), b=np.full(7, THIRD, f32))
+    pn, v6 = np.array([0.1, 0.1, 0.1, 0.1, 0.55, 0.1], f32), np.ones(6, bool)
+    none_cls = np.array([[0.2, 0.3, 0.1, 1.0, 0.1, 1.0], [0.3, 0.7, 1.0, 1.0, 1.0, 1.0]], f32)                       # 1 -> 3 ties its none (0.3), 0 -> 1 / 0 -> 2 tie (0.4), 1 -> 5 loses to none 0.7
+    f = dict(token="t", pnone=pn, keep=pn < f32(0.5), none_cls=none_cls, cand=c, argmax={k: c[k][[0, 2, 3]] for k in E.LINK_FIELDS})
+    got = lambda fn=E.decode_argmax_variant, kt=0.5: _links_set(fn(f, v6, kt)["argmax"])  # noqa: E731
+    assert got() == {(0, 1), (0, 5), (1, 3)} and got(kt=0.6) == {(0, 1), (0, 5), (1, 3), (2, 4), (4, 5)}, (got(), got(kt=0.6))
+    E.check_argmax([f], [v6])
+    must_fail(E.check_argmax, [dict(f, argmax={k: c[k][[0, 2, 3, 4]] for k in E.LINK_FIELDS})], [v6])                   # a stored link (1 -> 5) the candidates do not give
+    muts = {"none wins a tie": ("(c[\"p\"][w] >= np.asarray", "(c[\"p\"][w] > np.asarray"), "the higher destination wins a tie": ("np.lexsort((dst, -c", "np.lexsort((-dst, -c")}
+    for old, new in muts.values():
+        assert got(_mutant(E.decode_argmax_variant, old, new)) != got(), new
+    if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(E.planb_path(0)):
+        print(f"argmax_keep: a real head ({n_real} argmax links) and the hand frame ok, the cache part SKIPPED (no cache, smoke model or stored plain B)")
+        return
+    import qgraph_eval as QE
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
+        out = os.path.join(scratch, "out")
+        os.makedirs(out)
+        _floor_run(runs)
+        shutil.copy(E.planb_path(0), os.path.join(scratch, "planb_s0.pkl"))
+        with patched((E, "SCRATCH", scratch)):
+            E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+            path = os.path.join(runs, "h", "token_val_n3.pkl")
+            toks = [E.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
+            d, _ = _plant_pnone(path, toks)
+            for f_, t in zip(d["frames"], toks):                                                          # the toy dump: the argmax among its candidates (an untrained head's winner may lie below the floor)
+                f_["argmax"] = E.decode_argmax_variant(f_, t["valid"])["argmax"]
+            pickle.dump(d, open(path, "wb"))
+            base = ["score", "--run", "h", "--seed", "0", "--max", "3"]
+            stored = E.score(E.parse_args(base), runs, out)["argmax"]
+            k5, k6 = (E.score(E.parse_args(base + ["--argmax", "--keep-thr", kt]), runs, out)["argmax"] for kt in ("0.5", "0.6"))
+            assert all(os.path.exists(os.path.join(out, f"h_token_card_argmax_kt{kt}_n3.json")) for kt in ("0.5", "0.6")) and k6["info"]["decode_variant"] == dict(k6["info"]["decode_variant"], argmax=True, keep_thr=0.6)
+            assert all(k5["metrics"][k] == stored["metrics"][k] for k in E.KEYS), "the argmax card at the record keep = the stored argmax card"
+            direct = E.score_preds([E.frame_prediction(t, E.decode_argmax_variant(f_, t["valid"], 0.6), "argmax", 0.6) for f_, t in zip(d["frames"], toks)], QE.val_frames()[:3], log=lambda *x, **k: None)["graph"]
+            assert all(k6["metrics"][k] == direct[k] for k in E.KEYS) and any(k6["metrics"][k] != k5["metrics"][k] for k in E.KEYS), "keep 0.6 = a direct scoring, and it adds the planted nodes"
+            must_fail(E.score, E.parse_args(base + ["--argmax", "--keep-thr", "0.7", "--link-thr", "0.2"]), runs, out)
+    print(f"argmax_keep: the rebuilt argmax = the dump's on a real head ({n_real} links on 3 frames) and on a hand frame (tie with none -> the candidate, tie of two -> the lower destination, keep 0.6 adds two links, an impossible stored "
+          f"link refused; {len(muts)} textual mutants caught); on a toy dump the card at keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring (token_card_argmax_kt<K>), a link threshold refused: ok")
+
+
 TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_decode_perclass, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max,
-         test_fixture, test_ctl_train, test_graphs, test_snapshot]
+         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_anatomy, test_argmax_keep]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
