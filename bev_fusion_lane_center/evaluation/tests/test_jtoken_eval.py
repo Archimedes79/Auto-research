@@ -10,7 +10,8 @@ between assigned tokens are more than c-hi), drop (cache: reproducible, the seed
 and the standard scorer), readout_dump (B's stored dump frame -> prediction: sec0 zeroes the sections, the close-node step drops the weaker of two close nodes), numbers (the layer-1 comparison at its tolerance, g1, the sample, the parity
 comparison inside / outside its tolerance, the matching of two token sets by cell), parity_timing (cache: the check-parity and the timing code paths on a tiny head, CPU: stamped files, K from the cache), score_max (cache: `ctl --max` / `dump --max` / `score --max` end to end, g1 by hand),
 fixture (E369 / E370 verdicts at their boundaries; the untrained prior head on 3 VAL frames PASSes, lam 0 FAILs; a teacher smoke head read as stage A), ctl_train (c-rule on the TRAIN sample, never read as a VAL control), graphs (pass1 schema, systems added,
-a duplicate refused, the per-frame table; frame-order and GT-field mutants).
+a duplicate refused, the per-frame table; frame-order and GT-field mutants; a kill between the two renames completed by a rerun), snapshot (cache: --model model_step<N>.pt through dump / score / sweep / fixture / graphs, _step<N> in
+every file name, a dump of the other weights refused).
 """
 import contextlib
 import json
@@ -717,12 +718,76 @@ def test_graphs():
         leak = pickle.loads(pickle.dumps(doc))
         leak["frames"][1]["sys"]["S1"]["tier"] = np.zeros(3, np.int8)
         must_fail(E.check_graphs, leak, frames)
+        real_replace = os.replace
+
+        def killed_at_pickle(src, dst):                                                                     # a kill between the two renames
+            if dst == out:
+                raise OSError("killed")
+            real_replace(src, dst)
+        with patched((E.os, "replace", killed_at_pickle)):
+            try:
+                E.graphs(E.parse_args(g_args + ["--name", "S2"]), runs)
+            except OSError:
+                pass
+        held = lambda: ("S2" in json.load(open(os.path.join(tmp, "g", "perframe_table.json")))["sys"], "S2" in pickle.load(open(out, "rb"))["frames"][0]["sys"])  # noqa: E731
+        assert held() == (True, False), "the table is renamed first, the pickle last"
+        E.graphs(E.parse_args(g_args + ["--name", "S2"]), runs)                                              # a name in the table only: the rest of an interrupted write, written again
+        assert held() == (True, True)
+        must_fail(E.graphs, E.parse_args(g_args + ["--name", "S2"]), runs)
     print(f"graphs: 3 VAL frames in the schema of pass1.pkl (k, token, row, scene, gt pieces with tier / vis / kinds, maneuvers, sys lines + maneuver counts), a second system appended, a duplicate refused, the per-frame table "
-          f"pooled = the scorer's topo F1 ({want:.4f}); mutants (frame order swap, a GT field in a system record) fail: ok")
+          f"pooled = the scorer's topo F1 ({want:.4f}); mutants (frame order swap, a GT field in a system record) fail; a kill between the renames leaves the name in the table only, the rerun completes it: ok")
+
+
+def test_snapshot():
+    """--model model_step<N>.pt: a snapshot (step 10 of a 20-step smoke run) dumped, scored, swept, fixtured and turned into graphs on 3 VAL cache frames; every file name carries _step10, the outputs record the model and its 10
+    steps, the snapshot's dump is not model.pt's; refused: a dump of the other weights, a name other than model.pt / model_step<N>.pt, --model without --run in fixture"""
+    import pickle
+    import shutil
+    assert (E.model_sfx("model.pt"), E.model_sfx("model_step500.pt"), E.model_step("model_step500.pt")) == ("", "_step500", 500)
+    for bad in ("ckpt.pt", "model_step.pt", "model_step5.pt.tmp"):
+        must_fail(E.parse_args, ["dump", "--run", "h", "--seed", "0", "--model", bad])
+    if not CACHE_OK or not os.path.exists(E.planb_path(0)):
+        print("snapshot: the names ok, the cache part SKIPPED (no cache or stored plain B)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
+        out = os.path.join(scratch, "out")
+        os.makedirs(out)
+        shutil.copy(E.planb_path(0), os.path.join(scratch, "planb_s0.pkl"))
+        E.JKT.train(E.JKT.parse_args(["--name", "h", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--snapshots", "10"]), runs, 500, 48)
+        snap, rd = ["--model", "model_step10.pt"], os.path.join(runs, "h")
+        with patched((E, "SCRATCH", scratch)):
+            for m in ([], snap):
+                E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"] + m), runs)
+            d20, d10 = (pickle.load(open(os.path.join(rd, f"token{s}_val_n3.pkl"), "rb")) for s in ("", "_step10"))
+            assert (d10["meta"]["model"], d10["meta"]["steps"], d20["meta"]["model"], d20["meta"]["steps"]) == ("model_step10.pt", 10, "model.pt", 20), (d10["meta"], d20["meta"]["steps"])
+            assert any(not np.array_equal(x["pnone"], y["pnone"]) for x, y in zip(d10["frames"], d20["frames"])), "the snapshot's dump is the snapshot's head"
+            cards = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--max", "3"] + snap), runs, out)
+            tab = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--max", "3"] + snap), runs, out)))
+            E.fixture(E.parse_args(["fixture", "--seed", "0", "--run", "h", "--split", "val", "--max", "3"] + snap), runs, out_dir=out)
+            must_fail(E.fixture, E.parse_args(["fixture", "--seed", "0", "--split", "val", "--max", "3"] + snap), out_dir=out)
+            g = os.path.join(tmp, "g", "graphs.pkl")
+            os.makedirs(os.path.dirname(g))
+            E.graphs(E.parse_args(["graphs", "--run", "h", "--seed", "0", "--max", "3", "--out", g, "--name", "S10"] + snap), runs)
+            names = sorted(os.listdir(out))
+            assert names[:3] == ["h_token_card_argmax_step10_n3.json", "h_token_card_rec_step10_n3.json", "h_token_sweep_step10_n3.json"] and len(names) == 4 and names[3].startswith("token_fixture_step10_val_n3_"), names
+            fx = json.load(open(os.path.join(out, names[3])))
+            assert all(c["info"]["model"] == "model_step10.pt" and c["info"]["steps"] == 10 for c in cards.values()) and (tab["model"], tab["steps"]) == ("model_step10.pt", 10) and fx["model"] == "model_step10.pt", (tab["steps"], fx["model"])
+            gt = json.load(open(os.path.join(tmp, "g", "perframe_table.json")))["sys"]["S10"]
+            assert gt["model"] == "model_step10.pt" and gt["dump"]["path"].endswith("token_step10_val_n3.pkl"), gt["dump"]
+            pickle.dump(d20, open(os.path.join(rd, "token_step10_val_n3.pkl"), "wb"))                         # model.pt's dump under the snapshot's name
+            try:
+                E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--max", "3", "--link-thr", "0.1"] + snap), runs, out)
+            except AssertionError as e:
+                assert "not the dump of this read-out" in str(e), e
+            else:
+                raise RuntimeError("a dump of model.pt was scored as the snapshot's")
+    print(f"snapshot: --model model_step10.pt dumped / scored / swept / fixtured / graphed on 3 VAL frames, every name carries _step10 ({', '.join(names[:3])}, token_fixture_step10_val_n3_<UTC>.json, token_step10_val_n3.pkl), "
+          "model and steps 10 recorded, the dump differs from model.pt's; refused: other names, --model without --run, model.pt's dump read as the snapshot's: ok")
 
 
 TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max,
-         test_fixture, test_ctl_train, test_graphs]
+         test_fixture, test_ctl_train, test_graphs, test_snapshot]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
