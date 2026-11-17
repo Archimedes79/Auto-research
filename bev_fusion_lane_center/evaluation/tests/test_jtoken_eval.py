@@ -3,7 +3,7 @@ runs/e365_cache (built by the lane chat) and are skipped with a message when it 
 
     wsl bash tools/env/_py14.sh test_jtoken_eval.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
 
-keep_rule (a node is kept at p_none 0.49 and not at 0.50, e = 1 - p_none, the links of a dropped node go), decode_fork (rec keeps both branches of a fork, argmax one; the none slot wins when the branches are weak),
+decode_variant (the defaults = the record decode, thresholds and the none gate by hand, monotone), sweep (24 cells, counts monotone), keep_rule (a node is kept at p_none 0.49 and not at 0.50, e = 1 - p_none, the links of a dropped node go), decode_fork (rec keeps both branches of a fork, argmax one; the none slot wins when the branches are weak),
 dump_roundtrip (a real head forward: the dump holds exactly the decodes of `jtoken`, the candidate list, the keep mask), writer_no_gt (the prediction is made from the tokens only: mutants that put a GT section, a GT flag, a GT
 position or an extra GT field into the writer are caught by `check_writer`; the dump frame and `frame_prediction` have no GT input), oracle_hi (cache: an oracle head whose links are the c-hi links delivers exactly c-hi, and scores the same; the y pairs
 between assigned tokens are more than c-hi), drop (cache: reproducible, the seed matters, the share, equal to the loader's own `token_drop` at the same seed), controls (cache: c-rule, c-floor and a trained-style head run through the writer
@@ -133,6 +133,58 @@ def test_decode_fork():
     print("decode_fork: record keeps both branches, argmax the better one, the none slot beats weak branches: ok")
 
 
+def _links_set(l):
+    return set(zip(l["src"].tolist(), l["dst"].tolist()))
+
+
+def test_decode_variant():
+    K = 6
+    succ = {0: {1: 0.5, 2: 0.4}, 1: {2: 0.2}, 2: {3: 0.35}, 3: {4: 0.1}}                                  # none = the rest: src 0 two branches, src 1 weak (0.2), src 2 below its none (0.35 < 0.65), src 3 very weak
+    out, tok = stub_out(K, succ, [0.1, 0.1, 0.55, 0.1, 0.1, 0.1])                                          # token 2 has p_none 0.55: not a node at 0.5
+    (f,) = E.batch_dump(out, batch_of(tok))
+    valid = np.ones(K, bool)
+    rec = E.decode_variant(f, valid)                                                                       # the defaults are the decode of record, exactly
+    assert all(np.array_equal(rec["rec"][k], f["rec"][k]) for k in f["rec"]) and np.array_equal(rec["keep"], f["keep"]), (rec["rec"], f["rec"])
+    got = lambda **k: _links_set(E.decode_variant(f, valid, **k)["rec"])  # noqa: E731
+    assert got() == {(0, 1)} and got(link_thr=0.2) == {(0, 1)}, "token 2 is no node at p_none 0.55: no link to or from it"
+    assert got(keep_thr=0.6) == {(0, 1), (0, 2)} and got(link_thr=0.2, keep_thr=0.6) == {(0, 1), (0, 2)}, "a higher keep threshold adds the node"
+    assert got(keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (2, 3)}, "the none gate off adds 2 -> 3 (0.35 below p(none) 0.65)"
+    assert got(link_thr=0.19, keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (1, 2), (2, 3)} and got(link_thr=0.09, keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (1, 2), (2, 3), (3, 4)}
+    for kt in (0.5, 0.6):
+        for gate in (True, False):
+            chain = [got(link_thr=t, keep_thr=kt, none_gate=gate) for t in (0.3, 0.19, 0.09, 0.05)]
+            assert all(x <= y for x, y in zip(chain, chain[1:])), "a lower link threshold only adds links"
+        assert got(link_thr=0.2, keep_thr=kt) <= got(link_thr=0.2, keep_thr=kt, none_gate=False), "no none gate only adds links"
+    must_fail(E.decode_variant, f, valid, 0.04)                                                            # below the candidates the dump holds
+    v = E.decode_variant(f, np.array([True, True, True, True, True, False]), keep_thr=0.6)                 # the valid mask: an invalid token is never a node, whatever its p_none
+    assert not v["keep"][5] and v["keep"][2]
+    pred = E.frame_prediction(tok, E.decode_variant(f, valid, keep_thr=0.6), "rec", 0.6)                   # a node kept at 0.6 still passes the scorer's e >= 0.5, e = 1 - p_none + 0.1
+    import qgraph_eval as QE
+    assert QE.kept(pred, 0.5, 0.5)[0].all() and abs(pred["nodes"]["e"][2] - 0.55) < 1e-6 and abs(pred["nodes"]["e"][0] - 1.0) < 1e-6 and len(pred["nodes"]["pos"]) == 6, pred["nodes"]["e"]
+    # a dump of before the variants (no scales in the candidates, none probabilities in float16): the record's links keep their scales
+    old = dict(f, none_cls=f["none_cls"].astype(np.float16), cand={k: v for k, v in f["cand"].items() if k not in ("a", "b")}, rec=dict(f["rec"], a=np.full(len(f["rec"]["src"]), 0.25, np.float32)), argmax=dict(f["argmax"], a=np.full(len(f["argmax"]["src"]), 0.25, np.float32)))
+    r_old = E.decode_variant(old, valid)["rec"]
+    assert _links_set(r_old) == _links_set(f["rec"]) and np.allclose(r_old["a"], 0.25), "the record's links keep their scales"
+    ex = E.decode_variant(old, valid, link_thr=0.09, keep_thr=0.6, none_gate=False)["rec"]
+    added = [k for k, l in enumerate(zip(ex["src"].tolist(), ex["dst"].tolist())) if l not in _links_set(f["rec"])]
+    assert len(added) == 4 and np.allclose(ex["a"][added], 1 / 3) and np.allclose(ex["a"][[k for k in range(len(ex["a"])) if k not in added]], 0.25), "links that are not the record's get 1/3"
+    # a real head (random weights): the default variant is the decode of record on every frame, exactly
+    torch.manual_seed(0)
+    m = JK.JTokenHead().eval()
+    m.set_step(JK.SWITCH)
+    sb = JK.synthetic_batch(3, 48, seed=2)
+    toks = [dict(pos=sb["pos"][b].double().numpy(), cell=np.arange(48)) for b in range(3)]
+    frames = E.batch_dump(E.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
+    n_rec = 0
+    for fr_, val in zip(frames, sb["valid"].numpy()):
+        d = E.decode_variant(fr_, val)
+        assert all(np.array_equal(d["rec"][k], fr_["rec"][k]) for k in fr_["rec"]) and np.array_equal(d["keep"], fr_["keep"])
+        n_rec += len(fr_["rec"]["src"])
+    assert n_rec > 0
+    print(f"decode_variant: the defaults equal the record decode exactly (hand frame and {n_rec} links of a real head on 3 frames), a lower link threshold only adds links, the none gate off adds the links of sources whose none mass is above them, a higher keep "
+          "threshold adds nodes (e shifted so that the scorer keeps them), thresholds below the candidates refused, a dump of before the variants keeps the record's scales: ok")
+
+
 def test_dump_roundtrip():
     torch.manual_seed(0)
     m = JK.JTokenHead().eval()
@@ -163,7 +215,7 @@ def test_writer_no_gt():
     K = 4
     out, tok = stub_out(K, {0: {1: 0.8}, 1: {2: 0.8}}, [0.1] * K)
     pred, f = pred_of(out, tok)
-    assert list(inspect.signature(E.frame_prediction).parameters) == ["tokens", "f", "decode"], "the writer's inputs are the tokens and the dump frame"
+    assert list(inspect.signature(E.frame_prediction).parameters) == ["tokens", "f", "decode", "keep_thr"], "the writer's inputs are the tokens and the dump frame"
     gt_leaks = {"section": lambda nd: nd.update(section=np.arange(len(nd["pos"]))), "flags": lambda nd: nd.update(flags=np.ones_like(nd["flags"])), "pos": lambda nd: nd.update(pos=nd["pos"] + 0.7),
                 "extra field": lambda nd: nd.update(piece=np.zeros(len(nd["pos"]), int)), "s": lambda nd: nd.update(s=np.ones_like(nd["s"]))}
     real = LP.to_pred
@@ -413,6 +465,76 @@ def test_parity_timing():
               f"K {K}: head {t['median_ms']['head']:.0f} ms, whole {t['median_ms']['whole']:.0f} ms, {t['params']} parameters, {t['gmacs_head']:.2f} GMACs, two stamped files: ok")
 
 
+def test_sweep():
+    """the sweep on 3 cache frames with the untrained head (it keeps nodes and links): 24 cells, one is the record, the numbers move monotonically in the counts, the table is never overwritten"""
+    import shutil
+    if not CACHE_OK or not os.path.exists(SMOKE):
+        print("sweep: SKIPPED (no cache or no smoke model)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, out = os.path.join(tmp, "runs"), os.path.join(tmp, "out")
+        os.makedirs(os.path.join(runs, "h"))
+        os.makedirs(out)
+        ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
+        ck["state"] = E.floor_model().state_dict()
+        torch.save(ck, os.path.join(runs, "h", "model.pt"))
+        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        path = E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--max", "3"]), runs, out)
+        rows = json.load(open(path))["rows"]
+        assert len(rows) == 24 and sum(r["record"] for r in rows) == 1 and all(r["frames"] == 3 for r in rows), rows
+        cell = lambda lt, kt, g: next(r for r in rows if (r["link_thr"], r["keep_thr"], r["none_gate"]) == (lt, kt, g))  # noqa: E731
+        for kt in E.SWEEP_KEEP:
+            for g in (True, False):
+                lp = [cell(lt, kt, g)["links_per_frame"] for lt in E.SWEEP_LINK]
+                assert all(x <= y for x, y in zip(lp, lp[1:])), "a lower link threshold only adds links"
+            assert all(cell(lt, kt, True)["links_per_frame"] <= cell(lt, kt, False)["links_per_frame"] for lt in E.SWEEP_LINK), "no none gate only adds links"
+        for lt in E.SWEEP_LINK:
+            kn = [cell(lt, kt, True)["kept_nodes_per_frame"] for kt in E.SWEEP_KEEP]
+            assert all(x <= y for x, y in zip(kn, kn[1:])), "a higher keep threshold only adds nodes"
+        assert len({r["topo_F1"] for r in rows}) > 1, "the variants differ in the score"
+        must_fail(E.sweep, E.parse_args(["sweep", "--run", "h", "--seed", "0", "--max", "3"]), runs, out)
+        print(f"sweep: 24 cells on 3 frames of an untrained head (links per frame {min(r['links_per_frame'] for r in rows):.0f} - {max(r['links_per_frame'] for r in rows):.0f}), counts monotone in both thresholds and the gate, the record cell marked, the table never overwritten: ok")
+
+
+def test_every():
+    """--every N: the sample, the file names, the meta of the dump, and score / sweep reading the subset back (frames 0, 3, 6 of VAL with --max 3; the TRAIN sample every third = 291 frames)"""
+    import pickle
+    import shutil
+    s = E.sample(8414, "train")
+    assert len(E.sample(8414, "train", 3)) == 291 and E.sample(8414, "train", 3).tolist() == s[::3].tolist() and E.sample(873, "val", 3).tolist()[:3] == [0, 3, 6] and E.sample(873, "val", 1).tolist() == list(range(873))
+    if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(E.planb_path(0)):
+        print("every: the sample ok, the dump / score / sweep part SKIPPED (no cache, smoke model or stored plain B)")
+        return
+    import qgraph_eval as QE
+    ds = E.open_cache("val", 0)
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
+        out = os.path.join(scratch, "out")
+        os.makedirs(os.path.join(runs, "h"))
+        os.makedirs(out)
+        ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
+        ck["state"] = E.floor_model().state_dict()                                                       # an untrained head that keeps nodes and links
+        torch.save(ck, os.path.join(runs, "h", "model.pt"))
+        shutil.copy(E.planb_path(0), os.path.join(scratch, "planb_s0.pkl"))
+        with patched((E, "SCRATCH", scratch)):
+            E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)
+            path = os.path.join(runs, "h", "token_val_every3_n3.pkl")
+            d = pickle.load(open(path, "rb"))
+            assert d["meta"]["every"] == 3 and d["meta"]["idx"] == [0, 3, 6] and d["meta"]["tokens"] == [ds.tokens[i] for i in (0, 3, 6)] and [f["token"] for f in d["frames"]] == d["meta"]["tokens"], d["meta"]
+            must_fail(E.dump, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)       # never overwritten
+            cards = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--every", "3", "--max", "3"]), runs, out)
+            assert sorted(os.listdir(out)) == ["h_token_card_argmax_every3_n3.json", "h_token_card_rec_every3_n3.json"], os.listdir(out)
+            fr = QE.val_frames()
+            want = E.score_preds([E.frame_prediction(ds[i]["tokens_np"], f, "rec") for i, f in zip((0, 3, 6), d["frames"])], [fr[i] for i in (0, 3, 6)], log=lambda *a, **k: None)["graph"]
+            c = cards["rec"]
+            assert c["frames"] == 3 and all(abs(c["metrics"][k] - want[k]) < 1e-12 for k in E.KEYS) and "topo_F1" in c["info"]["paired_vs_plain_b"] and c["info"]["g1_topo_F1"] is None, "the card scores frames 0, 3, 6"
+            tab = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--every", "3", "--max", "3"]), runs, out)))
+            assert os.path.exists(os.path.join(out, "h_token_sweep_every3_n3.json")) and tab["frames"] == 3 and len(tab["rows"]) == 24
+            rec = next(r for r in tab["rows"] if r["record"])
+            assert abs(rec["topo_F1"] - want["topo_F1"]) < 1e-12, "the record cell of the sweep is the record card on the same frames"
+    print("every: the TRAIN sample every third = 291 frames; dump --every 3 --max 3 takes VAL frames 0, 3, 6 (file token_val_every3_n3.pkl, meta every / idx / tokens, never overwritten), score and sweep read it back (names ..._every3_n3), the card and the sweep's record cell equal a direct scoring of frames 0, 3, 6: ok")
+
+
 def test_score_max():
     """dump then score of 3 frames, end to end on a smoke head: the controls of `ctl --max 3` (bsec0_close: the pickle for the paired interval) and planted hi / rule cards, g1 against the hand formula"""
     import pickle
@@ -441,6 +563,10 @@ def test_score_max():
                 assert abs(c["info"]["g1_topo_F1"] - want) < 1e-12 and "exceed 1" in c["info"]["g1_note"], c["info"]["g1_topo_F1"]
                 assert "topo_F1" in c["info"]["paired_vs_plain_b"] and "topo_F1" in c["info"]["paired_vs_bsec0_close"] and "plain_b_dump" in c["info"]
                 assert c["protocol"]["reference"].startswith("val")
+            v = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--max", "3", "--link-thr", "0.1", "--keep-thr", "0.6", "--no-none-gate"]), runs, out)
+            assert list(v) == ["rec"] and os.path.exists(os.path.join(out, "h_token_card_rec_lt0.1_kt0.6_nng_n3.json")), (list(v), os.listdir(out))
+            dv = v["rec"]["info"]["decode_variant"]
+            assert (dv["link_thr"], dv["keep_thr"], dv["none_gate"]) == (0.1, 0.6, False) and "g1_topo_F1" in v["rec"]["info"], dv
             for f in os.listdir(out):
                 if f.startswith("h_token_card"):
                     os.remove(os.path.join(out, f))
@@ -458,7 +584,7 @@ def test_score_max():
     print("score_max: ctl --max 3 (bsec0_close pickle, K in the file name), dump --max 3, score --max 3 with planted controls: g1 equals the hand formula, the paired intervals vs plain B and vs bsec0_close, the cards in the out folder; a dump of another run and a missing plain B record are refused: ok")
 
 
-TESTS = [test_keep_rule, test_decode_fork, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_score_max]
+TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]

@@ -2,7 +2,7 @@
 
     ds, dl = loader("train" | "val", seed=0, bs=8, workers=4, token_drop=0.0, ident="e292_a")       # the cache of B' seed 0 under runs/e365_cache (exactly one K found, or K=...)
     batch["tok"] (B, K, 64) f16, ["pos"], ["dirv"] (B, K, 2), ["e"], ["e_raw"], ["s"], ["uout"], ["uin"] (B, K), ["flags"] (B, K, 8) logits, ["valid"] (B, K) bool,
-    ["ytype"] (B, K) int64 (0 none .. 6 boundary), ["y"] (B, K, K) uint8 (1 where token j is in G(i)), ["ylong"] (B, K, K) bool, ["yscale"] (B, K, K, 2) NaN elsewhere, ["gt_out"] (B,) the GT links lost,
+    ["ytype"] (B, K) int64 (0 none .. 6 boundary), ["y"] (B, K, K) uint8 (1 where token j is in G(i)), ["ylong"] (B, K, K) bool = y and the chord |pos_j - pos_i| of the TOKENS above 8 m (not the chord of the GT link), ["yscale"] (B, K, K, 2) NaN outside the long GT links with a fit, ["gt_out"] (B,) the GT links lost,
     ["token"], ["row"], ["tokens_np"] (a list of per-frame dicts, float64 pos / dirv / e_p / flags_p / s_p, int cell, bool valid: what the read-out writer needs; NO GT field), ["label"] (the GT-side fields
     gt_id, gd, gt_flags, gt_aux for the controls and diagnostics: the model must not read them)
     to_pred(tokens_np[b], keep, e_node, links)                                                                       # the qformat prediction of a frame from tokens + the head's output, no GT field
@@ -20,6 +20,7 @@ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirna
 for sub_ in ("training/data", "training/grid", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import lane_tokcache as LC  # noqa: E402
+import qtargets as QT  # noqa: E402
 
 TOKEN_FIELDS = ("tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid")
 
@@ -67,7 +68,9 @@ class PTokData(torch.utils.data.Dataset):
             from jtok_eval import keep_nodes
             keep = keep_nodes(self.tokens[i], self.K, self.drop, self.seed)
         valid = np.array(f["valid"][i]) & keep
-        y, yl, ys = densify(np.array(f["ypair"][i]), np.array(f["ypair_long"][i]), np.array(f["ypair_scale"][i]), self.K, keep if self.drop > 0 else None)
+        y, _, ys = densify(np.array(f["ypair"][i]), np.array(f["ypair_long"][i]), np.array(f["ypair_scale"][i]), self.K, keep if self.drop > 0 else None)
+        pos = np.array(f["pos"][i], np.float64)
+        yl = (y > 0) & (np.linalg.norm(pos[None, :, :] - pos[:, None, :], axis=-1) > QT.SHORT)                  # the class of a pair = the chord of its TOKENS (> 8 m); the class of the GT link is in the cache (`ypair_long`)
         out = {n: np.array(f[n][i]) for n in TOKEN_FIELDS if n in f}
         out.update(valid=valid, ytype=np.where(keep, np.array(f["gt_type"][i]), 0).astype(np.int64), y=y, ylong=yl, yscale=ys, gt_out=int(f["gt_out"][i]), token=self.tokens[i], row=int(self.rows[i]),
                    tokens_np=dict(pos=np.array(f["pos"][i], np.float64), dirv=np.array(f["dirv"][i], np.float64), e_p=np.array(f["e_p"][i], np.float64), flags_p=np.array(f["flags_p"][i], np.float64),
@@ -123,7 +126,9 @@ def toy_cache_test():
                    flags_p=rng.random((F, K, 8)).astype(np.float32), s_p=rng.random((F, K)).astype(np.float32), cell=np.tile(np.arange(K, dtype=np.int16), (F, 1)), gt_id=-np.ones((F, K), np.int32),
                    gd=np.full((F, K), np.nan, np.float32), gt_flags=np.zeros((F, K, 8), bool), gt_aux=np.zeros((F, K, 3), bool))
         arr["ypair"][:, :3] = [[0, 2], [0, 3], [4, 1]]
-        arr["ypair_long"][:, 1] = True
+        arr["pos"][:] = 0.0
+        arr["pos"][:, 2], arr["pos"][:, 3], arr["pos"][:, 1] = [0.0, 5.0], [0.0, 20.0], [0.0, 9.0]              # token chords: (0, 2) 5 m, (0, 3) 20 m, (4, 1) 9 m
+        arr["ypair_long"][:, 0] = True                                                                            # the GT class is the opposite of the token class for (0, 2) and (0, 3)
         arr["ypair_scale"][:, 1] = [0.3, 0.4]
         arr["valid"][1, 30:] = False
         for n_, v in arr.items():
@@ -134,7 +139,9 @@ def toy_cache_test():
         assert len(ds) == 3 and ds.K == K
         b = collate([ds[0], ds[1]])
         assert b["tok"].shape == (2, K, 4) and b["y"].shape == (2, K, K) and b["yscale"].shape == (2, K, K, 2) and b["ytype"].dtype == torch.int64 and b["gt_out"].tolist() == [5, 6] and b["token"] == ["ta", "tb"]
-        assert b["row"].tolist() == [10, 11] and int(b["y"][0].sum()) == 3 and b["y"][0, 4, 1] == 1 and bool(b["ylong"][0, 0, 3]) and not bool(b["valid"][1, 31]) and bool(b["valid"][0, 31])
+        assert b["row"].tolist() == [10, 11] and int(b["y"][0].sum()) == 3 and b["y"][0, 4, 1] == 1 and not bool(b["valid"][1, 31]) and bool(b["valid"][0, 31])
+        assert bool(b["ylong"][0, 0, 3]) and bool(b["ylong"][0, 4, 1]) and not bool(b["ylong"][0, 0, 2]) and int(b["ylong"][0].sum()) == 2, "ylong = the chord of the tokens"
+        assert not b["ylong"][0, 3, 0] and np.allclose(b["yscale"][0, 0, 3], [0.3, 0.4]) and np.isnan(b["yscale"][0, 0, 2]).all()
         assert sorted(b["tokens_np"][0]) == ["cell", "dirv", "e_p", "flags_p", "pos", "s_p", "valid"] and sorted(b["label"]) == ["gd", "gt_aux", "gt_flags", "gt_id"], "no GT field in tokens_np"
         assert b["tokens_np"][0]["pos"].dtype == np.float64 and b["tokens_np"][0]["valid"].shape == (K,)
         dr1, dr2, dr3 = (PTokData("val", seed=s_, token_drop=0.5, dir=d) for s_ in (1, 1, 2))
