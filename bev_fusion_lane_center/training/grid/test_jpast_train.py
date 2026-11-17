@@ -37,8 +37,8 @@ MUTANTS = [
     (T0, "the block is built before the head", "    head = JKT.build_head({})\n    if not args.get(\"no_past\"):\n        check_hook(head)\n        head.past_block = JP.PastBlock(d=JKT.arch({})[0], heads=JKT.arch({})[1])\n    return head",
      "    blk = JP.PastBlock(d=JKT.arch({})[0], heads=JKT.arch({})[1]) if not args.get(\"no_past\") else None\n    head = JKT.build_head({})\n    if blk is not None:\n        check_hook(head)\n        head.past_block = blk\n    return head"),
     (T0, "the hook is not checked", "    assert \"past\" in inspect.signature(model.forward).parameters and hasattr(model, \"past_block\"), \\\n", "    assert True or \"past\" in inspect.signature(model.forward).parameters and hasattr(model, \"past_block\"), \\\n"),
-    (T0, "u is not logged", "            info[\"u\"] = float(np.mean(u_hist)) if u_hist else 0.0", "            pass"),
-    (T0, "u is the last step's only", "float(np.mean(u_hist)) if u_hist else 0.0", "float(u_hist[-1]) if u_hist else 0.0"),
+    (T0, "u is not logged", "            info[\"u\"], info[\"u_none\"] = (float(np.mean(h)) if h else 0.0 for h in (u_hist, un_hist))", "            pass"),
+    (T0, "u is the last step's only", "(float(np.mean(h)) if h else 0.0 for h in (u_hist, un_hist))", "(float(h[-1]) if h else 0.0 for h in (u_hist, un_hist))"),
     (T0, "the sequence order uses the cache seed", "seed=init, args=args,", "seed=a.seed, args=args,"),
     (T0, "another recipe is not refused", "assert c.get(\"design\") == \"jpast\" and old ==", "assert c.get(\"design\") == \"jpast\" or old =="),
     (T0, "the seed twin shares the head initialisation", "    init = a.seed if a.init_seed is None else a.init_seed\n", "    init = a.seed\n"),
@@ -60,6 +60,14 @@ MUTANTS = [
     ("jpast_eval.py", "the carried state is the block input", 'state_ss=float((out["x"][0].float() ** 2)[v].sum())', "state_ss=x2"),
     ("jpast_eval.py", "the first 5 frames are 4", "FIRST = 5 ", "FIRST = 4 "),
     ("jpast_eval.py", "the state RMS stops one position early", "for p in range(int(pos.max()) + 1)]", "for p in range(int(pos.max()))]"),
+    (T0, "arm r with one sequence per step is accepted", 'assert args["no_past"] or args["bs"] >= 2,', 'assert True or args["bs"] >= 2,'),
+    (T0, "u is logged as u_none", "(float(np.mean(h)) if h else 0.0 for h in (u_hist, un_hist))", "(float(np.mean(h)) if h else 0.0 for h in (u_hist, u_hist))"),
+    (T0, "u takes the none-key value", 'u_hist.append(u["u"])', 'u_hist.append(u["u_none"])'),
+    (T0, "the window of u_none is 10", "collections.deque(maxlen=U_WINDOW), collections.deque(maxlen=U_WINDOW)", "collections.deque(maxlen=U_WINDOW), collections.deque(maxlen=10)"),
+    ("jpast_eval.py", "the meter gets no other scene's past", "meter.donor = other", "meter.donor = None"),
+    ("jpast_eval.py", "the meter compares with the stream's own past", "meter.donor = other", "meter.donor = past"),
+    ("jpast_eval.py", "mode shuffled ignores its donor", "past = other or {}", "past = {}"),
+    ("jpast_eval.py", "the stream dump makes no pass for the other scenes' states", 'if a.split == "val" and a.mode != "off" and not args.get("no_past"):', 'if a.mode == "shuffled":'),
     ("jpast_eval.py", "the stream carries the state over a scene start", "            pos_in_scene = pos_in_scene + 1 if hp else 0\n", "            pos_in_scene = pos_in_scene + 1\n"),
     ("jpast_eval.py", "a frame without a previous keyframe reads the state", "return mode == \"off\" or not has_prev or", "return mode == \"off\" or"),
     ("jpast_eval.py", "truncated resets at the wrong frames", "(mode == \"truncated\" and pos_in_scene % window == 0)", "(mode == \"truncated\" and pos_in_scene % window == 1)"),
@@ -71,10 +79,10 @@ MUTANTS = [
     ("jpast_eval.py", "the donor is the same scene", "                t = (s + d) % len(starts)", "                t = s"),
     ("jpast_eval.py", "the donor frame is the same step", "                    donor = starts[t] + n - 1", "                    donor = starts[t] + n"),
     ("jpast_eval.py", "the donor scene is too short", "                if ends[t] - starts[t] >= n:", "                if ends[t] - starts[t] >= 0:"),
-    ("jpast_eval.py", "shuffled borrows the state of this scene", "                        x, w = states[j]\n", "                        x, w = states[i]\n"),
+    ("jpast_eval.py", "shuffled borrows the state of this scene", "dict(x=states[j][0].to(dev), w=states[j][1].to(dev))", "dict(x=states[i][0].to(dev), w=states[i][1].to(dev))"),
     ("jpast_eval.py", "the stream stops late", "        if i >= last:\n            break", "        if i >= last + 1:\n            break"),
     ("jpast_eval.py", "an unkept frame is dumped", "        if i in keep:\n            frames += JE.batch_dump(out, fr)", "        if True:\n            frames += JE.batch_dump(out, fr)"),
-    ("jpast_eval.py", "u by position counts the cold start", "u_by_position={f\"{lo}-{hi}\" if hi < 10 ** 9 else f\"{lo}+\": ratio((pos >= lo) & (pos <= hi) & (hp > 0))", "u_by_position={f\"{lo}-{hi}\" if hi < 10 ** 9 else f\"{lo}+\": ratio((pos >= lo) & (pos < hi))"),
+    ("jpast_eval.py", "the u buckets exclude their upper bound", "bucket = {f\"{lo}-{hi}\" if hi < 10 ** 9 else f\"{lo}+\": (pos >= lo) & (pos <= hi) & (hp > 0)", "bucket = {f\"{lo}-{hi}\" if hi < 10 ** 9 else f\"{lo}+\": (pos >= lo) & (pos < hi) & (hp > 0)"),
     ("jpast_eval.py", "kept gained is kept lost", "g, l_ = int((ks & ~ko).sum()), int((~ks & ko).sum())", "l_, g = int((ks & ~ko).sum()), int((~ks & ko).sum())"),
     ("jpast_eval.py", "the links changed are the common links", "changed += len(link_set(fs) ^ link_set(fo))", "changed += len(link_set(fs) & link_set(fo))"),
 ]
@@ -263,13 +271,14 @@ def trainer_tests(T, stub, label):
     h0.train()
     lf = T.make_loss(NoRun(), h0, False)
     _, info = lf(h0, b)
-    assert info["u"] == 0.0 and "nll_s" in info and "gpu_gb" in info, f"{label}: u at zero init"
+    assert info["u"] == 0.0 and info["u_none"] == 0.0 and "nll_s" in info and "gpu_gb" in info, f"{label}: u at zero init"
     for p in (h0.past_block.o.weight, h0.past_block.o.bias):
         torch.nn.init.normal_(p, std=0.3)
-    u1 = lf(h0, b)[1]["u"]
-    u2 = lf(h0, b)[1]["u"]
-    assert u1 > 0 and abs(u2 / u1 - 4.0 / 3.0) < 1e-4, f"{label}: u is the mean of the last steps: {u1} {u2} (steps 1 - 3: 0, ua, ua)"
-    assert "u" not in T.make_loss(NoRun(), hz, True)(hz, b)[1], f"{label}: arm z logs u"
+    i1, i2 = lf(h0, b)[1], lf(h0, b)[1]
+    assert i1["u"] > 0 and i1["u_none"] > 0 and abs(i2["u"] / i1["u"] - 4.0 / 3.0) < 1e-4 and abs(i2["u_none"] / i1["u_none"] - 4.0 / 3.0) < 1e-4, f"{label}: u and u_none are the means of the last steps: {i1} {i2} (steps 1 - 3: 0, ua, ua)"
+    assert i1["u"] != i1["u_none"], f"{label}: u is not u_none"
+    iz = T.make_loss(NoRun(), hz, True)(hz, b)[1]
+    assert "u" not in iz and "u_none" not in iz, f"{label}: arm z logs u"
     # u is the mean of the last U_WINDOW = 100 steps = the card's last 500 steps as the five 100-step rows of log.jsonl (`trainer.fit` logs every 100)
     assert T.U_WINDOW == 100 == inspect.signature(T.T.fit).parameters["log_every"].default and 5 * T.U_WINDOW == 500, f"{label}: U_WINDOW {T.U_WINDOW}"
     if stub is not None:
@@ -282,7 +291,7 @@ def trainer_tests(T, stub, label):
 
         def take(self):
             r = orig(self)
-            rec.append(r[0] if r else None)
+            rec.append((r["u"], r["u_none"]) if r else None)
             return r
         T.JP.UseMeter.take = take
         try:
@@ -293,7 +302,9 @@ def trainer_tests(T, stub, label):
                 info1 = lf1(h1, b)[1]
         finally:
             T.JP.UseMeter.take = orig
-        assert abs(info1["u"] - float(np.mean(rec[-100:]))) < 1e-9 and abs(info1["u"] - float(np.mean(rec[-10:]))) > 1e-3, f"{label}: u is not the mean of the last 100 steps"
+        for j_, key in ((0, "u"), (1, "u_none")):
+            vals = [r_[j_] for r_ in rec]
+            assert abs(info1[key] - float(np.mean(vals[-100:]))) < 1e-9 and abs(info1[key] - float(np.mean(vals[-10:]))) > 1e-3, f"{label}: {key} is not the mean of the last 100 steps"
     # the smoke run to its end: files, the counter of the head = the steps, then the same run after a kill = the straight run
     with tempfile.TemporaryDirectory() as tmp:
         a = T.parse_args(["--name", "r", "--smoke", "--bs", "2", "--seq", "3", "--seed", "0"])
@@ -346,7 +357,9 @@ def trainer_tests(T, stub, label):
         assert mz.past_block is None and mz._step_py == 20 and not any(k.startswith("past_block") for k in mz.state_dict()), f"{label}: arm z has a block"
     # the options: arm r needs a sequence of two or more
     refuses(lambda: T.parse_args(["--name", "x", "--seq", "1"]), "at least 2")
+    refuses(lambda: T.parse_args(["--name", "x", "--bs", "1"]), "at least 2 sequences")                    # u compares with the past of another sample of the batch
     T.parse_args(["--name", "x", "--seq", "1", "--no-past"])
+    T.parse_args(["--name", "x", "--bs", "1", "--no-past"])
 
 
 def hook_refusal(T):
@@ -412,7 +425,8 @@ def eval_tests(E, T, stub, label):
     stream = {i: (out, info) for i, _, out, info in E.iter_outputs(m, batches(), "stream", 3)}
     assert all(torch.equal(stream[i][0]["logp"], cold[i]) for i in (0, 4)) and not any(torch.equal(stream[i][0]["logp"], cold[i]) for i in (1, 2, 3, 5, 6, 7, 8)), f"{label}: cold starts / the past changes the output"
     assert [stream[i][1]["pos"] for i in range(n)] == [0, 1, 2, 3, 0, 1, 2, 3, 4] and [stream[i][1]["has_prev"] for i in range(n)] == hp and abs(stream[1][1]["shift"] - float(t[1].norm())) < 1e-6
-    assert all(stream[i][1]["n"] == 0 and stream[i][1]["d2"] == 0.0 for i in (0, 4)) and all(stream[i][1]["n"] > 0 and stream[i][1]["d2"] > 0 and stream[i][1]["x2"] > 0 for i in (1, 2, 3, 5)), f"{label}: u sums"
+    assert all(stream[i][1]["n"] == 0 and stream[i][1]["d2_none"] == 0.0 for i in (0, 4)) and all(stream[i][1]["n"] > 0 and stream[i][1]["d2_none"] > 0 and stream[i][1]["x2"] > 0 for i in (1, 2, 3, 5)), f"{label}: u_none sums"
+    assert all(stream[i][1]["n_other"] == 0 and stream[i][1]["d2_other"] == 0.0 for i in range(n)), f"{label}: a batch of one sample without a donor has no u"
     for i in (0, 2):                                                                                         # the CARRIED state: the final token states x of the frame's valid tokens (not the block's input)
         o_i, inf = stream[i]
         v_i = o_i["valid"][0].bool()
@@ -433,13 +447,33 @@ def eval_tests(E, T, stub, label):
     assert E.donor_plan([-1, 0, 1, 2, -1, 4]) == [None, 4, 5, None, None, 0], E.donor_plan([-1, 0, 1, 2, -1, 4])      # the donor scene (2 frames) has no step 3
     assert E.donor_plan([-1, 0, 1]) == [None, None, None], "a single scene has no donor"
     states = {i: (stream[i][0]["x"], stream[i][0]["w"]) for i in range(n)}
-    sh = {i: out for i, _, out, _ in E.iter_outputs(m, batches(), "shuffled", 3, donor=plan, states=states, frame_of=lambda j: frames[j])}
+    shi = {i: (out, info) for i, _, out, info in E.iter_outputs(m, batches(), "shuffled", 3, donor=plan, states=states, frame_of=lambda j: frames[j])}
+    sh = {i: o_[0] for i, o_ in shi.items()}
+    assert all(shi[i][1]["n_other"] == 0 for i in range(n)) and all(shi[i][1]["n"] > 0 for i in (1, 5)), f"{label}: in mode shuffled the donor is the past, no other-scene comparison"
     for i in (1, 5):
         j = plan[i]
         past = JP.make_past(dict(x=states[j][0], w=states[j][1]), frames[j], frames[i], R[i][None], t[i][None], True)
         with torch.no_grad():
             assert torch.equal(sh[i]["logp"], m(frames[i], past)["logp"]), f"{label}: shuffled frame {i}"
     assert torch.equal(sh[0]["logp"], cold[0]) and torch.equal(sh[4]["logp"], cold[4]) and not torch.equal(sh[1]["logp"], stream[1][0]["logp"])
+    # u in the stream read-out: the update with the stream's past against the update with the OTHER scene's past (the donor of the plan, warped by this frame's pose), by hand from the block's own inputs
+    cap = {}
+    hk = m.past_block.register_forward_hook(lambda mod, args, out: cap.__setitem__("args", args))
+    try:
+        for i, _, out, info in E.iter_outputs(m, batches(), "stream", 3, donor=plan, states=states, frame_of=lambda j: frames[j]):
+            if not hp[i]:
+                assert info["n_other"] == 0 and info["d2_other"] == 0.0 and info["x2_other"] == 0.0, f"{label}: frame {i} has no past"
+                continue
+            xin, pi, di, vi, pa = cap["args"]
+            j = plan[i]
+            pd_ = JP.make_past(dict(x=states[j][0], w=states[j][1]), frames[j], frames[i], R[i][None], t[i][None], True)
+            with torch.no_grad():
+                y_s, y_o, y_n = (m.past_block.delta(xin, pi, di, vi, q_) for q_ in (pa, pd_, None))
+            mv = vi[..., None].float()
+            want_o, want_n = float((((y_s - y_o) * mv) ** 2).sum()), float((((y_s - y_n) * mv) ** 2).sum())
+            assert info["n_other"] == int(vi.sum()) == info["n"] and abs(info["d2_other"] - want_o) < 1e-4 * max(want_o, 1) and abs(info["d2_none"] - want_n) < 1e-4 * max(want_n, 1) and want_o > 0 and info["x2_other"] == info["x2"], f"{label}: u of frame {i}: {info} {want_o} {want_n}"
+    finally:
+        hk.remove()
     # dump_frames: only the asked frames, in order, the stream carried through the others and stopped after the last one; the use arrays aligned
     seen = []
 
@@ -449,7 +483,7 @@ def eval_tests(E, T, stub, label):
             yield bb
     fr_d, use = E.dump_frames(m, counting(), {0, 2, 3, 5}, "stream", 3, "cpu", log=lambda *a, **k: None)
     assert [f["token"] for f in fr_d] == ["t0", "t2", "t3", "t5"] and use["idx"] == [0, 2, 3, 5] and use["pos"] == [0, 2, 3, 1] and use["has_prev"] == [False, True, True, True] and seen == [0, 1, 2, 3, 4, 5], f"{label}: dump_frames {use} {seen}"
-    assert use["d2"][0] == 0.0 and use["d2"][1] > 0 and all(len(v) == 4 for v in use.values())
+    assert use["d2_none"][0] == 0.0 and use["d2_none"][1] > 0 and all(len(v) == 4 for v in use.values()) and set(use) >= set(E.JP.SUMS) | {"idx", "has_prev", "pos", "shift", "state_ss", "state_n"}
     assert torch.equal(torch.from_numpy(np.asarray(fr_d[1]["pnone"])), torch.from_numpy(np.asarray(E.JE.batch_dump(stream[2][0], frames[2])[0]["pnone"]))), f"{label}: the dumped frame is the stream output"
     # the writer of jtoken_eval accepts a dumped frame (the nodes are the kept tokens', no GT field)
     pred = E.JE.frame_prediction(frames[2]["tokens_np"][0], fr_d[1], "rec")
@@ -462,13 +496,15 @@ def eval_tests(E, T, stub, label):
         with torch.no_grad():
             assert torch.equal(out["logp"], mz(frames[i])["logp"]) and info["n"] == 0, f"{label}: arm z frame {i}"
     # the use report by hand
-    mk = lambda keeps, links, d2, x2, pos, hp_: dict(meta=dict(run="r", split="val", idx=list(range(len(pos))), use=dict(d2=d2, x2=x2, pos=pos, has_prev=hp_, state_ss=[1.0] * len(pos), state_n=[1] * len(pos))), frames=[dict(token=f"t{i}", keep=np.array(k), rec=dict(src=np.array([a for a, _ in l_], int), dst=np.array([b for _, b in l_], int))) for i, (k, l_) in enumerate(zip(keeps, links))])  # noqa: E731
-    s_ = mk([[1, 1, 1], [1, 0, 0]], [[(0, 1), (1, 2)], [(0, 1)]], [0.0, 1.0], [4.0, 4.0], [0, 1], [False, True])
-    o_ = mk([[1, 0, 1], [1, 0, 0]], [[(0, 1)], [(0, 1)]], [0.0, 0.0], [4.0, 4.0], [0, 0], [False, False])
+    mk = lambda keeps, links, d2, x2, pos, hp_, d2o, no_: dict(meta=dict(run="r", split="val", idx=list(range(len(pos))), use=dict(d2_none=d2, x2=x2, n=[int(h) for h in hp_], d2_other=d2o, x2_other=[x if k else 0.0 for x, k in zip(x2, no_)], n_other=no_, pos=pos, has_prev=hp_,
+                                                                                                                                                           state_ss=[1.0] * len(pos), state_n=[1] * len(pos))), frames=[dict(token=f"t{i}", keep=np.array(k), rec=dict(src=np.array([a for a, _ in l_], int), dst=np.array([b for _, b in l_], int))) for i, (k, l_) in enumerate(zip(keeps, links))])  # noqa: E731
+    s_ = mk([[1, 1, 1], [1, 0, 0], [1, 0, 0]], [[(0, 1), (1, 2)], [(0, 1)], [(0, 1)]], [0.0, 1.0, 6.0], [4.0, 4.0, 16.0], [0, 1, 2], [False, True, True], [0.0, 9.0, 0.0], [0, 2, 0])      # frame 2 has a past but no other scene's past
+    o_ = mk([[1, 0, 1], [1, 0, 0], [1, 0, 0]], [[(0, 1)], [(0, 1)], [(0, 1)]], [0.0, 0.0, 0.0], [4.0, 4.0, 4.0], [0, 0, 0], [False, False, False], [0.0] * 3, [0] * 3)
     rep = E.use_report(s_, o_)
-    assert abs(rep["u"] - 0.5) < 1e-9 and rep["frames_with_past"] == 1 and abs(rep["u_by_position"]["1-1"] - 0.5) < 1e-9 and np.isnan(rep["u_by_position"]["2-2"]) and rep["against_off"] == dict(kept_gained_per_frame=0.5, kept_lost_per_frame=0.0, kept_flips_per_frame=0.5,
-                                                                                                                                                                 frames_with_a_flip=0.5, links_changed_per_frame=0.5), rep
-    m2 = dict(meta=dict(run="r", split="val", idx=[10, 11, 12, 13, 14], use=dict(d2=[0.0, 1.0, 4.0, 1.0, 1.0], x2=[4.0] * 5, pos=[0, 1, 5, 4, 1], has_prev=[False, True, True, True, True], state_ss=[8.0, 18.0, 50.0, 18.0, 36.0], state_n=[2] * 5)), frames=[])
+    assert abs(rep["u"] - 1.5) < 1e-9 and abs(rep["u_none"] - math.sqrt(7 / 20)) < 1e-9 and rep["frames_with_past"] == 2 and rep["frames_with_other_past"] == 1, rep
+    assert abs(rep["u_by_position"]["1-1"] - 1.5) < 1e-9 and np.isnan(rep["u_by_position"]["2-2"]) and abs(rep["u_none_by_position"]["1-1"] - 0.5) < 1e-9 and abs(rep["u_none_by_position"]["2-2"] - math.sqrt(6 / 16)) < 1e-9 and np.isnan(rep["u_none_by_position"]["3-3"]), rep
+    assert rep["against_off"] == dict(kept_gained_per_frame=1 / 3, kept_lost_per_frame=0.0, kept_flips_per_frame=1 / 3, frames_with_a_flip=1 / 3, links_changed_per_frame=1 / 3), rep["against_off"]
+    m2 = dict(meta=dict(run="r", split="val", idx=[10, 11, 12, 13, 14], use=dict(d2_none=[0.0, 1.0, 4.0, 1.0, 1.0], x2=[4.0] * 5, n=[0, 1, 1, 1, 1], d2_other=[0.0] * 5, x2_other=[0.0] * 5, n_other=[0] * 5, pos=[0, 1, 5, 4, 1], has_prev=[False, True, True, True, True], state_ss=[8.0, 18.0, 50.0, 18.0, 36.0], state_n=[2] * 5)), frames=[])
     r2 = E.use_report(m2)                                                                                    # the carried state's RMS per stream position and the first-5 split, by hand
     sr = r2["state_rms_by_position"]
     assert len(sr) == 6 and sr[0] == 2.0 and abs(sr[1] - math.sqrt(54 / 4)) < 1e-12 and sr[4] == 3.0 and sr[5] == 5.0 and all(np.isnan(sr[q]) for q in (2, 3)), sr
@@ -514,7 +550,7 @@ def dump_on_real_frames(E, T, stub):
         assert not np.array_equal(d["stream"]["frames"][3]["pnone"], d["off"]["frames"][3]["pnone"]), "the past changed nothing at frame 3"
         assert np.array_equal(d["truncated"]["frames"][2]["pnone"], d["stream"]["frames"][2]["pnone"]) and not np.array_equal(d["truncated"]["frames"][3]["pnone"], d["stream"]["frames"][3]["pnone"]), "truncated: window 3"
         rep = E.use_report(d["stream"], d["off"])
-        assert rep["frames_with_past"] == 11 and rep["u"] > 0 and rep["against_off"]["kept_flips_per_frame"] >= 0
+        assert rep["frames_with_past"] == 11 and rep["frames_with_other_past"] == 11 and rep["u"] > 0 and rep["u_none"] > 0 and rep["u"] != rep["u_none"] and rep["against_off"]["kept_flips_per_frame"] >= 0
         res = E.use(argparse.Namespace(run="x", split="val", max=12), runs=tmp)                              # the command: stream + the sibling x_off -> past_use_val_n12.json
         assert res["against_off"] == rep["against_off"] and res["against_off"]["kept_flips_per_frame"] > 0, "use reads the off dump of the sibling folder"
         assert os.path.exists(os.path.join(tmp, "x", "past_use_val_n12.json")) and res["position_per_frame"] == list(range(12)) and res["frame_idx_first5"] == [0, 1, 2, 3, 4] and res["frame_idx_later"] == list(range(5, 12)) and "against_off" in res

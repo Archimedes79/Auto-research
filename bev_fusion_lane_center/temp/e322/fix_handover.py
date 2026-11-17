@@ -1,0 +1,15 @@
+p = "HANDOVER.md"
+s = open(p, encoding="utf-8").read()
+R = [
+ ("E320 delivers +5.6 % / +3.0 % curves, duplicates rise with the curve count ACROSS recipes but FALL with it within one network (E312 p >= 0.5 vs 0.1), so the count explanation is open (E323);",
+  "E320 delivers +5.6 % / +3.0 % curves but **E323 (run 08:25-08:50, card section 3) shows the duplicate excess is NOT the count**: E312 read out at E320's count has dup_frac +0.0011 / +0.0005, E320 at E312's count keeps +0.0172 / +0.0083 over c (both directions CUT; predictions all hit; the count has no effect on dup_frac near p = 0.1);"),
+ ("**E322 (soft wiring) CLOSED at its gate G0 (card, 34f1f28f):** choosing the wired piece by the rule at the matched GT end instead of at the keypoint gives -0.0008 / +0.0014 topo F1 on E312 and +0.0009 / +0.0019 on E320's attached ends (the rule picks the oracle's piece in 84 % of the ends; reach 4 m is the optimum): a learned wiring has no accuracy headroom, the snap's wiring gain is the count 'one piece instead of all'; the head stays designed in the card, not built (`evaluation/jwiring.py`).",
+  "**E322 (soft wiring) CLOSED at its gate G0 (card v2, critic REVISE answered):** choosing the wired piece by the rule at the matched GT end instead of at the keypoint gives -0.0007 / +0.0013 topo F1 on E312 and +0.0009 / +0.0019 on E320's attached ends (the rule picks the oracle's piece in 84 % of the ends, 75 % of the real choices; a deliberately wrong choice costs 0.03; reach 4 m is the best): a learned selection that imitates this label has no accuracy headroom, the snap's wiring gain is the count 'one piece instead of all'; NOT covered: ties (12-14 % of the oracle ends), wiring both tied pieces, a dustbin; the head stays designed in the card, not built (`evaluation/jwiring.py`); the one-piece rule is a named selection on the OUTPUT (D55 allows it). **One question for Mirko when he is back:** is an end-to-end replacement of that output selection worth one more module when it ties the rule (D86 names both weights; default: not now). Zero-parameter soft-distance edge weights (argmax = the rule) are an interface option for the planner, not built."),
+ ("5. Next steps after E320 (CUT) and E322 (closed at its gate): E323 (card v2, committed 34f1f28f: E312 read out at E320's number of curves 0.083 / 0.090 and E320 at E312's 0.120 / 0.110, read-out only, CPU, nice 19 one thread, three scores per seed; first critic pass REVISE, answered, second pass pending; start when it is ACCEPT, while day13 trains), the E316 pair stage (6000 steps) as a stack candidate only on a base that is adopted, then E292",
+  "5. Next steps after E320 (CUT), E322 (closed at its gate) and E323 (run, CUT stands): E292 first (Matrix-NMS layer replaces the close-node step; E288 reproduced it; the next hard step of B's read-out), the E316 pair stage (6000 steps) as a stack candidate only on a base that is adopted, a family card on the number of pieces per end (k = 2 weighted, ties) if wanted; then E292's neighbours"),
+]
+for a, b in R:
+    assert s.count(a) == 1, a[:70]
+    s = s.replace(a, b)
+open(p, "w", encoding="utf-8").write(s)
+print("ok")
