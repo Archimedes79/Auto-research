@@ -2,13 +2,13 @@
 
     wsl bash tools/env/_py14.sh jtoken_eval.py dump  --run R --seed S [--split val|train] [--drop 0.17 --drop-seed 0] [--every N] [--cpu] [--max N]   # GPU: the head on the cache tokens -> runs/R/token_<split>[_drop..].pkl
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [--split val|train] [--drop 0.17 --drop-seed 0] [--every N] [--max N]                     # CPU -> runs/R/token_card_<decode>[_train][_drop..].json (rec, argmax; never overwritten)
-    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --link-thr T --keep-thr K [--no-none-gate]                                      # CPU: another decode of the same dump -> token_card_rec_lt<T>_kt<K>[_nng][_train]..json
-    wsl bash tools/env/_py14.sh jtoken_eval.py sweep --run R --seed S --split train [--every N] [--max N]                                                       # CPU: the grid of decode variants on the TRAIN sample -> runs/R/token_sweep_train.json
+    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
+    wsl bash tools/env/_py14.sh jtoken_eval.py sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the grid of decode variants on the TRAIN sample -> runs/R/token_sweep[_perclass]_train.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a|e273_p [--arms hi,hi_y,rule,floor,bsec0_plain,bsec0_close] [--max N]   # CPU: the controls -> runs/eval/e365_ctl/<arm>_<ident>_s<S>_K<K>.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a --split train --every 3                                    # CPU: c-rule on the TRAIN sample -> runs/eval/e365_ctl/rule_<ident>_s<S>_K<K>_train_every3.json
     wsl bash tools/env/_py14.sh jtoken_eval.py fixture --seed S --split train|val [--every 3] [--lam 12 --mu 10.4]                     # CPU, E369: the untrained --prior rule head against c-rule -> runs/eval/e369_fix/fix_s<S>_<split>.._<UTC>.json, PASS / FAIL
     wsl bash tools/env/_py14.sh jtoken_eval.py fixture --seed S --run R --split train --every 3                                        # CPU, E370 stage A: the run's head against c-rule (per class, in the gate) -> runs/R/token_fixture_.._<UTC>.json
-    wsl bash tools/env/_py14.sh jtoken_eval.py graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
+    wsl bash tools/env/_py14.sh jtoken_eval.py graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --link-thr-long T_L --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
     wsl bash tools/env/_py14.sh jtoken_eval.py dump|score|sweep|graphs|fixture --run R --model model_step<N>.pt ...                       # a snapshot of `jtoken_train --snapshots` instead of model.pt: every file name carries _step<N>
     wsl bash tools/env/_py14.sh jtoken_eval.py check-layer1 --seed S [--dump PATH]                                                       # CPU: this scorer fed B's stored dump reproduces runs/eval/e324s_val/card_s<S>.json (PASS / FAIL)
     wsl bash tools/env/_py14.sh jtoken_eval.py check-parity --run R --seed S [--b-run runs/e292_a_s<S>] [--n 20]                         # CPU: the head from the cache tokens (fp16 tok) against tokens recomputed live from B' (fp32)
@@ -50,6 +50,7 @@ import lane_tokcache as LC  # noqa: E402
 import qgraph_eval as QE  # noqa: E402
 import qgraph_readout as QR  # noqa: E402
 
+ST = QE.TM.ST                                                               # the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
 RUNS = JV.RUNS
 CTL = os.path.join(JV.CARDS, "e365_ctl")
 SCRATCH = os.path.join(ROOT, "temp", "e365")
@@ -239,16 +240,19 @@ def frame_prediction(tokens, f, decode, keep_thr=KEEP_THR):
 LINK_FIELDS = ("src", "dst", "p", "long", "a", "b")
 
 
-def decode_variant(f, valid, link_thr=LINK_THR, keep_thr=KEEP_THR, none_gate=True):
-    """a decode of the dump frame `f` other than the record: nodes kept at p_none < keep_thr (valid tokens), links = every candidate with p >= link_thr (>= KEEP_P, the dump holds the candidates above it), and p >= p(none|i) of the class of the pair
-    unless `none_gate` is off, both ends kept -> the frame with `keep` and `rec` replaced; the handle scales are the dump's (`cand` a, b). A dump of before the variants (no scales in its candidates) is refused: re-dump. The default
-    arguments give exactly the decode of record (`check_record`)"""
-    assert link_thr >= KEEP_P, f"the dump holds the candidates with p >= {KEEP_P}: --link-thr below it cannot be re-scored"
+def decode_variant(f, valid, link_thr=LINK_THR, keep_thr=KEEP_THR, none_gate=True, link_thr_long=None):
+    """a decode of the dump frame `f` other than the record: nodes kept at p_none < keep_thr (valid tokens), links = every candidate with p >= the threshold of its class (link_thr for the short class, link_thr_long for the long
+    class = the dump's `long`, the token chord > 8 m of the head's candidates; None: link_thr for both; both >= KEEP_P, the dump holds the candidates above it), and p >= p(none|i) of the class of the pair unless `none_gate` is off, both
+    ends kept -> the frame with `keep` and `rec` replaced; the handle scales are the dump's (`cand` a, b). A dump of before the variants (no scales in its candidates) is refused: re-dump. The default arguments give exactly the decode
+    of record (`check_record`)"""
+    thr_long = link_thr if link_thr_long is None else link_thr_long
+    assert min(link_thr, thr_long) >= KEEP_P, f"the dump holds the candidates with p >= {KEEP_P}: --link-thr / --link-thr-long below it cannot be re-scored"
     c = f["cand"]
     assert "a" in c, f"frame {f['token']}: a dump of before the decode variants (no handle scales in its candidates): re-dump"
     keep = np.asarray(valid, bool) & (np.asarray(f["pnone"]) < np.float32(keep_thr))
     src, dst = c["src"].astype(int), c["dst"].astype(int)
-    m = (c["p"] >= np.float32(link_thr)) & keep[src] & keep[dst]
+    thr = np.array([link_thr, thr_long], np.float32)[c["long"].astype(int)]                 # the threshold of the pair's class (short, long)
+    m = (c["p"] >= thr) & keep[src] & keep[dst]
     if none_gate:
         m &= c["p"] >= np.asarray(f["none_cls"], np.float32)[c["long"].astype(int), src]
     return dict(f, keep=keep, rec={k: c[k][m] for k in LINK_FIELDS})
@@ -344,6 +348,22 @@ def score_preds(preds, frames, log=print):
             log(f"   {min(a + 100, len(frames))}/{len(frames)} frames, {time.time() - t0:.0f} s", flush=True)
     graph = {k: v for k, v in QE.graph_numbers(rec["graph"]).items() if k not in JV.SEC_VOID}
     return dict(graph=graph, nodes=QE.node_numbers(QE.pool_counts(rec["node"])) if rec["node"] else {}, rec=rec, lane_missing=miss)
+
+
+JUNCTION_KEYS = ("junction_F1", "junction_P", "junction_R")
+
+
+def junction_numbers(graph_recs, idx=None):
+    """junction F1 / P / R of the per-frame graph records (`score_preds` rec['graph']) of the frames idx (None: all; a frame drawn twice counts twice) from the pooled counts lane['junc'] (predicted, GT, matched within 3 m: the scorer's
+    junction points of degree >= 3), as `qgraph_eval.graph_numbers`"""
+    sel = graph_recs if idx is None else [graph_recs[i] for i in idx]
+    return {k: float(v) for k, v in QE.MS.topo_numbers(dict(marb=np.zeros(4), junc=np.sum([c["lane"]["junc"] for c in sel], 0))).items() if k in JUNCTION_KEYS}
+
+
+def paired_junction(rec_a, rec_b, frames, B=1000, seed=0):
+    """a - b of junction F1 / P / R (`junction_numbers`, pooled per draw) with the 95 % interval over the scene draws of `qgraph_eval.paired` (the same stream, B and seed: the same draws as its topo F1) -> key -> a, b, diff, lo, hi, p_a_better"""
+    res = ST.paired_draws(lambda idx: junction_numbers(rec_a["graph"], idx), lambda idx: junction_numbers(rec_b["graph"], idx), ST.scene_draws(np.array([f.scene for f in frames]), B, seed), JUNCTION_KEYS)
+    return {k: dict(a=v["a"], b=v["b"], diff=v["diff"], lo=v["lo"], hi=v["hi"], p_a_better=v["p_gt0"]) for k, v in res.items()}
 
 
 def show(tag, m):
@@ -446,9 +466,24 @@ def dump(a, runs=RUNS):
     return path
 
 
+def long_thr(a):
+    """the long-class link threshold of a read-out: --link-thr-long, else --link-thr (one threshold for both classes)"""
+    return a.link_thr if a.link_thr_long is None else a.link_thr_long
+
+
 def variant_suffix(a):
-    """'' for the decode of record, else _lt<link thr>_kt<keep thr>[_nng] (no none gate)"""
-    return "" if (a.link_thr, a.keep_thr, a.no_none_gate) == (LINK_THR, KEEP_THR, False) else f"_lt{a.link_thr:g}_kt{a.keep_thr:g}" + ("_nng" if a.no_none_gate else "")
+    """'' for the decode of record, else _lt<link thr>[_ltl<long link thr>, only when it differs]_kt<keep thr>[_nng] (no none gate)"""
+    ltl = long_thr(a)
+    if (a.link_thr, ltl, a.keep_thr, a.no_none_gate) == (LINK_THR, LINK_THR, KEEP_THR, False):
+        return ""
+    return f"_lt{a.link_thr:g}" + ("" if ltl == a.link_thr else f"_ltl{ltl:g}") + f"_kt{a.keep_thr:g}" + ("_nng" if a.no_none_gate else "")
+
+
+def parse_cell(s):
+    """--ref-cell '<short>,<long>,<keep>,<on|off>' -> (link thr, long link thr, keep thr, none gate)"""
+    lt, ltl, kt, gate = s.split(",")
+    assert gate in ("on", "off"), f"--ref-cell {s}: the none gate is on or off"
+    return float(lt), float(ltl), float(kt), gate == "on"
 
 
 def read_dump(a, runs, n_max):
@@ -474,9 +509,11 @@ def read_dump(a, runs, n_max):
 
 def score(a, runs=RUNS, out_dir=None):
     """the cards of one dump (module docstring). --max N reads the dump of `dump --max N`, scores its N frames and writes the cards to `out_dir` (default temp/e365/out) as ..._n<N>.json, with the controls of `ctl --max N` there.
-    --link-thr T --keep-thr K [--no-none-gate] re-score the dump with another decode (`decode_variant`, after `check_record`; only the `rec` card, its name carries the variant), the decode of record scored beside it on the same dump
-    (`paired_vs_record`; its numbers against the stored record card are reported, not asserted: a re-dump may differ); the defaults are the decode of record, both decodes"""
+    --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] re-score the dump with another decode (`decode_variant`, after `check_record`; only the `rec` card, its name carries the variant), the decode of record scored beside it
+    on the same dump (`paired_vs_record`; its numbers against the stored record card are reported, not asserted: a re-dump may differ); the defaults are the decode of record, both decodes. A variant with --ref-cell S,L,K,on|off
+    also scores that cell on the same dump: its numbers (`ref_cell`) and the paired scene-bootstrap interval of the variant against it (`paired_vs_ref_cell`: the keys of `qgraph_eval.paired` + junction F1 / P / R, `paired_junction`)"""
     n_max, vsfx = a.max, variant_suffix(a)
+    assert vsfx or a.ref_cell is None, "--ref-cell is compared with a decode variant: give --link-thr / --link-thr-long / --keep-thr / --no-none-gate"
     out_dir = (out_dir or os.path.join(SCRATCH, "out")) if n_max else None
     sfx = card_sfx(a)
     nsfx = f"_n{n_max}" if n_max else ""
@@ -501,12 +538,12 @@ def score(a, runs=RUNS, out_dir=None):
         check_record(r["fr"], r["valid"])
     out = {}
     for dec in decs:
-        fr = [decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate) for f, v in zip(r["fr"], r["valid"])] if vsfx else r["fr"]
+        fr = [decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate, a.link_thr_long) for f, v in zip(r["fr"], r["valid"])] if vsfx else r["fr"]
         res = score_preds([frame_prediction(t, f, dec, a.keep_thr) for t, f in zip(r["toks"], fr)], frames)
         show(f"{a.run} {dec}{vsfx}{sfx}{nsfx}", res["graph"])
         extra = {}
         if vsfx:
-            extra["decode_variant"] = dict(link_thr=a.link_thr, keep_thr=a.keep_thr, none_gate=not a.no_none_gate, scales="the head's (dump candidates a, b)",
+            extra["decode_variant"] = dict(link_thr=a.link_thr, **({} if long_thr(a) == a.link_thr else dict(link_thr_long=long_thr(a))), keep_thr=a.keep_thr, none_gate=not a.no_none_gate, scales="the head's (dump candidates a, b)",
                                            e_written=f"min(1 - p_none + {a.keep_thr} - 0.5, 1): only the scorer's e >= 0.5 is meant; a later read-out must not rank nodes by it")
             rec0 = score_preds([frame_prediction(t, f, "rec") for t, f in zip(r["toks"], r["fr"])], frames, log=lambda *x, **k: None)
             extra["paired_vs_record"] = QE.paired(res["rec"], rec0["rec"], frames)
@@ -514,6 +551,11 @@ def score(a, runs=RUNS, out_dir=None):
             stored = card_path("rec", "")
             extra["record_vs_stored_card"] = ({k: rec0["graph"][k] - json.load(open(stored))["metrics"][k] for k in KEYS} if os.path.exists(stored) else None)
             extra["record_card"] = os.path.relpath(stored, ROOT) if os.path.exists(stored) else f"no stored record card {os.path.relpath(stored, ROOT)}"
+            if a.ref_cell is not None:
+                lt0, ltl0, kt0, g0 = a.ref_cell
+                res0 = score_preds([frame_prediction(t, decode_variant(f, v, lt0, kt0, g0, ltl0), "rec", kt0) for t, f, v in zip(r["toks"], r["fr"], r["valid"])], frames, log=lambda *x, **k: None)
+                extra["ref_cell"] = dict(link_thr=lt0, link_thr_long=ltl0, keep_thr=kt0, none_gate=g0, **{k: res0["graph"][k] for k in KEYS + ("junction_P", "junction_R")})
+                extra["paired_vs_ref_cell"] = dict(QE.paired(res["rec"], res0["rec"], frames), **paired_junction(res["rec"], res0["rec"], frames))
         if ref is not None:
             extra["paired_vs_plain_b"] = QE.paired(res["rec"], ref_rec, frames)
             extra["plain_b"] = {k: QE.graph_numbers(ref_rec["graph"])[k] for k in KEYS}
@@ -531,28 +573,36 @@ def score(a, runs=RUNS, out_dir=None):
 
 SWEEP_LINK, SWEEP_KEEP = (0.3, 0.2, 0.1, 0.05), (0.5, 0.6, 0.7)
 SWEEP_KEYS = ("topo_F1", "topo_P", "topo_R", "F1@1.0", "lanes_found", "dup_frac")
+PERCLASS_SHORT, PERCLASS_LONG = (0.3, 0.2, 0.1), (0.3, 0.2, 0.1, 0.05)                  # E375: the link thresholds of the short and of the long class
+SWEEP_GRIDS = dict(default=[(lt, lt, kt, g) for lt in SWEEP_LINK for kt in SWEEP_KEEP for g in (True, False)],                          # cells (link thr, long link thr, keep thr, none gate)
+                   perclass=[(lt, ltl, kt, False) for lt in PERCLASS_SHORT for ltl in PERCLASS_LONG for kt in SWEEP_KEEP])
 
 
 def sweep(a, runs=RUNS, out_dir=None):
-    """the decode variants of one dump on its read-out frames: link threshold {0.3, 0.2, 0.1, 0.05} x keep threshold {0.5, 0.6, 0.7} x none gate {on, off} -> one table runs/R/token_sweep[_step<N>]_<split>[_drop..].json (--max N: temp/e365/out/..._n<N>.json),
-    never overwritten; the cell (0.3, 0.5, on) is the decode of record. For choosing a decode on TRAIN frames (the head was trained on them: the table says what the output could deliver, not what it does on VAL)"""
-    n_max = a.max
-    sfx = card_sfx(a)
+    """the decode variants of one dump on its read-out frames -> one table runs/R/token_sweep[_perclass][_step<N>]_<split>[_drop..].json (--max N: temp/e365/out/..._n<N>.json), never overwritten. --grid default: link threshold
+    {0.3, 0.2, 0.1, 0.05} x keep threshold {0.5, 0.6, 0.7} x none gate {on, off}; the cell (0.3, 0.5, on) is the decode of record. --grid perclass (E375): link threshold short {0.3, 0.2, 0.1} x long {0.3, 0.2, 0.1, 0.05} x keep
+    threshold {0.5, 0.6, 0.7}, none gate off; its rows also carry link_thr_long, junction F1 / P / R and the predicted junction points per frame (the scorer's, degree >= 3), the delivered long links per frame and the scorer's long-link
+    precision / recall (node_link_long_P / _R: GT long links between matched nodes). For choosing a decode on TRAIN frames (the head was trained on them: the table says what the output could deliver, not what it does on VAL)"""
+    n_max, pc = a.max, a.grid == "perclass"
+    sfx = ("_perclass" if pc else "") + card_sfx(a)
     path = os.path.join((out_dir or os.path.join(SCRATCH, "out")) if n_max else os.path.join(runs, a.run), f"{a.run + '_' if n_max else ''}token_sweep{sfx}{f'_n{n_max}' if n_max else ''}.json")
     assert not os.path.exists(path), f"a stored table is never overwritten: {path}"
     r = read_dump(a, runs, n_max)
     check_record(r["fr"], r["valid"])
     rows = []
-    for lt in SWEEP_LINK:
-        for kt in SWEEP_KEEP:
-            for gate in (True, False):
-                fr = [decode_variant(f, v, lt, kt, gate) for f, v in zip(r["fr"], r["valid"])]
-                res = score_preds([frame_prediction(t, f, "rec", kt) for t, f in zip(r["toks"], fr)], r["frames"], log=lambda *x, **k: None)
-                rows.append(dict(link_thr=lt, keep_thr=kt, none_gate=gate, record=(lt, kt, gate) == (LINK_THR, KEEP_THR, True), frames=len(fr), kept_nodes_per_frame=float(np.mean([f["keep"].sum() for f in fr])),
-                                 links_per_frame=float(np.mean([len(f["rec"]["src"]) for f in fr])), **{k: res["graph"][k] for k in SWEEP_KEYS}))
-                print(f"link {lt:<5g} keep {kt:<4g} gate {'on ' if gate else 'off'}  " + "  ".join(f"{k} {rows[-1][k]:.4f}" for k in SWEEP_KEYS) + f"  links/frame {rows[-1]['links_per_frame']:.1f}", flush=True)
+    for lt, ltl, kt, gate in SWEEP_GRIDS[a.grid]:
+        fr = [decode_variant(f, v, lt, kt, gate, ltl) for f, v in zip(r["fr"], r["valid"])]
+        res = score_preds([frame_prediction(t, f, "rec", kt) for t, f in zip(r["toks"], fr)], r["frames"], log=lambda *x, **k: None)
+        row = dict(link_thr=lt, **(dict(link_thr_long=ltl) if pc else {}), keep_thr=kt, none_gate=gate, record=(lt, ltl, kt, gate) == (LINK_THR, LINK_THR, KEEP_THR, True), frames=len(fr),
+                   kept_nodes_per_frame=float(np.mean([f["keep"].sum() for f in fr])), links_per_frame=float(np.mean([len(f["rec"]["src"]) for f in fr])), **{k: res["graph"][k] for k in SWEEP_KEYS})
+        if pc:
+            row.update({k: res["graph"][k] for k in JUNCTION_KEYS}, junction_points_per_frame=float(np.mean([c["lane"]["junc"][0] for c in res["rec"]["graph"]])), long_links_per_frame=float(np.mean([f["rec"]["long"].sum() for f in fr])),
+                       **{f"node_link_long_{k}": res["nodes"].get(f"link_long_{k}") for k in ("P", "R")})
+        rows.append(row)
+        print(f"link {lt:<5g} " + (f"long {ltl:<5g} " if pc else "") + f"keep {kt:<4g} gate {'on ' if gate else 'off'}  " + "  ".join(f"{k} {row[k]:.4f}" for k in SWEEP_KEYS + (JUNCTION_KEYS if pc else ()))
+              + f"  links/frame {row['links_per_frame']:.1f}", flush=True)
     JV.write_json(path, _jsonable(dict(run=a.run, model=a.model, seed=a.seed, split=a.split, every=a.every, max=a.max, drop=a.drop, drop_seed=a.drop_seed, steps=r["ck"].get("steps"), dump=_file_id(r["path"]), frames=len(r["frames"]), rows=rows, K=r["ds"].K,
-                                       note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
+                                       **(dict(grid="perclass") if pc else {}), note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
     print(f"written {os.path.relpath(path, ROOT)}")
     return path
 
@@ -737,7 +787,7 @@ def check_graphs(doc, frames):
 
 
 def graphs(a, runs=RUNS):
-    """the DELIVERED graphs of the run's VAL dump (of --model; the decode of record, or the variant of --link-thr / --keep-thr / --no-none-gate) in the schema of temp/qual_report_1115/pass1.pkl, as system `--name`: a new file, or one
+    """the DELIVERED graphs of the run's VAL dump (of --model; the decode of record, or the variant of --link-thr / --link-thr-long / --keep-thr / --no-none-gate) in the schema of temp/qual_report_1115/pass1.pkl, as system `--name`: a new file, or one
     more system in an existing --out (its frames must be the VAL frames in order); per frame the topo F1 / P / R (`qgraph_eval.graph_counts` inside the 2 m lattice block, as the cards) into perframe_table.json next to --out (merged
     the same way). The pooled topo F1 is compared with the stored card of the same model and decode: a difference goes into `mismatch` as ('pooled_topo_F1', name, pooled, card), one pooled entry per system (pass1's entries are per
     frame). Writes only derived data: both files to temp names, then the table renamed first and the pickle last, so a name in the pickle is a finished write (or a system of another tool) and is refused, never overwritten;
@@ -757,7 +807,7 @@ def graphs(a, runs=RUNS):
     fr = r["fr"]
     if vsfx:
         check_record(fr, r["valid"])
-        fr = [decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate) for f, v in zip(fr, r["valid"])]
+        fr = [decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate, a.link_thr_long) for f, v in zip(fr, r["valid"])]
     recs, topo = [], []
     for k, (t, f, fm) in enumerate(zip(r["toks"], fr, frames)):
         pred = frame_prediction(t, f, "rec", a.keep_thr)
@@ -1006,8 +1056,12 @@ def parse_args(argv=None):
             s.add_argument("--max", type=int, default=0, help="score the dump of `dump --max N` (cards to temp/e365/out/)")
         if name == "score":
             s.add_argument("--link-thr", type=float, default=LINK_THR, help="a decode variant: every candidate with p >= T is a link (>= 0.05; the decode of record: 0.3)")
+            s.add_argument("--link-thr-long", type=float, default=None, help="a decode variant: the threshold of the long class (token chord > 8 m; >= 0.05; default: --link-thr); the names carry _ltl<T_L> when it differs")
             s.add_argument("--keep-thr", type=float, default=KEEP_THR, help="a decode variant: a node is kept at p_none < K (record: 0.5)")
             s.add_argument("--no-none-gate", action="store_true", help="a decode variant: no p >= p(none) condition on a link")
+            s.add_argument("--ref-cell", type=parse_cell, default=None, help="with a variant: S,L,K,on|off = a reference cell (link short, link long, keep, none gate) scored on the same dump; the card gets its numbers and the paired interval")
+        if name == "sweep":
+            s.add_argument("--grid", default="default", choices=tuple(SWEEP_GRIDS), help="default: the 24 cells (link x keep x none gate); perclass (E375): link short x link long x keep, none gate off (36 cells)")
     s = sub.add_parser("ctl")
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--ident", required=True, choices=("e292_a", "e273_p"))
@@ -1036,6 +1090,7 @@ def parse_args(argv=None):
     s.add_argument("--out", required=True, help="the graphs pickle (pass1 schema; an existing one gets the system added); perframe_table.json goes next to it")
     s.add_argument("--max", type=int, default=0, help="the dump of `dump --max N` (a test)")
     s.add_argument("--link-thr", type=float, default=LINK_THR)
+    s.add_argument("--link-thr-long", type=float, default=None)
     s.add_argument("--keep-thr", type=float, default=KEEP_THR)
     s.add_argument("--no-none-gate", action="store_true")
     s = sub.add_parser("check-layer1")
