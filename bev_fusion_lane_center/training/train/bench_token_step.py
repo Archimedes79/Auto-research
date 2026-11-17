@@ -1,6 +1,7 @@
 """Seconds per training step of the token head: the plain path against the speed path (`jtoken_fast.py`, `lane_ptok_gpu.py`) on the real TRAIN cache of B' seed 0, and K 384 against K 512. A DIAGNOSTIC: it decides nothing and feeds no verdict.
 
-    wsl bash tools/env/_py14.sh bench_token_step.py gate [--out DIR]     # K 512: plain (CPU loader, workers 2) / fast head + CPU loader / fast + GPU loader / fast + GPU loader + compile_pairs
+    wsl bash tools/env/_py14.sh bench_token_step.py gate [--out DIR]     # K 512: plain (CPU loader, workers 2) / fast head + CPU loader / fast + GPU loader / fast + GPU loader + compile_pairs, each in turn (diagnostics);
+                                                                       # then THE GATE `gate_abba`: plain against the fast path as the card's arm runs it (fast head + fast loss + GPU loader, eager), blocks ABBA of 60 steps in one process
     wsl bash tools/env/_py14.sh bench_token_step.py pair [--out DIR]     # the speed path at K 512 and K 384 (cache root runs/e383_cache, built by `data/build_tokcache_root.py --root runs/e383_cache --run runs/e292_a_s0 --split train --K 384 --no-f2`)
                                                                        # in ONE process, blocks ABBA of 60 steps, eager -> ms per training step of K 384 over K 512
 
@@ -109,6 +110,25 @@ def main():
         res.update(gpu_loader_load_s=round(time.time() - t, 1), gpu_loader_frames=len(gds), gpu_loader_pairs_P=gds.P, gpu_resident_GB=round(torch.cuda.memory_allocated() / 1e9, 2))
         run("fast_head_gpu_loader", make_step(JF.FastJTokenHead(), lambda m, b: lf2(m, b)), endless(gdl))
         run("fast_head_gpu_loader_compile", make_step(JF.FastJTokenHead().compile_pairs(), lambda m, b: lf2(m, b)), endless(gdl), n=120, warm=40)
+        # THE GATE: the exact path the card's arm runs (fast head + fast loss + GPU loader, no compile) against the plain trainer's step (plain head + plain loss + CPU loader, 2 workers), ABBA in one process
+        pl, pdl = LP.loader("train", 0, 8, 2, ident="e292_a")
+
+        def with_loss(fn, lf_):                                             # `make_loss` resolves JK.jtoken_loss at call time: set it for each call (the plain step must not run the fast loss)
+            def call(m, b):
+                JK.jtoken_loss = fn
+                return lf_(m, b)
+            return call
+        ab = {"plain": (make_step(JT.build_head(dict(JT.ARCH_DEFAULTS)), with_loss(keep, lf)), endless(pdl)), "fast": (make_step(JF.FastJTokenHead(), with_loss(JF.fast_loss, lf2)), endless(gdl))}
+        for k in ab:
+            timed(*ab[k], 30)
+        torch.cuda.reset_peak_memory_stats()
+        blk = {"plain": [], "fast": []}
+        for k in ("plain", "fast", "fast", "plain"):
+            blk[k].append(timed(*ab[k], 60)[0])
+        mp, mf = sum(blk["plain"]) / 2, sum(blk["fast"]) / 2
+        res["gate_abba"] = dict(plain_ms_blocks=[round(v, 1) for v in blk["plain"]], fast_ms_blocks=[round(v, 1) for v in blk["fast"]], plain_ms=round(mp, 1), fast_ms=round(mf, 1), ratio_plain_over_fast=round(mp / mf, 3),
+                                peak_gb=round(torch.cuda.max_memory_allocated() / 1e9, 2))
+        print("gate_abba", res["gate_abba"], flush=True)
         t = time.time()
         it = endless(gdl)
         for _ in range(100):
