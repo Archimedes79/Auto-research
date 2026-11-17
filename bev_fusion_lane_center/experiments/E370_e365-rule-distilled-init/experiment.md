@@ -37,7 +37,7 @@ Card of 2026-11-17, **version 2 at 02:40 (system clock) after the first critic p
   {"metric": "topo_F1", "vs": "ref", "min_effect": 0.01}
  ],
  "budget_gpu_h": 3.0,
- "kill": "a loss is not finite; or no learning: stage A = the mean loss over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200; stage B = the mean GT loss over its steps 1801 - 2000 not below the GT loss of the stage-A head at stage-B step 0 (measured before the first update and written here); the stage-A fixture is a diagnosis, never a kill; a rule-step number is never a kill reason (D113 point 2). A run cut by run.py or the GPU is resumed from its 500-step checkpoint by the supervisor (resume steps reported); `--timeout` from 0.65 s per step at the start, then from the speed measured over 1500 steps",
+ "kill": "a loss is not finite; or no learning: stage A = the mean loss over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200; stage B = the mean GT loss over its steps 1801 - 2000 not below the GT loss of the stage-A head at stage-B step 0 (the reference is the `gt_loss` of `jtoken_eval.py fixture --run e370_a_s<S> --split train --every 3`: eval mode, 291 frames, written here before stage B starts; the trainer's 'first loss of this process' is one batch and only reported); the stage-A fixture is a diagnosis, never a kill; a rule-step number is never a kill reason (D113 point 2). A run cut by run.py or the GPU is resumed from its 500-step checkpoint by the supervisor (resume steps reported); `--timeout` from 0.65 s per step at the start, then from the speed measured over 1500 steps",
  "evaluate": {"split": "val"}
 }
 ```
