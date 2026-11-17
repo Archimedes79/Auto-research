@@ -269,16 +269,29 @@ def running(c):
     return [rid for rid in _slot_ids(c) if os.path.isdir(_run_dir(c, rid))]
 
 
+def one_running(ids):
+    """the one id of the trainings that run now, None when none does; with several running, a call without `i` would stop, hold or show whichever came first: refused"""
+    if len(ids) > 1:
+        raise TrainingError(f"{len(ids)} trainings are running ({', '.join(ids)}): name the one (i)")
+    return ids[0] if ids else None
+
+
 def resolve(c, i):
-    """-> (id, None, None). i=None is the running training. A text is an id or a run folder name (the id of the run record whose folder name it is). The triple keeps the shape
-    of queue_api.resolve_item, so a subclass with a queue can reuse the methods"""
+    """-> (id, None, None). i=None is the running training (several running: an error, `one_running`). A text is an id or a run folder name (the id of the run record whose folder name it is).
+    The triple keeps the shape of queue_api.resolve_item, so a subclass with a queue can reuse the methods"""
     if i is None:
-        r = running(c)
-        return (r[0], None, None) if r else (None, None, None)
+        return one_running(running(c)), None, None
     if not isinstance(i, str) or not i:
         raise TrainingError("i is an id or a run folder name")
     known = next((d for d in sorted(os.listdir(c.records)) if TQ.folder(d) == TQ.folder(i)), None) if os.path.isdir(c.records) else None
     return (known or i), None, None
+
+
+def resolve_after(c, after):
+    """the ids of an `after` list as the queue and run.py know them: a run folder name (`t23_C_s1`) is the id of the queue item or run record whose folder it is (`t23.C_s1`); else run.py
+    would wait for a record of the typed name that never comes. What nothing knows stays as typed; an id named twice (typed and resolved) is one"""
+    known = [it["id"] for it in TQ.load(c)["items"]] + (sorted(os.listdir(c.records)) if os.path.isdir(c.records) else [])
+    return list(dict.fromkeys(x if x in known else next((k for k in known if TQ.folder(k) == TQ.folder(x)), x) for x in after))
 
 
 def must_exist(c, rid):
@@ -402,7 +415,7 @@ class Training:
         if problems:
             raise TrainingError("nothing started: " + "; ".join(problems))
         argv = list(plan["argv"])
-        waits = j["after"] + [m["id"] for m in missing]                 # the jobs it waits for: its own `after`, and the builds of the data it needs (a failed one blocks it)
+        waits = resolve_after(c, j["after"]) + [m["id"] for m in missing]                 # the jobs it waits for: its own `after`, and the builds of the data it needs (a failed one blocks it)
         if waits:
             i = argv.index("--")
             argv = argv[:i] + ["--after", ",".join(waits)] + (["--wait-after", str(max(m["wait_min"] for m in missing))] if missing else []) + argv[i:]
@@ -415,7 +428,8 @@ class Training:
     @errors
     def stop(self, i=None, reason="", wait=60.0):
         """ask one training to save a checkpoint and stop (it exits with 75; run.py then puts its id on hold); i=None is the running one. The request is written again every 20 s until the
-        trainer has stopped or `wait` seconds are over (0: do not wait). Refused for a code snapshot without the stop check. -> {id, requested, file, verified, stopped (None: not waited)}"""
+        trainer has stopped or `wait` seconds are over (0: do not wait). Refused for a code snapshot without the stop check. -> {id, requested, file, verified, stopped (None: not waited), ok (False: still running after the
+        wait; the command exits 1)}"""
         c = self._c()
         rid, _, _ = resolve(c, i)
         if rid is None:
@@ -427,7 +441,8 @@ class Training:
         if ok is False:
             raise TrainingError(f"NOT requested: the code snapshot of {rid} (code/train.py) has no stop check, it would ignore CONTROL. Stopping it is a decision about the process, not a file")
         file = control.request_stop(rd, reason)
-        return dict(id=rid, requested=True, file=file, verified=bool(ok), stopped=_wait_stopped(c, rid, rd, reason, wait) if wait > 0 else None)
+        stopped = _wait_stopped(c, rid, rd, reason, wait) if wait > 0 else None
+        return dict(id=rid, requested=True, file=file, verified=bool(ok), stopped=stopped, ok=stopped is not False)
 
     @errors
     def status(self, i=None, kill=(), ref=None, skip=10):

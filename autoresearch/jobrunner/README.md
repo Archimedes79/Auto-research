@@ -37,7 +37,7 @@ Every method is also a command (the convention of the suites, `../README.md`); a
 | `args` | **exactly the keyword arguments of that method**, checked against its signature (unknown name, missing required one, a wrong basic type are problems). The data are arguments: a network (`network`), a set of frames (`frames`: `val`, `large.val`, ...), a ground-truth key, a data root |
 | `needs` | what it takes from the machine, over the entry's defaults: `gpu` (true / false), `gpu_max_used_mb` (start only when the GPU memory in use is below this: run.py `--gpu-max-mb`), `ram_gb` (GPU jobs: run.py `--ram-mb`), `cpu`, `est_hours` (recorded); numbers, not texts |
 | `reads`, `writes` | data references (below); normally derived from `args` by the entry, may be given |
-| `after` | job or run ids that must be done first; ids of runs the job reads, and of jobs that write what it reads, are added automatically |
+| `after` | job or run ids that must be done first (a run folder name such as `t23_C_s1` becomes the record id `t23.C_s1`, which is what run.py waits for); ids of runs the job reads, and of jobs that write what it reads, are added automatically |
 | `card` / `no_card` | `card = {hyp, pred, rule}` registers a decision rule for a call that may feed a verdict; without a card the run is a **diagnostic** (`run.py --no-card --no-git`) and never feeds a verdict. A call that never feeds a verdict refuses a card |
 | `split` | passed to `run.py --split`. The holdout split (TEST) is behind run.py's logged-row gate: `check` applies it too |
 | `retries`, `timeout` | run.py `--retries` (not passed unless given: run.py's own default stays, the CUDA retry) and `--timeout` (minutes) |
