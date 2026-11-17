@@ -15,7 +15,9 @@ fixture (E369 / E370 verdicts at their boundaries; the untrained prior head on 3
 a duplicate refused, the per-frame table; frame-order and GT-field mutants; a kill between the two renames completed by a rerun), snapshot (cache: --model model_step<N>.pt through dump / score / sweep / fixture / graphs, _step<N> in
 every file name, a dump of the other weights refused), ref_run (E376 score --ref-run: other frames / cells / valid tokens refused; cache: the run itself as reference = diff 0, interval [0, 0] at a variant cell; --ref-run-cell at
 the card's own cell = the default, at another cell = --ref-cell of that cell; an empty reference = the card's own numbers; the _vs_<run>[_rc<cell>] names beside the card without them; refused: another cache seed, another cache
-of the same seed (`same_tokens` end to end), --model with --ref-run), anatomy (E376: a hand frame with every category, the medians, the AP with ties, the recall ceiling and the existence AP by hand; the mass concentration by hand
+of the same seed (`same_tokens` end to end), --model with --ref-run), ensemble (E379: the means of a hand pair of dump frames by hand, 0 for a pair one head did not write, the scales over the heads that wrote it, the decode
+by hand, the floor bias by hand, the card names, 5 mutants; cache: h + h-without-candidates at half the thresholds = h, refusals incl. another opened cache), choose_cell (E375's rule of E377 / E378 on hand tables, 7 mutants,
+the command's names and its never-overwritten rule), anatomy (E376: a hand frame with every category, the medians, the AP with ties, the recall ceiling and the existence AP by hand; the mass concentration by hand
 and on a stub head with a hand y; textual mutants: dup / wrong swapped, false_end on both ends, ties broken optimistically, the existence label from p_none, the max over all candidates, G without the class gate; cache: the
 command on 3 frames, delivered = the decode's long links, the near_none section's none tokens = the cache's, its degree >= 3 tokens and kept none tokens = rebuilt at the command's thresholds (keep 0.6 and 0.2), never
 overwritten), near_none (E377, the anatomy's section: a hand frame with a twin at 1.0 m, one at exactly 2.0 m, one at 2.01 m, one at 1.0 m with heading cosine 0.4, a near and a far duplicate, a token near a none token only,
@@ -1018,6 +1020,178 @@ def test_ref_run():
           "run on plain B's cache (same frames, other tokens: `same_tokens`): ok")
 
 
+def _ens_toy():
+    """two heads' dump frames of one frame of 5 tokens (the fields `mean_frame` reads; a decode of their own lying around). Candidates: 0 -> 1 long in both (p 0.6 / 0.2), 1 -> 2 short in A only (0.5), 1 -> 4 long in A only
+    (0.45, scales 0.9 / 0.8), 2 -> 3 short in B only (0.42), 3 -> 4 short in both (0.3 / 0.7)"""
+    f32 = np.float32
+    cand = lambda s, d, p, lg, a, b: dict(src=np.array(s, np.int16), dst=np.array(d, np.int16), p=np.array(p, f32), long=np.array(lg, bool), a=np.array(a, f32), b=np.array(b, f32))  # noqa: E731
+    ptype = lambda pn: np.stack([pn, 1 - pn] + [np.zeros(5)] * (JK.NTYPE - 2), 1).astype(np.float16)  # noqa: E731
+    frame = lambda pn, none_cls, c: dict(token="t", row=7, cell=np.arange(5, dtype=np.int16) + 100, pnone=np.array(pn, f32), ptype=ptype(np.array(pn)), none_cls=np.array(none_cls, f32), cand=c,  # noqa: E731
+                                        keep=np.ones(5, bool), rec=c, argmax=c)
+    fa = frame([0.1, 0.3, 0.7, 0.2, 0.9], [[0.2, 0.4, 0.3, 0.6, 0.5], [0.3, 0.2, 0.2, 1.0, 1.0]], cand([0, 1, 1, 3], [1, 2, 4, 4], [0.6, 0.5, 0.45, 0.3], [1, 0, 1, 0], [0.5, THIRD, 0.9, THIRD], [0.7, THIRD, 0.8, THIRD]))
+    fb = frame([0.3, 0.5, 0.1, 0.4, 0.1], [[0.6, 0.2, 0.05, 0.2, 0.3], [0.3, 0.2, 0.2, 1.0, 1.0]], cand([0, 2, 3], [1, 3, 4], [0.2, 0.42, 0.7], [1, 0, 0], [0.3, THIRD, THIRD], [0.5, THIRD, THIRD]))
+    return fa, fb
+
+
+def test_ensemble():
+    """E379 `ensemble` (`mean_frame`): a hand pair of dump frames, every mean by hand (p_none, ptype, p(none|i), the union of the candidates, 0 for a missing pair, the scales over the heads that wrote the pair), the decode at the D115
+    cell and with the none gate on by hand; the self-ensemble is the frame; refused: other cells, a pair of another class; textual mutants (the mean over the present heads only, one head only, the none probabilities of one head)
+    deliver another graph. Cache: 3 frames of the untrained head h and a run g with h's dump without candidates: the ensemble h + g at (0.15, 0.1, 0.6, off) = h at (0.3, 0.2, 0.6, off) exactly (p / 2: --ref-run h at that cell, diff
+    and interval 0), and not h at its own cell; the card's name and info, never overwritten; refused: another cache seed, another cache of the same seed, one run"""
+    import pickle
+    import shutil
+    f32 = np.float32
+    fa, fb = _ens_toy()
+    e = E.mean_frame(fa, fb)
+    c = e["cand"]
+    assert sorted(e) == ["cand", "cell", "none_cls", "pnone", "ptype", "row", "token"], "no decode of either head is carried"
+    assert list(zip(c["src"].tolist(), c["dst"].tolist())) == [(0, 1), (1, 2), (1, 4), (2, 3), (3, 4)] and c["long"].tolist() == [True, False, True, False, False], c
+    close = lambda x, want, tol=1e-7: np.allclose(x, want, atol=tol, rtol=0)  # noqa: E731
+    assert [x.dtype for x in (c["src"], c["p"], c["a"], e["pnone"], e["none_cls"], e["ptype"])] == [np.int16, f32, f32, f32, f32, np.float16], "the dump's dtypes"
+    assert close(c["p"], [0.4, 0.25, 0.225, 0.21, 0.5]), c["p"]                                                                       # a pair one head did not write counts 0 for it
+    assert close(c["a"], [0.4, THIRD, 0.9, THIRD, THIRD]) and close(c["b"], [0.6, THIRD, 0.8, THIRD, THIRD]), (c["a"], c["b"])        # the scales: the mean over the heads that wrote the pair
+    assert close(e["pnone"], [0.2, 0.4, 0.4, 0.3, 0.5]) and close(e["none_cls"], [[0.4, 0.3, 0.175, 0.4, 0.4], [0.3, 0.2, 0.2, 1.0, 1.0]]), (e["pnone"], e["none_cls"])
+    assert close(e["ptype"][:, :2], [[0.2, 0.8], [0.4, 0.6], [0.4, 0.6], [0.3, 0.7], [0.5, 0.5]], 1e-3), e["ptype"]                   # float16
+    v5 = np.ones(5, bool)
+    d115 = lambda f: _links_set(E.decode_variant(f, v5, 0.3, 0.6, False, 0.2)["rec"])  # noqa: E731
+    gate = lambda f: _links_set(E.decode_variant(f, v5, 0.2, 0.6, True)["rec"])  # noqa: E731
+    want, want_gate = {(0, 1), (1, 4), (3, 4)}, {(0, 1), (1, 4), (2, 3), (3, 4)}          # D115: 1 -> 2 (0.25) and 2 -> 3 (0.21) under the short 0.3; gate on at 0.2: 2 -> 3 over the mean p(none) 0.175 (A's 0.3), 1 -> 2 under 0.3
+    assert (d115(e), gate(e)) == (want, want_gate), (d115(e), gate(e))
+    self_ = E.mean_frame(fa, fa)
+    assert all(np.array_equal(self_[k], fa[k]) for k in ("pnone", "ptype", "none_cls")) and all(np.array_equal(self_["cand"][k], fa["cand"][k]) for k in E.LINK_FIELDS), "the ensemble of a head with itself is the head"
+    assert c["heads"].tolist() == [2, 1, 1, 1, 2], c["heads"]
+    must_fail(E.mean_frame, fa, dict(fb, cell=fb["cell"] + 1))                                                                         # other tokens
+    must_fail(E.mean_frame, fa, dict(fb, cand=dict(fb["cand"], long=~fb["cand"]["long"])))                                              # 0 -> 1 short in B, long in A
+    must_fail(E.mean_frame, fa, dict(fb, cand={k: np.concatenate([v, v[:1]]) for k, v in fb["cand"].items()}))                       # a pair twice in one head's list
+    # the floor bias (`floor_numbers`): one-sided pairs not delivered, both ends kept, within 0.025 of delivery
+    fl = lambda f, cell: (lambda r: (r["delivered_links"], r["floor_links"]))(E.floor_numbers([f], [v5], cell))  # noqa: E731
+    assert fl(e, (0.3, 0.2, 0.6, False)) == (3, 0), "D115: 1 -> 2 (0.25) and 2 -> 3 (0.21) are more than 0.025 under 0.3"
+    assert fl(e, (0.27, 0.2, 0.6, False)) == (3, 1) and fl(e, (0.27, 0.2, 0.6, True)) == (3, 0), "1 -> 2 (0.25, A only) within 0.025 of 0.27; with the gate its p(none) 0.3 is more than 0.025 above it"
+    assert fl(e, (0.22, 0.2, 0.6, True)) == (3, 1), "gate on at 0.22: 2 -> 3 (0.21, B only) within reach (p(none) 0.175); 1 -> 2 above 0.22 but 0.05 under its p(none)"
+    eg = dict(e, none_cls=e["none_cls"].copy())
+    eg["none_cls"][0, 1] = 0.26                                                                                                        # 1 -> 2 above the threshold, only the gate holds it back, by 0.01
+    assert fl(eg, (0.22, 0.2, 0.6, True)) == (3, 2) and fl(e, (0.52, 0.2, 0.6, False)) == (2, 0), "a gate-only miss counts; 3 -> 4 (0.5) written by both heads never counts"
+    floor_mut = {"the threshold miss only (the gate-only miss dropped)": ("ends & ~ok & ", "ends & ~ok & (c[\"p\"] < thr) & "), "both-head pairs counted": ('(c["heads"] == 1)', '(c["heads"] >= 1)')}
+    for name, (old, new) in floor_mut.items():
+        fm = _mutant(E.floor_numbers, old, new)
+        assert [fm([x], [v5], cell)["floor_links"] for x, cell in ((eg, (0.22, 0.2, 0.6, True)), (e, (0.52, 0.2, 0.6, False)))] != [2, 0], name
+    mutants = {"the mean over the present heads only": ('p=(acc["p"] / 2)', 'p=(acc["p"] / acc["n"])'), "one head only": ("def mean_frame(fa, fb):", "def mean_frame(fa, fb):\n    fb = fa"),
+               "the none probabilities of one head": ('none_cls=mean("none_cls", np.float32)', 'none_cls=fa["none_cls"]')}
+    for name, (old, new) in mutants.items():
+        m = _mutant(E.mean_frame, old, new)(fa, fb)
+        assert (d115(m), gate(m)) != (want, want_gate), name
+    # the run names and the card's destination (no data)
+    assert E.run_pair(" e1 , e2 ") == ("e1", "e2")
+    for s in ("e1", "e1, e1", "e1,e2,e3", "e1,"):
+        must_fail(E.run_pair, s)
+    ens = lambda *x: E.ens_card_path(E.parse_args(["ensemble", "--runs", " e1 , e2 ", "--seed", "0", *x]), "R")  # noqa: E731
+    with patched((E, "SCRATCH", "S")):
+        assert [ens(), ens("--split", "train", "--every", "3"), ens("--link-thr", "0.3", "--link-thr-long", "0.2", "--keep-thr", "0.6", "--no-none-gate", "--ref-run", "c", "--ref-run-cell", "0.3,0.3,0.5,on"),
+                ens("--max", "3"), ens("--out-dir", "D", "--ref-run", "c")] == [
+            (os.path.join("R", "e1", "token_card_ens_e2_rec.json"), "token_card_ens_e2_rec"), (os.path.join("R", "e1", "token_card_ens_e2_rec_train_every3.json"), "token_card_ens_e2_rec_train_every3"),
+            (os.path.join("R", "e1", "token_card_ens_e2_rec_lt0.3_ltl0.2_kt0.6_nng_vs_c_rc0.3_0.3_0.5_on.json"), "token_card_ens_e2_rec_lt0.3_ltl0.2_kt0.6_nng_vs_c_rc0.3_0.3_0.5_on"),
+            (os.path.join("S", "out", "e1_token_card_ens_e2_rec_n3.json"), "token_card_ens_e2_rec_n3"), (os.path.join("D", "e1_token_card_ens_e2_rec_vs_c.json"), "token_card_ens_e2_rec_vs_c")], "the card names"
+    if not CACHE_OK or not os.path.exists(SMOKE):
+        print(f"ensemble: the hand frames ok ({len(mutants)} mutants), the cache part SKIPPED (no cache or smoke model)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, out = os.path.join(tmp, "runs"), os.path.join(tmp, "out")
+        for name, seed in (("h", 0), ("g", 0), ("g1", 1)):
+            _floor_run(runs, name, seed)
+        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        toks = [E.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
+        d, _ = _plant_pnone(os.path.join(runs, "h", "token_val_n3.pkl"), toks)
+        g = pickle.loads(pickle.dumps(d))                                                                    # g: h's p_none, no candidate (every pair below its floor), no link
+        g["meta"]["run"] = "g"
+        for f in g["frames"]:
+            f["cand"], f["none_cls"] = {k: v[:0] for k, v in f["cand"].items()}, np.ones_like(f["none_cls"])
+            f["rec"], f["argmax"] = {k: v[:0] for k, v in f["rec"].items()}, {k: v[:0] for k, v in f["argmax"].items()}
+        pickle.dump(g, open(os.path.join(runs, "g", "token_val_n3.pkl"), "wb"))
+        shutil.copy(os.path.join(runs, "h", "token_val_n3.pkl"), os.path.join(runs, "g1", "token_val_n3.pkl"))
+        args = ["ensemble", "--runs", "h,g", "--seed", "0", "--max", "3", "--out-dir", out, "--link-thr", "0.15", "--link-thr-long", "0.1", "--keep-thr", "0.6", "--no-none-gate"]
+        card = E.ensemble(E.parse_args(args + ["--ref-run", "h", "--ref-run-cell", "0.3,0.2,0.6,off"]), runs)
+        name = "h_token_card_ens_g_rec_lt0.15_ltl0.1_kt0.6_nng_n3_vs_h_rc0.3_0.2_0.6_off.json"
+        assert os.listdir(out) == [name] and json.load(open(os.path.join(out, name)))["metrics"] == card["metrics"], os.listdir(out)
+        info, pr = card["info"], card["info"]["paired_vs_ref_run"]
+        assert info["runs"] == ["h", "g"] and set(info["dumps"]) == {"h", "g"} and info["dumps"]["g"]["path"].endswith("token_val_n3.pkl") and card["frames"] == 3 and info["decode_variant"]["link_thr_long"] == 0.1, info
+        fl = info["floor"]
+        assert fl["delivered_links"] > 0 and fl["floor_links"] > 0 and E.FLOOR_NOTE in fl["note"], fl                                  # g wrote no pair: every pair is one-sided, those within 0.025 under their threshold count
+        assert all(card["metrics"][k] == info["ref_run"][k] for k in E.KEYS) and all((pr[k]["diff"], pr[k]["lo"], pr[k]["hi"]) == (0.0, 0.0, 0.0) for k in ("topo_F1", "junction_F1")), pr["topo_F1"]
+        rh = E.read_dump(E.parse_args(["score", "--run", "h", "--seed", "0", "--max", "3"]), runs, 3)
+        own = E.score_cell(rh, (0.15, 0.1, 0.6, False), rh["frames"], log=lambda *x, **k: None)["graph"]
+        assert any(own[k] != card["metrics"][k] for k in E.KEYS), "h at the ensemble's own cell is another graph (a mean over the present heads only would give it)"
+        must_fail(E.ensemble, E.parse_args(args + ["--ref-run", "h", "--ref-run-cell", "0.3,0.2,0.6,off"]), runs)          # never overwritten
+        must_fail(E.ensemble, E.parse_args(args[:2] + ["h,g1"] + args[3:]), runs)                                         # another cache seed
+        must_fail(E.ensemble, E.parse_args(args[:2] + ["h"] + args[3:]), runs)                                            # one run
+        must_fail(E.ensemble, E.parse_args(args + ["--ref-run-cell", "0.3,0.2,0.6,off"]), runs)                          # a reference cell without a reference run
+        _floor_run(runs, "p", 0, ident="e273_p")                                                                         # p: seed 0 on plain B's cache: the same frames, another opened cache
+        E.dump(E.parse_args(["dump", "--run", "p", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        try:
+            E.ensemble(E.parse_args(args[:2] + ["h,p"] + args[3:]), runs)
+        except AssertionError as x:
+            assert "other caches" in str(x), x
+        else:
+            raise RuntimeError("an ensemble with a run on another cache was scored")
+        assert os.listdir(out) == [name], os.listdir(out)
+    print(f"ensemble: a hand pair (the union of the candidates, 0 for a pair one head did not write, the scales over the heads that wrote it, the means of p_none / ptype / p(none|i), the D115 decode and the gate-on decode by hand, "
+          f"the self-ensemble = the head, other cells / another class / a pair twice refused; {len(mutants)} mutants caught: {', '.join(mutants)}); the floor bias by hand (a threshold miss, a gate-only miss, both-head pairs never; "
+          f"{len(floor_mut)} mutants); run names stripped, A = B refused, the card names (default, split / every, variant + reference cell, --max, --out-dir); 3 cache frames: h + g (h without candidates) at (0.15, 0.1, 0.6, off) = "
+          f"h at (0.3, 0.2, 0.6, off) (topo F1 {card['metrics']['topo_F1']:.4f}, paired diff and interval 0; h at the ensemble's own cell differs; floor {fl['floor_links']} of {fl['delivered_links']} delivered), {name}, never overwritten; "
+          "refused: another cache seed, another cache of the same seed (the opened cache), one run, a cell without a run: ok")
+
+
+def _cell_rows(cells):
+    """rows of a per-class sweep table from {(short, long, keep): (topo F1, junction F1, lanes found, dup_frac)}, none gate off"""
+    return [dict(link_thr=s, link_thr_long=l_, keep_thr=k, none_gate=False, topo_F1=t, junction_F1=j, lanes_found=n, dup_frac=d) for (s, l_, k), (t, j, n, d) in cells.items()]
+
+
+def test_choose_cell():
+    """`pick_cell` (E375's rule as pinned in E377 / E378) on hand tables: dup_frac 0.05 is eligible, 0.06 not; lanes found 0.010 under the reference cell's not; the window T - 0.005; the highest junction F1 in it; a tie in junction F1
+    to the cell nearest the reference (short first); equal distances to the higher threshold; no eligible cell: the reference cell; two tables: the mean row by row; 6 textual mutants. `choose-cell`: the table of a run folder,
+    the json name (one run, two runs, another reference), never overwritten (a stored choice is recomputed and printed; another cell refused), a default-grid table refused"""
+    base = {(0.3, 0.2, 0.6): (0.660, 0.25, 0.70, 0.04), (0.2, 0.2, 0.6): (0.668, 0.26, 0.70, 0.05), (0.1, 0.05, 0.7): (0.700, 0.30, 0.70, 0.06), (0.3, 0.05, 0.5): (0.690, 0.30, 0.68, 0.01),
+            (0.3, 0.1, 0.6): (0.6645, 0.26, 0.70, 0.03), (0.1, 0.3, 0.6): (0.662, 0.40, 0.70, 0.01)}
+    a_ = _cell_rows(base)                                                                     # T 0.668 (0.2, 0.2, 0.6: dup 0.05 eligible); (0.1, 0.05, 0.7) dup 0.06, (0.3, 0.05, 0.5) lanes 0.68 < 0.69 not; (0.1, 0.3, 0.6) under the window
+    b_ = _cell_rows({**base, (0.2, 0.3, 0.6): (0.666, 0.27, 0.70, 0.02)})                    # + a window cell with a higher junction F1
+    c_ = _cell_rows({(0.3, 0.2, 0.5): (0.60, 0.3, 0.70, 0.0), (0.3, 0.2, 0.25): (0.70, 0.3, 0.70, 0.0), (0.3, 0.2, 0.75): (0.70, 0.3, 0.70, 0.0)})   # equal keep distances 0.25 to the reference keep 0.5
+    d_ = _cell_rows({**base, (0.3, 0.1, 0.6): (0.650, 0.26, 0.70, 0.03)})                    # the second seed: (0.3, 0.1, 0.6) lower, the mean 0.65725 under the window
+    cases = [(([a_],), (0.3, 0.1, 0.6, False)), (([b_],), (0.2, 0.3, 0.6, False)), (([c_], (0.3, 0.2, 0.5, False)), (0.3, 0.2, 0.75, False)), (([a_, d_],), (0.2, 0.2, 0.6, False)),
+             (([_cell_rows({k: v[:3] + (0.06,) for k, v in base.items()})],), E.D115)]
+    got = [E.pick_cell(*x)["cell"] for x, _ in cases]
+    assert got == [w for _, w in cases], got
+    r = E.pick_cell([a_])
+    assert (r["T"], sorted(r["window"])) == (0.668, [(0.2, 0.2, 0.6, False), (0.3, 0.1, 0.6, False)]) and len(r["eligible"]) == 4, r
+    assert E.pick_cell([_cell_rows({k: v[:3] + (0.06,) for k, v in base.items()})])["eligible"] == []
+    must_fail(E.pick_cell, [a_, b_])                                                         # other cells
+    must_fail(E.pick_cell, [a_], (0.3, 0.3, 0.6, False))                                     # the reference cell is not in the table
+    mut = {"dup_frac < 0.05": ('r["dup_frac"] <= CHOOSE_DUP', 'r["dup_frac"] < CHOOSE_DUP'), "no window": ("T - CHOOSE_WINDOW)", "T)"),
+           "ties long before short": ("abs(c[0] - ref[0]), abs(c[1] - ref[1])", "abs(c[1] - ref[1]), abs(c[0] - ref[0])"), "no lanes bound": (' and r["lanes_found"] >= rows[ref]["lanes_found"] - CHOOSE_LANES', ""),
+           "no junction key": ('-rows[c]["junction_F1"], ', ""), "the lower thresholds on a tie": ("-c[0], -c[1], -c[2]", "c[0], c[1], c[2]"), "the first table only": ("sum(t[c][k] for t in cells) / len(cells)", "cells[0][c][k]")}
+    for name, (old, new) in mut.items():
+        fn = _mutant(E.pick_cell, old, new)
+        assert [fn(*x)["cell"] for x, _ in cases] != [w for _, w in cases], name
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, out = os.path.join(tmp, "runs"), os.path.join(tmp, "out")
+        for name, rows in (("h", a_), ("g", d_)):
+            E.JV.write_json(os.path.join(runs, name, "token_sweep_perclass_train_every3.json"), dict(grid="perclass", split="train", every=3, rows=rows))
+        E.JV.write_json(os.path.join(runs, "x", "token_sweep_perclass_train_every3.json"), dict(split="train", every=3, rows=a_))          # a table without the per-class grid
+        cc = lambda *x: E.choose_cell(E.parse_args(["choose-cell", "--runs", *x]), runs)  # noqa: E731
+        assert [cc("h")["cell"], cc("h,g")["cell"], cc("h", "--ref-cell", "0.3,0.05,0.5,off")["cell"]] == ["0.3,0.1,0.6,off", "0.2,0.2,0.6,off", "0.3,0.05,0.5,off"]      # the reference (0.3, 0.05, 0.5): lanes bound 0.67, its own topo F1 0.690 = T
+        names = sorted(os.listdir(os.path.join(runs, "h")))
+        assert names == ["token_cell_perclass_train_every3.json", "token_cell_perclass_train_every3_mean_g.json", "token_cell_perclass_train_every3_ref0.3_0.05_0.5_off.json", "token_sweep_perclass_train_every3.json"], names
+        stored = os.path.join(runs, "h", names[0])
+        before = open(stored).read()
+        assert cc("h")["cell"] == "0.3,0.1,0.6,off" and open(stored).read() == before, "a stored choice is recomputed and printed, not written again"
+        E.JV.write_json(os.path.join(runs, "h", "token_sweep_perclass_train_every3.json"), dict(grid="perclass", split="train", every=3, rows=b_))
+        must_fail(cc, "h")                                                                   # the table now gives another cell than the stored one
+        must_fail(cc, "x")
+        must_fail(cc, "h,h")
+        assert cc("h", "--out-dir", out)["cell"] == "0.2,0.3,0.6,off" and os.listdir(out) == ["h_token_cell_perclass_train_every3.json"]
+    print(f"choose_cell: hand tables (dup_frac 0.05 eligible / 0.06 not, lanes 0.010 under the reference not, the window, the junction F1 first, the short distance on a tie, the higher threshold on equal distances, the fall-back, the mean of "
+          f"two tables), other cells / a missing reference refused, {len(mut)} mutants caught ({', '.join(mut)}); the command: names (one run, _mean_<R2>, _ref<cell>, --out-dir), a stored choice recomputed and not rewritten, "
+          "another cell or a default-grid table or one run twice refused: ok")
+
+
 def _anatomy_toy():
     """a hand frame of 8 tokens (heading +y) and 5 GT nodes: GT long links G0 -> G1, G2 -> G3, G4 -> G3 (no token near G4), a short GT link G1 -> G3; T0 = G0, T1 = G1, T2 a duplicate of T1 (unassigned), T3 = G3, T4 near no GT
     node (p_none 0.5), T5 = G2 (p_none 0.55: kept at 0.6, not at 0.5), T6 invalid, T7 a duplicate of T3 (p_none 0.7: not kept). Long candidates: 0 -> 1 tp 0.5, 0 -> 2 dup 0.5, 0 -> 3 wrong 0.5, 0 -> 4 false 0.3, 5 -> 1 wrong 0.4, 5 -> 3 tp 0.1,
@@ -1535,7 +1709,7 @@ def test_live():
 
 
 TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_decode_perclass, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max,
-         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_anatomy, test_near_none, test_argmax_keep, test_live]
+         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_ensemble, test_choose_cell, test_anatomy, test_near_none, test_argmax_keep, test_live]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]

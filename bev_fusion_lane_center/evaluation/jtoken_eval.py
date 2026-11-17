@@ -5,6 +5,8 @@
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [a decode variant] --ref-run R2 [--ref-run-cell S,L,K,on|off]   # CPU, E376: + R2's dump of the same read-out at the same decode or that cell, paired R - R2 -> token_card_.._vs_<R2>[_rc<cell>].json
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --argmax --keep-thr K                                          # CPU, E376: the argmax decode at another keep threshold -> token_card_argmax_kt<K>..json
+    wsl bash tools/env/_py14.sh jtoken_eval.py ensemble --runs A,B --seed S [--split val|train] [--every N] [a decode variant] [--ref-run R [--ref-run-cell S,L,K,on|off]] [--out-dir D]   # CPU, E379: the mean of two heads' dumps -> runs/A/token_card_ens_<B>_rec..[_vs_<R>..].json
+    wsl bash tools/env/_py14.sh jtoken_eval.py choose-cell --runs R1[,R2] [--ref-cell 0.3,0.2,0.6,off] [--split train --every 3] [--out-dir D]   # CPU: E375's cell rule (E377 / E378) on the per-class table(s) -> prints S,L,K,on|off, runs/R1/token_cell_perclass..json
     wsl bash tools/env/_py14.sh jtoken_eval.py anatomy --run R --seed S [--split val] [--link-thr-long 0.2] [--keep-thr 0.6] [--every N]   # CPU, E376: the delivered long links by category + the long-link and existence AP (+ E377: the near-node none tokens) -> runs/R/token_anatomy_long_ltl<T>_kt<K>..json
     wsl bash tools/env/_py14.sh jtoken_eval.py sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the grid of decode variants on the TRAIN sample -> runs/R/token_sweep[_perclass]_train.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a|e273_p [--arms hi,hi_y,rule,floor,bsec0_plain,bsec0_close] [--max N]   # CPU: the controls -> runs/eval/e365_ctl/<arm>_<ident>_s<S>_K<K>.json
@@ -44,6 +46,7 @@ cache's: the parity read of a cache-trained run) and tokens_exact_frames; its ca
 b_sha256) and everything outside the node head is its; a run with train_nodes ran its own b_state, whose node head differs from runs/<ident>_s<S>'s; any other run that node head). A joint run (b_state or train_nodes) is read only
 with --live (dump, the reads of a dump, fixture refuse it). Two live dumps hold other tokens of the same frames: `--ref-run` pairs them by frame (both of one B' batch and device); `--ref-cache` pairs the live read-out with the
 reference's cache dump (the parity read: the topo / junction F1 difference in `paired_vs_ref_run`).
+Ensemble (E379 arm e2, promoted from temp/e379/ens_step0.py): one frame per frame from the cache dumps of two runs of the same read-out (`mean_frame`), decoded and scored as one head's dump.
 """
 import argparse
 import hashlib
@@ -427,6 +430,53 @@ def check_argmax(frames, valid, keep_thr=KEEP_THR):
             has[c["long"].astype(int), c["src"].astype(int)] = True
             lost = keep[None, :] & ~has & (np.asarray(f["none_cls"], np.float32) < np.float32(KEEP_P))
             assert not lost.any(), f"frame {f['token']}: {int(lost.sum())} sources kept at {keep_thr} have their argmax below the dump's floor {KEEP_P}"
+
+
+def mean_frame(fa, fb):
+    """E379 arm e2: the ensemble of two heads' dump frames of the same frame and tokens -> one dump frame: pnone, ptype and none_cls = the means of the two heads; the candidates = the union of the two lists, sorted by (source,
+    destination) as a dump's, p = the mean with 0 for a head that wrote no candidate for the pair (below its floor KEEP_P), long = the pair's class (the token chord: equal in both), the handle scales a, b = the mean over the heads
+    that wrote the pair, heads = how many heads wrote it (1: the mean is low by less than KEEP_P / 2, `floor_numbers`). No decode of its own (keep, rec, argmax are not carried: `decode_variant` makes one). Means in float64,
+    stored in the dump's dtypes"""
+    assert fa["token"] == fb["token"] and fa["row"] == fb["row"] and np.array_equal(fa["cell"], fb["cell"]), f"frame {fa['token']}: the two dumps are not the same frame and tokens"
+    K = len(fa["pnone"])
+    mean = lambda k, dt: ((np.asarray(fa[k], np.float64) + np.asarray(fb[k], np.float64)) / 2).astype(dt)  # noqa: E731
+    ca, cb = fa["cand"], fb["cand"]
+    ka, kb = (c["src"].astype(np.int64) * K + c["dst"].astype(np.int64) for c in (ca, cb))
+    assert len(np.unique(ka)) == len(ka) and len(np.unique(kb)) == len(kb), f"frame {fa['token']}: a pair twice in one head's candidates"
+    key = np.union1d(ka, kb)
+    acc = {k: np.zeros(len(key)) for k in ("p", "a", "b", "n")}
+    cls = np.full((2, len(key)), -1, np.int8)
+    for h, (c, i) in enumerate(((ca, np.searchsorted(key, ka)), (cb, np.searchsorted(key, kb)))):
+        for k in ("p", "a", "b"):
+            acc[k][i] += c[k]
+        acc["n"][i] += 1
+        cls[h, i] = c["long"]
+    assert not ((cls >= 0).all(0) & (cls[0] != cls[1])).any(), f"frame {fa['token']}: a pair of another class in the two dumps"
+    cand = dict(src=(key // K).astype(np.int16), dst=(key % K).astype(np.int16), p=(acc["p"] / 2).astype(np.float32), long=cls.max(0) == 1,
+                a=(acc["a"] / acc["n"]).astype(np.float32), b=(acc["b"] / acc["n"]).astype(np.float32), heads=acc["n"].astype(np.int8))
+    return dict(token=fa["token"], row=fa["row"], cell=fa["cell"], pnone=mean("pnone", np.float32), ptype=mean("ptype", np.float16), none_cls=mean("none_cls", np.float32), cand=cand)
+
+
+FLOOR_NOTE = "links are a subset of the full-probability ensemble's at this cell"
+
+
+def floor_numbers(fr, valid, cell):
+    """the floor bias of the ensemble frames `fr` (`mean_frame`) at a cell (link short, link long, keep, none gate): delivered = the links of `decode_variant`; floor = the pairs written by ONE head only (the other's p, below its
+    floor KEEP_P, counts 0: the mean is low by less than KEEP_P / 2) that are not delivered, with both ends kept and within KEEP_P / 2 of delivery (p >= the class threshold - KEEP_P / 2, and with the none gate p + KEEP_P / 2 >=
+    p(none|i), also when p is above the threshold). p(none|i) and p_none are full means, so the delivered links are a subset of the full-probability ensemble's (FLOOR_NOTE), which delivers at most `floor` more -> dict"""
+    lt, ltl, kt, gate = cell
+    half, deliv, floor = np.float32(KEEP_P / 2), 0, 0
+    for f, v in zip(fr, valid):
+        c = f["cand"]
+        src, dst, cls = c["src"].astype(int), c["dst"].astype(int), c["long"].astype(int)
+        keep = np.asarray(v, bool) & (np.asarray(f["pnone"]) < np.float32(kt))
+        thr, none = np.array([lt, ltl], np.float32)[cls], np.asarray(f["none_cls"], np.float32)[cls, src]
+        ends, ok = keep[src] & keep[dst], (c["p"] >= thr) & ((c["p"] >= none) | (not gate))
+        deliv += int((ends & ok).sum())
+        floor += int((ends & ~ok & (c["heads"] == 1) & (c["p"] >= thr - half) & ((c["p"] + half >= none) | (not gate))).sum())
+    n = max(len(fr), 1)
+    return dict(delivered_links=deliv, delivered_links_per_frame=deliv / n, floor_links=floor, floor_links_per_frame=floor / n, floor_share=floor / max(deliv, 1), note=FLOOR_NOTE + f"; it delivers at most floor_links more "
+                "(pairs written by one head only, both ends kept, within KEEP_P / 2 of delivery)")
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the controls
@@ -838,6 +888,61 @@ def score(a, runs=RUNS, out_dir=None):
     return out
 
 
+def run_pair(s, what="--runs"):
+    """'A,B' -> (A, B): two run names, stripped, not the same run"""
+    x = [r.strip() for r in s.split(",")]
+    assert len(x) == 2 and all(x) and x[0] != x[1], f"{what} {s}: two different runs A,B"
+    return tuple(x)
+
+
+def ens_card_path(a, runs):
+    """the card of `ensemble` -> (path, name): runs/A/<name>.json, name = token_card_ens_<B>_rec<variant>[_<split>][_every<N>][_n<N>][_vs_<R>[_rc<cell>]]; --out-dir D or --max N: <D or temp/e365/out>/A_<name>.json"""
+    A, B = run_pair(a.runs)
+    rc = ref_run_cell(a, "rec")
+    rsfx = f"_vs_{a.ref_run}" + (cell_sfx(rc) if rc else "") if a.ref_run else ""
+    name = f"token_card_ens_{B}_rec{variant_suffix(a)}{card_sfx(a)}{f'_n{a.max}' if a.max else ''}{rsfx}"
+    out_dir = a.out_dir or (os.path.join(SCRATCH, "out") if a.max else None)
+    return (os.path.join(out_dir, f"{A}_{name}.json") if out_dir else os.path.join(runs, A, f"{name}.json")), name
+
+
+def ensemble(a, runs=RUNS):
+    """E379 arm e2: the cache dumps of the same read-out (split, every, --max; model.pt, no drop) of the two runs of --runs A,B (`read_dump`: the seed of both runs is --seed; one cache, opened at the same folder; `same_tokens`:
+    the same frames, tokens and valid tokens; `check_record` on both) -> one frame per frame (`mean_frame`), decoded at the decode of record or the variant of --link-thr / --link-thr-long / --keep-thr / --no-none-gate
+    (`decode_variant`) and scored by the standard scorer; `floor` = `floor_numbers` at the cell; --ref-run R [--ref-run-cell S,L,K,on|off]: R's dump of the same read-out (`read_ref`) at the same decode or that cell, `ref_run` +
+    `paired_vs_ref_run` (the ensemble minus R, as `score`). The card `ens_card_path`, never overwritten"""
+    A, B = run_pair(a.runs)
+    n_max = a.max
+    assert a.ref_run or a.ref_run_cell is None, "--ref-run-cell is the cell of --ref-run"
+    cell = (a.link_thr, long_thr(a), a.keep_thr, not a.no_none_gate)
+    rc = ref_run_cell(a, "rec")
+    path, name = ens_card_path(a, runs)
+    assert not os.path.exists(path), f"a stored card is never overwritten: {path}"
+    ra, rb = (read_dump(argparse.Namespace(**dict(vars(a), run=x)), runs, n_max) for x in (A, B))
+    assert os.path.realpath(ra["ds"].dir) == os.path.realpath(rb["ds"].dir), f"{A} and {B} read other caches ({ra['ds'].dir}, {rb['ds'].dir}): B's probabilities would be paired with A's tokens"
+    same_tokens(ra, rb)
+    for r in (ra, rb):
+        check_record(r["fr"], r["valid"])
+    ens = dict(toks=ra["toks"], valid=ra["valid"], fr=[mean_frame(x, y) for x, y in zip(ra["fr"], rb["fr"])])
+    frames = ra["frames"]
+    res = score_cell(ens, cell, frames)
+    show(f"ens {A}+{B}", res["graph"])
+    extra = dict(floor=floor_numbers(ens["fr"], ens["valid"], cell))
+    print(f"  delivered links per frame {extra['floor']['delivered_links_per_frame']:.2f}, of which the floor may hide at most {extra['floor']['floor_links_per_frame']:.3f} more ({FLOOR_NOTE})", flush=True)
+    if a.ref_run:
+        rr = read_ref(a, ra, runs, n_max)
+        check_record(rr["fr"], rr["valid"])
+        res_ref = score_cell(rr, rc or cell, frames, log=lambda *x, **k: None)
+        show(f"  ref {a.ref_run}{cell_sfx(rc) if rc else ''}", res_ref["graph"])
+        extra["ref_run"] = dict(run=a.ref_run, model="model.pt", dump=_file_id(rr["path"]), cell=dict(zip(("link_thr", "link_thr_long", "keep_thr", "none_gate"), rc)) if rc else "the decode of this card",
+                                **{k: res_ref["graph"][k] for k in KEYS + ("junction_P", "junction_R")})
+        extra["paired_vs_ref_run"] = dict(QE.paired(res["rec"], res_ref["rec"], frames), **paired_junction(res["rec"], res_ref["rec"], frames))
+    return write_card(path, f"{A}_{name}", res, len(frames), a.split, runs=[A, B], dumps={x: _file_id(r["path"]) for x, r in ((A, ra), (B, rb))}, seed=a.seed, every=a.every, K=ra["ds"].K, ident=ra["kw"]["ident"],
+                      decode="rec", decode_variant=dict(zip(("link_thr", "link_thr_long", "keep_thr", "none_gate"), cell)), steps={A: ra["ck"].get("steps"), B: rb["ck"].get("steps")},
+                      ensemble="`mean_frame`: p_none, ptype and p(none|i) of each class = the means of the two heads; the candidate links = the union of the two dumps' lists, p = the mean with 0 for a head that wrote no candidate "
+                               f"for the pair (below its floor {KEEP_P}), the handle scales = the mean over the heads that wrote the pair; then `decode_variant` (the scales of the ensemble's candidates) and the standard scorer",
+                      e_written=f"min(1 - p_none + {a.keep_thr} - 0.5, 1): only the scorer's e >= 0.5 is meant; a later read-out must not rank nodes by it", **extra)
+
+
 SWEEP_LINK, SWEEP_KEEP = (0.3, 0.2, 0.1, 0.05), (0.5, 0.6, 0.7)
 SWEEP_KEYS = ("topo_F1", "topo_P", "topo_R", "F1@1.0", "lanes_found", "dup_frac")
 PERCLASS_SHORT, PERCLASS_LONG = (0.3, 0.2, 0.1), (0.3, 0.2, 0.1, 0.05)                  # E375: the link thresholds of the short and of the long class
@@ -872,6 +977,63 @@ def sweep(a, runs=RUNS, out_dir=None):
                                        **(dict(grid="perclass") if pc else {}), **live_meta(r), note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
     print(f"written {os.path.relpath(path, ROOT)}")
     return path
+
+
+D115 = (0.3, 0.2, 0.6, False)                                                     # the champion's cell (link short, link long, keep, none gate)
+CHOOSE_DUP, CHOOSE_LANES, CHOOSE_WINDOW = 0.05, 0.010, 0.005                       # E375's rule as pinned in E377 / E378: dup_frac bound, lanes-found loss to the reference cell, topo F1 window
+CHOOSE_KEYS = ("topo_F1", "junction_F1", "lanes_found", "dup_frac")
+
+
+def table_cell(row):
+    """the cell of a sweep row: (link thr, long link thr (a default-grid row: the link thr), keep thr, none gate)"""
+    return row["link_thr"], row.get("link_thr_long", row["link_thr"]), row["keep_thr"], row["none_gate"]
+
+
+def pick_cell(tables, ref=D115):
+    """E375's cell rule as pinned in E377 / E378 (promoted from temp/e377/choose377.py and temp/e378/choose378.py): tables = the rows of one or two sweep tables of the same cells, averaged row by row; eligible = mean dup_frac <=
+    CHOOSE_DUP and mean lanes found >= the mean at the reference cell - CHOOSE_LANES; T = the highest mean topo F1 of the eligible cells; the window = the eligible cells with topo F1 >= T - CHOOSE_WINDOW; the chosen cell = the highest
+    mean junction F1 of the window, ties by |short - ref short|, |long - ref long|, |keep - ref keep|, then the higher thresholds; no eligible cell: the reference cell -> dict(cell, rows, eligible, T, window)"""
+    cells = [{table_cell(r): r for r in t} for t in tables]
+    assert all(c.keys() == cells[0].keys() and len(c) == len(t) for c, t in zip(cells, tables)) and ref in cells[0], "the tables hold other cells (or a cell twice, or not the reference cell)"
+    rows = {c: {k: sum(t[c][k] for t in cells) / len(cells) for k in CHOOSE_KEYS} for c in cells[0]}
+    ok = [c for c, r in rows.items() if r["dup_frac"] <= CHOOSE_DUP and r["lanes_found"] >= rows[ref]["lanes_found"] - CHOOSE_LANES]
+    if not ok:
+        return dict(cell=ref, rows=rows, eligible=[], T=None, window=[])
+    T = max(rows[c]["topo_F1"] for c in ok)
+    win = sorted((c for c in ok if rows[c]["topo_F1"] >= T - CHOOSE_WINDOW), key=lambda c: (-rows[c]["junction_F1"], abs(c[0] - ref[0]), abs(c[1] - ref[1]), abs(c[2] - ref[2]), -c[0], -c[1], -c[2]))
+    return dict(cell=win[0], rows=rows, eligible=ok, T=T, window=win)
+
+
+def cell_str(c):
+    """'S,L,K,on|off' (the form of --ref-cell / --ref-run-cell)"""
+    return f"{c[0]:g},{c[1]:g},{c[2]:g},{'on' if c[3] else 'off'}"
+
+
+def choose_cell(a, runs=RUNS):
+    """the decode cell of one run (its own per-class sweep table, `sweep --grid perclass`) or of a recipe of two runs (the mean of their tables row by row) by `pick_cell` against --ref-cell (default D115) -> prints the cell as
+    S,L,K,on|off (the last line) and writes runs/R1/token_cell_perclass[_<split>][_every<N>][_mean_<R2>][_ref<cell>].json (the reference only when not D115; --out-dir D: <D>/R1_token_cell_..json). Never overwritten: a
+    stored choice is recomputed, must be the same cell, and is printed"""
+    rs = [r.strip() for r in a.runs.split(",")]
+    assert 1 <= len(rs) <= 2 and all(rs) and len(set(rs)) == len(rs), f"--runs {a.runs}: one run or two different runs"
+    ref = a.ref_cell or D115
+    paths = [os.path.join(runs, r, f"token_sweep_perclass{card_sfx(a)}.json") for r in rs]
+    tabs = [json.load(open(p)) for p in paths]
+    assert all(t.get("grid") == "perclass" and t["split"] == a.split and t.get("every", 1) == a.every for t in tabs), "per-class sweep tables of this split and sample"
+    got = pick_cell([t["rows"] for t in tabs], ref)
+    name = f"token_cell_perclass{card_sfx(a)}{f'_mean_{rs[1]}' if len(rs) == 2 else ''}{'' if ref == D115 else '_ref' + cell_sfx(ref)[3:]}.json"
+    path = os.path.join(a.out_dir, f"{rs[0]}_{name}") if a.out_dir else os.path.join(runs, rs[0], name)
+    num = lambda c: {k: got["rows"][c][k] for k in CHOOSE_KEYS}  # noqa: E731
+    doc = dict(runs=rs, tables={r: _file_id(p) for r, p in zip(rs, paths)}, ref_cell=cell_str(ref), cell=cell_str(got["cell"]), numbers=num(got["cell"]), ref_numbers=num(ref), eligible=len(got["eligible"]), cells=len(got["rows"]),
+               T=got["T"], window=[dict(cell=cell_str(c), **num(c)) for c in got["window"]], rule=f"eligible: dup_frac <= {CHOOSE_DUP} and lanes found >= the reference cell's - {CHOOSE_LANES} (the mean of the tables row by row); "
+               f"T = the highest topo F1; window topo F1 >= T - {CHOOSE_WINDOW}; the highest junction F1; ties by |short - ref|, |long - ref|, |keep - ref|, then the higher thresholds; no eligible cell: the reference cell")
+    if os.path.exists(path):
+        assert json.load(open(path))["cell"] == doc["cell"], f"{path} holds another cell than the tables give now: never overwritten"
+        print(f"stored {os.path.relpath(path, ROOT)}")
+    else:
+        JV.write_json(path, _jsonable(doc))
+        print(f"written {os.path.relpath(path, ROOT)}: {len(got['eligible'])} of {len(got['rows'])} cells eligible, T {got['T']}, window {len(got['window'])}")
+    print(doc["cell"])
+    return doc
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the anatomy of the delivered long links (E376)
@@ -1587,6 +1749,27 @@ def parse_args(argv=None):
             s.add_argument("--argmax", action="store_true", help="the argmax decode (one link per source and class) at --keep-thr instead of the record's 0.5 -> token_card_argmax_kt<K>..json")
         if name == "sweep":
             s.add_argument("--grid", default="default", choices=tuple(SWEEP_GRIDS), help="default: the 24 cells (link x keep x none gate); perclass (E375): link short x link long x keep, none gate off (36 cells)")
+    s = sub.add_parser("ensemble")
+    s.add_argument("--runs", required=True, help="A,B: two runs whose cache dumps of this read-out (model.pt, the same cache seed, frames and tokens) are averaged; the card goes to runs/A/")
+    s.add_argument("--seed", type=int, required=True)
+    s.add_argument("--split", choices=("val", "train"), default="val")
+    s.add_argument("--every", type=int, default=1)
+    s.add_argument("--max", type=int, default=0, help="the dumps of `dump --max N` (a test; the card goes to --out-dir or temp/e365/out/)")
+    s.add_argument("--out-dir", default=None, help="the card goes to <D>/A_token_card_ens_..json instead of runs/A/ (a read-out that is not a run's record)")
+    s.add_argument("--link-thr", type=float, default=LINK_THR)
+    s.add_argument("--link-thr-long", type=float, default=None)
+    s.add_argument("--keep-thr", type=float, default=KEEP_THR)
+    s.add_argument("--no-none-gate", action="store_true")
+    s.add_argument("--ref-run", default=None, help="another run's dump of the same read-out at the same decode (or --ref-run-cell): its numbers and the paired interval ensemble - it; the card's name ends in _vs_<run>")
+    s.add_argument("--ref-run-cell", type=parse_cell, default=None)
+    s.set_defaults(model="model.pt", drop=0.0, drop_seed=0, live=False, argmax=False, ref_cache=False)          # the cache read-out of model.pt that `read_dump` / `read_ref` / `card_sfx` read
+    s = sub.add_parser("choose-cell")
+    s.add_argument("--runs", required=True, help="R1[,R2]: one run (its own per-class table) or the two runs of a recipe (the mean of the two tables); the json goes to runs/R1/")
+    s.add_argument("--ref-cell", type=parse_cell, default=None, help="S,L,K,on|off: the reference cell (default D115 0.3,0.2,0.6,off): the lanes-found bound, the tie-break and the fall-back")
+    s.add_argument("--split", choices=("val", "train"), default="train")
+    s.add_argument("--every", type=int, default=3, help="the table of `sweep --grid perclass --every N` (default 3: the TRAIN every-3 table)")
+    s.add_argument("--out-dir", default=None, help="the json goes to <D>/R1_token_cell_..json instead of runs/R1/")
+    s.set_defaults(model="model.pt", drop=0.0, drop_seed=0, live=False)                                       # the table name of `sweep` (`card_sfx`)
     s = sub.add_parser("anatomy")
     s.add_argument("--run", required=True)
     model_arg(s)
@@ -1660,7 +1843,7 @@ def parse_args(argv=None):
 def main(argv=None):
     a = parse_args(argv)
     torch.set_num_threads(2)
-    r = {"dump": dump, "score": score, "sweep": sweep, "anatomy": anatomy, "live-diff": live_diff, "ctl": ctl, "fixture": fixture, "graphs": graphs, "check-layer1": check_layer1, "check-parity": check_parity, "timing": timing}[a.cmd](a)
+    r = {"dump": dump, "score": score, "sweep": sweep, "ensemble": ensemble, "choose-cell": choose_cell, "anatomy": anatomy, "live-diff": live_diff, "ctl": ctl, "fixture": fixture, "graphs": graphs, "check-layer1": check_layer1, "check-parity": check_parity, "timing": timing}[a.cmd](a)
     sys.exit(r if isinstance(r, int) else 0)
 
 
