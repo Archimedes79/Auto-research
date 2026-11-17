@@ -69,4 +69,22 @@ GPU order (the lane lead, 02:05): b25 pair, E370 (A + B, both seeds), the lane c
 | seed 1 | 0.990 | 0.827 | 0.031 | 0.999 | 0.6349 / 0.6381 | 11 of 47 935 | 2.804 |
 The stage-A head reproduces the rule per class (the long links of `lo_near`, the hard part, at 0.82 / 0.83), with a few extra links; on the TRAIN sample its topo F1 is within 0.005 of c-rule (+0.004 / -0.003), F1@1.0 0.827 / 0.825 against the rule's 0.811 / 0.807. The stage-B kill reference (the stage-A head's GT loss in eval mode on these frames) is 2.718 / 2.804, written here before stage B. **Stage B** waits for the weekday GPU window (the lane lead, 04:32); the stage-A VAL read-out (B-ADDS) is queued behind E373.
 
-(stage B follows)
+**Stage A on VAL (runs `E370.read_a_s0 / s1`, decode of record):** topo F1 **0.6221 / 0.6244** (c-rule 0.6265 / 0.6281; plain B 0.6259 / 0.6249: paired -0.004 [-0.021, +0.015] / -0.001 [-0.018, +0.018]), F1@1.0 0.784 / 0.788, lanes found 0.572 / 0.574, dup_frac 0.008 / 0.007: the distilled head reproduces the rule on VAL as on TRAIN.
+
+**Stage B (2026-11-17 06:23 - 07:05, runs `E370.b_s0 / b_s1`, `--init` from the stage-A weights (sha256 0e5ed6056521 / ff61240eea44, the head step 3000 carried), 12000 steps, no crash, no resume; read-outs `E370.dump_b_s<S>` / `E370.read_b_s<S>`; VAL 873, TEST untouched): MISS by the gate (G-topo and G-found fail on both seeds); B-ADDS: NO (stage B is BELOW stage A); ABOVE-RULE: NO.**
+| VAL 873, decode of record | topo F1 | topo P / R | F1@1.0 | lanes found | junction F1 | dup_frac |
+|---|---|---|---|---|---|---|
+| floors (seed 0 / 1) | >= 0.6359 / 0.6349 | | >= 0.8182 / 0.8060 | >= 0.6066 / 0.5937 | | |
+| stage A (the rule distilled), seed 0 / 1 | 0.6221 / 0.6244 | | 0.784 / 0.788 | 0.572 / 0.574 | | 0.008 / 0.007 |
+| **stage B, seed 0 / 1** | **0.5409 / 0.5535** | 0.858 / 0.395 and 0.848 / 0.411 | **0.744 / 0.753** | **0.494 / 0.509** | 0.192 / 0.211 | 0.004 |
+| E365 S1 (random start), seed 0 / 1, for comparison | 0.5486 / 0.5743 | 0.858 / 0.403 and 0.853 / 0.433 | 0.752 / 0.763 | 0.500 / 0.525 | | 0.004 |
+Paired against plain B: -0.085 [-0.116, -0.057] / -0.072 [-0.106, -0.038].
+**The drift (pre-registered secondary numbers, TRAIN sample of 291 frames, decode of record, the snapshots of stage B):**
+| stage-B step | 0 | 500 | 1000 | 3000 | 6000 | 12000 |
+|---|---|---|---|---|---|---|
+| topo F1, seed 0 | 0.6441 | 0.5450 | 0.5469 | 0.5731 | 0.5918 | 0.6023 |
+| topo F1, seed 1 | 0.6349 | 0.5292 | 0.4948 | 0.5866 | 0.6004 | 0.6122 |
+| precision / recall, seed 0 | 0.744 / 0.568 | 0.847 / 0.402 | 0.847 / 0.404 | 0.834 / 0.437 | 0.862 / 0.451 | 0.858 / 0.464 |
+**What it says, plainly:** the warm start at the rule does not survive the GT loss: within the first 500 steps of stage B the head falls from the rule's operating point (precision 0.74, recall 0.57 on TRAIN) to the conservative point of S1 (precision 0.85, recall 0.40), then recovers slowly, ending on VAL at S1's level (0.541 / 0.554 against S1's 0.549 / 0.574). The stage-B loss started at 3.31 (the card's kill reference 2.718 / 2.804 on the TRAIN sample in eval mode) and learned (no kill). This confirms, with a direct measurement, the diagnosis of E365 and the result of E366: the E365 GT loss with its none slot pulls the head to a conservative operating point; the operating point, not the initialisation, is the lever (E366 / E373 move it with the decode or the none weight).
+**Per-head decode on the TRAIN sample (the E366 rule, for the cross-card comparison; never this card's verdict):** both stage-B heads choose link 0.1 / keep 0.6 / none gate off (TRAIN topo F1 0.7070 / 0.7138; the record cell 0.6023 / 0.6122), the same cell as the S1 champion's; its VAL read-out follows below as a diagnosis.
+**Predictions against the numbers:** stage A meets the fixture (65 %): hit; stage-B VAL topo F1 0.63 (0.58 - 0.69): 0.541 / 0.554 MISSED (below the window); F1@1.0 0.78 (0.74 - 0.82): 0.744 / 0.753 hit at the edge; lanes found 0.61 (0.55 - 0.67): 0.494 / 0.509 missed; ABOVE-RULE about 40 %: no; B-ADDS about 45 %: no; PASS about 12 %, MISS 55 %: MISS. The risk named in the card ('stage B uses the same GT loss that made S1 conservative; a warm start may only delay the drift') is what happened, and faster than feared (500 steps). **Not done:** the schedule control g (E370.ga / gb) was not run: the drift result makes it moot for the question 'does the rule start help' (it does not survive). **Consequence:** the rule-distilled initialisation is not a way to the champion with this loss; a decaying teacher term inside one schedule (the card's fallback) would only be worth a card if it keeps the operating point; the E373 champion (none weight 0.25) already moves the operating point with one loss weight.
