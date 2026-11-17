@@ -166,13 +166,18 @@ def label_frame(tk, table, r=R_NEAR, cos=COS_NEAR, K=None, allowed=None, ks=KST)
                 cov_nodes_at=np.array([near[:min(k, T)].any(0).sum() for k in ks], np.int32), cov_links_at=np.array([both(near[:min(k, T)].any(0)) for k in ks], np.int32))
 
 
-def compare_dump(cache, dump, e_min=0.2, prefix=False):
+B_CAP = 512                                                                                        # B's own active set = the top 512 cells (qlinks.LinkHead K), so a stored dump holds at most 512 nodes
+
+
+def compare_dump(cache, dump, e_min=0.2, prefix=False, b_cap=B_CAP):
     """the cache against a stored B dump (`qgraph_readout.dump_full`: the nodes with sigmoid(e) >= e_min of every frame in the order of the active set): -> (ok, report dict). Per frame the first min(K, n) stored nodes are
-    compared with the cache tokens cell by cell: same set of cells, and e, pos, dirv, flags, s equal bit for bit (the dump holds float64 copies of float32 numbers); the cache must hold no token at or above e_min behind them"""
+    compared with the cache tokens cell by cell: same set of cells, and e, pos, dirv, flags, s equal bit for bit (the dump holds float64 copies of float32 numbers); the cache must hold no token at or above e_min behind them.
+    One exception, counted and reported: when the stored active set is FULL (n >= b_cap, B's own top-512 cut) the last rank may be a tie of two cells with exactly the same existence that `torch.topk` of the probabilities and the
+    stable sort of the logits order differently; such a cell, and only at the existence of the last stored node, may differ"""
     if prefix:                                                                                                  # a limited (smoke) cache: its frames are the first ones of the dump
         dump = dump[:len(cache.rows)]
     assert len(dump) == len(cache.rows), f"{len(dump)} dump frames, {len(cache.rows)} cache frames"
-    worst, bad, cut, n_nodes, order_diff = dict(e=0.0, pos=0.0, dirv=0.0, flags=0.0, s=0.0), [], 0, 0, 0
+    worst, bad, cut, n_nodes, order_diff, ties = dict(e=0.0, pos=0.0, dirv=0.0, flags=0.0, s=0.0), [], 0, 0, 0, 0
     for i, d in enumerate(dump):
         if int(d["row"]) != int(cache.rows[i]):
             return False, dict(error=f"row of frame {i}: dump {d['row']}, cache {cache.rows[i]}")
@@ -184,14 +189,23 @@ def compare_dump(cache, dump, e_min=0.2, prefix=False):
         cell_d = cell_d[:, 0] * N + cell_d[:, 1]
         cell_c = f["cell"][i, :nc].astype(int)
         order_diff += int(not np.array_equal(cell_d, cell_c))
-        if sorted(cell_d.tolist()) != sorted(cell_c.tolist()):
-            bad.append((i, "cells differ"))
-            continue
+        only_d, only_c = set(cell_d.tolist()) - set(cell_c.tolist()), set(cell_c.tolist()) - set(cell_d.tolist())
+        if only_d or only_c:
+            ed = {int(c_): float(e_) for c_, e_ in zip(cell_d, d["e"][:nc])}
+            ec = {int(c_): float(e_) for c_, e_ in zip(cell_c, f["e_p"][i, :nc])}
+            last = float(d["e"][nc - 1])
+            if n >= b_cap and nc == n and all(ed[c_] == last for c_ in only_d) and all(ec[c_] == last for c_ in only_c):
+                ties += 1
+            else:
+                bad.append((i, "cells differ"))
+                continue
         if not np.array_equal(np.asarray(d["e"][:nc], np.float64), f["e_p"][i, :nc].astype(np.float64)):             # other cells at a position are fine only where the existence is equal (a tie)
             bad.append((i, "order differs beyond ties"))
             continue
         pc = {int(c): k for k, c in enumerate(cell_c)}
         for k in range(nc):
+            if int(cell_d[k]) not in pc:                                                                        # the tie cell of the dump
+                continue
             j = pc[int(cell_d[k])]
             for name, a, b in (("e", d["e"][k], f["e_p"][i, j]), ("pos", d["pos"][k], f["pos"][i, j]), ("dirv", d["dirv"][k], f["dirv"][i, j]), ("flags", d["flags"][k], f["flags_p"][i, j]), ("s", d["s"][k], f["s_p"][i, j])):
                 a64, b64 = np.asarray(a, np.float64), np.asarray(b, np.float32).astype(np.float64)
@@ -199,11 +213,11 @@ def compare_dump(cache, dump, e_min=0.2, prefix=False):
                 worst[name] = max(worst[name], v) if v == v else float("nan")
                 if v != 0.0:
                     bad.append((i, name))
-        if n < cache.K and nc == n and (f["e_p"][i, n:] >= e_min).any():
+        if n < cache.K and nc == n and n < b_cap and (f["e_p"][i, n:] >= e_min).any():                            # (a full active set is cut by B itself: tokens at or above e_min behind it are expected)
             bad.append((i, f"a cache token at or above {e_min} behind the {n} stored nodes"))
         n_nodes += nc
     ok = not bad and all(v == 0.0 for v in worst.values())
-    return ok, dict(frames=len(dump), nodes_compared=n_nodes, frames_cut_by_K=cut, frames_with_other_order=order_diff, worst=worst, mismatches=len(bad), first=bad[:5])
+    return ok, dict(frames=len(dump), nodes_compared=n_nodes, frames_cut_by_K=cut, frames_with_other_order=order_diff, frames_with_boundary_tie=ties, worst=worst, mismatches=len(bad), first=bad[:5])
 
 
 def compare_caches(a, b, n=None):
@@ -586,9 +600,33 @@ def selftest():
     assert ok and rep["frames_with_other_order"] == 1, rep
     ok, rep = compare_dump(toy, swap(dump_of(toy)))
     assert not ok, "a swap of two tokens with different existence passed"
+    # a full active set (n >= b_cap): the LAST rank may be another cell of exactly the same existence, nothing else
+    class Cap:
+        K, rows = 3, [7]
+        f = dict(cell=np.array([[53, 5, 1275]], np.int16), e_p=np.array([[0.9, 0.6, 0.3]], np.float32), pos=np.array([[[-47.0, -43.0], [-49.5, -39.0], [1.0, 1.0]]], np.float32),
+                 dirv=np.array([[[1.0, 0], [0, 1.0], [1.0, 0]]], np.float32), flags_p=np.full((1, 3, 8), 0.25, np.float32), s_p=np.full((1, 3), 0.5, np.float32))
+    cap = Cap()
+    dd = dump_of(cap)
+    assert compare_dump(cap, dd, b_cap=3)[0]
+    dd[0]["pos"][2] = [-1.0, -1.0]                                                                           # the dump holds cell 1224 at the last rank, the cache cell 1275, both with the existence 0.3
+    ok, rep = compare_dump(cap, dd, b_cap=3)
+    assert ok and rep["frames_with_boundary_tie"] == 1 and rep["nodes_compared"] == 3, rep
+    assert not compare_dump(cap, dd, b_cap=4)[0], "no tolerance when the active set is not full"
+    dd2 = dump_of(cap)
+    dd2[0]["pos"][1] = [-1.0, -1.0]                                                                          # another cell at rank 1 (existence 0.6, not the last existence 0.3): no tie rule applies
+    assert not compare_dump(cap, dd2, b_cap=3)[0]
+    dd3 = dump_of(cap)
+    dd3[0]["pos"][2] = [-1.0, -1.0]
+    dd3[0]["e"][2] = 0.2999                                                                                  # not a tie any more
+    assert not compare_dump(cap, dd3, b_cap=3)[0]
+    dd4 = dump_of(cap)
+    dd4[0]["pos"][2] = [-1.0, -1.0]
+    dd4[0]["flags"][0, 0] = 0.3                                                                              # a tie in the cell, but the common cells must still agree to the bit
+    assert not compare_dump(cap, dd4, b_cap=3)[0]
     extra = Toy()                                                                                            # a cache token at e_p >= 0.2 behind the stored nodes
     extra.f = dict(Toy.f, e_p=np.array([[0.9, 0.6, 0.3, 0.5]], np.float32))
     assert not compare_dump(extra, dump_of(extra))[0]
+    assert compare_dump(extra, dump_of(extra), b_cap=3)[0], "a full active set is cut by B itself: tokens behind it are expected"
     # the qformat nodes of a frame
     fr = dict(valid=np.array([True, False, True]), cell=np.array([53, 5, 1224], np.int16), pos=np.zeros((3, 2), np.float32), dirv=np.ones((3, 2), np.float32), e_p=np.array([0.9, 0.1, 0.6], np.float32),
               flags_p=np.zeros((3, 8), np.float32), s_p=np.zeros(3, np.float32))
