@@ -7,3 +7,5 @@ An experiment folder holds the `README.md` index of the experiment and its small
 In git: the `README.md` files, `package.json`, `provenance.json` and small result json files. Not in git: frames, videos and other heavy files (about 1.2 GB on disk); the checkpoints stay in `../runs/`.
 
 Reproduce a run: `python autoresearch/tools/provenance.py repro <run id>`.
+
+**End-to-end reports** (`E2E_Champion_Report/`, `E2E_Report_<date>/`, built by `reporter/reporter.py`): the sources are in git (`report.json`, `parts/*.md`, `parts/*.svg`); the built html, the code zip and the pictures (`parts/figures/`) are not: rebuild with `reporter.py build` / `check` / `pack`. Every report holds the short article "how the ground truth of a lane graph must look" (chapter 3.0).
