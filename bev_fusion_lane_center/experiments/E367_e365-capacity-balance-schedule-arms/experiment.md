@@ -60,4 +60,7 @@ Card of 2026-11-17, **version 2 at 01:40 (system clock) after the first critic p
 | decide | the verdict above per arm; the champion rule; the confirmation | by hand | result section, ledger notes, commit, one line to the lead |
 
 ## 3. Summary
-(empty until the runs exist)
+**Decode choices per head (each written BEFORE that head's VAL score; the rule of E366 on the head's own 291-frame TRAIN sample, `temp/e366/choose.py <run>`):**
+- b_bal5, both heads (runs E367.sweep_b5_s0 / s1, 03:35): link 0.2, keep 0.7, none gate off (TRAIN topo F1 0.7185 / 0.7198, dup_frac 0.0275 / 0.0288; the record cell 0.6642 / 0.6727)
+
+(results follow)
