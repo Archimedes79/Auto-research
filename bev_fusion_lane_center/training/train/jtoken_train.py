@@ -13,7 +13,9 @@ the same effect on the batch as the loader's own `token_drop`, which draws once 
 `--prior rule` (E369) builds the head with c-rule as a fixed prior (`jtoken.JTokenHead(prior=)`; in `build_head`, so `load_model` rebuilds it). `--teacher rule` (E370 stage A, a training option only, not in `build_head`):
 the targets are `jtoken.rule_teacher`'s (c-rule's links inside the gate, B''s own types; no GT key is read), no scale term. `--init <model.pt>` (E370 stage B): the weights of another run of the same architecture
 (refused otherwise), the head's step buffer CARRIED (the key weights stay the head's own 1 - p_none: the step-0 graph is the init's), a fresh optimiser and schedule; only at a fresh start (`ckpt.pt` takes precedence on a
-resume); the recipe records the path and its sha256. `--snapshots 0,500,...`: model_step<N>.pt after N updates (the format of model.pt: `load_model(..., name=)`), never overwritten. `--head-seed N` (default: --seed):
+resume); the recipe records the path and its sha256. `--snapshots 0,500,...`: model_step<N>.pt after N updates (the format of model.pt: `load_model(..., name=)`), never overwritten; the later ones are taken by the trainer's eval
+hook (every gcd of the snapshot steps), so log.jsonl gets a row {"step": N, "val": {"snapshot": N}} at a snapshot and {"step": N, "val": {}} at every other multiple of that gcd, and status.json an `eval_<N>` key: rows without
+'total' are eval rows, a curve reader skips them. `--head-seed N` (default: --seed):
 the head's initialisation, the data order and the token-drop draws use N, `--seed` keeps choosing the B' cache (args['seed'] stays the cache seed, so the read-outs open the same cache); in the recipe.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
