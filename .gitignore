@@ -21,6 +21,10 @@
 # both stay ignored by the first rule
 !/GtGenerator/
 
+# the report tool (reporter/: report builder, plots, winner export) and the winner folders (winners/: small source snapshots of winning systems, no weights)
+!/reporter/
+!/winners/
+
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/
 /bev_fusion_lane_center/*
