@@ -15,6 +15,11 @@ import; a non-smoke run through a fake loader that returns (None, batches) with 
 read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), live_inputs (S4: the default = the forward of before bit for bit, outputs and parameter gradients, no input gradient; live: the same values, a gradient on every float
 input, the full gradient against float64 central differences; textual mutants; build_head / load_model read it, absent = False), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
 head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
+distill (E379 card v2 `distill_loss` = KL_s + KL_l by hand on two toy frames with two stub teachers incl. masked keys and an all-masked row, a teacher equal to the student gives 0 exactly, the gradient, no type term;
+textual mutants), distill_trainer (E379 --distill-from / --distill-weight: unset = the champion's 20 smoke steps (recorded constants), W 0 = the champion bit for bit, W 1 moves the weights, step 1 = + W x kd at W 1 / 4,
+gt_mean / kd_mean, the teacher key, the start check on the teachers' GT loss over the first 20 batches, the first batch through a persistent-worker DataLoader unchanged by the teachers, the first-batch log, float32
+teachers inside autocast, the student initialised as its teacher has KD 0 at step 1, the teachers frozen with their own counters; the refusals; textual mutants of jtoken_train.py; the card's teachers on their VAL
+dumps and the twin of E373 (2 loader workers) on the real cache when they are there).
 """
 import json
 import math
@@ -966,19 +971,19 @@ def _maps_hook_ok(mod):
     assert all(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in mg.map_block.parameters()), "no gradient into the map block"
 
 
-def _mutant(*edits, double=False):
-    """jtoken.py with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual mutant; double: then every `.float()` becomes `.double()` (the float64 copy of
-    `_live_fd_ok`)"""
-    src = open(JK.__file__, encoding="utf-8").read()
+def _mutant(*edits, double=False, of=JK):
+    """jtoken.py (of=JKT: jtoken_train.py) with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual mutant; double: then every `.float()` becomes `.double()` (the float64
+    copy of `_live_fd_ok`)"""
+    src = open(of.__file__, encoding="utf-8").read()
     for old, new in edits:
         assert src.count(old) == 1, old
         src = src.replace(old, new)
     if double:
         src = src.replace(".float()", ".double()")
-    mod, path = types.ModuleType("jtoken_mutant"), list(sys.path)
-    mod.__file__ = JK.__file__
+    mod, path = types.ModuleType(of.__name__ + "_mutant"), list(sys.path)
+    mod.__file__ = of.__file__
     try:
-        exec(compile(src, JK.__file__, "exec"), mod.__dict__)
+        exec(compile(src, of.__file__, "exec"), mod.__dict__)
     finally:
         sys.path[:] = path
     return mod
@@ -1226,9 +1231,368 @@ def test_head_seed():
           f"head_seed in the recipe (another one refused); the log names both seeds and 127131 parameters; a shuffling DataLoader as the loader: first batch {order['f0']} (default, --head-seed 0) vs {order['f0h2']} (--head-seed 2); {real}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_none_weight_near, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
-         test_none_weight_near_trainer, test_prior, test_past, test_maps, test_live_inputs, test_teacher, test_init, test_head_seed]
+# ------------------------------------------------------------------------------------------------------------------------------ E379 ensemble distillation
+# two toy frames of 4 tokens. Frame 1 (token 3 padding): short candidates 0 -> {1, 2}, 1 -> {2}, long 2 -> {0} (token 2 has no short candidate, tokens 0 and 1 no long one: valid tokens outside the class rows).
+# Frame 2 (all valid): short 0 -> {1}, 1 -> {2, 3}, 3 -> {0}, no long source (other source counts: the per-frame normalisation). Every other key masked. p: per teacher {(class, source): p of its candidates in order, p(none) last}
+KD_K = 4
+KD_FRAMES = (dict(valid=[True, True, True, False], cand=({0: [1, 2], 1: [2]}, {2: [0]}),
+                  p=({(0, 0): [.5, .3, .2], (0, 1): [.6, .4], (1, 2): [.7, .3]}, {(0, 0): [.2, .6, .2], (0, 1): [.1, .9], (1, 2): [.5, .5]})),
+             dict(valid=[True] * 4, cand=({0: [1], 1: [2, 3], 3: [0]}, {}), p=({(0, 0): [.4, .6], (0, 1): [.3, .3, .4], (0, 3): [.9, .1]}, {(0, 0): [.8, .2], (0, 1): [.1, .5, .4], (0, 3): [.5, .5]})))
 
+
+def _kd_frame():
+    """-> (the student's out with leaf logits z / zn / types1 / types, the two stub teachers' outs: log of the hand probabilities, -inf at a masked key, p(none) 1 for a valid source without a candidate, the padding
+    source's rows ALL -inf (every key and the none slot masked); random types (the KD does not read them))"""
+    K, B = KD_K, len(KD_FRAMES)
+    valid = torch.tensor([f["valid"] for f in KD_FRAMES])
+    cand = torch.zeros(B, 2, K, K, dtype=torch.bool)
+    for b, f in enumerate(KD_FRAMES):
+        for c, cs in enumerate(f["cand"]):
+            for i, js in cs.items():
+                cand[b, c, i, js] = True
+    g = torch.Generator().manual_seed(3)
+    z, zn, t1, t3 = (torch.randn(*s, generator=g).requires_grad_() for s in ((B, 2, K, K), (B, 2, K), (B, K, 7), (B, K, 7)))
+    out = dict(z=z, zn=zn, cand=cand, valid=valid, logp=JK.wiring_logp(z, zn, cand), types1=t1, types=t3)
+    teachers = []
+    for t in range(2):
+        P = torch.zeros(B, 2, K, K + 1)
+        for b, f in enumerate(KD_FRAMES):
+            P[b, :, valid[b], K] = 1.0
+            for (c, i), p in f["p"][t].items():
+                P[b, c, i, f["cand"][c][i] + [K]] = torch.tensor(p)
+        teachers.append(dict(cand=cand, valid=valid, logp=P.log(), types1=torch.randn(B, K, 7, generator=g), types=torch.randn(B, K, 7, generator=g)))
+    return out, teachers
+
+
+def _kd_hand(out):
+    """the KD by hand (float64): per class and frame the mean over its sources of sum p_T log(p_T / p_S) over the candidates + none (p_T the mean of the teachers' hand probabilities), then the mean over the frames
+    that have a source of the class; the entropy of p_T per source the same way -> dict(kd_s, kd_l, ent_s, ent_l, kd)"""
+    z, zn = out["z"].detach().double(), out["zn"].detach().double()
+    kl = lambda pt, ps: sum(a * math.log(a / b) for a, b in zip(pt, ps))  # noqa: E731
+    soft = lambda v: [math.exp(x - lse(*v)) for x in v]  # noqa: E731
+    mean = lambda v: sum(v) / len(v)  # noqa: E731
+    h = {}
+    for c, name in ((0, "s"), (1, "l")):
+        frames = [[([(x + y) / 2 for x, y in zip(f["p"][0][(c, i)], f["p"][1][(c, i)])], soft([float(z[b, c, i, j]) for j in js] + [float(zn[b, c, i])])) for i, js in f["cand"][c].items()]
+                  for b, f in enumerate(KD_FRAMES)]
+        h["kd_" + name] = mean([mean([kl(pt, ps) for pt, ps in rows]) for rows in frames if rows])
+        h["ent_" + name] = mean([mean([-sum(a * math.log(a) for a in pt) for pt, _ in rows]) for rows in frames if rows])
+    h["kd"] = h["kd_s"] + h["kd_l"]
+    return h
+
+
+def _check_kd(mod):
+    """asserts `mod.distill_loss` (jtoken or a textual mutant) on the toy frame against `_kd_hand` (to 1e-6) -> (kd, info, hand)"""
+    out, teachers = _kd_frame()
+    kd, info = mod.distill_loss(out, teachers)
+    h = _kd_hand(out)
+    assert all(abs(info[k] - v) < 1e-6 for k, v in h.items()) and abs(float(kd) - h["kd"]) < 1e-6, (info, h)
+    return kd, info, h
+
+
+def test_distill():
+    """E379 (card v2) `distill_loss` on two toy frames by hand (kd = kd_s + kd_l, the entropy; the mean of the teachers' PROBABILITIES, the none slot in, a masked key with p_T 0 and log p_T -inf adds exactly 0, a padding
+    row all -inf and a valid source without a candidate of the class: finite, outside the rows; per frame, then over the frames); a teacher equal to the student gives 0 exactly; the gradient: finite, on the gate only, none
+    into the type readings (not distilled); no teacher refused (other tokens: `distill_trainer`); textual mutants fail"""
+    _, info, h = _check_kd(JK)
+    out, teachers = _kd_frame()
+    kd = JK.distill_loss(out, teachers)[0]
+    kd.backward()
+    gz = out["z"].grad
+    assert torch.isfinite(kd) and torch.isfinite(gz).all() and float(gz[~out["cand"]].abs().max()) == 0.0 and float(gz[out["cand"]].abs().min()) > 0, gz
+    assert out["types1"].grad is None and out["types"].grad is None and set(info) == {"kd", "kd_s", "kd_l", "ent_s", "ent_l"}, "the type readings are not distilled"
+    me = {k: (v.detach().clone() if torch.is_tensor(v) else v) for k, v in out.items()}
+    k0, i0 = JK.distill_loss(out, [me])
+    assert float(k0) == 0.0 and i0["kd_s"] == 0.0 and i0["kd_l"] == 0.0, i0                                 # a teacher equal to the student: 0 exactly
+    must_fail(JK.distill_loss, out, [])
+    kl = "torch.where(pt > 0, pt * (lpt - lp), 0.0)"
+    mutants = {"KL(p_S || p_T)": [(kl, "torch.where(lp.exp() > 0, lp.exp() * (lp - lpt), 0.0)")], "no 0 x log 0 guard": [(kl, "(pt * (lpt - lp))")],
+               "a global mean over the sources": [("(_frame_mean(kl[:, c], src[:, c]) for c in range(2))", "((kl[:, c] * src[:, c]).sum() / src[:, c].sum() for c in range(2))")],
+               "the mean of the logits": [("torch.logsumexp(torch.stack(lps), 0) - math.log(len(lps))", "torch.stack(lps).mean(0).log_softmax(-1)")],
+               "the none slot left out": [('_kl(lpt, out["logp"])', '_kl(lpt[..., :-1], out["logp"][..., :-1])')],
+               "the rows of all valid tokens": [("src = source_rows(out)", 'src = out["valid"][:, None].expand(-1, 2, -1)')],
+               "the type KL kept": [("kd = kd_s + kd_l\n", 'kd = kd_s + kd_l + 0.5 * _frame_mean(_kl(teacher_logp([o["types"].float().log_softmax(-1) for o in outs_t]), out["types"].float().log_softmax(-1)), out["valid"])\n')]}
+    for edits in mutants.values():
+        must_fail(_check_kd, _mutant(*edits))
+    print(f"distill: by hand on two toy frames (two stub teachers, masked keys at -inf, a padding row all -inf, a source without a candidate of the class, 2 and 3 short sources): kd_s {h['kd_s']:.6f} kd_l {h['kd_l']:.6f} "
+          f"kd {h['kd']:.6f}, the teachers' entropy per source {h['ent_s']:.6f} / {h['ent_l']:.6f}; a teacher equal to the student: 0 exactly; the gradient finite, on the gate only, none into the type readings; no teacher "
+          f"refused; textual mutants ({', '.join(mutants)}) fail: ok")
+
+
+CHAMP = (4.647189617156982, 1.6313660144805908, 2.20220827460289, 8251.217476223794)        # the champion recipe (--none-weight 0.25, seed 0, smoke bs 2, K 48): the first and the last of the 20 losses, the log row, the sum of |weights|;
+# recorded from the code before --distill-from (commit 866ba519) in this test's process (2 threads; another process may differ in the last digits, as `arch_options`)
+
+
+KD_KEYS = ("gt", "kd", "kd_s", "kd_l", "ent_s", "ent_l", "gt_mean", "kd_mean")
+BASE = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25"]                       # the champion recipe on synthetic batches
+
+
+def _distill_runs(mod, runs, todo, band=(0.0, 100.0)):
+    """trains each (name, extra argv) of `todo` with `mod` (jtoken_train or a textual mutant) on the champion recipe, `mod.TEACHER_GT` = band (the toy teachers' GT loss is not the card's) -> {name: (the (loss, info) of
+    every step, the final state, the run's args, the teachers handed to make_loss)}"""
+    got = {}
+    for name, extra in todo:
+        steps, held, real = [], [], mod.make_loss
+
+        def rec(*a, **k):
+            held.extend(a[7] if len(a) > 7 else k.get("teachers", ()))
+            f = real(*a, **k)
+
+            def g(m, b):
+                r = f(m, b)
+                steps.append((float(r[0]), dict(r[1])))
+                return r
+            return g
+        patched(mod, "TEACHER_GT", band, patched, mod, "make_loss", rec, mod.train, mod.parse_args(["--name", name] + BASE + extra), runs, 500, 48)
+        ck = torch.load(os.path.join(runs, name, "model.pt"), map_location="cpu", weights_only=False)
+        got[name] = (steps, ck["state"], ck["args"], held)
+    return got
+
+
+def _check_distill_runs(mod, runs, td, sha, band):
+    """`mod` = jtoken_train or a textual mutant; td = the two teachers (a at step 20, b one past the switch), sha = their sha256, band = a TEACHER_GT that holds the teachers' mean GT loss over the first 20 batches and
+    not their first-batch loss: unset = the champion of before (CHAMP), W 0 = the champion bit for bit (every loss, the final weights), W 1 differs (finite, KD > 0 at every step, other weights, other step-2 GT parts);
+    step 1 = the champion's first loss + W x kd at W 1 and 4; gt_mean / kd_mean = the means of the steps so far; the teacher key (cache seed, ident, K, cache root); the teachers keep their step counters, eval mode, frozen,
+    and run in float32 inside an autocast region (bf16 only for the precision probe); the sha256 in the recipe (another one refused at a resume) -> the runs"""
+    r = _distill_runs(mod, runs, [("champ", []), ("w0", ["--distill-from", td, "--distill-weight", "0"]), ("w1", ["--distill-from", td]), ("w4", ["--distill-from", td, "--distill-weight", "4"])], band)
+    ls = {n: [x[0] for x in v[0]] for n, v in r.items()}
+    tot = sum(float(v.double().abs().sum()) for v in r["champ"][1].values() if v.dtype.is_floating_point)
+    row = [json.loads(x) for x in open(os.path.join(runs, "champ", "log.jsonl"))][-1]
+    assert len(ls["champ"]) == 20 and (ls["champ"][0], ls["champ"][-1], row["total"], tot) == CHAMP, (ls["champ"][0], ls["champ"][-1], row["total"], tot)
+    assert ls["w0"] == ls["champ"] and all(torch.equal(v, r["champ"][1][k]) for k, v in r["w0"][1].items()), "W 0: not the champion"
+    assert ls["w1"] != ls["champ"] and all(math.isfinite(v) for v in ls["w1"]) and all(i["kd"] > 0 for _, i in r["w1"][0]), "W 1: the option ignored"
+    (_, c2), (_, w2) = r["champ"][0][1], r["w1"][0][1]
+    assert not all(torch.equal(v, r["champ"][1][k]) for k, v in r["w1"][1].items()) and c2["nll_s"] != w2["nll_s"] and c2["ce1"] != w2["ce1"], "W 1: the KD gradient does not reach the student"
+    assert all(abs(ls[n][0] - (ls["champ"][0] + w * r[n][0][0][1]["kd"])) < 1e-5 for n, w in (("w1", 1.0), ("w4", 4.0))), "step 1: not the champion's first loss + W x kd"
+    s1 = [i for _, i in r["w1"][0]]
+    assert s1[-1]["gt_mean"] == float(np.mean([i["gt"] for i in s1])) and s1[-1]["kd_mean"] == float(np.mean([i["kd"] for i in s1])) and s1[0]["gt_mean"] == s1[0]["gt"], "gt_mean / kd_mean"
+    key = dict(distill_from=td, seed=0, ident="e292_a", K=None, cache=None)
+    assert len(mod.load_teachers(key, "cpu")) == 2
+    for k, v in (("seed", 1), ("ident", "e273_p"), ("K", 384), ("cache", "elsewhere")):
+        try:
+            mod.load_teachers(dict(key, **{k: v}), "cpu")
+        except AssertionError:
+            continue
+        raise AssertionError(f"a teacher of another {k} accepted")
+    tt = r["w1"][3]
+    assert [(t._step_py, int(t.step), t.training, any(p.requires_grad for p in t.parameters())) for t in tt] == [(20, 20, False, False), (JK.SWITCH + 7, JK.SWITCH + 7, False, False)], "the teachers moved"
+    b, seen, real_dl = JK.synthetic_batch(2, 48, seed=0), [], JK.distill_loss
+    with torch.no_grad():
+        ref = [t(b)["logp"] for t in tt]
+
+    def spy(o, outs_t):
+        seen.append([x["logp"] for x in outs_t])
+        return real_dl(o, outs_t)
+    with torch.autocast("cpu", dtype=torch.bfloat16):                                                       # the trainer's autocast (bf16 on the GPU; CPU autocast here) around the loss
+        patched(JK, "distill_loss", spy, mod.make_loss(None, none_weight=0.25, teachers=tt), JK.JTokenHead(), b)
+        o16 = mod.teacher_forward(tt, b, amp=True)
+    assert seen and all(all(torch.equal(x, q) for x, q in zip(s, ref)) for s in seen) and not torch.equal(o16[1]["logp"], ref[1]), "the teachers not in float32 inside autocast"
+    a1 = r["w1"][2]
+    assert a1["distill_sha256"] == sha and r["champ"][2]["distill_sha256"] is None
+    mod.check_start(a1, os.path.join(runs, "w1"))
+    try:
+        mod.check_start(dict(a1, distill_sha256=sha[::-1]), os.path.join(runs, "w1"))
+    except AssertionError:
+        return r
+    raise AssertionError("a resume with other teacher files accepted")
+
+
+class _Frames(torch.utils.data.Dataset):
+    """48 synthetic frames (K 48) with a frame token: the dataset of a real DataLoader with workers (`_check_first_batch`; 24 batches of 2 >= the 20 start batches)"""
+
+    def __len__(self):
+        return 48
+
+    def __getitem__(self, i):
+        return dict({k: v[0] for k, v in JK.synthetic_batch(1, 48, seed=i).items()}, token=f"frame{i}")
+
+
+def _collate(items):
+    return dict({k: torch.stack([it[k] for it in items]) for k in items[0] if k != "token"}, token=[it["token"] for it in items])
+
+
+def _check_first_batch(mod, runs, td):
+    """the code critic's B-1: a non-smoke run through a real DataLoader (shuffled, 1 PERSISTENT worker, as `lane_ptok_data.loader` with workers) over `_Frames`: the first training batch of the run with the teachers (W 0)
+    = that of the run without them = `first_batches(...)[0]` (the start check must not iterate the run's own loader: fit's reset of a persistent iterator draws another shuffle), and the weights after the step are the same
+    (the start batches draw from the RNG: the student is seeded again before its build, F6)"""
+    first, real, old = {}, mod.make_loss, sys.modules.get("lane_ptok_data")
+
+    def fake_loader(split, seed, bs, workers, **k):
+        return None, torch.utils.data.DataLoader(_Frames(), batch_size=bs, shuffle=True, num_workers=1, persistent_workers=True, collate_fn=_collate, drop_last=True)
+
+    def rec(name):
+        def mk(*a, **k):
+            f = real(*a, **k)
+
+            def g(m, b):
+                first.setdefault(name, list(b["token"]))
+                return f(m, b)
+            return g
+        return mk
+    sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
+    try:
+        for name, extra in (("p", []), ("d", ["--distill-from", td, "--distill-weight", "0"])):
+            patched(mod, "TEACHER_GT", (0.0, 100.0), patched, mod, "make_loss", rec(name), mod.train,
+                    mod.parse_args(["--name", name, "--seed", "0", "--steps", "1", "--bs", "2", "--workers", "1", "--none-weight", "0.25"] + extra), runs, 500)
+    finally:
+        sys.modules.pop("lane_ptok_data")
+        if old is not None:
+            sys.modules["lane_ptok_data"] = old
+    fb = list(mod.first_batches(fake_loader("train", 0, 2, 1)[1], None, 0)[0]["token"])
+    st = {n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False)["state"] for n in ("p", "d")}
+    assert first["p"] == first["d"] == fb and all(torch.equal(v, st["p"][k]) for k, v in st["d"].items()), (first, fb)    # W 0: the same init and batch give the same step
+    return fb
+
+
+REAL_TEACHERS = ("runs/e373_cb_s0", "runs/e367_b25_s0")                                                             # the teachers of E379 arm d, cache seed 0
+
+
+def _real_teachers():
+    """the card's teachers through `load_teachers` on the first 3 frames of their VAL dumps (the cache of B' seed 0): the step counter is the checkpoint's (> SWITCH) and does not move in a forward, the p_none of the valid
+    tokens = the dump's to 1e-3 (as `jtoken_eval.concentration`) -> a note"""
+    import pickle
+    paths = [os.path.join(JKT.ROOT, p) for p in REAL_TEACHERS]
+    if not all(os.path.exists(os.path.join(p, f)) for p in paths for f in ("model.pt", "token_val.pkl")) or _cache_batch(1) is None:
+        return "real teachers SKIPPED (the E373 / E367 runs or the VAL cache of B' seed 0 are not there)"
+    import lane_ptok_data as LP
+    ds = LP.PTokData("val", 0, "e292_a", None, 0.0)
+    heads = JKT.load_teachers(dict(distill_from=",".join(REAL_TEACHERS), seed=0, ident="e292_a", K=None), "cpu")
+    err, n = 0.0, []
+    for p, m in zip(paths, heads):
+        n.append(m._step_py)
+        assert m._step_py == int(m.step) == int(torch.load(os.path.join(p, "model.pt"), map_location="cpu", weights_only=False)["state"]["step"]) > JK.SWITCH, (p, m._step_py)
+        d = pickle.load(open(os.path.join(p, "token_val.pkl"), "rb"))
+        idx = d["meta"]["idx"][:3]
+        b = LP.collate([ds[int(i)] for i in idx])
+        with torch.no_grad():
+            pn = JK.probs(m(b))["pt"][..., 0].numpy()
+        assert m._step_py == int(m.step) == n[-1] and [f["token"] for f in d["frames"][:3]] == list(b["token"]), "the counter moved, or other frames"
+        err = max(err, max(float(np.abs(pn[f] - fr["pnone"])[np.asarray(t["valid"], bool)].max()) for f, (fr, t) in enumerate(zip(d["frames"], b["tokens_np"]))))
+    assert err < 1e-3, err
+    return f"the card's teachers {', '.join(REAL_TEACHERS)} (step counters {n}) reproduce their VAL dumps' p_none on 3 frames (largest difference {err:.1e})"
+
+
+def _real_twin():
+    """the twin of the card (arm d, seed 0) on the real TRAIN cache, one step on the CPU with the card's teachers at W 0 and 2 loader workers (persistent) (--snapshots 0): the start check passes the card's band TEACHER_GT; the student's step-0 state =
+    E373 cb's init rebuilt (seed_all(2), build_head of its args); the frame tokens of the first batch in train.log = the first batch of E373's order (seed_all(2), the TRAIN loader), and the first GT loss = E373's logged
+    'first loss' (its first batch on its init; the GPU in bf16 there: to 2e-3) -> a note"""
+    import hashlib
+    import re
+    import lane_ptok_data as LP
+    e373 = os.path.join(JKT.ROOT, REAL_TEACHERS[0])
+    if not all(os.path.exists(os.path.join(JKT.ROOT, p, "model.pt")) for p in REAL_TEACHERS) or not os.path.exists(os.path.join(LP.cache_dir("train", 0, "e292_a"), "meta.json")):
+        return "twin SKIPPED (the E373 / E367 runs or the TRAIN cache of B' seed 0 are not there)"
+    ea = torch.load(os.path.join(e373, "model.pt"), map_location="cpu", weights_only=False)["args"]
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        JKT.train(JKT.parse_args(["--name", "twin", "--seed", "0", "--head-seed", "2", "--ident", "e292_a", "--steps", "1", "--bs", "8", "--workers", "2", "--none-weight", "0.25", "--snapshots", "0",
+                                  "--distill-from", ",".join(REAL_TEACHERS), "--distill-weight", "0"]), runs, 500)
+        s0 = torch.load(os.path.join(runs, "twin", "model_step0.pt"), map_location="cpu", weights_only=False)["state"]
+        log = open(os.path.join(runs, "twin", "train.log"), encoding="utf-8").read()
+    JKT.T.seed_all(2)
+    init = JKT.build_head(ea).state_dict()
+    JKT.T.seed_all(2)
+    first = next(iter(LP.loader("train", 0, 8, 0, ident="e292_a")[1]))
+    digest = lambda sd: hashlib.sha256(b"".join(v.numpy().tobytes() for v in sd.values())).hexdigest()  # noqa: E731
+    assert list(s0) == list(init) and digest(s0) == digest(init), "the student's init is not E373 cb's"
+    assert f"frame tokens of this batch {list(first['token'])}" in log and "the band of the mean (0.3, 0.5): ok" in log, log[-3000:]
+    mine, theirs = (float(re.search(r"first loss of this process: ([0-9.]+)", t).group(1)) for t in (log, open(os.path.join(e373, "train.log"), encoding="utf-8").read()))
+    assert abs(mine - theirs) < 2e-3, (mine, theirs)
+    gl = re.search(r"on the first 20 batches (.*?); the band", log).group(1)
+    return f"the twin on the real cache: init hash {digest(s0)[:12]} = E373 cb's rebuilt init, first batch {list(first['token'])[:2]}... = E373's order, first GT loss {mine:.4f} against E373's logged {theirs:.4f}; the card's teachers' GT loss on the first 20 batches {gl}"
+
+
+def test_distill_trainer():
+    """E379 (card v2) --distill-from / --distill-weight in the trainer (the champion recipe on synthetic batches; teacher b one past the switch): `_check_distill_runs` with a band that holds the teachers' mean GT loss
+    over the first 20 batches and not every first-batch loss; gt / kd / kd_s / kd_l in the info of every step and in the log row; the start line (the teachers' GT loss on the first 20 batches) and the first-loss line (the parts,
+    the teachers' GT loss on the first batch, the precision KL, the frame tokens) by hand; the student initialised as its teacher has KD 0 at step 1; refusals (the card's band, another cache seed, a step counter that is
+    not the run's steps, --teacher rule, W < 0, W without teachers, no model.pt, another W / no teachers at a resume, a changed teacher file at a resume); textual mutants of jtoken_train.py; `_real_teachers`, `_real_twin`"""
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        for name, extra in (("ta", ["--head-seed", "5"]), ("tb", ["--head-seed", "6"]), ("tc", ["--seed", "1"])):
+            JKT.train(JKT.parse_args(["--name", name] + BASE + extra), runs, 500, 48)
+        pb = os.path.join(runs, "tb", "model.pt")
+        ck = torch.load(pb, map_location="cpu", weights_only=False)
+        ck["state"]["step"], ck["args"]["steps"] = torch.tensor(JK.SWITCH + 7), JK.SWITCH + 7
+        torch.save(ck, pb)                                                                                    # teacher b past the switch (its key weights are its own 1 - p_none), its run's steps the same
+        os.makedirs(os.path.join(runs, "te"))
+        torch.save(dict(ck, state=dict(ck["state"], step=torch.tensor(JK.SWITCH + 8))), os.path.join(runs, "te", "model.pt"))      # a step counter that is not its run's steps
+        td = ",".join(os.path.join(runs, n) for n in ("ta", "tb"))
+        sha = [JKT.file_sha256(os.path.join(runs, n, "model.pt")) for n in ("ta", "tb")]
+        nb = JKT.START_BATCHES
+        with torch.no_grad():                                                                                 # the teachers' GT loss on the first batches of the smoke run (head seed 0) by hand
+            hand = [[float(JK.jtoken_loss(m(b), b, none_weight=0.25)[0]) for b in (JK.synthetic_batch(2, 48, seed=s) for s in range(nb))] for m in (JKT.load_model(n, "cpu", runs)[0] for n in ("ta", "tb"))]
+        means = [sum(h) / nb for h in hand]
+        band = (min(means) - 1e-3, max(means) + 1e-3)
+        assert nb == 20 and any(not band[0] <= h[0] <= band[1] for h in hand), (hand, band)                  # the band holds the means and not every first-batch loss
+        r = _check_distill_runs(JKT, runs, td, sha, band)
+        steps, a1 = r["w1"][0], r["w1"][2]
+        rows = [x for x in map(json.loads, open(os.path.join(runs, "w1", "log.jsonl"))) if "total" in x]
+        assert rows and all(all(k in x for k in KD_KEYS) for x in rows + [i for _, i in steps]) and (a1["distill_from"], a1["distill_weight"]) == (td, 1.0)
+        log, i1 = open(os.path.join(runs, "w1", "train.log"), encoding="utf-8").read(), steps[0][1]
+        start = "; ".join(f"{os.path.join(runs, n)}: mean {sum(h) / nb:.4f} (one batch {min(h):.4f} - {max(h):.4f})" for n, h in zip(("ta", "tb"), hand))
+        assert f"step counters [20, {JK.SWITCH + 7}]): their own GT loss (the student's loss options) on the first 20 batches {start}" in log, log[:2500]
+        assert f"GT loss {i1['gt']:.4f} + KD {i1['kd']:.4f} (x W 1.0) = kd_s {i1['kd_s']:.4f} + kd_l {i1['kd_l']:.4f}" in log and f"the teachers' own GT loss on this batch {hand[0][0]:.4f}, {hand[1][0]:.4f}" in log, log[:2500]
+        assert i1["gt"] == r["champ"][0][0][0], "info['gt'] is the GT loss alone (the champion's first loss: the same head and batch)"
+        assert "KL(the teachers' mean in float32 || under bf16 autocast) short " in log and "frame tokens of this batch []" in log and f"distill from {td}" in log, log[:2500]
+        assert abs(steps[0][0] - r["champ"][0][0][0] - i1["kd"]) < 1e-5, "step 1: the champion's GT loss (the same head and batch) + 1 x KD"
+        si = _distill_runs(JKT, runs, [("init", ["--init", os.path.join(runs, "ta", "model.pt"), "--distill-from", os.path.join(runs, "ta")])], band)["init"][0]
+        assert si[0][1]["kd"] == 0.0 and all(i["kd"] > 0 for _, i in si[1:]), [i["kd"] for _, i in si[:3]]      # the student = its teacher on the same batch: 0 exactly
+        # refusals
+        must_fail(JKT.train, JKT.parse_args(["--name", "c0"] + BASE + ["--distill-from", td]), runs, 500, 48)  # the card's band (the toy teachers are not the card's)
+        must_fail(JKT.train, JKT.parse_args(["--name", "c1"] + BASE + ["--distill-from", f"{td},{os.path.join(runs, 'tc')}"]), runs, 500, 48)
+        assert not os.path.exists(os.path.join(runs, "c0")) and not os.path.exists(os.path.join(runs, "c1")), "a refused start wrote the run folder"
+        must_fail(JKT.load_teachers, dict(distill_from=os.path.join(runs, "te"), seed=0, ident="e292_a", K=None), "cpu")
+        for k, v in (("distill_weight", 0.5), ("distill_from", None)):
+            must_fail(JKT.check_start, dict(a1, **{k: v}), os.path.join(runs, "w1"))
+        for bad in (["--distill-from", td, "--teacher", "rule"], ["--distill-from", td, "--distill-weight", "-0.5"], ["--distill-weight", "0.5"], ["--distill-from", os.path.join(runs, "nothing")], ["--distill-from", ""]):
+            must_fail(JKT.parse_args, ["--name", "x"] + bad)
+        must_fail(JKT.make_loss, None, teacher="rule", teachers=r["w1"][3])
+
+        class Other(torch.nn.Module):                                                                         # a teacher on other tokens (another gate)
+            def __init__(self, t):
+                super().__init__()
+                self.t = t
+
+            def forward(self, bb):
+                o = self.t(bb)
+                return dict(o, cand=~o["cand"])
+        must_fail(JKT.make_loss(None, none_weight=0.25, teachers=[r["w1"][3][0], Other(r["w1"][3][1])]), JK.JTokenHead(), JK.synthetic_batch(2, 48, seed=0))
+        argv = JKT.parse_args(["--name", "w1"] + BASE + ["--distill-from", td])
+        patched(JKT, "TEACHER_GT", band, JKT.train, argv, runs, 500, 48)                                     # the same teacher files: resumed
+        torch.save(dict(ck, steps=21), pb)
+        must_fail(patched, JKT, "TEACHER_GT", band, JKT.train, argv, runs, 500, 48)                          # a changed teacher file: refused
+        torch.save(ck, pb)
+        fb = _check_first_batch(JKT, runs, td)
+        mutants = {"the option ignored": [("teachers = load_teachers(args, dev) if a.distill_from else []", "teachers = []")], "W ignored": [("loss = loss + distill_weight * kd", "loss = loss + kd")],
+                   "W only on / off": [("loss = loss + distill_weight * kd", "loss = loss + (kd if distill_weight else 0.0 * kd)")],
+                   "W on the sum": [("loss = loss + distill_weight * kd", "loss = distill_weight * (loss + kd)")],
+                   "the KD gradient cut": [("loss = loss + distill_weight * kd", "loss = loss + distill_weight * kd.detach()")],
+                   "the KD on a detached student": [("JK.distill_loss(out, outs_t)", "JK.distill_loss({k: (v.detach() if torch.is_tensor(v) else v) for k, v in out.items()}, outs_t)")],
+                   "the teachers in train mode": [("heads.append(m.requires_grad_(False))", "heads.append(m.train().requires_grad_(False))")],
+                   "the autocast-off of the teachers removed": [('with torch.no_grad(), torch.autocast(b["valid"].device.type, dtype=torch.bfloat16, enabled=amp):', "with torch.no_grad():")],
+                   "the start check on the first batch only": [("for v in tl.mean(1))", "for v in tl[:, 0])")],
+                   "the cache root out of the teacher key": [('x.get("K"), x.get("cache"))', 'x.get("K"))')],
+                   "the sha256 out of the recipe": [('"distill_from", "distill_weight", "distill_sha256")', '"distill_from", "distill_weight")')]}
+        for edits in mutants.values():
+            with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
+                must_fail(_check_distill_runs, _mutant(*edits, of=JKT), tmp, td, sha, band)
+        own = {"the start batches from the run's own loader": [("it = iter(torch.utils.data.DataLoader(", "it = iter(loader) if True else iter(torch.utils.data.DataLoader(")],                   # smoke runs cannot see these two
+               "no seed before the student's build": [("    T.seed_all(hs)                                                          # the student's", "    pass                                                                    # the student's")]}
+        for edits in own.values():
+            with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
+                must_fail(_check_first_batch, _mutant(*edits, of=JKT), tmp, td)
+        mutants.update(own)
+    real, twin = _real_teachers(), _real_twin()
+    print(f"distill_trainer: unset = the champion's 20 smoke steps (recorded: first {CHAMP[0]:.6f}, last {CHAMP[1]:.6f}), W 0 with two teachers = the champion bit for bit, W 1 differs (KD at step 1 {i1['kd']:.4f}: "
+          f"kd_s {i1['kd_s']:.4f} kd_l {i1['kd_l']:.4f}; other final weights, other step-2 GT parts; step 1 = the champion's + W x kd at W 1 and 4), gt / kd / kd_s / kd_l / gt_mean / kd_mean in every step's info "
+          f"and the log row; through a shuffled DataLoader with a persistent worker the first batch with teachers = without = first_batches ({fb}); the start check on the mean of the first 20 batches (toy "
+          f"teachers {means[0]:.4f} / {means[1]:.4f}, first batch {hand[0][0]:.4f} / {hand[1][0]:.4f}) and the first-batch line (= by hand, the precision KL, the frame tokens) logged; the teachers keep their counters (20, "
+          f"{JK.SWITCH + 7}: past the switch), eval, frozen, float32 inside the loss under bf16 autocast; the student initialised as its teacher: KD 0 at step 1; the sha256 in the recipe; refusals (the card's band, another "
+          f"cache seed / ident / K / cache root, a step counter off its run's steps, a teacher on other tokens, --teacher rule, W < 0, W without teachers, no model.pt, another W / sha / no teachers at a resume, a changed teacher file); textual mutants "
+          f"({', '.join(mutants)}) fail; {real}; {twin}: ok")
+
+
+TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_none_weight_near, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
+         test_none_weight_near_trainer, test_prior, test_past, test_maps, test_live_inputs, test_teacher, test_init, test_head_seed, test_distill, test_distill_trainer]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want

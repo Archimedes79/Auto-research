@@ -19,6 +19,8 @@ Likelihood (`jtoken_loss`): per class c and source i (every valid token with at 
 (E376 `pos_loss="max"`: -log max_{j in G(i)} p^c(j|i)) when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
 + type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. E377 `none_weight_near`: the none tokens near an assigned token (`near_none`, a label of the batch)
 get their own none weight in both places the none weight acts. Tests: test_jtoken.py
+E379 (`distill_loss`, ensemble distillation; the trainer adds W x it to the loss above): p_T = the MEAN of the frozen teachers' PROBABILITIES on the same tokens (`teacher_logp`); kd = KL_s + KL_l, the KL(p_T || p) of the
+successor softmax (with the none slot) per class over the sources of the likelihood (`source_rows`), temperature 1; the type readings and the handle scales are not distilled (card v2).
 c-rule (`rule_links`, THE one code path of the rule: the arm `rule` of `jtoken_eval.py ctl`, the E369 prior and the E370 teacher call it): E357's `lo_near` on the valid tokens with B' e_p >= 0.5.
 E369 (`JTokenHead(prior="rule")`): c-rule's links r and B''s existence as a FIXED prior: z^c_ij += lam r^c_ij (r^c = r inside the gate of class c), the none slot of class c += lam (1 - has^c_i) + mu, the type none logit
 += log 6 - e_j inside `read_types` (both readings: at zero type logits p_none = sigmoid(-e), and the key weight 1 - p_none of the switch carries it); lam, mu are buffers; the type Linear, `wk`, the last layer of `wbias` and
@@ -288,6 +290,11 @@ def _source_nll(lp, G, none_weight, pos_loss="sum"):
     return torch.where(G.any(-1), pos, -lp[..., K] * (none_weight[:, None] if torch.is_tensor(none_weight) else none_weight))
 
 
+def source_rows(out):
+    """(B, 2, K) bool: the sources of a class, the valid tokens with a candidate of it (the rows of the likelihood and of the KD term)"""
+    return out["cand"].any(-1) & out["valid"][:, None]
+
+
 def near_none(pos, dirv, valid, ytype):
     """E377, a label of the loss from the training labels and the token geometry (nothing at inference reads it): pos, dirv (B, K, 2), valid (B, K) bool, ytype (B, K) -> (B, K) bool, the valid none tokens (ytype 0)
     within NEAR_R m (inclusive) of a valid ASSIGNED token (ytype != 0) whose heading has a cosine >= NEAR_COS with their own: the duplicates and near-twins of a real node"""
@@ -316,7 +323,7 @@ def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="
         if none_weight_near != none_weight:
             wn = torch.where(near, none_weight_near, none_weight)          # (B, K)
     nll = _source_nll(lp, G, wn, pos_loss)
-    rows = cand.any(-1) & valid[:, None]                                    # the sources of a class: valid tokens with a candidate of it
+    rows = source_rows(out)
     if "yskip" in batch:
         rows = rows & ~batch["yskip"].to(dev)
     nll_s, nll_l = (_frame_mean(nll[:, c], rows[:, c]) for c in range(2))
@@ -336,6 +343,30 @@ def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="
         loss = loss + scale_w * l1
         info["scale_l1"] = float(l1)
     return loss, info
+
+
+def teacher_logp(lps):
+    """the log of the MEAN of the teachers' probabilities (not of their logits): lps = their log-probabilities (..., C) -> (..., C); one teacher -> its own bit for bit; a key that every teacher masks (log p -inf or the
+    NEG fill) stays at p 0"""
+    return torch.logsumexp(torch.stack(lps), 0) - math.log(len(lps))
+
+
+def _kl(lpt, lp):
+    """KL(p_T || p) per row from log-probabilities: the sum over the last axis of p_T (log p_T - log p); an entry with p_T = 0 (a masked key) adds exactly 0 (no 0 x log 0, no 0 x -inf)"""
+    pt = lpt.exp()
+    return torch.where(pt > 0, pt * (lpt - lp), 0.0).sum(-1)
+
+
+def distill_loss(out, outs_t):
+    """E379 (module docstring): out = the student's forward, outs_t = the frozen teachers' forwards on the SAME batch (no gradient) -> (kd, info: kd, its parts kd_s, kd_l, and ent_s, ent_l = the entropy of p_T per source
+    of the class). The trainer adds W x kd to the likelihood and checks at its first step that the teachers saw the student's tokens (the same cand and valid)"""
+    assert outs_t, "no teacher"
+    lpt = teacher_logp([o["logp"] for o in outs_t])                        # (B, 2, K, K + 1): the candidates + the none slot
+    src = source_rows(out)
+    kl, ent = _kl(lpt, out["logp"]), -_kl(lpt, torch.zeros_like(lpt))      # H(p_T) = -KL(p_T || 1)
+    kd_s, kd_l = (_frame_mean(kl[:, c], src[:, c]) for c in range(2))
+    kd = kd_s + kd_l
+    return kd, dict(kd=float(kd), kd_s=float(kd_s), kd_l=float(kd_l), ent_s=float(_frame_mean(ent[:, 0], src[:, 0])), ent_l=float(_frame_mean(ent[:, 1], src[:, 1])))
 
 
 def count_params(model):

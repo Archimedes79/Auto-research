@@ -1,6 +1,6 @@
 """Trainer of the E365 token head on the predicted-node cache of the frozen lane head B' (stage S1 of the token champion); start it through `autoresearch/tools/run.py`.
 
-    wsl bash tools/env/_pyr.sh jtoken_train.py --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--cache <cache root>] [--K 384] [--prior rule] [--teacher rule] [--init runs/R/model.pt] [--snapshots 0,500] [--smoke]
+    wsl bash tools/env/_pyr.sh jtoken_train.py --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--cache <cache root>] [--K 384] [--prior rule] [--teacher rule] [--init runs/R/model.pt] [--snapshots 0,500] [--distill-from runs/A,runs/B [--distill-weight 1.0]] [--smoke]
 
 The model is `grid/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `jtoken.jtoken_loss`. Batches come from `data/lane_ptok_data.loader("train", seed, bs, workers, ident=, K=,
 cache=)` (imported only when the loop starts): `--cache` = the cache ROOT (default `runs/e365_cache`), `--ident` = the frozen head whose tokens are cached (`e292_a` = B', `e273_p` = plain B), `--K` only when the root
@@ -22,11 +22,17 @@ resume); the recipe records the path and its sha256. `--snapshots 0,500,...`: mo
 hook (every gcd of the snapshot steps), so log.jsonl gets a row {"step": N, "val": {"snapshot": N}} at a snapshot and {"step": N, "val": {}} at every other multiple of that gcd, and status.json an `eval_<N>` key: rows without
 'total' are eval rows, a curve reader skips them. `--head-seed N` (default: --seed):
 the head's initialisation, the data order and the token-drop draws use N, `--seed` keeps choosing the B' cache (args['seed'] stays the cache seed, so the read-outs open the same cache); in the recipe.
+`--distill-from runs/A,runs/B` (E379 card v2, ensemble distillation; unset = the loss of before): the heads of these runs (`load_teachers`: eval, frozen, their own step counter) run on the step's batch in no_grad, float32 with
+autocast OFF (the student stays in the trainer's autocast), and the loss is the GT loss + `--distill-weight` W (default 1) x `jtoken.distill_loss` from step 1 (gt = the GT loss alone, kd, kd_s, kd_l and their means gt_mean / kd_mean over the last LOG_WINDOW steps in the info of every step; at the first batch of
+a process the parts, the teachers' own GT loss, the KL of their mean in float32 against bf16 autocast and the frame tokens in the log). HARD start checks (also at a resume): a teacher learned on the student's tokens
+(cache seed, ident, K, cache root), its step counter is its run's steps, the sha256 of its model.pt is in the recipe (`distill_sha256`: a changed file is refused at a resume), and the MEAN of its own GT loss over the run's first START_BATCHES
+batches (`first_batches`) lies in TEACHER_GT; refused with `--teacher rule`.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
 are TEST-ONLY arguments (a run uses 500 / 384).
 """
 import argparse
+import collections
 import functools
 import hashlib
 import json
@@ -45,9 +51,14 @@ for sub_ in ("training", "training/grid", "training/data", "training/data/prep",
 import jtoken as JK  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "d", "layers", "heads", "ffn", "token_drop", "none_weight", "none_weight_near", "pos_loss", "prior", "teacher", "init", "init_sha256", "head_seed")
-ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0, none_weight_near=None, pos_loss="sum", prior="none", teacher="none", init=None, init_sha256=None, head_seed=None, live_inputs=False)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
+RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "d", "layers", "heads", "ffn", "token_drop", "none_weight", "none_weight_near", "pos_loss", "prior", "teacher", "init", "init_sha256", "head_seed",
+          "distill_from", "distill_weight", "distill_sha256")
+ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0, none_weight_near=None, pos_loss="sum", prior="none", teacher="none", init=None, init_sha256=None, head_seed=None, live_inputs=False,
+                     distill_from=None, distill_weight=1.0, distill_sha256=None)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
+TEACHER_GT, START_BATCHES = (0.30, 0.50), 20                                # E379 card v2: the band of a teacher's own GT loss (none weight 0.25: 0.37 on the 291-frame TRAIN sample), the MEAN over the run's first 20
+                                                                            # batches (a single batch: SD ~0.08, outside the band 24 - 26 % of the time)
+LOG_WINDOW = 100                                                            # `trainer.fit`'s log_every: the window of gt_mean / kd_mean (one log row per window when no step is skipped)
 
 
 def parse_args(argv=None):
@@ -74,6 +85,8 @@ def parse_args(argv=None):
     ap.add_argument("--init", default=None, help="E370 stage B: the model.pt whose weights (and step buffer) start this run; relative to the problem folder")
     ap.add_argument("--snapshots", default="", help="comma list of update counts N: model_step<N>.pt (e.g. 0,500,1000,3000,6000)")
     ap.add_argument("--head-seed", type=int, default=None, dest="head_seed", help="the seed of the head's initialisation, the data order and the token-drop draws (default: --seed); --seed keeps choosing the B' cache")
+    ap.add_argument("--distill-from", default=ARCH_DEFAULTS["distill_from"], dest="distill_from", help="E379: comma list of run folders (relative to the problem folder) whose frozen heads are the teachers of the KD term")
+    ap.add_argument("--distill-weight", type=float, default=ARCH_DEFAULTS["distill_weight"], dest="distill_weight", help="E379: W, the loss = the GT loss + W x the KD term (only with --distill-from)")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
     a = ap.parse_args(argv)
     check_options(vars(a))
@@ -81,18 +94,30 @@ def parse_args(argv=None):
 
 
 def check_options(args):
-    """the options of the head and the loss, before anything is built or loaded: d a multiple of the heads, a positive ffn (0 is not 'the default': leave --ffn out), layers >= 1, a token drop in [0, 1), a near weight >= 0"""
+    """the options of the head and the loss, before anything is built or loaded: d a multiple of the heads, a positive ffn (0 is not 'the default': leave --ffn out), layers >= 1, a token drop in [0, 1), a near weight >= 0;
+    the teachers of --distill-from have a model.pt and the KD weight is >= 0 (not given without teachers, not with --teacher rule)"""
     assert args["heads"] > 0 and args["d"] > 0 and args["d"] % args["heads"] == 0, f"--d {args['d']} is not a multiple of --heads {args['heads']}"
     assert args["layers"] >= 1, f"--layers {args['layers']}"
     assert args["ffn"] is None or args["ffn"] > 0, f"--ffn {args['ffn']}: a positive width, or leave it out for 2 x d"
     assert 0.0 <= args["token_drop"] < 1.0, f"--token-drop {args['token_drop']}: a probability in [0, 1)"
     assert args.get("none_weight_near") is None or args["none_weight_near"] >= 0.0, f"--none-weight-near {args['none_weight_near']}: a weight >= 0"
     assert args.get("init") is None or os.path.isfile(_abs(args["init"])), f"--init {args.get('init')}: no such file"
+    if args.get("distill_from") is not None:
+        ps = distill_paths(args["distill_from"])
+        assert ps and all(os.path.isfile(os.path.join(p, "model.pt")) for p in ps), f"--distill-from {args['distill_from']}: run folders with a model.pt"
+        assert args["distill_weight"] >= 0.0 and args.get("teacher", "none") == "none", f"--distill-weight {args['distill_weight']} (>= 0), --teacher {args.get('teacher')}: the KD term sits next to the GT loss, not the rule teacher's"
+    else:
+        assert args.get("distill_weight", 1.0) == 1.0, f"--distill-weight {args['distill_weight']} without --distill-from"
     snapshot_steps(args.get("snapshots", ""))
 
 
 def _abs(p):
     return p if os.path.isabs(p) else os.path.join(ROOT, p)
+
+
+def distill_paths(spec):
+    """--distill-from 'runs/A,runs/B' -> the teachers' run folders (relative to the problem folder, or absolute)"""
+    return [os.path.normpath(_abs(p.strip())) for p in str(spec or "").split(",") if p.strip()]
 
 
 def snapshot_steps(spec):
@@ -173,12 +198,20 @@ def drop_tokens(b, keep):
     return out
 
 
-def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0, teacher="none", pos_loss="sum", none_weight_near=None):
+def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0, teacher="none", pos_loss="sum", none_weight_near=None, teachers=(), distill_weight=1.0):
     """`jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line); token_drop > 0: `drop_tokens` with a draw of `step_keep` per step
     (the step is the head's own training-step counter, which a resume and a roll-back keep); teacher 'rule': the targets of `jtoken.rule_teacher` (no GT key read) with the batch's pos / dirv (the near label of
-    none_weight_near reads them with the teacher's types), no scale term, the rule links outside the gate counted"""
+    none_weight_near reads them with the teacher's types), no scale term, the rule links outside the gate counted; teachers (E379, the frozen heads of `load_teachers`; not with teacher 'rule'): `teacher_forward` on the
+    same batch, + distill_weight x `jtoken.distill_loss` from the first step, its parts in the info; at the first call the parts, the teachers' own GT loss (the student's loss options), `precision_kl` and the frame tokens
+    in the first-loss line"""
+    assert not (teachers and teacher != "none"), f"teachers with --teacher {teacher}: the KD term sits next to the GT loss"
     n, mark = [0], [time.time(), 0]
     gb = lambda f: f() / 1e9 if torch.cuda.is_available() else 0.0  # noqa: E731
+    first = {}                                                              # the teachers on the first batch of this process: their own GT loss, precision_kl, the frame tokens
+    win = collections.deque(maxlen=LOG_WINDOW)                              # (gt, kd) of the last LOG_WINDOW calls: gt_mean / kd_mean of a log row = the means since the row before
+
+    def gt_loss(out, b):
+        return JK.jtoken_loss(out, b, none_weight=none_weight, pos_loss=pos_loss, none_weight_near=none_weight_near)
 
     def loss_fn(m, b):
         n[0] += 1
@@ -192,11 +225,25 @@ def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0, teacher="none", pos_
             loss, info = JK.jtoken_loss(out, tb, scale_w=0.0, none_weight=none_weight, pos_loss=pos_loss, none_weight_near=none_weight_near)
             info.update(rule_links=tb["rule_links"], rule_out_gate=tb["rule_out_gate"])
         else:
-            loss, info = JK.jtoken_loss(m(b), b, none_weight=none_weight, pos_loss=pos_loss, none_weight_near=none_weight_near)
+            out = m(b)
+            loss, info = gt_loss(out, b)
+            if teachers:
+                outs_t = teacher_forward(teachers, b)
+                if n[0] == 1:
+                    assert all(torch.equal(o["cand"], out["cand"]) and torch.equal(o["valid"], out["valid"]) for o in outs_t), "a teacher saw other tokens than the student"
+                    first.update(gt=[float(gt_loss(o, b)[0]) for o in outs_t], prec=precision_kl(outs_t, teacher_forward(teachers, b, amp=True)), tokens=list(b.get("token") or []))
+                kd, kd_info = JK.distill_loss(out, outs_t)
+                info.update(kd_info, gt=float(loss))                                # gt: the GT loss alone (the total, hist and final_loss hold W x kd too)
+                win.append((info["gt"], info["kd"]))
+                info.update(gt_mean=float(np.mean([g for g, _ in win])), kd_mean=float(np.mean([k for _, k in win])))
+                loss = loss + distill_weight * kd
         info.update(gpu_gb=gb(torch.cuda.max_memory_allocated), gpu_res_gb=gb(torch.cuda.max_memory_reserved))
         if n[0] == 1 and run is not None:                                       # E370: the loss of the start weights (stage B: the init's GT loss before the first update)
             run.log(f"first loss of this process: {float(loss):.4f} (head step {m._step_py - 1} at this forward; before any update of this process)"
-                    + (f"; near none tokens per frame in this batch (n_near) {info['n_near']:.1f}" if "n_near" in info else ""))
+                    + (f"; near none tokens per frame in this batch (n_near) {info['n_near']:.1f}" if "n_near" in info else "")
+                    + (f"; GT loss {info['gt']:.4f} + KD {info['kd']:.4f} (x W {distill_weight}) = kd_s {info['kd_s']:.4f} + kd_l {info['kd_l']:.4f}, entropy of the teachers' mean per source short {info['ent_s']:.4f} / long {info['ent_l']:.4f}; "
+                       f"the teachers' own GT loss on this batch {', '.join(f'{v:.4f}' for v in first['gt'])}; KL(the teachers' mean in float32 || under bf16 autocast) short {first['prec'][0]:.2e} / long "
+                       f"{first['prec'][1]:.2e}; frame tokens of this batch {first['tokens']}" if teachers else ""))
         if n[0] == 10:
             mark[:] = [time.time(), 10]
         if n[0] == 50 or n[0] % 100 == 0:
@@ -217,12 +264,56 @@ def load_model(run, dev, runs=None, name="model.pt"):
     return m.to(dev).eval(), ck["args"]
 
 
+def load_teachers(args, dev):
+    """E379 --distill-from: the teachers' heads (`load_model`: eval mode, their own step counter; every parameter frozen); refused when a teacher learned on other tokens than this run (cache seed, ident, K, cache root)
+    or its step counter is not its run's steps (the key weights of another state). Their build draws random numbers: `train` seeds again right before it builds the student"""
+    tok = lambda x: (x.get("seed"), x.get("ident"), x.get("K"), x.get("cache"))  # noqa: E731
+    heads = []
+    for p in distill_paths(args["distill_from"]):
+        m, ta = load_model(os.path.basename(p), dev, os.path.dirname(p))
+        assert tok(ta) == tok(args), f"--distill-from {p}: its tokens (cache seed, ident, K, cache root) {tok(ta)} are not this run's {tok(args)}"
+        assert m._step_py == int(m.step) == ta["steps"], f"--distill-from {p}: its step counter {m._step_py} is not the {ta['steps']} steps of its run"
+        heads.append(m.requires_grad_(False))
+    return heads
+
+
+def teacher_forward(teachers, b, amp=False):
+    """the teachers' outputs on the batch b: eval, no_grad, float32 with autocast OFF (inside the trainer's autocast); amp=True: under bf16 autocast (the precision probe of the first batch)"""
+    with torch.no_grad(), torch.autocast(b["valid"].device.type, dtype=torch.bfloat16, enabled=amp):
+        return [t(b) for t in teachers]
+
+
+def precision_kl(outs, outs_amp):
+    """(short, long): KL(the teachers' mean in float32 || their mean under bf16 autocast), the precision effect of autocast on the targets (`jtoken.distill_loss` with the autocast mean as the student)"""
+    i = JK.distill_loss(dict(outs_amp[0], logp=JK.teacher_logp([o["logp"] for o in outs_amp])), outs)[1]
+    return i["kd_s"], i["kd_l"]
+
+
+def first_batches(loader, batch_fn, seed, n=START_BATCHES):
+    """the run's first n batches: the order `trainer.fit` draws after its seed_all(seed), from a COPY of the loader without workers (iterating the run's own loader would start its persistent workers, and fit's reset
+    of that iterator draws another shuffle); it seeds the global RNG (`train` seeds again before the student is built, fit before the first batch)"""
+    T.seed_all(seed)
+    if batch_fn is not None:
+        return [batch_fn(s) for s in range(n)]
+    it = iter(torch.utils.data.DataLoader(loader.dataset, batch_size=loader.batch_size, shuffle=isinstance(loader.sampler, torch.utils.data.RandomSampler), num_workers=0, collate_fn=loader.collate_fn,
+                                          drop_last=loader.drop_last))
+    return [next(it) for _ in range(n)]
+
+
+def teacher_start_loss(teachers, batches, dev, **loss_kw):
+    """E379 hard start check: each teacher's own GT loss (`jtoken.jtoken_loss` with the student's loss options; `teacher_forward`: float32, eval) on each batch -> (teachers, batches) array"""
+    return np.array([[float(JK.jtoken_loss(o, b, **loss_kw)[0]) for o in teacher_forward(teachers, b)] for b in (to_device(x, dev) for x in batches)]).T
+
+
 def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
     """the loop of the parsed arguments `a` (no GPU check: `main` has it); --seed chooses the B' cache (the loader's seed), the head seed (--head-seed, default --seed) the initialisation, the data order and the token-drop draws"""
     hs = a.seed if getattr(a, "head_seed", None) is None else a.head_seed
     T.seed_all(hs)
-    args = dict(vars(a), steps=20 if a.smoke else a.steps, init_sha256=file_sha256(_abs(a.init)) if a.init else None)
+    args = dict(vars(a), steps=20 if a.smoke else a.steps, init_sha256=file_sha256(_abs(a.init)) if a.init else None,
+                distill_sha256=[file_sha256(os.path.join(p, "model.pt")) for p in distill_paths(a.distill_from)] if a.distill_from else None)
     check_start(args, os.path.join(runs, a.name))
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    teachers = load_teachers(args, dev) if a.distill_from else []
     if a.smoke:
         mk = JK.with_tokens_np if a.teacher != "none" else (lambda b: b)
         loader, batch_fn = None, lambda step: mk(JK.synthetic_batch(a.bs, smoke_k, seed=hs * 100003 + step))
@@ -230,7 +321,11 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
         import lane_ptok_data as LP  # the lane chat's loader (card 2a); lazily, so that the tests and --smoke need no cache
         _, loader = LP.loader("train", a.seed, a.bs, a.workers, ident=a.ident, K=a.K, **({"cache": a.cache} if a.cache else {}))
         batch_fn = None
+    if teachers:
+        tl = teacher_start_loss(teachers, first_batches(loader, batch_fn, hs), dev, none_weight=a.none_weight, pos_loss=a.pos_loss, none_weight_near=a.none_weight_near)
+        assert all(TEACHER_GT[0] <= v <= TEACHER_GT[1] for v in tl.mean(1)), f"--distill-from: the teachers' own GT loss on the first {START_BATCHES} batches {tl.round(4).tolist()} has a mean outside {TEACHER_GT}"
     run = T.Run(a.name, root=runs)
+    T.seed_all(hs)                                                          # the student's initialisation never depends on what drew before (the teachers' build, the start batches)
     model = build_head(args)
     fresh = not os.path.exists(run.path("ckpt.pt"))                         # a resume: ckpt.pt takes precedence over --init (and the step-0 snapshot exists)
     if a.init and fresh:
@@ -248,9 +343,13 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
             + (f"prior {a.prior}, " if a.prior != "none" else "") + (f"teacher {a.teacher} (no GT targets, no scale term), " if a.teacher != "none" else "")
             + (f"init {a.init} (sha256 {args['init_sha256'][:12]}, head step {model._step_py}{'' if fresh else ', not loaded: resumed from ckpt.pt'}), " if a.init else "")
             + (f"snapshots {sorted(snaps)}, " if snaps else "")
+            + (f"distill from {a.distill_from} (sha256 {', '.join(s[:12] for s in args['distill_sha256'])}, weight {a.distill_weight}), " if a.distill_from else "")
             + (f"synthetic batches, K {smoke_k}" if a.smoke else f"cache {a.cache or 'default root'}, ident {a.ident}, K {a.K or 'auto'}"))
-    T.fit(model, make_loss(run, a.token_drop, hs, a.none_weight, a.teacher, a.pos_loss, a.none_weight_near), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05, ckpt_every=ckpt_every, seed=hs, args=args,
-          device="cuda" if torch.cuda.is_available() else "cpu", config=dict(design="jtoken"), eval_fn=snap_fn, eval_every=functools.reduce(math.gcd, later) if later else 0)
+    if teachers:
+        run.log(f"teachers (float32, eval, step counters {[t._step_py for t in teachers]}): their own GT loss (the student's loss options) on the first {START_BATCHES} batches "
+                + "; ".join(f"{p}: mean {row.mean():.4f} (one batch {row.min():.4f} - {row.max():.4f})" for p, row in zip(a.distill_from.split(","), tl)) + f"; the band of the mean {TEACHER_GT}: ok")
+    T.fit(model, make_loss(run, a.token_drop, hs, a.none_weight, a.teacher, a.pos_loss, a.none_weight_near, teachers, a.distill_weight), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05,
+          ckpt_every=ckpt_every, seed=hs, args=args, device=dev, config=dict(design="jtoken"), eval_fn=snap_fn, eval_every=functools.reduce(math.gcd, later) if later else 0)
     run.log(f"done {a.name}")
 
 
