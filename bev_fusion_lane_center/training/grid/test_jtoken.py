@@ -10,7 +10,7 @@ key_bias (the head's own p_none gets gradient from layer 2 on after the switch a
 key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches, kill, resume, another recipe refused, no loader
 import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none),
 prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
-read_types), past (the S2 hook), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
+read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
 head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 """
 import json
@@ -467,7 +467,7 @@ def test_arch_options():
     torch.manual_seed(0)
     old = JK.JTokenHead()
     torch.manual_seed(0)
-    expl = JK.JTokenHead(prior=None, past_block=None)                                                      # the new constructor arguments at their defaults
+    expl = JK.JTokenHead(prior=None, past_block=None, map_block=None)                                      # the new constructor arguments at their defaults
     for h in (new, expl):
         assert list(h.state_dict()) == list(old.state_dict()) and all(torch.equal(v, old.state_dict()[k]) for k, v in h.state_dict().items()), "default options must build the old head"
     assert JK.count_params(new) == 127131 and JKT.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
@@ -690,8 +690,8 @@ def test_prior():
           "gradient: the zero outputs at step 0, every parameter after one step, none into lam / mu / the inputs: ok")
 
 
-class _Past(torch.nn.Module):
-    """a dummy S2 block: x + Linear(the mean past state); identity at zero init"""
+class _Hook(torch.nn.Module):
+    """a dummy hook block (S2 past / S3 maps): x + Linear(the mean of ctx['x']); the identity at zero init and on an empty or None ctx (`{}` = no map)"""
 
     def __init__(self, zero=True):
         super().__init__()
@@ -701,16 +701,16 @@ class _Past(torch.nn.Module):
             torch.nn.init.zeros_(self.lin.weight)
             torch.nn.init.zeros_(self.lin.bias)
 
-    def forward(self, x, pos, dirv, valid, past):
-        self.seen = past
-        return x + self.lin(past["x"].mean(1, keepdim=True))
+    def forward(self, x, pos, dirv, valid, ctx):
+        self.seen = ctx
+        return x + self.lin(ctx["x"].mean(1, keepdim=True)) if ctx else x
 
 
 def test_past():
     b = _batch(2)
     torch.manual_seed(0)
     base = JK.JTokenHead().eval()
-    m = JK.JTokenHead(past_block=_Past()).eval()
+    m = JK.JTokenHead(past_block=_Hook()).eval()
     m.load_state_dict(dict(base.state_dict(), **{f"past_block.{k}": v for k, v in m.past_block.state_dict().items()}))
     with torch.no_grad():
         o0, o1 = base(b), m(b)
@@ -719,13 +719,84 @@ def test_past():
         assert m.past_block.seen is past, "the past dict reaches the block untouched"
         assert all(torch.equal(o0[k], o1[k]) and torch.equal(o0[k], o2[k]) for k in ("logp", "types", "types1", "scale", "x", "w")), "no past / a zero block: the output of the plain head"
         assert o0["x"].shape == (2, 48, JK.D) and o0["w"].shape == (2, 48) and torch.allclose(o0["w"], 1 - o0["types"].softmax(-1)[..., 0])
-        m.past_block = _Past(zero=False)
+        m.past_block = _Hook(zero=False)
         must_fail(holds, torch.equal(m(b, past)["logp"], o0["logp"]))                                          # a live block changes the output: it is called
-        m.past_block = _Past(zero=True)
+        m.past_block = _Hook(zero=True)
         m.past_block.lin = torch.nn.Identity()
         m.past_block.forward = lambda x, pos, dirv, valid, past: x                                             # a block that ignores past: the head reads none of its keys
         assert torch.equal(m(b, {"anything": 1})["logp"], o0["logp"])
     print("past: the S2 hook after layer 1 (no past or a zero block = the plain head bit for bit, a live block changes the output, the past dict reaches the block untouched and the head reads none of its keys), out['x'] (B, K, D), out['w'] = 1 - p_none: ok")
+
+
+def _order(m, b, *a):
+    """m(b, *a) without gradient -> the names of its layers and hook blocks in the order they ran; asserts the chain: every call got the x that the call before it returned"""
+    log = []
+    mods = [(f"layer{i}", l) for i, l in enumerate(m.layers, 1)] + [(n, getattr(m, f"{n}_block")) for n in ("past", "map") if getattr(m, f"{n}_block") is not None]
+    hs = [mod.register_forward_hook(lambda _m, inp, out, n=n: log.append((n, inp[0], out))) for n, mod in mods]
+    try:
+        with torch.no_grad():
+            m(b, *a)
+    finally:
+        for h in hs:
+            h.remove()
+    assert all(torch.equal(o, i) for (_, _, o), (_, i, _) in zip(log, log[1:])), [n for n, _, _ in log]
+    return [n for n, _, _ in log]
+
+
+def _maps_hook_ok(mod):
+    """the S3 hook of `mod.JTokenHead` (jtoken itself or a textual mutant of it)"""
+    b = _batch(2)
+    torch.manual_seed(0)
+    base = mod.JTokenHead().eval()
+    m = mod.JTokenHead(map_block=_Hook()).eval()
+    m.load_state_dict(dict(base.state_dict(), **{f"map_block.{k}": v for k, v in m.map_block.state_dict().items()}))
+    maps, past = dict(x=torch.randn(2, 5, JK.D)), dict(x=torch.randn(2, 48, JK.D))
+    with torch.no_grad():
+        o0 = base(b)
+        same = lambda o: all(torch.equal(o0[k], o[k]) for k in ("logp", "types", "types1", "scale", "x", "w"))  # noqa: E731
+        assert same(m(b)) and same(m(b, None, None)) and same(base(b, maps=maps)), "no maps / no block: the plain head bit for bit"
+        assert same(m(b, maps=maps)) and m.map_block.seen is maps, "a zero block: the plain head bit for bit; the maps dict reaches the block untouched"
+        live = m.map_block = _Hook(zero=False)
+        assert not torch.equal(m(b, maps=maps)["logp"], o0["logp"]), "a live block changes the output"
+        assert _order(m, b, None, maps) == ["layer1", "layer2", "map", "layer3"], "the map block once, after layer 2, before layer 3"
+        empty = {}
+        assert same(m(b, maps=empty)) and live.seen is empty and _order(m, b, None, empty) == ["layer1", "layer2", "map", "layer3"], "{} reaches the block (the head does not special-case it)"
+        assert same(m(b)) and _order(m, b) == ["layer1", "layer2", "layer3"], "maps None: the block is not called"
+        mp = mod.JTokenHead(past_block=_Hook(zero=False), map_block=_Hook(zero=False)).eval()
+        assert _order(mp, b, past, maps) == ["layer1", "past", "layer2", "map", "layer3"] and mp.past_block.seen is past and mp.map_block.seen is maps, "both hooks: layer 1 -> past -> layer 2 -> map -> layer 3"
+        assert _order(mp, b, past) == ["layer1", "past", "layer2", "layer3"] and _order(mp, b, None, maps) == ["layer1", "layer2", "map", "layer3"]
+    mg = mod.JTokenHead(map_block=_Hook())                                                                    # a zero block (the start of a training): the loss reaches its parameters
+    mod.jtoken_loss(mg(b, maps=maps), b)[0].backward()
+    assert all(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in mg.map_block.parameters()), "no gradient into the map block"
+
+
+def _mutant(*edits):
+    """jtoken.py with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual mutant"""
+    src = open(JK.__file__, encoding="utf-8").read()
+    for old, new in edits:
+        assert src.count(old) == 1, old
+        src = src.replace(old, new)
+    mod, path = types.ModuleType("jtoken_mutant"), list(sys.path)
+    mod.__file__ = JK.__file__
+    try:
+        exec(compile(src, JK.__file__, "exec"), mod.__dict__)
+    finally:
+        sys.path[:] = path
+    return mod
+
+
+def test_maps():
+    _maps_hook_ok(JK)
+    must_fail(JK.JTokenHead, layers=1, map_block=_Hook())                                                     # no layer 2: refused
+    cond, call = "self.map_block is not None and maps is not None", "self.map_block(x, pos, dirv, valid, maps)"
+    hook = f"if n == 2 and {cond}:"
+    mutants = {"after layer 3": [(hook, hook.replace("n == 2", "n == 3"))], "after every layer from 2 on": [(hook, hook.replace("n == 2 and ", ""))],
+               "before layer 2": [(hook, hook.replace("n == 2", "n == 0")), ("        types1, w1 = self.read_types(x, tp)\n", f"        if {cond}:\n            x = {call}\n        types1, w1 = self.read_types(x, tp)\n")],
+               "{} skipped": [(hook, hook.replace("maps is not None", "maps"))], "maps None passed on": [(hook, hook.replace(" and maps is not None", ""))], "the block gets past": [(call, call.replace("maps)", "past)"))]}
+    for edits in mutants.values():
+        must_fail(_maps_hook_ok, _mutant(*edits))
+    print(f"maps: the S3 hook after layer 2 (no block / maps None / a zero block = the plain head bit for bit, a live block changes the output, the maps dict reaches the block untouched and {{}} is passed on, called once "
+          f"between layer 2 and layer 3, with the S2 hook layer 1 -> past -> layer 2 -> map -> layer 3, the loss reaches a zero block, a 1-layer head refused); {len(mutants)} textual mutants fail ({', '.join(mutants)}): ok")
 
 
 def test_teacher():
@@ -879,7 +950,7 @@ def test_head_seed():
           f"head_seed in the recipe (another one refused); the log names both seeds and 127131 parameters; a shuffling DataLoader as the loader: first batch {order['f0']} (default, --head-seed 0) vs {order['f0h2']} (--head-seed 2); {real}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_prior, test_past, test_teacher, test_init, test_head_seed]
+TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_prior, test_past, test_maps, test_teacher, test_init, test_head_seed]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
