@@ -1,0 +1,3 @@
+HYP="E375: a per-class decode (link threshold short x long x keep, none gate off) chosen on the E367 b_bal25 TRAIN tables with a junction tie-break raises the champion's junction F1 by at least 0.03 on the E373 fresh heads without losing topo F1, F1@1.0 or lanes found."
+PRED="the chosen cell has a short or a long threshold above 0.2 (65 %); junction F1 on the fresh heads +0.02 (-0.01 to +0.05); ADOPT-DECODE about 20 %"
+RULE="E375 card section 0 (by hand): ADOPT-DECODE = on both E373 fresh heads at the chosen cell vs the champion's cell: topo F1 and F1@1.0 not lower by > 0.005, lanes found not lower by > 0.01, junction F1 +0.03 with the paired interval above 0, the gate floors and the E373 tie conditions held; else NO; no GPU, no training"
