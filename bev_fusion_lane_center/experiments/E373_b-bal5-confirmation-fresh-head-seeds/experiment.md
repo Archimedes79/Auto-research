@@ -1,15 +1,17 @@
-# E373 - confirmation of the b_bal5 challenger (E367: the E365 head with none weight 0.5 + its TRAIN-selected decode) on two fresh head seeds
+# E373 - confirmation of the E367 champion arm by its WRITTEN rule (b_bal25: the E365 head with none weight 0.25) on two fresh head seeds, read at the record decode and at the recipe's TRAIN-selected cell
 
-Card of 2026-11-17 (version 1, 04:35 system clock, before any run; written by the Spurmitte chat that Mirko addresses as "Fable" on the lane lead's order of 04:30: "b_bal5 ties on topo F1 at clearly fewer duplicates with the same head and one different loss weight, so D106 ('similar performance: the simpler / cheaper one') makes it worth its own confirmation"). **Status: draft; nothing run.** The pattern is E371's (experiments/E371_e366-confirmation-fresh-head-seeds): the recipe frozen, two fresh head seeds on the same B' caches, read once on VAL, nothing re-selected.
+Card of 2026-11-17, **version 2 at 04:55 (system clock), before any run** (the folder name keeps the v1 name; v1 proposed b_bal5 on the lane lead's tie-break by duplicates; a short fresh ar-critic (cards, REVISE, 5 findings) showed that this departs from the rules written before the runs: E367's champion rule 'the PASSING arm with the highest mean topo F1' and E371's 'an E367 arm that passes its own confirmation with a higher mean'; the lane lead dropped the tie-break at 04:50: "E373 confirms b_bal25 by the rule written BEFORE the runs"). Written by the Spurmitte chat that Mirko addresses as "Fable". **Status: v2, nothing run.** The pattern is E371's (experiments/E371_e366-confirmation-fresh-head-seeds): the recipe frozen, two fresh head seeds on the same B' caches, read once on VAL.
 
-**The challenger:** E367 arm b_bal5 (experiments/E367_e365-capacity-balance-schedule-arms, section 3 decode choices): the E365 S1 head with `--none-weight 0.5`, 12000 steps; its decode chosen on each head's own TRAIN sample by the E366 rule = link threshold 0.2, keep threshold 0.7, none gate off on BOTH heads; VAL: topo F1 0.6691 / 0.6696, F1@1.0 0.834 / 0.831, lanes found 0.686 / 0.685, dup_frac 0.032 / 0.035. **The champion it challenges:** the E365 S1 recipe at the E366 decode (0.1 / 0.6 / off), confirmed by E371: VAL topo F1 0.6617 / 0.6767 (E366) and 0.6618 / 0.6733 (E371), dup_frac 0.0548 / 0.0536 (E366) and 0.0588 / 0.0629 (E371).
+**Why b_bal25:** E367 section 3 (committed before this card): both b arms pass the quality gate on both seeds at their TRAIN-selected decodes; mean VAL topo F1 b_bal25 0.6730, b_bal5 0.6694, the S1 champion at the E366 decode 0.6692 (a three-way tie INSIDE the band 0.010; in-sample: selected among the arms read so far on VAL; a_wide and c_long have not run). By the written rule the arm to confirm is b_bal25. **Forking path, said:** VAL 873 has been read by E365 - E373; the confirmation removes the selection of the head instance, not the reuse of VAL.
+
+**The recipe (frozen now, before any fresh head exists):** the E365 S1 head with `--none-weight 0.25`, 12000 steps, bs 8, lr 1e-3; head seeds 2 (cache 0) and 3 (cache 1); the decode: TWO decodes are read on the same trained heads, chosen by the rule below: (D-rec) the decode of record of E365 (a link where p >= 0.3 and p >= p(none), a node where p_none < 0.5), (D-cell) the cell chosen by the E366 rule over BOTH b_bal25 TRAIN tables (`temp/e366/choose.py e367_b25_s0 e367_b25_s1`, 04:45): link threshold 0.2, keep threshold 0.6, none gate off (mean TRAIN topo F1 0.7183, mean dup 0.0452; one cell for the recipe, chosen on TRAIN).
 
 ## 0. The card (what the tools run)
 ```json card
 {
  "id": "E373",
  "card": "",
- "title": "The b_bal5 recipe frozen (the E365 S1 head, none weight 0.5, 12000 steps; decode link 0.2 / keep 0.7 / none gate off) retrained with head seeds 2 and 3 on the B' caches 0 and 1, read once on VAL; against the confirmed S1 champion",
+ "title": "The b_bal25 recipe frozen (the E365 S1 head, none weight 0.25, 12000 steps) retrained with head seeds 2 and 3 on the B' caches 0 and 1, read once on VAL at the record decode and at the recipe cell 0.2 / 0.6 / gate off; against the confirmed S1 champion",
  "kind": "variant",
  "deterministic": false,
  "metric": "topo_F1",
@@ -17,8 +19,8 @@ Card of 2026-11-17 (version 1, 04:35 system clock, before any run; written by th
  "band": 0.01,
  "prediction": {"value": 0.0, "vs": "ref"},
  "arms": {
-  "ref": {"recipe": "the confirmed S1 champion (E366 / E371, four heads at the decode 0.1 / 0.6 / off); per cache the E366 head: topo F1 0.6617 / 0.6767, dup_frac 0.0548 / 0.0536; the verdict is by hand (decide.py not used)"},
-  "cb": {"recipe": "`jtoken_train.py --name e373_cb_s<S> --seed S --head-seed <S + 2> --ident e292_a --none-weight 0.5 --steps 12000 --bs 8 --lr 1e-3 --workers 4` (cache seed S, head seed S + 2), new-format dumps, `jtoken_eval.py score --link-thr 0.2 --keep-thr 0.7 --no-none-gate` once on VAL; nothing re-selected", "run_ids": ["E373.cb_s0", "E373.cb_s1", "E373.read_s0", "E373.read_s1"]}
+  "ref": {"recipe": "the confirmed S1 champion (E366 + E371, four heads at the decode 0.1 / 0.6 / off); per cache the mean of its two heads: topo F1 0.6618 / 0.6750, F1@1.0 0.8381 / 0.8410, lanes found 0.6798 / 0.6876; the verdict is by hand (decide.py not used)"},
+  "cb": {"recipe": "`jtoken_train.py --name e373_cb_s<S> --seed S --head-seed <S + 2> --ident e292_a --none-weight 0.25 --steps 12000 --bs 8 --lr 1e-3 --workers 4` (cache seed S, head seed S + 2), new-format dumps, `jtoken_eval.py score` at the record decode and at `--link-thr 0.2 --keep-thr 0.6 --no-none-gate`, once each on VAL; nothing re-selected", "run_ids": ["E373.cb_s0", "E373.cb_s1", "E373.read_s0", "E373.read_s1"]}
  },
  "control": "ref",
  "variant": "cb",
@@ -28,23 +30,27 @@ Card of 2026-11-17 (version 1, 04:35 system clock, before any run; written by th
   {"metric": "topo_F1", "vs": "ref", "min_effect": 0.01}
  ],
  "budget_gpu_h": 1.5,
- "kill": "a loss is not finite; or no learning (the mean loss over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200); a run cut by run.py or the GPU is resumed from its 500-step checkpoint by the supervisor (resume steps reported, not bit-reproducible); `--timeout` 130 minutes; a crashed read-out is re-run unchanged, never with another cell",
+ "kill": "a loss is not finite; or no learning (the mean loss over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200); a run cut by run.py or the GPU is resumed from its 500-step checkpoint by the supervisor (resume steps reported, not bit-reproducible); `--timeout` 130 minutes; a crashed read-out is re-run unchanged, never with another cell; the training must end before about 07:30 (the lane lead's night limit)",
  "evaluate": {"split": "val"}
 }
 ```
-**The verdict (by hand, written before any run; the JSON rule is NOT the verdict):** CONFIRMED = the okayish gate of E365 section 0 holds on BOTH fresh heads at the frozen decode (G-topo >= 0.6359 (cache 0) / 0.6349 (cache 1); F1@1.0 >= 0.8182 / 0.8060; lanes found >= 0.6066 / 0.5937; G-cost and G-simple as the S1 champion: the same architecture) AND the dup_frac of each fresh head is not above the S1 champion's on the same cache (0.0548 / 0.0536, the E366 heads); NOT CONFIRMED otherwise (no third head, no pooled rule; 'at the floor' when below a floor by less than the band). **If CONFIRMED, the b_bal5 recipe replaces the S1 recipe as THE champion** (the lane lead's rule, D106: same quality, fewer duplicates, nothing added: the same head, one loss weight changed); if NOT CONFIRMED, the S1 recipe stays the champion. Reported: the paired cb - champion interval per cache (topo F1), the paired interval against plain B per cache, the topo F1 of the four challenger heads against the four champion heads (a tie inside the band is expected), junction F1, precision / recall, vertices per 100 m, the TRAIN-to-VAL drop; the forking path said: b_bal5 was selected among E367's arms on VAL (in-sample), which is why it needs this confirmation.
-**Prediction (guesses, with windows):** VAL topo F1 cache 0 about 0.665 (0.64 - 0.69), cache 1 about 0.668 (0.645 - 0.69); dup_frac about 0.034 (0.025 - 0.045) per head; CONFIRMED about 70 % (the dup condition is easy: 0.032 / 0.035 against 0.055 / 0.054; the quality conditions have the margins of E367: +0.033 / +0.035 topo, +0.016 / +0.025 F1@1.0).
+**The verdict (by hand, written before any run; the JSON rule is NOT the verdict):**
+1. **The decode of the recipe (the lane lead's rule of 04:50, the D106 reading 'same cost, simpler = no tuned output thresholds'):** the recipe's decode is D-rec if the okayish gate of E365 section 0 holds on BOTH fresh heads at D-rec (G-topo >= 0.6359 (cache 0) / 0.6349 (cache 1); F1@1.0 >= 0.8182 / 0.8060; lanes found >= 0.6066 / 0.5937); otherwise D-cell if the gate holds on both fresh heads at D-cell; otherwise **NOT CONFIRMED**. A fresh head below a floor by less than the band 0.01 counts as failing ('at the floor'); no third head; no pooled rule.
+2. **CONFIRMED** = the gate holds on both fresh heads at the chosen decode (G-cost and G-simple as the S1 champion: the same architecture; D-rec has no tuned threshold, D-cell has three).
+3. **Replacement of the S1 champion** (E367 / E371's rule, with the critic's quality-tie condition): b_bal25 replaces the S1 recipe as THE champion when CONFIRMED AND, at the chosen decode, on each cache: topo F1 >= the champion's per-cache mean - 0.01 (>= 0.6518 / 0.6650), F1@1.0 >= 0.8281 / 0.8310, lanes found >= 0.6698 / 0.6776; otherwise the S1 recipe stays the champion and b_bal25 is reported as a confirmed alternative. **Said now:** at D-rec the E367 b_bal25 heads had F1@1.0 0.8193 / 0.8191, below the tie condition 0.8281 / 0.8310: if D-rec is chosen by rule 1, a replacement is unlikely even when the gate holds.
+**Reported:** the paired scene-bootstrap interval cb - S1 champion per cache (topo F1) at both decodes; **the seed twin:** cb - E371 cf per cache (the same cache seed and head seed: the none-weight effect at equal initialisation and batch order; the cb train.log must print the same first-batch frame order as cf's, checked); the paired interval against plain B; junction F1, dup_frac, vertices per 100 m, precision / recall against the champion; the TRAIN-to-VAL drop; the degraded read-out at the chosen decode.
+**Prediction (guesses, with windows):** at D-rec: topo F1 about 0.650 (0.63 - 0.67) per head, F1@1.0 about 0.819 (0.80 - 0.83): the gate at D-rec holds on both heads about 45 % (F1@1.0 on cache 0 was +0.001 over the floor); at D-cell: topo F1 about 0.670 (0.65 - 0.69), F1@1.0 0.846 (0.83 - 0.86): the gate holds about 85 %; CONFIRMED (at either decode) about 85 %; replacement of the S1 champion about 35 % (needs D-cell chosen AND the tie: likely only if D-rec fails).
 
 ## 1. Card text
-- **Statement:** the b_bal5 result is a property of its recipe on the B' caches 0 / 1. **Not claimed:** robustness to a new B' seed; anything about S2 / S3 / S4 / TEST. **Cost:** two trainings of about 40 minutes side by side, two dumps, two scores (CPU).
-- **Referee:** a short fresh ar-critic (cards) before the runs.
+- **Statement:** the b_bal25 result is a property of its recipe on the B' caches 0 / 1. **Not claimed:** robustness to a new B' seed; that the none weight 0.25 is optimal; anything about S2 / S3 / S4 / TEST. **Cost:** two trainings of about 40 minutes side by side, two dumps, four scores (CPU).
+- **Referee:** short fresh ar-critic (cards) on v1: REVISE, 5 findings, taken in (the written rule names b_bal25; a quality-tie condition for the replacement; the forking path; the seed twin; the dup condition dropped as the criterion); v2 changed the arm, the decode rule came from the lane lead before any fresh head.
 
 ## 2. Detail plan
 | step | what exactly | where | done when |
 |---|---|---|---|
-| train | cb_s0 (cache 0, head seed 2), cb_s1 (cache 1, head seed 3), the supervisor pattern, after the quiet-window timing | `run.py --id E373.cb_s<S> --gpu --require-card` | done flags |
-| read-out | dumps (VAL, TRAIN every 3), score at the frozen decode (VAL), the record decode (diagnosis), the TRAIN sample (diagnosis) | `run.py --id E373.read_s<S>` | cards |
-| decide | the verdict above | by hand | result section, ledger notes, commit, one line to the lead (and the champion line if it replaces) |
+| train | cb_s0 (cache 0, head seed 2), cb_s1 (cache 1, head seed 3), the supervisor pattern, after the lane chat's S2 pair | `run.py --id E373.cb_s<S> --gpu --require-card` | done flags |
+| read-out | dumps (VAL, TRAIN every 3), scores at D-rec and D-cell on VAL, the degraded read-out, the TRAIN sample (diagnosis) | `run.py --id E373.read_s<S>` | cards |
+| decide | the verdict above | by hand | result section, ledger notes, commit, one line to the lead (the champion line if it replaces) |
 
 ## 3. Summary
 (empty until the runs exist)
