@@ -12,6 +12,7 @@ import concurrent.futures as cf
 import copy
 import importlib.util
 import inspect
+import math
 import os
 import subprocess
 import sys
@@ -41,6 +42,24 @@ MUTANTS = [
     (T0, "the sequence order uses the cache seed", "seed=init, args=args,", "seed=a.seed, args=args,"),
     (T0, "another recipe is not refused", "assert c.get(\"design\") == \"jpast\" and old ==", "assert c.get(\"design\") == \"jpast\" or old =="),
     (T0, "the seed twin shares the head initialisation", "    init = a.seed if a.init_seed is None else a.init_seed\n", "    init = a.seed\n"),
+    (T0, "the switch is judged one step late", "learned = s0 >= JK.SWITCH", "learned = s0 > JK.SWITCH"),
+    (T0, "U_WINDOW is 10", "U_WINDOW = 100 ", "U_WINDOW = 10 "),
+    (T0, "a change of seq is not refused at a resume", 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "seq", "steps", "lr", "no_past")', 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "no_past")'),
+    (T0, "the loader gets K_seq 3", "K_seq=a.seq, ident=a.ident", "K_seq=3, ident=a.ident", "real"),
+    (T0, "the loader gets the head seed", 'LPD.loader("train", a.seed, a.bs', 'LPD.loader("train", init, a.bs', "real"),
+    (T0, "the loader gets another batch size", "a.seed, a.bs, a.workers", "a.seed, 4, a.workers", "real"),
+    ("jpast_eval.py", "the read-out's switch is one step late", "learned = m._step_py >= JK.SWITCH", "learned = m._step_py > JK.SWITCH"),
+    ("jpast_eval.py", "the last scene ends one frame early", "ends = starts[1:] + [len(prev)]", "ends = starts[1:] + [len(prev) - 1]"),
+    ("jpast_eval.py", "dump does not check the seed", 'assert args["seed"] == a.seed,', 'assert True or args["seed"] == a.seed,'),
+    ("jpast_eval.py", "the sibling folder has no model.pt", "shutil.copyfile(src, dst)", "pass"),
+    ("jpast_eval.py", "a sibling with another model.pt is accepted", 'assert filecmp.cmp(src, dst, shallow=False), f"{dst} is not a copy of {src}"', "pass"),
+    ("jpast_eval.py", "the meta names the run, not the sibling", "meta = dict(run=name,", "meta = dict(run=a.run,"),
+    ("jpast_eval.py", "every mode goes to a sibling", 'return run if mode == "stream" else f"{run}_{mode}"', 'return f"{run}_{mode}"'),
+    ("jpast_eval.py", "use reads the off dump of the run itself", "dump_file(runs, run_folder(a.run, m), a.split, a.max)", "dump_file(runs, a.run, a.split, a.max)"),
+    ("jpast_eval.py", "the state count forgets the channels", 'state_n=int(v.sum()) * int(out["x"].shape[-1])', "state_n=int(v.sum())"),
+    ("jpast_eval.py", "the carried state is the block input", 'state_ss=float((out["x"][0].float() ** 2)[v].sum())', "state_ss=x2"),
+    ("jpast_eval.py", "the first 5 frames are 4", "FIRST = 5 ", "FIRST = 4 "),
+    ("jpast_eval.py", "the state RMS stops one position early", "for p in range(int(pos.max()) + 1)]", "for p in range(int(pos.max()))]"),
     ("jpast_eval.py", "the stream carries the state over a scene start", "            pos_in_scene = pos_in_scene + 1 if hp else 0\n", "            pos_in_scene = pos_in_scene + 1\n"),
     ("jpast_eval.py", "a frame without a previous keyframe reads the state", "return mode == \"off\" or not has_prev or", "return mode == \"off\" or"),
     ("jpast_eval.py", "truncated resets at the wrong frames", "(mode == \"truncated\" and pos_in_scene % window == 0)", "(mode == \"truncated\" and pos_in_scene % window == 1)"),
@@ -193,7 +212,7 @@ def trainer_tests(T, stub, label):
     blk = hr.past_block
     for p in (blk.o.weight, blk.o.bias):
         torch.nn.init.normal_(p, std=0.3)
-    for s0, learned in ((0, False), (JK.SWITCH + 5, True)):
+    for s0, learned in ((0, False), (JK.SWITCH - 1, False), (JK.SWITCH, True), (JK.SWITCH + 5, True)):                # the switch at the boundary: step 999 is not learned, 1000 is
         calls, restore = spy(hr)
         hr.set_step(s0)
         loss_r, _ = T.sequence_loss(hr, b, "cpu")
@@ -204,6 +223,14 @@ def trainer_tests(T, stub, label):
             got = calls[k]["past"]
             assert sorted(got) == sorted(want) and all(torch.equal(got[n], want[n]) for n in want) and got["x"] is calls[k - 1]["out"]["x"] and got["x"].grad_fn is not None, f"{label}: the past of step {k + 1} at counter {s0}"
         assert torch.equal(calls[1]["past"]["w"], calls[0]["out"]["w"] if learned else b["frames"][0]["e"].sigmoid()), f"{label}: the key weight at counter {s0}"
+    if stub is None:                                                                                        # the real head switches its own key weights at the same boundary as `make_past` (the stub has no switch)
+        hb = T.build_head(dict(no_past=True))
+        hb.eval()
+        lp = {}
+        for s0 in (0, JK.SWITCH - 1, JK.SWITCH):
+            hb.set_step(s0)
+            lp[s0] = hb(b["frames"][0])["logp"]
+        assert torch.equal(lp[0], lp[JK.SWITCH - 1]) and not torch.equal(lp[0], lp[JK.SWITCH]), f"{label}: the head's own switch is not at step {JK.SWITCH}"
     # the gradient of the last frame's loss runs back through two steps to the first frame's states
     calls, restore = spy(hr)
     hr.set_step(0)
@@ -243,6 +270,30 @@ def trainer_tests(T, stub, label):
     u2 = lf(h0, b)[1]["u"]
     assert u1 > 0 and abs(u2 / u1 - 4.0 / 3.0) < 1e-4, f"{label}: u is the mean of the last steps: {u1} {u2} (steps 1 - 3: 0, ua, ua)"
     assert "u" not in T.make_loss(NoRun(), hz, True)(hz, b)[1], f"{label}: arm z logs u"
+    # u is the mean of the last U_WINDOW = 100 steps = the card's last 500 steps as the five 100-step rows of log.jsonl (`trainer.fit` logs every 100)
+    assert T.U_WINDOW == 100 == inspect.signature(T.T.fit).parameters["log_every"].default and 5 * T.U_WINDOW == 500, f"{label}: U_WINDOW {T.U_WINDOW}"
+    if stub is not None:
+        import numpy as np
+        h1 = T.build_head(dict(no_past=False))
+        h1.train()
+        for p in (h1.past_block.o.weight, h1.past_block.o.bias):
+            torch.nn.init.normal_(p, std=0.3)
+        rec, orig = [], T.JP.UseMeter.take
+
+        def take(self):
+            r = orig(self)
+            rec.append(r[0] if r else None)
+            return r
+        T.JP.UseMeter.take = take
+        try:
+            lf1 = T.make_loss(NoRun(), h1, False)
+            for _ in range(120):
+                with torch.no_grad():
+                    h1.past_block.o.weight.mul_(1.02)                                                       # u grows from step to step: the window can be seen
+                info1 = lf1(h1, b)[1]
+        finally:
+            T.JP.UseMeter.take = orig
+        assert abs(info1["u"] - float(np.mean(rec[-100:]))) < 1e-9 and abs(info1["u"] - float(np.mean(rec[-10:]))) > 1e-3, f"{label}: u is not the mean of the last 100 steps"
     # the smoke run to its end: files, the counter of the head = the steps, then the same run after a kill = the straight run
     with tempfile.TemporaryDirectory() as tmp:
         a = T.parse_args(["--name", "r", "--smoke", "--bs", "2", "--seq", "3", "--seed", "0"])
@@ -254,6 +305,12 @@ def trainer_tests(T, stub, label):
         import json
         assert json.load(open(os.path.join(tmp, "r", "config.json")))["design"] == "jpast"
         T.train(a, runs=tmp, ckpt_every=10, smoke_k=K)                                                  # the same recipe in a finished folder is resumed (nothing left to do)
+        cfg, folder = json.load(open(os.path.join(tmp, "r", "config.json")))["args"], os.path.join(tmp, "r")
+        change = dict(seed=lambda v: v + 1, init_seed=lambda v: v + 1, cache=lambda v: "another_root", ident=lambda v: "e273_p", K=lambda v: 384, bs=lambda v: v + 1, seq=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2, no_past=lambda v: not v)
+        assert set(change) == set(T.RECIPE), f"{label}: a recipe key without a refusal test: {set(T.RECIPE) ^ set(change)}"
+        T.check_start(cfg, folder)                                                                       # the same recipe is accepted
+        for k_ in change:                                                                                # a change of EVERY recipe key is refused at a resume
+            refuses(lambda: T.check_start(dict(cfg, **{k_: change[k_](cfg[k_])}), folder), "of another run")
         refuses(lambda: T.train(T.parse_args(["--name", "r", "--smoke", "--bs", "2", "--seq", "3", "--seed", "1"]), runs=tmp, ckpt_every=10, smoke_k=K), "of another run")
         real_make, state = T.make_loss, dict(boom=True)
 
@@ -356,6 +413,17 @@ def eval_tests(E, T, stub, label):
     assert all(torch.equal(stream[i][0]["logp"], cold[i]) for i in (0, 4)) and not any(torch.equal(stream[i][0]["logp"], cold[i]) for i in (1, 2, 3, 5, 6, 7, 8)), f"{label}: cold starts / the past changes the output"
     assert [stream[i][1]["pos"] for i in range(n)] == [0, 1, 2, 3, 0, 1, 2, 3, 4] and [stream[i][1]["has_prev"] for i in range(n)] == hp and abs(stream[1][1]["shift"] - float(t[1].norm())) < 1e-6
     assert all(stream[i][1]["n"] == 0 and stream[i][1]["d2"] == 0.0 for i in (0, 4)) and all(stream[i][1]["n"] > 0 and stream[i][1]["d2"] > 0 and stream[i][1]["x2"] > 0 for i in (1, 2, 3, 5)), f"{label}: u sums"
+    for i in (0, 2):                                                                                         # the CARRIED state: the final token states x of the frame's valid tokens (not the block's input)
+        o_i, inf = stream[i]
+        v_i = o_i["valid"][0].bool()
+        assert inf["state_n"] == int(v_i.sum()) * 64 and inf["state_ss"] > 0 and abs(inf["state_ss"] - float((o_i["x"][0] ** 2)[v_i].sum())) < 1e-4 * inf["state_ss"] and abs(inf["state_ss"] - inf["x2"]) > 1e-3 * inf["state_ss"], f"{label}: the carried state's sums"
+    for s0, learned in ((JK.SWITCH - 1, False), (JK.SWITCH, True)):                                          # the read-out's switch of the key weight at the boundary (as the head's and make_past's)
+        m.set_step(s0)
+        calls_b, restore = spy(m)
+        list(E.iter_outputs(m, batches()[:2], "stream", 3))
+        restore()
+        assert torch.equal(calls_b[1]["past"]["w"], calls_b[0]["out"]["w"] if learned else frames[0]["e"].sigmoid()), f"{label}: the read-out's key weight at counter {s0}"
+    m.set_step(JK.SWITCH + 10)
     trunc = {i: out for i, _, out, _ in E.iter_outputs(m, batches(), "truncated", 3)}
     assert torch.equal(trunc[3]["logp"], cold[3]) and torch.equal(trunc[7]["logp"], cold[7]), f"{label}: truncated is cold at position 3"
     assert all(torch.equal(trunc[i]["logp"], stream[i][0]["logp"]) for i in (1, 2, 5, 6)) and not any(torch.equal(trunc[i]["logp"], stream[i][0]["logp"]) for i in (3, 7, 8)), f"{label}: truncated = stream until the reset, then another state"
@@ -394,12 +462,17 @@ def eval_tests(E, T, stub, label):
         with torch.no_grad():
             assert torch.equal(out["logp"], mz(frames[i])["logp"]) and info["n"] == 0, f"{label}: arm z frame {i}"
     # the use report by hand
-    mk = lambda keeps, links, d2, x2, pos, hp_: dict(meta=dict(run="r", split="val", use=dict(d2=d2, x2=x2, pos=pos, has_prev=hp_)), frames=[dict(token=f"t{i}", keep=np.array(k), rec=dict(src=np.array([a for a, _ in l_], int), dst=np.array([b for _, b in l_], int))) for i, (k, l_) in enumerate(zip(keeps, links))])  # noqa: E731
+    mk = lambda keeps, links, d2, x2, pos, hp_: dict(meta=dict(run="r", split="val", idx=list(range(len(pos))), use=dict(d2=d2, x2=x2, pos=pos, has_prev=hp_, state_ss=[1.0] * len(pos), state_n=[1] * len(pos))), frames=[dict(token=f"t{i}", keep=np.array(k), rec=dict(src=np.array([a for a, _ in l_], int), dst=np.array([b for _, b in l_], int))) for i, (k, l_) in enumerate(zip(keeps, links))])  # noqa: E731
     s_ = mk([[1, 1, 1], [1, 0, 0]], [[(0, 1), (1, 2)], [(0, 1)]], [0.0, 1.0], [4.0, 4.0], [0, 1], [False, True])
     o_ = mk([[1, 0, 1], [1, 0, 0]], [[(0, 1)], [(0, 1)]], [0.0, 0.0], [4.0, 4.0], [0, 0], [False, False])
     rep = E.use_report(s_, o_)
     assert abs(rep["u"] - 0.5) < 1e-9 and rep["frames_with_past"] == 1 and abs(rep["u_by_position"]["1-1"] - 0.5) < 1e-9 and np.isnan(rep["u_by_position"]["2-2"]) and rep["against_off"] == dict(kept_gained_per_frame=0.5, kept_lost_per_frame=0.0, kept_flips_per_frame=0.5,
                                                                                                                                                                  frames_with_a_flip=0.5, links_changed_per_frame=0.5), rep
+    m2 = dict(meta=dict(run="r", split="val", idx=[10, 11, 12, 13, 14], use=dict(d2=[0.0, 1.0, 4.0, 1.0, 1.0], x2=[4.0] * 5, pos=[0, 1, 5, 4, 1], has_prev=[False, True, True, True, True], state_ss=[8.0, 18.0, 50.0, 18.0, 36.0], state_n=[2] * 5)), frames=[])
+    r2 = E.use_report(m2)                                                                                    # the carried state's RMS per stream position and the first-5 split, by hand
+    sr = r2["state_rms_by_position"]
+    assert len(sr) == 6 and sr[0] == 2.0 and abs(sr[1] - math.sqrt(54 / 4)) < 1e-12 and sr[4] == 3.0 and sr[5] == 5.0 and all(np.isnan(sr[q]) for q in (2, 3)), sr
+    assert r2["position_per_frame"] == [0, 1, 5, 4, 1] and r2["frame_idx_first5"] == [10, 11, 13, 14] and r2["frame_idx_later"] == [12], r2
     assert E.is_cold("stream", True, 5, 3) is False and E.is_cold("stream", False, 0, 3) and E.is_cold("off", True, 5, 3) and E.is_cold("truncated", True, 6, 3) and not E.is_cold("truncated", True, 5, 3) and not E.is_cold("still", True, 3, 3)
 
 
@@ -421,11 +494,17 @@ def dump_on_real_frames(E, T, stub):
         paths = {}
         for mode in ("stream", "off", "truncated"):
             paths[mode] = E.dump(argparse.Namespace(run="x", seed=0, split="val", mode=mode, window=3, cpu=True, max=12), runs=tmp)
-        assert [os.path.basename(p) for p in paths.values()] == ["token_val_n12.pkl", "token_val_off_n12.pkl", "token_val_truncated_n12.pkl"]
+        assert [os.path.relpath(p, tmp) for p in paths.values()] == ["x/token_val_n12.pkl", "x_off/token_val_n12.pkl", "x_truncated/token_val_n12.pkl"], paths
+        assert all(open(os.path.join(tmp, f"x_{md}", "model.pt"), "rb").read() == open(os.path.join(tmp, "x", "model.pt"), "rb").read() for md in ("off", "truncated")), "the sibling folder holds a copy of model.pt"
         refuses(lambda: E.dump(argparse.Namespace(run="x", seed=0, split="val", mode="stream", window=3, cpu=True, max=12), runs=tmp), "never overwritten")
+        refuses(lambda: E.dump(argparse.Namespace(run="x", seed=1, split="val", mode="stream", window=3, cpu=True, max=5), runs=tmp), "does not match the run")
         d = {k: pickle.load(open(p, "rb")) for k, p in paths.items()}
         meta = d["stream"]["meta"]
-        assert {"run", "seed", "split", "drop", "drop_seed", "idx", "every", "tokens", "K", "ident", "cache", "steps"} <= set(meta) and meta["idx"] == list(range(12)) and meta["mode"] == "stream" and meta["every"] == 1 and meta["drop"] == 0.0
+        assert {"run", "seed", "split", "drop", "drop_seed", "idx", "every", "tokens", "K", "ident", "cache", "steps", "model"} <= set(meta) and meta["idx"] == list(range(12)) and meta["mode"] == "stream" and meta["every"] == 1 and meta["drop"] == 0.0 and meta["run"] == "x" and meta["model"] == "model.pt"
+        assert d["off"]["meta"]["run"] == "x_off" and d["off"]["meta"]["of_run"] == "x" and d["truncated"]["meta"]["run"] == "x_truncated", "the meta names the sibling run the scorer reads"
+        for sib in ("x", "x_off"):                                                                          # the scorer's own reader accepts the dumps: the cache, the kept nodes, the scorer's frames (a mode dump is read as a run of its own)
+            r_ = E.JE.read_dump(argparse.Namespace(run=sib, seed=0, split="val", model="model.pt", every=1, drop=0.0, drop_seed=0), tmp, 12)
+            assert len(r_["fr"]) == 12 and r_["idx"].tolist() == list(range(12)), sib
         assert [f["token"] for f in d["stream"]["frames"]] == meta["tokens"] and len(d["stream"]["frames"]) == 12 and meta["use"]["has_prev"][0] is False
         import lane_ptok_data as LP
         ds = LP.PTokData("val", 0, "e292_a")
@@ -436,6 +515,14 @@ def dump_on_real_frames(E, T, stub):
         assert np.array_equal(d["truncated"]["frames"][2]["pnone"], d["stream"]["frames"][2]["pnone"]) and not np.array_equal(d["truncated"]["frames"][3]["pnone"], d["stream"]["frames"][3]["pnone"]), "truncated: window 3"
         rep = E.use_report(d["stream"], d["off"])
         assert rep["frames_with_past"] == 11 and rep["u"] > 0 and rep["against_off"]["kept_flips_per_frame"] >= 0
+        res = E.use(argparse.Namespace(run="x", split="val", max=12), runs=tmp)                              # the command: stream + the sibling x_off -> past_use_val_n12.json
+        assert res["against_off"] == rep["against_off"] and res["against_off"]["kept_flips_per_frame"] > 0, "use reads the off dump of the sibling folder"
+        assert os.path.exists(os.path.join(tmp, "x", "past_use_val_n12.json")) and res["position_per_frame"] == list(range(12)) and res["frame_idx_first5"] == [0, 1, 2, 3, 4] and res["frame_idx_later"] == list(range(5, 12)) and "against_off" in res
+        assert len(res["state_rms_by_position"]) == 12 and all(v > 0 for v in res["state_rms_by_position"]), res["state_rms_by_position"]
+        refuses(lambda: E.use(argparse.Namespace(run="x", split="val", max=12), runs=tmp), "never overwritten")
+        with open(os.path.join(tmp, "x_off", "model.pt"), "ab") as fh:                                       # a sibling folder holds the same model.pt as the run or the dump is refused
+            fh.write(b"0")
+        refuses(lambda: E.dump(argparse.Namespace(run="x", seed=0, split="val", mode="off", window=3, cpu=True, max=5), runs=tmp), "is not a copy")
 
 
 def selftest(train_path=TRAIN, eval_path=EVAL):
@@ -454,12 +541,14 @@ def selftest(train_path=TRAIN, eval_path=EVAL):
     print("jpast_train selftest ok" + ("" if has_hook() else " (the real head has no S2 hook yet: the stub only)"))
 
 
-def real_chain_check():
-    """one batch of the real TRAIN chains (the cache and its extension, 2 sequences of 3 keyframes) through the loop with the real head on the CPU, and the sequence order of two arms with the same seeds (not run for the mutants)"""
+def real_chain_check(train_path=TRAIN):
+    """one batch of the real TRAIN chains (the cache and its extension, 2 sequences of 3 keyframes) through the loop with the real head on the CPU, the sequence order of two arms with the same seeds, and `train()` with the real loader (3 steps, the stub head):
+    the arguments it hands to `lane_past_data.loader` (the smoke path never calls it). Not part of the selftest: it needs the cache"""
+    import json
     import torch
     import trainer as TR
     import lane_past_data as LPD
-    T = load(TRAIN, "jpast_train_real")
+    T = load(train_path, "jpast_train_real")
     ds, dl = LPD.loader("train", 0, 2, 0)
     TR.seed_all(0)
     b = next(iter(dl))
@@ -479,12 +568,27 @@ def real_chain_check():
         TR.seed_all(seed)
         return [bb["idx"].tolist() for _, bb in zip(range(3), LPD.loader("train", 0, 4, 0)[1])]
     assert first(0) == first(0) and first(0) != first(1), "the sequence order follows the seed"
+    calls, orig = [], LPD.loader
+
+    def recording(*a, **k):
+        calls.append((a, k))
+        return orig(*a, **k)
+    LPD.loader = recording
+    try:
+        with Patch(make_stub()), tempfile.TemporaryDirectory() as tmp:
+            T.train(T.parse_args(["--name", "rl", "--seed", "1", "--init-seed", "0", "--bs", "2", "--seq", "2", "--steps", "3", "--workers", "0"]), runs=tmp, ckpt_every=500)
+            ms, args = T.load_model("rl", "cpu", tmp)
+            assert ms._step_py == 3 and args["seed"] == 1 and json.load(open(os.path.join(tmp, "rl", "config.json")))["seed"] == 0 and os.path.exists(os.path.join(tmp, "rl", ".done"))
+    finally:
+        LPD.loader = orig
+    assert len(calls) == 1 and calls[0][0] == ("train", 1, 2, 0) and calls[0][1] == dict(K_seq=2, ident="e292_a", K=None), f"the loader call of train(): {calls}"
     print(f"real chains ok: loss {float(loss):.3f}, {len(ds)} chains, first batch rows {rows.tolist()}")
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ mutants
 def one(args):
-    k, (mod, name, a, b), tmp = args
+    k, (mod, name, a, b, *rest), tmp = args
+    cmd = rest[0] if rest else "one"                                                                        # the command a mutant runs: the selftest ("one") or the real-data check ("real")
     path = TRAIN if mod == T0 else EVAL
     src = open(path, encoding="utf-8").read()
     if src.count(a) != 1:
@@ -496,7 +600,7 @@ def one(args):
         fh.write(src.replace(a, b))
     other = [TRAIN, EVAL]
     other[mod != T0] = p
-    r = subprocess.run([sys.executable, os.path.abspath(__file__), "one", other[0], other[1]], capture_output=True, text=True, env=ENV)
+    r = subprocess.run([sys.executable, os.path.abspath(__file__), cmd, other[0], other[1]], capture_output=True, text=True, env=ENV)
     return name, "killed" if r.returncode != 0 else "SURVIVED"
 
 
@@ -516,7 +620,7 @@ if __name__ == "__main__":
         selftest(sys.argv[2], sys.argv[3])
         sys.exit(0)
     if len(sys.argv) > 1 and sys.argv[1] == "real":
-        real_chain_check()
+        real_chain_check(sys.argv[2] if len(sys.argv) > 2 else TRAIN)
         sys.exit(0)
     for args_ in (["one", TRAIN, EVAL], ["real"]):
         r = subprocess.run([sys.executable, os.path.abspath(__file__)] + args_, capture_output=True, text=True, env=ENV)
