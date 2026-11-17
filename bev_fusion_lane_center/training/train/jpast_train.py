@@ -8,7 +8,7 @@ Step 1 of a sequence is cold; step k >= 2 (arm r) reads the state of step k - 1 
 runs through the steps (no detach). The loss is the E365 loss (`jtoken.jtoken_loss`) on every frame, the mean over the `--seq` frames. Arm z runs the SAME loop and loader without the block: every frame cold. The head is built first, the block (arm r) from the
 RNG state after it, so that z and r start from the same head weights; `--seed` = the cache seed (B' seed 0 / 1: the cache, the loader), `--init-seed` (default = `--seed`) = the head initialisation and the sequence order (`--init-seed 1` with `--seed 0`: the seed twin z2).
 The key-weight switch: the head counts its training forwards (`jtoken.SWITCH` = 1000), here the counter is held at the step's value for the `--seq` forwards of a step and advanced ONCE per optimisation step, so the switch (of the head's own key weights and of the
-past's, `make_past(learned=)`) comes after 1000 steps in both arms. `u` (the kill measure of the card, `jpast.UseMeter`) is logged as the mean of the last 100 steps (arm r). A RESUMED run re-seeds the sampler (`trainer.fit` seeds the RNG again at its start and draws a fresh permutation of the chains for the remaining steps): it is not batch-matched with its twin arm any more; `fit` logs `resumed from ckpt.pt at step N`, report such a run's resume steps.
+past's, `make_past(learned=)`) comes after 1000 steps in both arms. `u` (the kill measure of the card, `jpast.UseMeter`: RMS of the block's update with the past against its update with the past of ANOTHER SAMPLE of the batch, over RMS(x); 0 when the block ignores the content of the past) and `u_none` (against the none key only: any content-free attention satisfies it, reported next to it) are logged as the mean of the last 100 steps (arm r; the arm needs `--bs` >= 2 for the comparison). A RESUMED run re-seeds the sampler (`trainer.fit` seeds the RNG again at its start and draws a fresh permutation of the chains for the remaining steps): it is not batch-matched with its twin arm any more; `fit` logs `resumed from ckpt.pt at step N`, report such a run's resume steps.
 The loop, the run-directory contract, the checkpoint every 500 steps with resume, the roll-back
 guard and the `clock` line are those of `jtoken_train.py` / `trainer.fit`; AdamW lr 1e-3, 5 % warm-up, cosine to 0. The arm-r head needs the S2 hook of `jtoken.JTokenHead` (`past_block=`, `forward(batch, past=None)`, out['x'], out['w']): `check_hook` refuses a head
 without it. `--smoke` = 20 steps on synthetic sequences (K 512, no cache): the plumbing test and the memory check. A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop
@@ -61,6 +61,7 @@ def parse_args(argv=None):
 def check_options(args):
     assert args["bs"] > 0 and args["steps"] > 0 and args["lr"] > 0, f"--bs {args['bs']} --steps {args['steps']} --lr {args['lr']}"
     assert args["seq"] >= 1 and (args["seq"] >= 2 or args["no_past"]), f"--seq {args['seq']}: arm r needs a sequence of at least 2 keyframes"
+    assert args["no_past"] or args["bs"] >= 2, f"--bs {args['bs']}: arm r needs at least 2 sequences per step (the kill measure u compares with the past of another sample of the batch)"
 
 
 def check_start(args, folder):
@@ -126,10 +127,10 @@ def sequence_loss(m, b, dev, none_weight=1.0, no_past=False):
 
 
 def make_loss(run, model, no_past=False, none_weight=1.0):
-    """`sequence_loss` + what the log needs: the means of the frames' info, `u` (arm r: the mean of the last `U_WINDOW` steps), every step the peak GPU memory, at call 50 and every 100 calls a clock line (seconds per step since the last line)"""
+    """`sequence_loss` + what the log needs: the means of the frames' info, `u` and `u_none` (arm r: the means of the last `U_WINDOW` steps), every step the peak GPU memory, at call 50 and every 100 calls a clock line (seconds per step since the last line)"""
     n, mark = [0], [time.time(), 0]
     meter = None if no_past else JP.UseMeter(model.past_block)
-    u_hist = collections.deque(maxlen=U_WINDOW)
+    u_hist, un_hist = collections.deque(maxlen=U_WINDOW), collections.deque(maxlen=U_WINDOW)
     gb = lambda f: f() / 1e9 if torch.cuda.is_available() else 0.0  # noqa: E731
 
     def loss_fn(m, b):
@@ -139,15 +140,17 @@ def make_loss(run, model, no_past=False, none_weight=1.0):
         if meter is not None:
             u = meter.take()
             if u is not None:
-                u_hist.append(u[0])
-            info["u"] = float(np.mean(u_hist)) if u_hist else 0.0
+                assert u["u"] is not None, "no other sample in the batch: arm r needs --bs >= 2"
+                u_hist.append(u["u"])
+                un_hist.append(u["u_none"])
+            info["u"], info["u_none"] = (float(np.mean(h)) if h else 0.0 for h in (u_hist, un_hist))
         info.update(gpu_gb=gb(torch.cuda.max_memory_allocated), gpu_res_gb=gb(torch.cuda.max_memory_reserved))
         if n[0] == 10:
             mark[:] = [time.time(), 10]
         if n[0] == 50 or n[0] % 100 == 0:
             run.log(f"clock: {(time.time() - mark[0]) / (n[0] - mark[1]):.3f} s/step over the last {n[0] - mark[1]} steps of this process; over all {n[0]} steps so far: peak GPU allocated {info['gpu_gb']:.2f} GB, "
                     f"reserved {info['gpu_res_gb']:.2f} GB, valid tokens in the largest frame {max(float(f['valid'].sum(1).max()) for f in b['frames']):.0f}; loss parts nll_s {info['nll_s']:.3f} nll_l {info['nll_l']:.3f} "
-                    f"ce1 {info['ce1']:.3f} ce3 {info['ce3']:.3f} scale_l1 {info.get('scale_l1', float('nan')):.3f}" + ("" if meter is None else f" u {info['u']:.4f}"))
+                    f"ce1 {info['ce1']:.3f} ce3 {info['ce3']:.3f} scale_l1 {info.get('scale_l1', float('nan')):.3f}" + ("" if meter is None else f" u {info['u']:.4f} u_none {info['u_none']:.4f}"))
             mark[:] = [time.time(), n[0]]
         return loss, info
     return loss_fn
