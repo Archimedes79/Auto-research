@@ -1,23 +1,29 @@
 """Read-out of E368 (stage S2 of the token champion): the head with (arm r) or without (arm z) the cross-attention block to the past, run frame by frame in the E365 cache order with the state carried (`training/train/jpast_train.py`, `training/grid/jpast.py`).
 It only DUMPS; the scorer, the writer and the decode are those of `jtoken_eval.py` (the dump has its format, the prediction is written from the cached tokens by `lane_ptok_data.to_pred`: no GT field).
 
-    wsl bash tools/env/_py14.sh jpast_eval.py dump --run R --seed S [--split val|train] [--mode stream|truncated|off|shuffled|still] [--window 3] [--cpu] [--max N]   # GPU: -> runs/R/token_<split>[_<mode>][_n<N>].pkl
-    wsl bash tools/env/_py14.sh jpast_eval.py use  --run R [--split val]                                                                                          # CPU: u per stream position and what the past changed (stream against off) -> runs/R/past_use_<split>.json
+    wsl bash tools/env/_py14.sh jpast_eval.py dump --run R --seed S [--split val|train] [--mode stream|truncated|off|shuffled|still] [--window 3] [--cpu] [--max N]   # GPU: -> runs/<R or R_<mode>>/token_<split>[_n<N>].pkl
+    wsl bash tools/env/_py14.sh jpast_eval.py use  --run R [--split val] [--max N]                                                                                # CPU: u and the carried state's RMS per stream position, what the past changed (stream against off) -> runs/R/past_use_<split>.json
+    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R_off --seed S   |   sweep --run R_off --seed S --split train ...                                       # a mode dump is read by the scorer like any run: its folder is the sibling R_<mode>
 
 Modes (one frame per forward, batch 1, the cache order = the stream order (scene, time); the state is empty at every frame without a previous keyframe: the 22 VAL scene starts):
-  stream     the state of the previous frame is carried through the whole scene (the verdict mode; its file is `token_<split>.pkl`, the one `jtoken_eval.py score` / `sweep` read)
+  stream     the state of the previous frame is carried through the whole scene (the verdict mode; its folder is the run's own: `runs/R/token_<split>.pkl`, the file `jtoken_eval.py score` / `sweep` read)
   truncated  the state is also reset every `--window` frames of a scene (3 = the training distribution: a third of the frames are cold)
   off        every frame cold (the checkpoint's own control: no past)          shuffled  the state of ANOTHER scene at the same step index (donor = the next scene, cyclically, that has the frame; VAL only), warped by this frame's pose
   still      the identity pose instead of the ego pose (the state is not moved)   (arm z: no block, every mode is the same head on the same frames)
+Every other mode goes to the SIBLING run folder `runs/R_<mode>/` (stream: `runs/R/`): `token_<split>[_n<N>].pkl` with meta['run'] = `R_<mode>`, and `model.pt` = a copy of R's (an existing one must be the same bytes), so that `jtoken_eval.py score --run R_<mode>`
+and `sweep` read it as they read a run (they need model.pt for its args and the dump named as above; their cards land in the sibling folder; the parameter count they print is that of the E365 head without the block).
 TRAIN (873 evenly spaced frames, as `jtoken_eval.sample`): the stream runs through the whole split, only the sampled frames are dumped. The key weight of the past is the head's own 1 - p_none (the switch of 1000 steps is over in a trained head).
-The dump of `jtoken_eval.dump` (meta + frames of `batch_dump`) with meta['use'] = per dumped frame has_prev, position in the scene, ego shift (m), sums d2 / x2 / n of the kill measure u = RMS(block(x, past) - block(x, none key only)) / RMS(x) (NaN-free: 0 without a past).
+The dump of `jtoken_eval.dump` (meta + frames of `batch_dump`) with meta['use'] = per dumped frame has_prev, position in the scene, ego shift (m), sums d2 / x2 / n of the kill measure u = RMS(block(x, past) - block(x, none key only)) / RMS(x) (0 without a past) and state_ss / state_n = sum of squares and count of the CARRIED state (the head's final token states x of that frame, valid tokens).
+`use` writes u and the RMS of the carried state per stream position (0 = the cold start, 1, 2, ... frames since the last reset), the stream against off (what the past changed) and the frame indices of the first 5 frames of every scene against the later ones (the card's topo-F1 split).
 Tests: training/grid/test_jpast_train.py (the modes by hand on the stub head, the donor plan, the use report)
 """
 import argparse
+import filecmp
 import json
 import math
 import os
 import pickle
+import shutil
 import sys
 
 import numpy as np
@@ -34,11 +40,31 @@ import jtoken_train as JKT  # noqa: E402
 import lane_ptok_data as LP  # noqa: E402
 
 MODES = ("stream", "truncated", "off", "shuffled", "still")
+FIRST = 5                                                                   # the card's split of the topo F1: the first 5 frames of every scene (positions 0 - 4) against the later ones
 BUCKETS = ((1, 1), (2, 2), (3, 3), (4, 10), (11, 10 ** 9))                  # stream positions of the u table: 1st, 2nd, 3rd, 4th - 10th, 11th and later frame of a scene (0 = the cold start)
 
 
-def mode_sfx(mode):
-    return "" if mode == "stream" else f"_{mode}"
+def run_folder(run, mode):
+    """the run folder a dump of `mode` is written to: the run itself for stream, the sibling `<run>_<mode>` for every other mode"""
+    return run if mode == "stream" else f"{run}_{mode}"
+
+
+def sibling(runs, run, mode):
+    """the folder of `run_folder` with the run's model.pt in it (a copy; an existing one must be the same bytes: another checkpoint under the same name is refused) -> its name"""
+    name = run_folder(run, mode)
+    if name != run:
+        os.makedirs(os.path.join(runs, name), exist_ok=True)
+        src, dst = os.path.join(runs, run, "model.pt"), os.path.join(runs, name, "model.pt")
+        if os.path.exists(dst):
+            assert filecmp.cmp(src, dst, shallow=False), f"{dst} is not a copy of {src}"
+        else:
+            shutil.copyfile(src, dst)
+    return name
+
+
+def dump_file(runs, name, split, n=0):
+    """runs/<name>/token_<split>[_n<n>].pkl (n: the frames of a `--max` dump), the name `jtoken_eval.dump_path` builds for model.pt, no drop, every 1"""
+    return os.path.join(runs, name, f"token_{split}{f'_n{n}' if n else ''}.pkl")
 
 
 def donor_plan(prev):
@@ -69,7 +95,8 @@ def is_cold(mode, has_prev, pos_in_scene, window):
 
 def iter_outputs(m, batches, mode="stream", window=3, dev="cpu", donor=None, states=None, frame_of=None):
     """the head on the frames of `batches` (batch size 1: `lane_past_data.loader(..., stream=True)`: dict(frames=[frame], rel_R (1, 1, 2, 2), rel_t (1, 1, 2), has_prev (1, 1), idx (1, 1))) in order, the state carried as `mode` says -> yields
-    (cache index, frame batch on the CPU, the head's output, dict(has_prev, pos = position in the scene, shift = the ego shift in m, d2 / x2 / n = the sums of the kill measure)). shuffled: `donor` = `donor_plan`, `states` = cache index -> (x, w) of a
+    (cache index, frame batch on the CPU, the head's output, dict(has_prev, pos = position in the scene, shift = the ego shift in m, d2 / x2 / n = the sums of the kill measure, state_ss / state_n = the sum of squares and the count of the final
+    token states x of the frame's valid tokens: the state that is carried on)). shuffled: `donor` = `donor_plan`, `states` = cache index -> (x, w) of a
     stream pass (CPU tensors), `frame_of(j)` = the frame batch of cache index j. A head without a block (arm z) runs every frame cold"""
     block = getattr(m, "past_block", None)
     meter = JP.UseMeter(block) if block is not None else None
@@ -96,7 +123,8 @@ def iter_outputs(m, batches, mode="stream", window=3, dev="cpu", donor=None, sta
             with torch.no_grad():
                 out = m(frd, past) if block is not None else m(frd)
             d2, x2, n = meter.take_sums() if meter is not None else (0.0, 0.0, 0)
-            yield i, fr, out, dict(has_prev=hp, pos=pos_in_scene, shift=float(b["rel_t"][0, 0].norm()), d2=d2, x2=x2, n=n)
+            v = out["valid"][0].bool()
+            yield i, fr, out, dict(has_prev=hp, pos=pos_in_scene, shift=float(b["rel_t"][0, 0].norm()), d2=d2, x2=x2, n=n, state_ss=float((out["x"][0].float() ** 2)[v].sum()), state_n=int(v.sum()) * int(out["x"].shape[-1]))
             out_prev, fr_prev = out, frd
     finally:
         if meter is not None:
@@ -105,12 +133,12 @@ def iter_outputs(m, batches, mode="stream", window=3, dev="cpu", donor=None, sta
 
 def dump_frames(m, batches, keep, mode="stream", window=3, dev="cpu", donor=None, states=None, frame_of=None, log=print):
     """the dump frames (`jtoken_eval.batch_dump`) of the cache indices in `keep` (a set) + meta['use'] arrays; the stream runs on through the frames that are not kept (the state is carried through them) and stops after the last kept one"""
-    last, frames, use = max(keep), [], dict(idx=[], has_prev=[], pos=[], shift=[], d2=[], x2=[], n=[])
+    last, frames, use = max(keep), [], dict(idx=[], has_prev=[], pos=[], shift=[], d2=[], x2=[], n=[], state_ss=[], state_n=[])
     for i, fr, out, info in iter_outputs(m, batches, mode, window, dev, donor, states, frame_of):
         if i in keep:
             frames += JE.batch_dump(out, fr)
             use["idx"].append(i)
-            for k in ("has_prev", "pos", "shift", "d2", "x2", "n"):
+            for k in ("has_prev", "pos", "shift", "d2", "x2", "n", "state_ss", "state_n"):
                 use[k].append(info[k])
             if len(frames) % 100 == 0:
                 log(f"   {len(frames)}/{len(keep)} frames", flush=True)
@@ -132,31 +160,35 @@ def dump(a, runs=JE.RUNS):
     kw = JE.cache_kw(args)
     ds, dl = LPD.loader(a.split, kw["seed"], 1, 0 if a.cpu else 2, ident=kw["ident"], K=kw["K"], shuffle=False, stream=True, **({"cache": kw["cache"]} if kw.get("cache") else {}))
     idx = JE.sample(len(ds), a.split, 1)[: a.max or None]
-    path = os.path.join(runs, a.run, f"token_{a.split}{mode_sfx(a.mode)}{f'_n{len(idx)}' if a.max else ''}.pkl")
+    name = run_folder(a.run, a.mode)
+    path = dump_file(runs, name, a.split, len(idx) if a.max else 0)
     assert not os.path.exists(path), f"a stored dump is never overwritten: {path}"
+    sibling(runs, a.run, a.mode)
     donor = states = frame_of = None
     if a.mode == "shuffled":
         states = {i: (out["x"].cpu(), out["w"].cpu()) for i, _, out, _ in iter_outputs(m, dl, "stream", dev=dev)}
         donor, frame_of = donor_plan(ds.prev), (lambda j: LP.collate([ds.tok[j]]))
     frames, use = dump_frames(m, dl, set(int(i) for i in idx), a.mode, a.window, dev, donor, states, frame_of)
-    meta = dict(run=a.run, seed=a.seed, split=a.split, drop=0.0, drop_seed=0, idx=idx.tolist(), every=1, tokens=[ds.tok.tokens[i] for i in idx], K=ds.tok.K, ident=kw["ident"], cache=ds.dir, steps=args.get("steps"), mode=a.mode, window=a.window, use=use,
+    meta = dict(run=name, seed=a.seed, split=a.split, drop=0.0, drop_seed=0, idx=idx.tolist(), every=1, tokens=[ds.tok.tokens[i] for i in idx], K=ds.tok.K, ident=kw["ident"], cache=ds.dir, steps=args.get("steps"), model="model.pt", of_run=a.run, mode=a.mode, window=a.window, use=use,
                 past="none (arm z)" if args.get("no_past") else "PastBlock")
     assert use["idx"] == idx.tolist() and [f["token"] for f in frames] == meta["tokens"], "the dump is not the frames asked for, in order"
     with open(path, "wb") as fh:
         pickle.dump(dict(meta=meta, frames=frames), fh)
-    n = np.asarray(use["n"], float)
-    u = math.sqrt(sum(use["d2"]) / max(sum(use["x2"]), 1e-30)) if n.sum() else float("nan")
-    print(f"written {os.path.relpath(path, ROOT)}: {len(frames)} frames, mode {a.mode}, kept nodes per frame {np.mean([f['keep'].sum() for f in frames]):.1f}, u {u:.4f} over {int(sum(use['has_prev']))} frames with a past, device {dev}")
+    used = sum(1 for n in use["n"] if n)
+    u_txt = f"u {math.sqrt(sum(use['d2']) / max(sum(use['x2']), 1e-30)):.4f} over {used} frames with a past" if used else "no past read (mode off or arm z)"
+    print(f"written {os.path.relpath(path, ROOT)}: {len(frames)} frames, mode {a.mode}, kept nodes per frame {np.mean([f['keep'].sum() for f in frames]):.1f}, {u_txt}, device {dev}")
     return path
 
 
 def use_report(stream, off=None):
     """u of the kill measure overall and by stream position, and (with the dump of mode off) what the past changed: the dumps are the dicts of `dump` (meta + frames) -> dict"""
     u = stream["meta"]["use"]
-    d2, x2, pos, hp = (np.asarray(u[k], float) for k in ("d2", "x2", "pos", "has_prev"))
+    d2, x2, pos, hp, sq, sn = (np.asarray(u[k], float) for k in ("d2", "x2", "pos", "has_prev", "state_ss", "state_n"))
     ratio = lambda m: float(math.sqrt(d2[m].sum() / max(x2[m].sum(), 1e-30))) if m.any() and x2[m].sum() > 0 else float("nan")  # noqa: E731
     rep = dict(run=stream["meta"]["run"], split=stream["meta"]["split"], mode=stream["meta"].get("mode", "stream"), frames=len(d2), frames_with_past=int(hp.sum()), u=ratio(hp > 0),
-               u_by_position={f"{lo}-{hi}" if hi < 10 ** 9 else f"{lo}+": ratio((pos >= lo) & (pos <= hi) & (hp > 0)) for lo, hi in BUCKETS})
+               u_by_position={f"{lo}-{hi}" if hi < 10 ** 9 else f"{lo}+": ratio((pos >= lo) & (pos <= hi) & (hp > 0)) for lo, hi in BUCKETS},
+               state_rms_by_position=[float(math.sqrt(sq[pos == p].sum() / sn[pos == p].sum())) if sn[pos == p].sum() > 0 else float("nan") for p in range(int(pos.max()) + 1)] if len(pos) else [],
+               position_per_frame=pos.astype(int).tolist(), frame_idx_first5=[int(i) for i, p in zip(stream["meta"]["idx"], pos) if p < FIRST], frame_idx_later=[int(i) for i, p in zip(stream["meta"]["idx"], pos) if p >= FIRST])
     if off is not None:
         assert [f["token"] for f in off["frames"]] == [f["token"] for f in stream["frames"]], "the two dumps are not the same frames"
         gain = lose = flips = changed = frames_any = 0
@@ -173,10 +205,9 @@ def use_report(stream, off=None):
 
 
 def use(a, runs=JE.RUNS):
-    load = lambda sfx: pickle.load(open(os.path.join(runs, a.run, f"token_{a.split}{sfx}.pkl"), "rb"))  # noqa: E731
-    off_path = os.path.join(runs, a.run, f"token_{a.split}{mode_sfx('off')}.pkl")
-    rep = use_report(load(""), load(mode_sfx("off")) if os.path.exists(off_path) else None)
-    path = os.path.join(runs, a.run, f"past_use_{a.split}.json")
+    paths = {m: dump_file(runs, run_folder(a.run, m), a.split, a.max) for m in ("stream", "off")}
+    rep = use_report(pickle.load(open(paths["stream"], "rb")), pickle.load(open(paths["off"], "rb")) if os.path.exists(paths["off"]) else None)
+    path = os.path.join(runs, a.run, f"past_use_{a.split}{f'_n{a.max}' if a.max else ''}.json")
     assert not os.path.exists(path), f"a stored result is never overwritten: {path}"
     with open(path, "w") as fh:
         json.dump(rep, fh, indent=1)
@@ -198,6 +229,7 @@ def main(argv=None):
     s = sub.add_parser("use")
     s.add_argument("--run", required=True)
     s.add_argument("--split", default="val", choices=("val", "train"))
+    s.add_argument("--max", type=int, default=0, help="the dumps of `dump --max N` (their names carry _n<N>)")
     a = ap.parse_args(argv)
     {"dump": dump, "use": use}[a.cmd](a)
 
