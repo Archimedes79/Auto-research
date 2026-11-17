@@ -10,6 +10,7 @@ Architecture options (all in the recipe and in `model.pt`, `load_model` rebuilds
 `--token-drop P` removes each valid token with probability P in every training step (a new draw per step, seeded by (seed, the head's step counter, the frame token)): the removed token is not valid, has type none and loses every target pair (`drop_tokens`,
 the same effect on the batch as the loader's own `token_drop`, which draws once per frame and cache seed, the same removal every epoch); the targets are NOT re-contracted over the removed tokens (GT links through a removed token are lost, not bridged).
 `--none-weight W` (default 1 = the loss of before) multiplies the loss of the sources whose GT successor set is empty (target: the none slot) and the type cross-entropy of the none class (`jtoken.jtoken_loss`).
+`--pos-loss max` (E376; default sum = the loss of before): a source with GT successors is trained on -log max over its group instead of -log of its sum (one winner among the duplicates; a fork's group holds both branches).
 `--prior rule` (E369) builds the head with c-rule as a fixed prior (`jtoken.JTokenHead(prior=)`; in `build_head`, so `load_model` rebuilds it). `--teacher rule` (E370 stage A, a training option only, not in `build_head`):
 the targets are `jtoken.rule_teacher`'s (c-rule's links inside the gate, B''s own types; no GT key is read), no scale term. `--init <model.pt>` (E370 stage B): the weights of another run of the same architecture
 (refused otherwise), the head's step buffer CARRIED (the key weights stay the head's own 1 - p_none: the step-0 graph is the init's), a fresh optimiser and schedule; only at a fresh start (`ckpt.pt` takes precedence on a
@@ -40,8 +41,8 @@ for sub_ in ("training", "training/grid", "training/data", "training/data/prep",
 import jtoken as JK  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "d", "layers", "heads", "ffn", "token_drop", "none_weight", "prior", "teacher", "init", "init_sha256", "head_seed")
-ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0, prior="none", teacher="none", init=None, init_sha256=None, head_seed=None)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
+RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "d", "layers", "heads", "ffn", "token_drop", "none_weight", "pos_loss", "prior", "teacher", "init", "init_sha256", "head_seed")
+ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0, pos_loss="sum", prior="none", teacher="none", init=None, init_sha256=None, head_seed=None)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
 
 
@@ -62,6 +63,7 @@ def parse_args(argv=None):
     ap.add_argument("--ffn", type=int, default=ARCH_DEFAULTS["ffn"], help="feed-forward width (default 2 x d)")
     ap.add_argument("--token-drop", type=float, default=ARCH_DEFAULTS["token_drop"], dest="token_drop", help="train-time removal of each valid token with this probability, a new draw every step (seeded by seed, step, frame token)")
     ap.add_argument("--none-weight", type=float, default=ARCH_DEFAULTS["none_weight"], dest="none_weight", help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
+    ap.add_argument("--pos-loss", choices=JK.POS_LOSS, default=ARCH_DEFAULTS["pos_loss"], dest="pos_loss", help="E376: the likelihood of a source with GT successors, -log sum over its group (sum) or -log max (max)")
     ap.add_argument("--prior", choices=("none", "rule"), default=ARCH_DEFAULTS["prior"], help="E369: c-rule as a fixed prior on the logits (part of the head)")
     ap.add_argument("--teacher", choices=("none", "rule"), default=ARCH_DEFAULTS["teacher"], help="E370 stage A: c-rule's links and B''s types as the targets (no GT read, no scale term)")
     ap.add_argument("--init", default=None, help="E370 stage B: the model.pt whose weights (and step buffer) start this run; relative to the problem folder")
@@ -165,7 +167,7 @@ def drop_tokens(b, keep):
     return out
 
 
-def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0, teacher="none"):
+def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0, teacher="none", pos_loss="sum"):
     """`jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line); token_drop > 0: `drop_tokens` with a draw of `step_keep` per step
     (the step is the head's own training-step counter, which a resume and a roll-back keep); teacher 'rule': the targets of `jtoken.rule_teacher` (no GT key read), no scale term, the rule links outside the gate counted"""
     n, mark = [0], [time.time(), 0]
@@ -180,10 +182,10 @@ def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0, teacher="none"):
         if teacher == "rule":
             out = m(b)
             tb = JK.rule_teacher(out, b)
-            loss, info = JK.jtoken_loss(out, tb, scale_w=0.0, none_weight=none_weight)
+            loss, info = JK.jtoken_loss(out, tb, scale_w=0.0, none_weight=none_weight, pos_loss=pos_loss)
             info.update(rule_links=tb["rule_links"], rule_out_gate=tb["rule_out_gate"])
         else:
-            loss, info = JK.jtoken_loss(m(b), b, none_weight=none_weight)
+            loss, info = JK.jtoken_loss(m(b), b, none_weight=none_weight, pos_loss=pos_loss)
         info.update(gpu_gb=gb(torch.cuda.max_memory_allocated), gpu_res_gb=gb(torch.cuda.max_memory_reserved))
         if n[0] == 1 and run is not None:                                       # E370: the loss of the start weights (stage B: the init's GT loss before the first update)
             run.log(f"first loss of this process: {float(loss):.4f} (head step {m._step_py - 1} at this forward; before any update of this process)")
@@ -232,12 +234,12 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
     snap_fn = (lambda m, n: dict(snapshot=n) if n in snaps and save_snapshot(run, m, args, n) else None) if later else None
     run.log(f"jtoken bs {a.bs}: {args['steps']} steps, lr {a.lr}, trainable {JK.count_params(model)} parameters ({JK.count_params(model) / 1e6:.3f} M: the whole head, d {args['d']} layers {args['layers']} heads {args['heads']} ffn {args['ffn'] or 2 * args['d']}; B' is cached), "
             f"cache seed {a.seed}, head seed {hs}{' (--head-seed)' if hs != a.seed or getattr(a, 'head_seed', None) is not None else ''}, "
-            + (f"token drop {a.token_drop} per step, " if a.token_drop > 0 else "") + (f"none weight {a.none_weight}, " if a.none_weight != 1.0 else "")
+            + (f"token drop {a.token_drop} per step, " if a.token_drop > 0 else "") + (f"none weight {a.none_weight}, " if a.none_weight != 1.0 else "") + (f"positive loss {a.pos_loss}, " if a.pos_loss != "sum" else "")
             + (f"prior {a.prior}, " if a.prior != "none" else "") + (f"teacher {a.teacher} (no GT targets, no scale term), " if a.teacher != "none" else "")
             + (f"init {a.init} (sha256 {args['init_sha256'][:12]}, head step {model._step_py}{'' if fresh else ', not loaded: resumed from ckpt.pt'}), " if a.init else "")
             + (f"snapshots {sorted(snaps)}, " if snaps else "")
             + (f"synthetic batches, K {smoke_k}" if a.smoke else f"cache {a.cache or 'default root'}, ident {a.ident}, K {a.K or 'auto'}"))
-    T.fit(model, make_loss(run, a.token_drop, hs, a.none_weight, a.teacher), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05, ckpt_every=ckpt_every, seed=hs, args=args,
+    T.fit(model, make_loss(run, a.token_drop, hs, a.none_weight, a.teacher, a.pos_loss), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05, ckpt_every=ckpt_every, seed=hs, args=args,
           device="cuda" if torch.cuda.is_available() else "cpu", config=dict(design="jtoken"), eval_fn=snap_fn, eval_every=functools.reduce(math.gcd, later) if later else 0)
     run.log(f"done {a.name}")
 
