@@ -5,7 +5,8 @@
 likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT successors (one of them with `ylong` against the token
 chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over
 the sources, no valid mask; the none slot trains the empty sources), pos_loss (E376: -log sum / -log max over G(i) by hand with duplicates and a fork, one member = the same loss, the max raises one member; textual
-mutants), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination, argmax;
+mutants), none_weight_near (E377: the near label and the loss by hand on a toy frame (a twin at 1.0 m, exactly 2.0 m, 2.01 m, a heading cosine 0.4, a duplicate in G(i), padding), n_near, unset / equal = the
+loss of before, no near token = any W; textual mutants), none_weight_near_trainer (E377: 20 smoke steps bit for bit at W = the none weight, n_near logged, resume refusal, the teacher branch), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination, argmax;
 mutants: other thresholds / ends / no valid mask), head (shapes, every parameter gets gradient, the gate and the chord classes against an independent distance, order and padding invariance with a padding mutant),
 key_bias (the head's own p_none gets gradient from layer 2 on after the switch and not before; the step mirror survives load_state_dict; no gradient reaches the cached inputs), writer_free (the forward reads no GT
 key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches, kill, resume, another recipe refused, no loader
@@ -79,7 +80,8 @@ def _tensors(f):
         yl[i, j] = True
     for (i, j), v in f["scale"].items():
         ys[i, j] = torch.tensor(v)
-    return dict(cand=cand, chord=chord, y=y, ylong=yl, yscale=ys, ytype=torch.tensor(f["ytype"]), valid=torch.tensor(f["valid"]))
+    geo = {k: torch.tensor(f[k], dtype=torch.float32) for k in ("pos", "dirv") if k in f}                  # the token geometry of a frame that has one (the E377 near label)
+    return dict(cand=cand, chord=chord, y=y, ylong=yl, yscale=ys, ytype=torch.tensor(f["ytype"]), valid=torch.tensor(f["valid"]), **geo)
 
 
 def _hand(frames=(F1, F2)):
@@ -91,7 +93,7 @@ def _hand(frames=(F1, F2)):
     B = len(frames)
     z, zn, ty = torch.randn(B, 2, K, K, generator=g), torch.randn(B, 2, K, generator=g), torch.randn(B, K, 7, generator=g)
     out = dict(z=z.requires_grad_(), zn=zn.requires_grad_(), cand=st("cand"), chord=st("chord"), valid=st("valid"), scale=torch.full((B, K, K, 2), 0.4), types=ty, types1=ty.flip(-1))
-    return out, dict(y=st("y"), ylong=st("ylong"), yscale=st("yscale"), ytype=st("ytype")), frames
+    return out, dict(y=st("y"), ylong=st("ylong"), yscale=st("yscale"), ytype=st("ytype"), **{k: st(k) for k in ("pos", "dirv") if k in ts[0]}), frames
 
 
 def _with_logp(out, cand=None):
@@ -100,8 +102,9 @@ def _with_logp(out, cand=None):
 
 
 def _hand_loss(f, z, zn, t1, t3, w=1.0, pos="sum"):
-    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights); pos = the likelihood of a source with
-    GT successors, -log sum ('sum') or -log max ('max') of p over G(i). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
+    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights), a number or a list per token (E377);
+    pos = the likelihood of a source with GT successors, -log sum ('sum') or -log max ('max') of p over G(i). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
+    wn = lambda n: w[n] if isinstance(w, (list, tuple)) else w  # noqa: E731
     res = []
     for c, cs in enumerate((f["short"], f["long"])):
         rows = []
@@ -109,9 +112,9 @@ def _hand_loss(f, z, zn, t1, t3, w=1.0, pos="sum"):
             G = [j for a, j in f["gt"] if a == i and j in js]
             den = lse(*[z[c][i][j] for j in js], zn[c][i])
             zg = [z[c][i][j] for j in G]
-            rows.append(-((lse(*zg) if pos == "sum" else max(zg)) - den) if G else -w * (zn[c][i] - den))
+            rows.append(-((lse(*zg) if pos == "sum" else max(zg)) - den) if G else -wn(i) * (zn[c][i] - den))
         res.append(sum(rows) / len(rows) if rows else None)
-    wt = lambda n: w if f["ytype"][n] == 0 else 1.0  # noqa: E731
+    wt = lambda n: wn(n) if f["ytype"][n] == 0 else 1.0  # noqa: E731
     ce = lambda t: sum(wt(n) * -(t[n][f["ytype"][n]] - lse(*t[n])) for n in range(f["K"]) if f["valid"][n]) / sum(wt(n) for n in range(f["K"]) if f["valid"][n])  # noqa: E731
     return res[0], res[1], ce(t1), ce(t3)
 
@@ -222,13 +225,86 @@ def test_pos_loss():
         assert gz["sum"][i, win] < 0 and gz["sum"][i, lose] < 0 and gz["max"][i, win] < 0 and gz["max"][i, lose] > 0, (i, gz["sum"][i], gz["max"][i])
     must_fail(JK.jtoken_loss, out, b, pos_loss="mean")
     mutants = {"the max over the wrong axis": [("g.amax(-1)", "g.amax(-2)")], "the max over all candidates instead of the group": [("g.amax(-1)", "lp[..., :K].amax(-1)")],
-               "the option ignored": [("_source_nll(lp, G, none_weight, pos_loss)", "_source_nll(lp, G, none_weight)")], "logsumexp kept under max": [("g.amax(-1)", "torch.logsumexp(g, -1)")],
+               "the option ignored": [("_source_nll(lp, G, wn, pos_loss)", "_source_nll(lp, G, wn)")], "logsumexp kept under max": [("g.amax(-1)", "torch.logsumexp(g, -1)")],
                "the none slot inside the max": [("g.amax(-1)", "torch.cat([g, lp[..., K:]], -1).amax(-1)")]}
     for edits in mutants.values():
         must_fail(_check_pos, "max", _mutant(*edits))
     print(f"pos_loss: nll_s / nll_l by hand on two frames (duplicates and a fork in the short class, duplicates in the long class, one-member groups, empty-G sources at W 0.25): sum {hand['sum'][0]:.6f} / {hand['sum'][1]:.6f}, "
           f"max {hand['max'][0]:.6f} / {hand['max'][1]:.6f}, the rest of the loss unchanged; one member in every group: max = sum bit for bit; under max the losing member of a duplicate pair and of a fork is pushed down "
           f"(under sum both go up); an unknown mode refused; textual mutants ({', '.join(mutants)}) fail: ok")
+
+
+# E377 toy frame (metres, heading +y unless said): 0 (type 1) at (0, 0) and 1 (type 2) at (20, 0) are assigned; GT 0 -> 1 and 0 -> 7. NEAR (by hand): 2 a twin 1.0 m beside 0 (in no G), 3 exactly 2.0 m ahead of 0,
+# 7 a duplicate 0.5 m beside 1 and in G(0). FAR: 4 2.01 m behind 0, 5 1.0 m beside 0 with a heading cosine 0.4, 6 a far none token, 9 1.0 m beside 6 (near a NONE token only); 8 padding 0.5 m beside 0.
+# Empty-G sources: short 1 (assigned: keeps the none weight), 2, 3, 7 (near), 5 (far); long 7 (near), 4, 9 (far). NF_FAR = NF with 2, 3, 7 moved away: no near token
+NEAR_HAND = (2, 3, 7)
+NF = dict(_frame(10, {0: [1, 2, 7], 1: [9], 2: [3], 3: [4], 5: [6], 7: [1]}, {4: [6], 7: [9], 9: [0]}, [(0, 1), (0, 7)], [], [1, 2] + [0] * 8, [True] * 8 + [False, True]),
+          pos=[(0, 0), (20, 0), (1, 0), (0, 2), (0, -2.01), (-1, 0), (-15, 30), (20.5, 0), (0.5, 0), (-15, 31)],
+          dirv=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (math.sqrt(1 - 0.4 ** 2), 0.4), (1, 0), (0, 1), (0, 1), (1, 0)])
+NF_FAR = dict(NF, pos=[{2: (-30, -30), 3: (30, -30), 7: (30, 30)}.get(n, p) for n, p in enumerate(NF["pos"])])
+
+
+def _check_near(mod, w, W=0.73):
+    """asserts `mod.jtoken_loss(none_weight=w, none_weight_near=W)` (jtoken or a textual mutant) on the batch (NF, NF_FAR) against the hand values: the none weight of every token typed by hand (W on NEAR_HAND of NF,
+    w on every other token, also on the assigned empty-G source 1 and on all of NF_FAR) in the empty-G source terms of both classes and in the type CE with its denominator; n_near = (3 + 0) / 2 -> (loss, hand parts)"""
+    out, b, frames = _hand((NF, NF_FAR))
+    out = _with_logp(out)
+    wl = [[W if n in NEAR_HAND else w for n in range(NF["K"])], [w] * NF["K"]]
+    z, zn, t1, t3 = (x.detach().tolist() for x in (out["z"], out["zn"], out["types1"], out["types"]))
+    per = [_hand_loss(f, z[n], zn[n], t1[n], t3[n], wl[n]) for n, f in enumerate(frames)]
+    hand = [sum(p[k] for p in per) / len(per) for k in range(4)]
+    loss, info = mod.jtoken_loss(out, b, none_weight=w, none_weight_near=W)
+    got = [info[k] for k in ("nll_s", "nll_l", "ce1", "ce3")]
+    assert all(abs(g - h) < 1e-5 for g, h in zip(got, hand)) and abs(float(loss) - (hand[0] + hand[1] + 0.5 * (hand[2] + hand[3]))) < 1e-5, (w, W, got, hand)
+    assert info["n_near"] == 1.5, info["n_near"]
+    return loss, hand
+
+
+def test_none_weight_near():
+    """E377 --none-weight-near: the label `near_none` on the toy frame (NEAR_HAND, padding never near); the loss by hand on (NF, NF_FAR) at W 0.73 with none weight 0.25 and 1.0 (the CE weighting must switch on at 1);
+    n_near by hand; unset or equal to the none weight = the loss of before bit for bit (also 1.0 / 1.0); a batch without near tokens has the same loss under any W; textual mutants fail"""
+    out, b, _ = _hand((NF, NF_FAR))
+    near = JK.near_none(b["pos"], b["dirv"], out["valid"], b["ytype"])
+    assert near[0].nonzero().flatten().tolist() == list(NEAR_HAND) and not near[1].any(), near
+    den = {w: sum(0.73 if n in NEAR_HAND else (w if NF["ytype"][n] == 0 else 1.0) for n in range(NF["K"]) if NF["valid"][n]) for w in (0.25, 1.0)}
+    assert abs(den[0.25] - 5.19) < 1e-12 and abs(den[1.0] - 8.19) < 1e-12, den                               # the CE denominator of NF by hand: 2 assigned + 3 x 0.73 + 4 far none x w (champion 0.25: 3.75)
+    (l25, h25), (l1, h1) = _check_near(JK, 0.25), _check_near(JK, 1.0)
+    out = _with_logp(out)
+    loss = lambda **k: JK.jtoken_loss(out, b, **k)[0]  # noqa: E731
+    assert torch.equal(loss(none_weight=0.25), loss(none_weight=0.25, none_weight_near=0.25)) and torch.equal(loss(), loss(none_weight=1.0, none_weight_near=1.0)), "W = the none weight: the loss of before"
+    assert abs(float(l25) - float(loss(none_weight=0.25))) > 1e-3 and abs(float(l1) - float(loss())) > 1e-3, "W != the none weight changes the loss (at none weight 1 too: the CE weighting on)"
+    o0, b0, _ = _hand((NF_FAR,))
+    o0 = _with_logp(o0)
+    for w in (0.25, 1.0):
+        ref = JK.jtoken_loss(o0, b0, none_weight=w)[0]
+        assert all(torch.equal(JK.jtoken_loss(o0, b0, none_weight=w, none_weight_near=wn)[0], ref) for wn in (0.0, 0.25, 0.73, 1.0, 5.0)), f"no near token: W changes the loss at none weight {w}"
+    label = 'near = near_none(batch["pos"].to(dev).float(), batch["dirv"].to(dev).float(), valid, yt)'
+    mutants = {"the label from the column of y (v1's duplicates)": [(label, "near = valid & (yt == 0) & y.any(1)")], "the label from the row of y": [(label, "near = valid & (yt == 0) & y.any(-1)")],
+               "the weight on all none tokens": [(label, "near = valid & (yt == 0)")],
+               "on the type term only": [("_source_nll(lp, G, wn, pos_loss)", "_source_nll(lp, G, none_weight, pos_loss)")],
+               "on the source term only": [("torch.where(yt == 0, wn, 1.0)", "torch.where(yt == 0, none_weight, 1.0)")],
+               "the CE denominator of the scalar weight": [("valid, wt) for t in", "valid, None if wt is None else torch.where(yt == 0, none_weight, 1.0)) for t in")],
+               "< instead of <= at 2.0 m": [("d2 <= NEAR_R ** 2", "d2 < NEAR_R ** 2")], "the heading test dropped": [(" & (cos >= NEAR_COS)", "")],
+               "the assigned test dropped (near any other valid token)": [("asg[:, None, :]", "(valid[:, None, :] & ~torch.eye(valid.shape[-1], dtype=torch.bool))")],
+               "padding counted": [("return valid & (ytype == 0) & (", "return (ytype == 0) & (")],
+               "the option ignored": [("wn = torch.where(near, none_weight_near, none_weight)", "wn = none_weight")],
+               "the CE weighting off at none weight 1": [("if torch.is_tensor(wn) or none_weight != 1.0 else None", "if none_weight != 1.0 else None")]}
+    for edits in mutants.values():
+        must_fail(lambda mod: (_check_near(mod, 0.25), _check_near(mod, 1.0)), _mutant(*edits))
+    # the label's two remaining edges (code critic of the option): an opposite-heading twin is not near; a TYPED padding token is no anchor (frame: 0 assigned at (0, 0) heading +y, 1 none at (1, 0) heading -y,
+    # 2 padding with ytype 1 at (10, 0), 3 none at (11, 0) heading +y next to the padding token only, 4 none at (0, 1) heading +y: the one near token)
+    t = lambda x: torch.tensor([x], dtype=torch.float32)  # noqa: E731
+    edge = (t([(0, 0), (1, 0), (10, 0), (11, 0), (0, 1)]), t([(0, 1), (0, -1), (0, 1), (0, 1), (0, 1)]), torch.tensor([[True, True, False, True, True]]), torch.tensor([[1, 0, 1, 0, 0]]))
+
+    def check_edge(mod):
+        assert mod.near_none(*edge)[0].tolist() == [False, False, False, False, True], mod.near_none(*edge)
+    check_edge(JK)
+    for edits in ([("(cos >= NEAR_COS)", "(cos.abs() >= NEAR_COS)")], [("asg = valid & (ytype != 0)", "asg = (ytype != 0)")]):
+        must_fail(check_edge, _mutant(*edits))
+    print(f"none_weight_near: the near label on the toy frame = tokens {list(NEAR_HAND)} (a twin at 1.0 m, exactly 2.0 m, a duplicate in G(0) at 0.5 m; 2.01 m, cos 0.4, a far token, a token near a none token only and padding: not near); "
+          f"by hand at W 0.73 / none weight 0.25: nll_s {h25[0]:.6f} nll_l {h25[1]:.6f} ce1 {h25[2]:.6f} ce3 {h25[3]:.6f} (CE denominator of NF {den[0.25]:.2f}, champion 3.75), at W 0.73 / none weight 1.0: nll_s {h1[0]:.6f} "
+          f"nll_l {h1[1]:.6f} ce1 {h1[2]:.6f} ce3 {h1[3]:.6f} (denominator {den[1.0]:.2f}), n_near 1.5 (3 + 0 over 2 frames); unset / W = the none weight (0.25, 1.0) = the loss of before bit for bit; no near token: "
+          f"the same loss under W 0 - 5; textual mutants ({', '.join(mutants)}) fail; an opposite-heading twin and a token next to a typed padding token are not near (mutants |cos| and anchors without the valid mask fail): ok")
 
 
 def test_wiring_logp():
@@ -627,6 +703,47 @@ def test_pos_loss_trainer():
     assert (ck["champ"]["args"]["pos_loss"], ck["max"]["args"]["pos_loss"]) == ("sum", "max")
     print(f"pos_loss_trainer: the default is sum: --pos-loss sum = the champion command line --none-weight 0.25 bit for bit (the loss of each of 20 smoke steps, last {losses['champ'][-1]:.6f}, the final weights); --pos-loss max differs "
           f"(first loss {losses['max'][0]:.6f} against {losses['champ'][0]:.6f}, last {losses['max'][-1]:.6f}), finite; pos_loss in model.pt's args: ok")
+
+
+def test_none_weight_near_trainer():
+    """E377 in the trainer: --none-weight-near unset or equal to --none-weight = the run without it bit for bit (the loss of each of 20 smoke steps and the final weights, same process) at the champion's 0.25 and at 1.0;
+    0.73 differs (also at none weight 1), `n_near` in every log.jsonl row (>= the 4 duplicates of a synthetic frame), in the first-loss line, the start line names W; the value in model.pt's args, a resume with another value
+    refused, W < 0 refused; the teacher branch passes it on (`_rule_frame` under B''s types: n_near 1 = token 10, 1 m ahead of token 5)"""
+    losses, real, now = {}, JK.jtoken_loss, [None]
+
+    def recording(out, batch, **k):                                           # the loss of every step
+        r = real(out, batch, **k)
+        losses[now[0]].append(float(r[0]))
+        return r
+    nw = lambda w, wn=None: ["--none-weight", w] + ([] if wn is None else ["--none-weight-near", wn])  # noqa: E731
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0"]
+        for name, extra in (("champ", nw("0.25")), ("champ_n", nw("0.25", "0.25")), ("near", nw("0.25", "0.73")), ("w1", []), ("w1_n", nw("1.0", "1.0")), ("w1_near", nw("1.0", "0.73"))):
+            now[0], losses[name] = name, []
+            patched(JK, "jtoken_loss", recording, JKT.train, JKT.parse_args(["--name", name] + base + extra), runs, 500, 48)
+        ck = {n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False) for n in losses}
+        rows = {n: [r for r in map(json.loads, open(os.path.join(runs, n, "log.jsonl"))) if "total" in r] for n in ("near", "champ")}
+        log = open(os.path.join(runs, "near", "train.log"), encoding="utf-8").read()
+        JKT.check_start(ck["near"]["args"], os.path.join(runs, "near"))
+        for other in (None, 0.25, 0.5):
+            must_fail(JKT.check_start, dict(ck["near"]["args"], none_weight_near=other), os.path.join(runs, "near"))       # a resume with another value (or without the option) is refused
+        must_fail(JKT.check_start, dict(ck["champ"]["args"], none_weight_near=0.73), os.path.join(runs, "champ"))
+    same = lambda a, b: losses[a] == losses[b] and all(torch.equal(v, ck[b]["state"][k]) for k, v in ck[a]["state"].items())  # noqa: E731
+    assert len(losses["champ"]) == 20 and same("champ_n", "champ") and same("w1_n", "w1"), "W = the none weight changes the run"
+    assert losses["near"] != losses["champ"] and losses["w1_near"] != losses["w1"] and all(math.isfinite(v) for v in losses["near"] + losses["w1_near"]), losses
+    assert rows["near"] and all(r["n_near"] >= 4 for r in rows["near"]) and not any("n_near" in r for r in rows["champ"]), rows["near"][:2]
+    assert "none weight near 0.73 (none tokens within 2.0 m / cos 0.5 of an assigned token)" in log and "near none tokens per frame in this batch (n_near)" in log, log[:800]
+    assert (ck["near"]["args"]["none_weight_near"], ck["champ"]["args"]["none_weight_near"]) == (0.73, None)
+    must_fail(JKT.parse_args, ["--name", "x", "--none-weight-near", "-0.1"])
+    b = _rule_frame()
+    gt_free = {k: v for k, v in b.items() if k not in JK.GT_KEYS}
+    torch.manual_seed(0)
+    m = JK.JTokenHead()
+    (l_n, i_n), (l_0, i_0) = (JKT.make_loss(None, none_weight=0.25, teacher="rule", **k)(m, gt_free) for k in (dict(none_weight_near=0.73), {}))
+    assert i_n["n_near"] == 1.0 and "n_near" not in i_0 and float(l_n) != float(l_0), (i_n, float(l_n), float(l_0))
+    print(f"none_weight_near_trainer: unset / = --none-weight (0.25 and 1.0) = the run without it bit for bit (20 smoke steps, final weights); 0.73 differs (last loss {losses['near'][-1]:.6f} against {losses['champ'][-1]:.6f}; "
+          f"at none weight 1: {losses['w1_near'][-1]:.6f} against {losses['w1'][-1]:.6f}); n_near in the log rows ({min(r['n_near'] for r in rows['near']):.1f} - {max(r['n_near'] for r in rows['near']):.1f} per synthetic frame), "
+          f"in the first-loss line (the start line names W), not in a run without the option; in model.pt's args, another value refused at a resume, W < 0 refused; the teacher branch: n_near 1 on the hand frame: ok")
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ c-rule: E369 prior, E370 teacher, S2 hook, --init
@@ -1028,8 +1145,8 @@ def test_head_seed():
           f"head_seed in the recipe (another one refused); the log names both seeds and 127131 parameters; a shuffling DataLoader as the loader: first batch {order['f0']} (default, --head-seed 0) vs {order['f0h2']} (--head-seed 2); {real}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer, test_prior, test_past,
-         test_maps, test_teacher, test_init, test_head_seed]
+TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_none_weight_near, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
+         test_none_weight_near_trainer, test_prior, test_past, test_maps, test_teacher, test_init, test_head_seed]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
