@@ -96,6 +96,7 @@ def resolve(a, runs):
     g = lambda k: h[k] if h.get(k) is not None else JKT.ARCH_DEFAULTS.get(k)  # noqa: E731   (a key stored as None means the default, as `jtoken_train.arch` reads it)
     assert h.get("seed") == a.seed, f"--seed {a.seed}: the head run {a.head_run} learned on the tokens of B' seed {h.get('seed')}"
     assert g("teacher") == "none", f"the head run {a.head_run} was trained on a teacher's targets ({g('teacher')}): not this loss"
+    assert h.get("K") in (None, K) and not h.get("cache"), f"the head run {a.head_run} was trained on K {h.get('K')} / cache root {h.get('cache')}: this trainer builds the tokens of the default cache at K {K}"
     b_run = a.b_run or f"runs/{h.get('ident') or 'e292_a'}_s{a.seed}"
     return dict(vars(a), **{k: g(k) for k in ("d", "layers", "heads", "ffn", "prior", "none_weight_near")}, ident=h.get("ident") or "e292_a", cache=h.get("cache"), K=K, token_drop=0.0, teacher="none",
                 none_weight=g("none_weight") if a.none_weight is None else a.none_weight, pos_loss=g("pos_loss") if a.pos_loss is None else a.pos_loss,

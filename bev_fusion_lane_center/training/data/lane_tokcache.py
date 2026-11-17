@@ -312,6 +312,13 @@ def _sha(path):
     return h.hexdigest()[:16]
 
 
+def build_env():
+    """the software / device that made a cache (stored in meta.json): the GPU parity of the live token path (`lane_live_tok`) is exact only against a cache of the same stack"""
+    cuda = torch.cuda.is_available()
+    return dict(torch=torch.__version__, cuda=torch.version.cuda, cudnn=torch.backends.cudnn.version(), device=torch.cuda.get_device_name(0) if cuda else "cpu",
+                tf32_matmul=bool(torch.backends.cuda.matmul.allow_tf32), tf32_cudnn=bool(torch.backends.cudnn.allow_tf32), numpy=np.__version__)
+
+
 def _collate(b):
     return dict(x=torch.stack([o["x"] for o in b]), row=[o["row"] for o in b], token=[o["token"] for o in b], table=[{k: o[k] for k in ("pos", "dirv", "cell", "flags", "piece", "sstart", "src", "dst", "long", "scale", "conn")} for o in b])
 
@@ -335,14 +342,14 @@ def build(a):
     done = json.load(open(prog))["done"] if os.path.exists(prog) else 0
     fresh = not os.path.exists(os.path.join(out, "meta.json"))
     assert (done % bs == 0 or done == n_all) and done <= n_all, f"progress {done} is not a multiple of {bs} within {n_all}"
-    if done == n_all and not fresh:
-        print(f"cache {out} is finished ({n_all} frames)")
-        return out
-    if not fresh:                                                                                          # a resume continues the SAME build: run checkpoint, budget, features, label code, GT
+    if not fresh:                                                                                          # a resume (or a call on a finished cache) continues the SAME build: run checkpoint, budget, features, label code, GT
         meta = json.load(open(os.path.join(out, "meta.json")))
         want = dict(run_sha=_sha(os.path.join(run, "model.pt")), K=a.K, f2=bool(a.f2), version=VERSION, lane_gt=sig, split=split, r=R_NEAR, cos=COS_NEAR, table_version=LT.TABLE_VERSION)
         diff = {k: (meta.get(k), v) for k, v in want.items() if meta.get(k) != v}
         assert not diff, f"{out} was started with other settings (stored, now): {diff}"
+        if done == n_all:                                                                                  # finished: only after the check above (a changed checkpoint under the same name is refused, not accepted)
+            print(f"cache {out} is finished ({n_all} frames)")
+            return out
     dl = torch.utils.data.DataLoader(torch.utils.data.Subset(ds, list(range(done, n_all))), batch_size=bs, shuffle=False, num_workers=a.workers, collate_fn=_collate,
                                      persistent_workers=a.workers > 0, prefetch_factor=2 if a.workers > 0 else None)
     arrays, t0, nb, i = None, time.time(), 0, done
@@ -366,7 +373,8 @@ def build(a):
                     np.lib.format.open_memmap(_path(out, name_), mode="w+", dtype=FIELDS[name_], shape=(n_all,) + shp).flush()
                 _atomic_json(os.path.join(out, "meta.json"), dict(run=a.run, run_sha=_sha(os.path.join(run, "model.pt")), split=split, K=a.K, f2=bool(a.f2), r=R_NEAR, cos=COS_NEAR, version=VERSION, lane_gt=sig,
                                                                   table_version=LT.TABLE_VERSION, node_stage="mnms" if m.mnms else ("soft" if m.soft_nms else "plain"), kst=list(KST), types=list(TYPES),
-                                                                  type_priority="split > merge > stop > exit > boundary (start, end, win_in, win_out) > lane point"))
+                                                                  type_priority="split > merge > stop > exit > boundary (start, end, win_in, win_out) > lane point",
+                                                                  env=build_env()))                                                  # who built it: the live path's GPU parity rule (lane_live_tok) asks
                 fresh = False
             arrays = {n_: np.load(_path(out, n_), mmap_mode="r+") for n_ in FIELDS if os.path.exists(_path(out, n_))}
         B = tk["cell"].shape[0]
@@ -708,6 +716,8 @@ if __name__ == "__main__":
         rep_ = report(_abs(a.cache))
         print(json.dumps(rep_, indent=1))
         if a.write:
+            c_ = TokCache(_abs(a.cache))
+            assert c_.done == len(c_), f"{a.cache} is not finished ({c_.done} of {len(c_)} frames): the manifest is the finished marker of `cache_dir`, it is not written"
             p_ = os.path.join(_abs(a.cache), "manifest.json")
             _atomic_json(p_, dict(json.load(open(p_)) if os.path.exists(p_) else json.load(open(os.path.join(_abs(a.cache), "meta.json"))), numbers=rep_))
     else:

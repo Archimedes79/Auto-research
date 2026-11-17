@@ -148,7 +148,7 @@ def build(cache_dir, pose_file=None, check=True):
 
 def cache_dirs(cache=LC.CACHE):
     """the finished cache directories <run>/<split> of the root (the limited `_first<N>` builds are not in it)"""
-    return sorted(p for p in glob.glob(os.path.join(cache, "b*_v1", "*")) if os.path.basename(p) in ("train", "val") and "_first" not in p and os.path.exists(os.path.join(p, "manifest.json")))
+    return sorted(p for p in glob.glob(os.path.join(cache, f"b*_{LC.VERSION}", "*")) if os.path.basename(p) in ("train", "val") and "_first" not in p and os.path.exists(os.path.join(p, "manifest.json")))
 
 
 def check_built(cache=LC.CACHE, log=print):
