@@ -3,6 +3,9 @@
     wsl bash tools/env/_py14.sh jtoken_eval.py dump  --run R --seed S [--split val|train] [--drop 0.17 --drop-seed 0] [--every N] [--cpu] [--max N]   # GPU: the head on the cache tokens -> runs/R/token_<split>[_drop..].pkl
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [--split val|train] [--drop 0.17 --drop-seed 0] [--every N] [--max N]                     # CPU -> runs/R/token_card_<decode>[_train][_drop..].json (rec, argmax; never overwritten)
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
+    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [a decode variant] --ref-run R2 [--ref-run-cell S,L,K,on|off]   # CPU, E376: + R2's dump of the same read-out at the same decode or that cell, paired R - R2 -> token_card_.._vs_<R2>[_rc<cell>].json
+    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --argmax --keep-thr K                                          # CPU, E376: the argmax decode at another keep threshold -> token_card_argmax_kt<K>..json
+    wsl bash tools/env/_py14.sh jtoken_eval.py anatomy --run R --seed S [--split val] [--link-thr-long 0.2] [--keep-thr 0.6] [--every N]   # CPU, E376: the delivered long links by category + the long-link and existence AP -> runs/R/token_anatomy_long_ltl<T>_kt<K>..json
     wsl bash tools/env/_py14.sh jtoken_eval.py sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the grid of decode variants on the TRAIN sample -> runs/R/token_sweep[_perclass]_train.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a|e273_p [--arms hi,hi_y,rule,floor,bsec0_plain,bsec0_close] [--max N]   # CPU: the controls -> runs/eval/e365_ctl/<arm>_<ident>_s<S>_K<K>.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a --split train --every 3                                    # CPU: c-rule on the TRAIN sample -> runs/eval/e365_ctl/rule_<ident>_s<S>_K<K>_train_every3.json
@@ -24,6 +27,9 @@ Controls (no learning, the same tokens, the same writer and scorer): hi = the GT
 pairs between assigned tokens (diagnostic: y also holds tokens that are assigned to the successor's neighbours); rule = E357's `lo_near` on the nodes with
 B''s e >= 0.5; floor = the untrained head (random init seed 0, the key weights of a trained head), decode of record; bsec0_plain / bsec0_close = B's own stored nodes and links with every section 0, read out as `plain@0.5` / `close:1.5@0.5`
 (`--ident e292_a`: B' with the Matrix-NMS layer, `e273_p`: plain B). Tests: evaluation/tests/test_jtoken_eval.py
+Anatomy (E376, promoted from temp/_session_scratch_d113/anatomy_long.py): a long link is DELIVERED at p >= T_L with both ends kept (p_none < K; the long class of the D115 decode, no none gate); each is tp (the ends are assigned to the
+GT nodes of a GT long link), dup_of_true, wrong_pair or false_end (`link_category`); the long-link AP ranks every long candidate of the dump with both ends kept, the existence AP every valid token (`average_precision`); the mass
+concentration (`concentration`) reads the head's own probabilities on its training label G(i) in both classes.
 """
 import argparse
 import hashlib
@@ -263,6 +269,35 @@ def check_record(frames, valid):
     for f, v in zip(frames, valid):
         d = decode_variant(f, v)
         assert np.array_equal(d["keep"], f["keep"]) and all(np.array_equal(d["rec"][k], f["rec"][k]) for k in LINK_FIELDS), f"frame {f['token']}: the default decode variant is not the dump's decode of record"
+
+
+def decode_argmax_variant(f, valid, keep_thr=KEEP_THR):
+    """the head's argmax decode (`jtoken.decode_argmax`: per source and class the argmax over {none} + its candidates, a link when a candidate wins and both ends are kept) rebuilt from the dump's candidates and none probabilities
+    at another keep threshold (p_none < keep_thr, valid tokens) -> the frame with `keep` and `argmax` replaced. A tie goes to the candidate of the lower index, as torch's argmax (the none slot is the last). Exact only when every
+    winner is a dump candidate (p >= KEEP_P): `check_argmax` asserts that before a read-out"""
+    c = f["cand"]
+    keep = np.asarray(valid, bool) & (np.asarray(f["pnone"]) < np.float32(keep_thr))
+    src, dst, cls = c["src"].astype(int), c["dst"].astype(int), c["long"].astype(int)
+    order = np.lexsort((dst, -c["p"], cls, src))                                                 # per source and class its best candidate first (a tie: the lower destination)
+    first = np.ones(len(order), bool)
+    first[1:] = (np.diff(src[order]) != 0) | (np.diff(cls[order]) != 0)
+    w = order[first]
+    w = np.sort(w[(c["p"][w] >= np.asarray(f["none_cls"], np.float32)[cls[w], src[w]]) & keep[src[w]] & keep[dst[w]]])       # the dump's order (source, destination)
+    return dict(f, keep=keep, argmax={k: c[k][w] for k in LINK_FIELDS})
+
+
+def check_argmax(frames, valid, keep_thr=KEEP_THR):
+    """before an argmax read-out at keep_thr: on every frame `decode_argmax_variant` at the record keep threshold equals the dump's argmax decode on all six link fields; above the record's keep threshold also no source kept at
+    keep_thr has a class with p(none) < KEEP_P and no dump candidate (its winner is a candidate below the dump's floor: the rebuild would drop that link silently)"""
+    for f, v in zip(frames, valid):
+        d = decode_argmax_variant(f, v)
+        assert np.array_equal(d["keep"], f["keep"]) and all(np.array_equal(d["argmax"][k], f["argmax"][k]) for k in LINK_FIELDS), f"frame {f['token']}: the argmax decode cannot be rebuilt from the dump's candidates"
+        if keep_thr > KEEP_THR:
+            c, keep = f["cand"], decode_argmax_variant(f, v, keep_thr)["keep"]
+            has = np.zeros((2, len(keep)), bool)
+            has[c["long"].astype(int), c["src"].astype(int)] = True
+            lost = keep[None, :] & ~has & (np.asarray(f["none_cls"], np.float32) < np.float32(KEEP_P))
+            assert not lost.any(), f"frame {f['token']}: {int(lost.sum())} sources kept at {keep_thr} have their argmax below the dump's floor {KEEP_P}"
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the controls
@@ -507,22 +542,85 @@ def read_dump(a, runs, n_max):
     return dict(ck=ck, args=args, kw=kw, ds=ds, idx=idx, meta=meta, fr=fr, toks=toks, valid=valid, frames=[all_frames[int(i)] for i in idx], path=path)
 
 
+def same_tokens(r, rr):
+    """two read-outs (`read_dump`) hold the same frames in the same order and per frame the same tokens (cells) and the same valid tokens: one cache, so a paired comparison of their heads"""
+    assert r["idx"].tolist() == rr["idx"].tolist() and [f["token"] for f in r["fr"]] == [f["token"] for f in rr["fr"]], "the reference run's dump holds other frames"
+    assert all(np.array_equal(x["cell"], y["cell"]) and np.array_equal(u, w) for x, y, u, w in zip(r["fr"], rr["fr"], r["valid"], rr["valid"])), "the reference run's dump holds other tokens (another cache)"
+
+
+def read_ref(a, r, runs, n_max):
+    """--ref-run: the dump of the SAME read-out (split, every, drop, drop seed, --max) of another run, of its model.pt (`read_dump`), refused unless its frames and tokens are those of this read-out `r` (`same_tokens`)"""
+    rr = read_dump(argparse.Namespace(**dict(vars(a), run=a.ref_run, model="model.pt")), runs, n_max)
+    same_tokens(r, rr)
+    return rr
+
+
+def decode_frames(r, a):
+    """the dump frames of `r` (`read_dump`) at the decode of the read-out `a`: the dump's own (the record), the variant of --link-thr / --link-thr-long / --keep-thr / --no-none-gate (`decode_variant`) or, with --argmax, the
+    argmax decode at --keep-thr (`decode_argmax_variant`)"""
+    if a.argmax:
+        return [decode_argmax_variant(f, v, a.keep_thr) for f, v in zip(r["fr"], r["valid"])]
+    if variant_suffix(a):
+        return [decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate, a.link_thr_long) for f, v in zip(r["fr"], r["valid"])]
+    return r["fr"]
+
+
+def check_decode(r, a):
+    """before the dump `r` is read at the decode of the read-out `a`: `check_argmax` (--argmax), `check_record` (a variant); the record needs none"""
+    if a.argmax:
+        check_argmax(r["fr"], r["valid"], a.keep_thr)
+    elif variant_suffix(a):
+        check_record(r["fr"], r["valid"])
+
+
+def score_dump(r, a, dec, frames, log=print):
+    """the standard scorer on the dump `r` at the decode of the read-out `a` (`decode_frames`; `dec` = the links written: rec or argmax)"""
+    return score_preds([frame_prediction(t, f, dec, a.keep_thr) for t, f in zip(r["toks"], decode_frames(r, a))], frames, log=log)
+
+
+def score_cell(r, cell, frames, log=print):
+    """the standard scorer on the dump `r` at a threshold cell (link short, link long, keep, none gate) of `decode_variant`"""
+    lt, ltl, kt, gate = cell
+    return score_preds([frame_prediction(t, decode_variant(f, v, lt, kt, gate, ltl), "rec", kt) for t, f, v in zip(r["toks"], r["fr"], r["valid"])], frames, log=log)
+
+
+def ref_run_cell(a, dec):
+    """the cell at which --ref-run is decoded for the card of `dec`: --ref-run-cell when it is given and is not this card's own cell (an argmax card has none), else None = this read-out's own decode"""
+    own = None if a.argmax or dec == "argmax" else (a.link_thr, long_thr(a), a.keep_thr, not a.no_none_gate)
+    return a.ref_run_cell if a.ref_run_cell is not None and tuple(a.ref_run_cell) != own else None
+
+
+def cell_sfx(cell):
+    """_rc<short>_<long>_<keep>_<on|off>: the part of a card name that says at which cell the reference run was decoded (only when not at the card's own)"""
+    return f"_rc{cell[0]:g}_{cell[1]:g}_{cell[2]:g}_{'on' if cell[3] else 'off'}"
+
+
 def score(a, runs=RUNS, out_dir=None):
     """the cards of one dump (module docstring). --max N reads the dump of `dump --max N`, scores its N frames and writes the cards to `out_dir` (default temp/e365/out) as ..._n<N>.json, with the controls of `ctl --max N` there.
     --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] re-score the dump with another decode (`decode_variant`, after `check_record`; only the `rec` card, its name carries the variant), the decode of record scored beside it
     on the same dump (`paired_vs_record`; its numbers against the stored record card are reported, not asserted: a re-dump may differ); the defaults are the decode of record, both decodes. A variant with --ref-cell S,L,K,on|off
-    also scores that cell on the same dump: its numbers (`ref_cell`) and the paired scene-bootstrap interval of the variant against it (`paired_vs_ref_cell`: the keys of `qgraph_eval.paired` + junction F1 / P / R, `paired_junction`)"""
-    n_max, vsfx = a.max, variant_suffix(a)
+    also scores that cell on the same dump: its numbers (`ref_cell`) and the paired scene-bootstrap interval of the variant against it (`paired_vs_ref_cell`: the keys of `qgraph_eval.paired` + junction F1 / P / R, `paired_junction`).
+    --ref-run R2 (E376) also scores R2's dump of the same read-out (`read_ref`: its model.pt, the same frames and tokens) at the same decode, or at --ref-run-cell S,L,K,on|off: its numbers and cell (`ref_run`) and the paired interval of
+    this run minus R2 (`paired_vs_ref_run`, the keys of `paired_vs_ref_cell`, the same draws); the card's name ends in _vs_<R2>[_rc<cell>, only when R2 is read at another cell].
+    --argmax --keep-thr K (E376): the head's argmax decode at another keep threshold (`decode_argmax_variant`, after `check_argmax`) -> the card token_card_argmax_kt<K>..json"""
+    n_max = a.max
+    assert not a.argmax or (a.link_thr, a.link_thr_long, a.no_none_gate, a.ref_cell) == (LINK_THR, None, False, None), "--argmax takes --keep-thr only"
+    assert a.ref_run or a.ref_run_cell is None, "--ref-run-cell is the cell of --ref-run"
+    assert a.ref_run is None or a.model == "model.pt", "--ref-run compares the model.pt heads: no --model snapshot"
+    vsfx = f"_kt{a.keep_thr:g}" if a.argmax else variant_suffix(a)
     assert vsfx or a.ref_cell is None, "--ref-cell is compared with a decode variant: give --link-thr / --link-thr-long / --keep-thr / --no-none-gate"
     out_dir = (out_dir or os.path.join(SCRATCH, "out")) if n_max else None
     sfx = card_sfx(a)
     nsfx = f"_n{n_max}" if n_max else ""
-    decs = ("rec",) if vsfx else DECODES
-    card_path = lambda d, v: os.path.join(out_dir, f"{a.run}_token_card_{d}{v}{sfx}{nsfx}.json") if n_max else os.path.join(runs, a.run, f"token_card_{d}{v}{sfx}.json")  # noqa: E731
-    paths = {d: card_path(d, vsfx) for d in decs}
+    decs = ("argmax",) if a.argmax else ("rec",) if vsfx else DECODES
+    rcells = {d: ref_run_cell(a, d) for d in decs}
+    rsfx = {d: f"_vs_{a.ref_run}" + (cell_sfx(rcells[d]) if rcells[d] else "") if a.ref_run else "" for d in decs}
+    card_path = lambda d, v, x="": os.path.join(out_dir, f"{a.run}_token_card_{d}{v}{sfx}{nsfx}{x}.json") if n_max else os.path.join(runs, a.run, f"token_card_{d}{v}{sfx}{x}.json")  # noqa: E731
+    paths = {d: card_path(d, vsfx, rsfx[d]) for d in decs}
     held = [p for p in paths.values() if os.path.exists(p)]
     assert not held, f"a stored card is never overwritten: {held}"
     r = read_dump(a, runs, n_max)
+    rr = read_ref(a, r, runs, n_max) if a.ref_run else None
     ck, kw, ds, frames = r["ck"], r["kw"], r["ds"], r["frames"]
     ref = stored_plain_b(a.seed) if a.split == "val" and not a.drop else None
 
@@ -534,15 +632,28 @@ def score(a, runs=RUNS, out_dir=None):
     b0 = bsec0_close_path(kw["ident"], a.seed, n_max) if ref is not None and kw["ident"] == "e292_a" and not (n_max and a.every > 1) else None      # `ctl --max N` holds the first N frames, not a subsample
     b0 = pickle.load(open(b0, "rb")) if b0 and os.path.exists(b0) else None
     params = JK.count_params(JKT.build_head(r["args"]))
-    if vsfx:
-        check_record(r["fr"], r["valid"])
+    check_decode(r, a)
+    if rr is not None:
+        if not all(rcells.values()):                                                # a card that reads R2 at this read-out's decode
+            check_decode(rr, a)
+        if any(rcells.values()):
+            check_record(rr["fr"], rr["valid"])
+    quiet = lambda *x, **k: None  # noqa: E731
     out = {}
     for dec in decs:
-        fr = [decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate, a.link_thr_long) for f, v in zip(r["fr"], r["valid"])] if vsfx else r["fr"]
-        res = score_preds([frame_prediction(t, f, dec, a.keep_thr) for t, f in zip(r["toks"], fr)], frames)
+        res = score_dump(r, a, dec, frames)
         show(f"{a.run} {dec}{vsfx}{sfx}{nsfx}", res["graph"])
         extra = {}
-        if vsfx:
+        if rr is not None:
+            rc = rcells[dec]
+            res_ref = score_cell(rr, rc, frames, log=quiet) if rc else score_dump(rr, a, dec, frames, log=quiet)
+            show(f"  ref {a.ref_run}{cell_sfx(rc) if rc else ''}", res_ref["graph"])
+            extra["ref_run"] = dict(run=a.ref_run, model="model.pt", dump=_file_id(rr["path"]), cell=dict(zip(("link_thr", "link_thr_long", "keep_thr", "none_gate"), rc)) if rc else "the decode of this card",
+                                    **{k: res_ref["graph"][k] for k in KEYS + ("junction_P", "junction_R")})
+            extra["paired_vs_ref_run"] = dict(QE.paired(res["rec"], res_ref["rec"], frames), **paired_junction(res["rec"], res_ref["rec"], frames))
+        if a.argmax:
+            extra["decode_variant"] = dict(argmax=True, keep_thr=a.keep_thr, e_written=f"min(1 - p_none + {a.keep_thr} - 0.5, 1): only the scorer's e >= 0.5 is meant; a later read-out must not rank nodes by it")
+        elif vsfx:
             extra["decode_variant"] = dict(link_thr=a.link_thr, **({} if long_thr(a) == a.link_thr else dict(link_thr_long=long_thr(a))), keep_thr=a.keep_thr, none_gate=not a.no_none_gate, scales="the head's (dump candidates a, b)",
                                            e_written=f"min(1 - p_none + {a.keep_thr} - 0.5, 1): only the scorer's e >= 0.5 is meant; a later read-out must not rank nodes by it")
             rec0 = score_preds([frame_prediction(t, f, "rec") for t, f in zip(r["toks"], r["fr"])], frames, log=lambda *x, **k: None)
@@ -553,7 +664,7 @@ def score(a, runs=RUNS, out_dir=None):
             extra["record_card"] = os.path.relpath(stored, ROOT) if os.path.exists(stored) else f"no stored record card {os.path.relpath(stored, ROOT)}"
             if a.ref_cell is not None:
                 lt0, ltl0, kt0, g0 = a.ref_cell
-                res0 = score_preds([frame_prediction(t, decode_variant(f, v, lt0, kt0, g0, ltl0), "rec", kt0) for t, f, v in zip(r["toks"], r["fr"], r["valid"])], frames, log=lambda *x, **k: None)
+                res0 = score_cell(r, a.ref_cell, frames, log=quiet)
                 extra["ref_cell"] = dict(link_thr=lt0, link_thr_long=ltl0, keep_thr=kt0, none_gate=g0, **{k: res0["graph"][k] for k in KEYS + ("junction_P", "junction_R")})
                 extra["paired_vs_ref_cell"] = dict(QE.paired(res["rec"], res0["rec"], frames), **paired_junction(res["rec"], res0["rec"], frames))
         if ref is not None:
@@ -566,8 +677,9 @@ def score(a, runs=RUNS, out_dir=None):
             extra["g1_topo_F1"] = None if ctl_hi is None or ctl_rule is None else g1(res["graph"]["topo_F1"], ctl_hi, ctl_rule)
             if extra["g1_topo_F1"] is not None:
                 extra["g1_note"] = G1_NOTE
-        out[dec] = write_card(paths[dec], f"{a.run}_token_{dec}{vsfx}{sfx}{nsfx}", res, len(frames), a.split, run=a.run, model=a.model, seed=a.seed, decode=dec, drop=a.drop, drop_seed=a.drop_seed, steps=ck.get("steps"), head_params=params,
-                              K=ds.K, ident=kw["ident"], decode_rule="rec: p >= 0.3 and p >= p(none), both ends kept (p_none < 0.5); argmax: one link per source and class" if not vsfx else "the variant of `decode_variant`", **extra)
+        rule = "the argmax decode at another keep threshold (`decode_argmax_variant`)" if a.argmax else "the variant of `decode_variant`" if vsfx else "rec: p >= 0.3 and p >= p(none), both ends kept (p_none < 0.5); argmax: one link per source and class"
+        out[dec] = write_card(paths[dec], f"{a.run}_token_{dec}{vsfx}{sfx}{nsfx}{rsfx[dec]}", res, len(frames), a.split, run=a.run, model=a.model, seed=a.seed, decode=dec, drop=a.drop, drop_seed=a.drop_seed, steps=ck.get("steps"), head_params=params,
+                              K=ds.K, ident=kw["ident"], decode_rule=rule, **extra)
     return out
 
 
@@ -603,6 +715,147 @@ def sweep(a, runs=RUNS, out_dir=None):
               + f"  links/frame {row['links_per_frame']:.1f}", flush=True)
     JV.write_json(path, _jsonable(dict(run=a.run, model=a.model, seed=a.seed, split=a.split, every=a.every, max=a.max, drop=a.drop, drop_seed=a.drop_seed, steps=r["ck"].get("steps"), dump=_file_id(r["path"]), frames=len(r["frames"]), rows=rows, K=r["ds"].K,
                                        **(dict(grid="perclass") if pc else {}), note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
+    print(f"written {os.path.relpath(path, ROOT)}")
+    return path
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ the anatomy of the delivered long links (E376)
+LONG_CATS = ("tp", "dup_of_true", "wrong_pair", "false_end")
+ENTRY, EXIT = LC.TYPES.index("entry"), LC.TYPES.index("exit")              # columns of the dump's ptype (the head's type softmax in the order of `lane_tokcache.TYPES`)
+
+
+def link_category(s, d, gt_id, near, gt_long):
+    """the category of the link s -> d between two tokens, an index of LONG_CATS: tp = the ends are assigned (`gt_id`) to the GT nodes a, b of a GT long link a -> b (`gt_long`: a set of pairs of table rows); else false_end = an end
+    is near no GT node (`near` (K, M), the cache's label rule `lane_tokcache.near_matrix`: 1.5 m and the cosine of the headings >= 0.5); dup_of_true = a GT node near s and one near d form a GT long link (an end is a duplicate token
+    of a true end); wrong_pair = both ends near GT nodes, no pair of them a GT long link"""
+    a, b = int(gt_id[s]), int(gt_id[d])
+    if a >= 0 and b >= 0 and (a, b) in gt_long:
+        return 0
+    ns, nd = np.flatnonzero(near[s]), np.flatnonzero(near[d])
+    if len(ns) == 0 or len(nd) == 0:
+        return 3
+    return 1 if any((int(x), int(y)) in gt_long for x in ns for y in nd) else 2
+
+
+def average_precision(score, label):
+    """the area under the precision-recall step curve of the ranking by `score` (descending) = the mean over the positives of the precision at their rank (recall over the positives of the list); ties broken pessimistically (in a
+    group of equal scores the negatives rank first); None without a positive"""
+    label = np.asarray(label, bool)
+    if not label.any():
+        return None
+    hit = label[np.lexsort((label, -np.asarray(score, float)))]
+    return float((np.cumsum(hit) / np.arange(1, len(hit) + 1))[hit].mean())
+
+
+def gt_labels(tokens, valid, table, gt_id, uout, uin):
+    """the GT side of one frame: gt_id (K,) of the cache, near (K, M) = the valid tokens near the GT nodes of the frame's table (`lane_tokcache.near_matrix`), gt_long = the GT long links (pairs of table rows), b_out / b_in =
+    B''s long-link evidence sigmoid(uout) / sigmoid(uin) of the tokens"""
+    sig = lambda u: 1.0 / (1.0 + np.exp(-np.asarray(u, float)))  # noqa: E731
+    return dict(gt_id=np.asarray(gt_id, int), near=LC.near_matrix(tokens["pos"], tokens["dirv"], valid, table["pos"], table["dirv"])[0], gt_long={(int(s), int(d)) for s, d, lg in zip(table["src"], table["dst"], table["long"]) if lg},
+                b_out=sig(uout), b_in=sig(uin))
+
+
+def anatomy_frame(f, valid, lab, keep_thr):
+    """one dump frame and its GT side (`gt_labels`) -> the long candidates with both ends kept (`decode_variant` at the dump's floor KEEP_P, keep_thr, no none gate): p, cat (`link_category`), typed = p_entry(src) * p_exit(dst)
+    of the head's type softmax, b_long = B''s sigmoid(uout[src]) * sigmoid(uin[dst]); and the valid tokens: ex_score = 1 - p_none, ex_label = assigned to a GT node (gt_id >= 0)"""
+    c = decode_variant(f, valid, KEEP_P, keep_thr, False, KEEP_P)["rec"]
+    lg = np.asarray(c["long"], bool)
+    s, d = c["src"][lg].astype(int), c["dst"][lg].astype(int)
+    pt, v = np.asarray(f["ptype"], float), np.asarray(valid, bool)
+    return dict(p=c["p"][lg], cat=np.array([link_category(i, j, lab["gt_id"], lab["near"], lab["gt_long"]) for i, j in zip(s, d)], int), typed=pt[s, ENTRY] * pt[d, EXIT],
+                b_long=lab["b_out"][s] * lab["b_in"][d], ex_score=1.0 - np.asarray(f["pnone"], float)[v], ex_label=lab["gt_id"][v] >= 0)
+
+
+def anatomy_numbers(parts, n_gt_long, thr_long):
+    """the frames' `anatomy_frame` parts pooled: the delivered long links (p >= thr_long) per category (n, share, median p / typed / b_long), tp over the GT long links; the long-link AP over every kept long candidate (label tp) with its
+    recall ceiling (the share of the GT long links that are such a candidate: the assignment is one to one, so a tp candidate is one GT link) and the existence AP over the valid tokens"""
+    cat = lambda k: np.concatenate([x[k] for x in parts])  # noqa: E731
+    p, c, typed, bl = cat("p"), cat("cat"), cat("typed"), cat("b_long")
+    dl = p >= np.float32(thr_long)
+    n = int(dl.sum())
+    med = lambda x: float(np.median(x)) if len(x) else None  # noqa: E731
+    cats = {k: dict(n=int((dl & (c == i)).sum()), share=float((dl & (c == i)).sum() / max(n, 1)), median_p=med(p[dl & (c == i)]), median_typed=med(typed[dl & (c == i)]), median_b_long=med(bl[dl & (c == i)]))
+            for i, k in enumerate(LONG_CATS)}
+    n_tp = int((c == 0).sum())
+    ex = cat("ex_label")
+    return dict(gt_long_links=n_gt_long, delivered=n, categories=cats, tp_over_gt_long=cats["tp"]["n"] / max(n_gt_long, 1), ap_long=average_precision(p, c == 0), long_candidates=len(p), long_candidates_tp=n_tp,
+                recall_ceiling=n_tp / max(n_gt_long, 1), ap_existence=average_precision(cat("ex_score"), ex), valid_tokens=len(ex), assigned_tokens=int(ex.sum()))
+
+
+def group_concentration(p, G, cand, thr=LINK_THR):
+    """one class of one frame: p (K, K) = p^c(j|i), G (K, K) bool = the in-class GT successor group G(i) of every source (the training label of `jtoken.jtoken_loss`: y and the class gate), cand (K, K) bool = the class gate ->
+    for every source with a non-empty G(i): above = its in-class candidates with p >= thr; share = the largest member's share of the group's mass (max over G(i) of p / sum over G(i) of p) for the sources whose group has mass,
+    zero = the sources whose group has none (no share) -> (share, above, zero)"""
+    rows = G.any(1)
+    top, mass = np.where(G, p, 0.0).max(1), np.where(G, p, 0.0).sum(1)
+    ok = rows & (mass > 0)
+    return top[ok] / mass[ok], ((p >= thr) & cand).sum(1)[rows], int((rows & ~ok).sum())
+
+
+def head_concentration(out, y):
+    """a head output of one frame (B = 1) and its GT pairs y (1, K, K) -> class (short, long) -> `group_concentration` on the training label of `jtoken.jtoken_loss` (G = y and the class gate) with p = exp(logp) in float64"""
+    K = out["cand"].shape[-1]
+    G, cand = ((y > 0)[:, None] & out["cand"])[0].numpy(), out["cand"][0].numpy()
+    p = out["logp"][0, :, :, :K].double().exp().numpy()
+    return {name: group_concentration(p[c], G[c], cand[c]) for c, name in enumerate(("short", "long"))}
+
+
+def concentration(m, ds, idx, fr, valid):
+    """the mass concentration of the head `m` on the cache frames idx, per class (a CPU forward, batch 1: the dump does not hold the probabilities below KEEP_P; its p_none must agree with the dump's `fr` to 1e-3 on the `valid`
+    tokens) -> class -> `concentration_numbers` over the sources with a non-empty G(i) (`head_concentration`)"""
+    got = {c: ([], [], []) for c in ("short", "long")}
+    for b, f, v in zip(batches(ds, idx, bs=1), fr, valid):
+        out = run_head(m, b, "cpu")
+        assert np.abs(JK.probs(out)["pt"][0, :, 0].numpy() - f["pnone"])[v].max(initial=0.0) < 1e-3, f"frame {f['token']}: the head's p_none is not the dump's"
+        for c, x in head_concentration(out, b["y"]).items():
+            for lst, val in zip(got[c], x):
+                lst.append(val)
+    return {c: concentration_numbers(np.concatenate(sh), np.concatenate(ab), sum(z)) for c, (sh, ab, z) in got.items()}
+
+
+def concentration_numbers(s, n, zero=0):
+    """the pooled shares s, counts n and zero-mass sources of `group_concentration` -> sources, zero_mass_sources, share median / mean (the sources with group mass), above_mean, above_2plus (the share of sources with 2 or more),
+    above_mean_given_one (over the sources with one or more); None where empty"""
+    v = lambda x, fn: float(fn(x)) if len(x) else None  # noqa: E731
+    return dict(sources=len(n), zero_mass_sources=zero, share_median=v(s, np.median), share_mean=v(s, np.mean), above_mean=v(n, np.mean), above_2plus=v(n >= 2, np.mean), above_mean_given_one=v(n[n >= 1], np.mean))
+
+
+def anatomy(a, runs=RUNS, out_dir=None):
+    """E376: the anatomy of the delivered long links of the run's dump at --link-thr-long / --keep-thr (module docstring; `anatomy_numbers`; the GT side: the cache's gt_id / uout / uin, read once, and the frame's table of
+    `lane_tok_data.TokData`) and the mass concentration of the head in both classes (`concentration`, a CPU forward of --model on the same frames) -> runs/R/token_anatomy_long_ltl<T>_kt<K>[_step<N>][_<split>][_every<N>].json,
+    never overwritten (out_dir or --max: <out_dir or temp/e365/out>/R_token_anatomy_..[_n<N>].json), and a table"""
+    import lane_tok_data as TD
+    assert a.link_thr_long >= KEEP_P, f"the dump holds the candidates with p >= {KEEP_P}"
+    a.drop, a.drop_seed = 0.0, 0
+    name = f"token_anatomy_long_ltl{a.link_thr_long:g}_kt{a.keep_thr:g}{card_sfx(a)}{f'_n{a.max}' if a.max else ''}.json"
+    path = os.path.join(out_dir or os.path.join(SCRATCH, "out"), f"{a.run}_{name}") if out_dir or a.max else os.path.join(runs, a.run, name)
+    assert not os.path.exists(path), f"a stored anatomy is never overwritten: {path}"
+    r = read_dump(a, runs, a.max)
+    ds, idx = r["ds"], r["idx"]
+    td = TD.TokData(a.split, LATTICE, feats=False)
+    assert [td.tokens[int(i)] for i in idx] == [ds.tokens[int(i)] for i in idx], "the GT tables are not the frames of the cache"
+    gid, uout, uin = (np.asarray(ds.c.f[k][idx]) for k in ("gt_id", "uout", "uin"))
+    parts, n_gt = [], 0
+    for k, (i, f, t, v) in enumerate(zip(idx, r["fr"], r["toks"], r["valid"])):
+        lab = gt_labels(t, v, td.table(int(i)), gid[k], uout[k], uin[k])
+        parts.append(anatomy_frame(f, v, lab, a.keep_thr))
+        n_gt += len(lab["gt_long"])
+    num = anatomy_numbers(parts, n_gt, a.link_thr_long)
+    num["concentration"] = concentration(JKT.load_model(a.run, "cpu", runs, name=a.model)[0], ds, idx, r["fr"], r["valid"])
+    JV.write_json(path, _jsonable(dict(run=a.run, model=a.model, seed=a.seed, split=a.split, every=a.every, max=a.max, frames=len(idx), K=ds.K, link_thr_long=a.link_thr_long, keep_thr=a.keep_thr, dump=_file_id(r["path"]),
+                                       near=dict(r=LC.R_NEAR, cos=LC.COS_NEAR), **num, note="delivered = long candidate with p >= link_thr_long and both ends kept (p_none < keep_thr), no none gate; categories of `link_category`; "
+                                       "median_b_long = the median of the PRODUCT sigmoid(uout[src]) * sigmoid(uin[dst]), median_typed of the product p_entry(src) * p_exit(dst); AP = the mean precision at the positives, ties broken "
+                                       "pessimistically, recall over the positives of the list (x recall_ceiling = recall over the GT long links); concentration: a CPU forward of the head, per class the sources with a non-empty G(i) "
+                                       f"(y and the class gate, the training label), share = max / sum of p over G(i) (sources with no mass on G(i): zero_mass_sources), above = the in-class candidates with p >= {LINK_THR}")))
+    fmt = lambda x, s: "-" if x is None else format(x, s)  # noqa: E731
+    print(f"{a.run} {a.split}, {len(idx)} frames: GT long links {n_gt}, delivered long links (p >= {a.link_thr_long:g}, both ends p_none < {a.keep_thr:g}) {num['delivered']}")
+    for k, x in num["categories"].items():
+        print(f"  {k:<12} {x['n']:7d}  share {x['share']:.3f}  median p {fmt(x['median_p'], '.2f')}  typed {fmt(x['median_typed'], '.3f')}  B' uout*uin {fmt(x['median_b_long'], '.2f')}")
+    print(f"  tp / GT long links {num['tp_over_gt_long']:.3f}; AP long links {fmt(num['ap_long'], '.4f')} over {num['long_candidates']} kept long candidates (recall ceiling {num['recall_ceiling']:.3f}); "
+          f"AP existence {fmt(num['ap_existence'], '.4f')} over {num['valid_tokens']} valid tokens ({num['assigned_tokens']} assigned)")
+    for c, x in num["concentration"].items():
+        print(f"  {c:<5} {x['sources']} sources with a GT successor ({x['zero_mass_sources']} with no mass on it): largest member's share of G(i)'s mass median {fmt(x['share_median'], '.3f')} mean {fmt(x['share_mean'], '.3f')}; candidates >= {LINK_THR} per source "
+              f"{fmt(x['above_mean'], '.3f')}, 2 or more {fmt(x['above_2plus'], '.3f')}, per source with one or more {fmt(x['above_mean_given_one'], '.3f')}")
     print(f"written {os.path.relpath(path, ROOT)}")
     return path
 
@@ -1060,8 +1313,20 @@ def parse_args(argv=None):
             s.add_argument("--keep-thr", type=float, default=KEEP_THR, help="a decode variant: a node is kept at p_none < K (record: 0.5)")
             s.add_argument("--no-none-gate", action="store_true", help="a decode variant: no p >= p(none) condition on a link")
             s.add_argument("--ref-cell", type=parse_cell, default=None, help="with a variant: S,L,K,on|off = a reference cell (link short, link long, keep, none gate) scored on the same dump; the card gets its numbers and the paired interval")
+            s.add_argument("--ref-run", default=None, help="another run's dump of the same read-out (its model.pt, the same cache) scored at the same decode: its numbers and the paired interval this run - it; the card's name ends in _vs_<run>")
+            s.add_argument("--ref-run-cell", type=parse_cell, default=None, help="S,L,K,on|off: --ref-run read at this cell instead of this read-out's decode; the name gets _rc<cell> when it is not the card's own cell")
+            s.add_argument("--argmax", action="store_true", help="the argmax decode (one link per source and class) at --keep-thr instead of the record's 0.5 -> token_card_argmax_kt<K>..json")
         if name == "sweep":
             s.add_argument("--grid", default="default", choices=tuple(SWEEP_GRIDS), help="default: the 24 cells (link x keep x none gate); perclass (E375): link short x link long x keep, none gate off (36 cells)")
+    s = sub.add_parser("anatomy")
+    s.add_argument("--run", required=True)
+    model_arg(s)
+    s.add_argument("--seed", type=int, required=True)
+    s.add_argument("--split", choices=("val", "train"), default="val")
+    s.add_argument("--every", type=int, default=1)
+    s.add_argument("--max", type=int, default=0, help="the dump of `dump --max N` (a test; the json goes to temp/e365/out/)")
+    s.add_argument("--link-thr-long", type=float, default=0.2, help="a long link is delivered at p >= T_L (the D115 decode: 0.2)")
+    s.add_argument("--keep-thr", type=float, default=0.6, help="a node is kept at p_none < K (the D115 decode: 0.6)")
     s = sub.add_parser("ctl")
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--ident", required=True, choices=("e292_a", "e273_p"))
@@ -1118,7 +1383,7 @@ def parse_args(argv=None):
 def main(argv=None):
     a = parse_args(argv)
     torch.set_num_threads(2)
-    r = {"dump": dump, "score": score, "sweep": sweep, "ctl": ctl, "fixture": fixture, "graphs": graphs, "check-layer1": check_layer1, "check-parity": check_parity, "timing": timing}[a.cmd](a)
+    r = {"dump": dump, "score": score, "sweep": sweep, "anatomy": anatomy, "ctl": ctl, "fixture": fixture, "graphs": graphs, "check-layer1": check_layer1, "check-parity": check_parity, "timing": timing}[a.cmd](a)
     sys.exit(r if isinstance(r, int) else 0)
 
 
