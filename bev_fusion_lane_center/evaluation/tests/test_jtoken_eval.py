@@ -3,12 +3,14 @@ runs/e365_cache (built by the lane chat) and are skipped with a message when it 
 
     wsl bash tools/env/_py14.sh test_jtoken_eval.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
 
-keep_rule (a node is kept at p_none 0.49 and not at 0.50, e = 1 - p_none, the links of a dropped node go), decode_fork (rec keeps both branches of a fork, argmax one; the none slot wins when the branches are weak),
+decode_variant (the defaults = the record decode, thresholds and the none gate by hand, monotone), sweep (24 cells, counts monotone), keep_rule (a node is kept at p_none 0.49 and not at 0.50, e = 1 - p_none, the links of a dropped node go), decode_fork (rec keeps both branches of a fork, argmax one; the none slot wins when the branches are weak),
 dump_roundtrip (a real head forward: the dump holds exactly the decodes of `jtoken`, the candidate list, the keep mask), writer_no_gt (the prediction is made from the tokens only: mutants that put a GT section, a GT flag, a GT
 position or an extra GT field into the writer are caught by `check_writer`; the dump frame and `frame_prediction` have no GT input), oracle_hi (cache: an oracle head whose links are the c-hi links delivers exactly c-hi, and scores the same; the y pairs
 between assigned tokens are more than c-hi), drop (cache: reproducible, the seed matters, the share, equal to the loader's own `token_drop` at the same seed), controls (cache: c-rule, c-floor and a trained-style head run through the writer
 and the standard scorer), readout_dump (B's stored dump frame -> prediction: sec0 zeroes the sections, the close-node step drops the weaker of two close nodes), numbers (the layer-1 comparison at its tolerance, g1, the sample, the parity
-comparison inside / outside its tolerance, the matching of two token sets by cell), parity_timing (cache: the check-parity and the timing code paths on a tiny head, CPU: stamped files, K from the cache), score_max (cache: `ctl --max` / `dump --max` / `score --max` end to end, g1 by hand).
+comparison inside / outside its tolerance, the matching of two token sets by cell), parity_timing (cache: the check-parity and the timing code paths on a tiny head, CPU: stamped files, K from the cache), score_max (cache: `ctl --max` / `dump --max` / `score --max` end to end, g1 by hand),
+fixture (E369 / E370 verdicts at their boundaries; the untrained prior head on 3 VAL frames PASSes, lam 0 FAILs; a teacher smoke head read as stage A), ctl_train (c-rule on the TRAIN sample, never read as a VAL control), graphs (pass1 schema, systems added,
+a duplicate refused, the per-frame table; frame-order and GT-field mutants).
 """
 import contextlib
 import json
@@ -133,6 +135,74 @@ def test_decode_fork():
     print("decode_fork: record keeps both branches, argmax the better one, the none slot beats weak branches: ok")
 
 
+def _links_set(l):
+    return set(zip(l["src"].tolist(), l["dst"].tolist()))
+
+
+def test_decode_variant():
+    K = 6
+    succ = {0: {1: 0.5, 2: 0.4}, 1: {2: 0.2}, 2: {3: 0.35}, 3: {4: 0.1}}                                  # none = the rest: src 0 two branches, src 1 weak (0.2), src 2 below its none (0.35 < 0.65), src 3 very weak
+    out, tok = stub_out(K, succ, [0.1, 0.1, 0.55, 0.1, 0.1, 0.1])                                          # token 2 has p_none 0.55: not a node at 0.5
+    (f,) = E.batch_dump(out, batch_of(tok))
+    valid = np.ones(K, bool)
+    rec = E.decode_variant(f, valid)                                                                       # the defaults are the decode of record, exactly
+    assert all(np.array_equal(rec["rec"][k], f["rec"][k]) for k in f["rec"]) and np.array_equal(rec["keep"], f["keep"]), (rec["rec"], f["rec"])
+    got = lambda **k: _links_set(E.decode_variant(f, valid, **k)["rec"])  # noqa: E731
+    assert got() == {(0, 1)} and got(link_thr=0.2) == {(0, 1)}, "token 2 is no node at p_none 0.55: no link to or from it"
+    assert got(keep_thr=0.6) == {(0, 1), (0, 2)} and got(link_thr=0.2, keep_thr=0.6) == {(0, 1), (0, 2)}, "a higher keep threshold adds the node"
+    assert got(keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (2, 3)}, "the none gate off adds 2 -> 3 (0.35 below p(none) 0.65)"
+    assert got(link_thr=0.19, keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (1, 2), (2, 3)} and got(link_thr=0.09, keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (1, 2), (2, 3), (3, 4)}
+    for kt in (0.5, 0.6):
+        for gate in (True, False):
+            chain = [got(link_thr=t, keep_thr=kt, none_gate=gate) for t in (0.3, 0.19, 0.09, 0.05)]
+            assert all(x <= y for x, y in zip(chain, chain[1:])), "a lower link threshold only adds links"
+        assert got(link_thr=0.2, keep_thr=kt) <= got(link_thr=0.2, keep_thr=kt, none_gate=False), "no none gate only adds links"
+    must_fail(E.decode_variant, f, valid, 0.04)                                                            # below the candidates the dump holds
+    v = E.decode_variant(f, np.array([True, True, True, True, True, False]), keep_thr=0.6)                 # the valid mask: an invalid token is never a node, whatever its p_none
+    assert not v["keep"][5] and v["keep"][2]
+    pred = E.frame_prediction(tok, E.decode_variant(f, valid, keep_thr=0.6), "rec", 0.6)                   # a node kept at 0.6 still passes the scorer's e >= 0.5, e = 1 - p_none + 0.1
+    import qgraph_eval as QE
+    assert QE.kept(pred, 0.5, 0.5)[0].all() and abs(pred["nodes"]["e"][2] - 0.55) < 1e-6 and abs(pred["nodes"]["e"][0] - 1.0) < 1e-6 and len(pred["nodes"]["pos"]) == 6, pred["nodes"]["e"]
+    old = dict(f, cand={k: v for k, v in f["cand"].items() if k not in ("a", "b")})                         # a dump of before the variants (no scales in the candidates): refused, re-dump
+    must_fail(E.decode_variant, old, valid)
+    E.check_record([f], [valid])
+    must_fail(E.check_record, [dict(f, rec=dict(f["rec"], a=f["rec"]["a"] + 0.01))], [valid])                # a record whose scales are not the candidates' is caught before a variant is scored
+    # a hand frame exactly on the thresholds: p = float32(0.3) at link 0.3, p == p(none), p_none == float32(0.6) at keep 0.6; each mutant of a comparison delivers another graph
+    f32 = np.float32
+    th = dict(token="t", pnone=np.array([0.1, 0.1, 0.6, 0.1, 0.1], f32), none_cls=np.array([[0.2, 0.4, 0.1, 0.1, 0.1], [1.0] * 5], f32),
+              cand=dict(src=np.array([0, 1, 3, 3], np.int16), dst=np.array([1, 3, 2, 4], np.int16), p=np.array([0.3, 0.4, 0.5, 0.5], f32), long=np.zeros(4, bool), a=np.full(4, THIRD, f32), b=np.full(4, THIRD, f32)))
+    v5 = np.ones(5, bool)
+    got_th = E.decode_variant(th, v5, link_thr=0.3, keep_thr=0.6)
+    want = {(0, 1), (1, 3), (3, 4)}
+    assert _links_set(got_th["rec"]) == want and got_th["keep"].tolist() == [True, True, False, True, True], (got_th["rec"], got_th["keep"])
+
+    def mutant(le_keep=False, gt_link=False, gt_none=False):                                               # the rule of `decode_variant` with one comparison changed
+        c, lt, kt = th["cand"], f32(0.3), f32(0.6)
+        keep = (th["pnone"] <= kt) if le_keep else (th["pnone"] < kt)
+        s, d = c["src"].astype(int), c["dst"].astype(int)
+        m = ((c["p"] > lt) if gt_link else (c["p"] >= lt)) & keep[s] & keep[d]
+        pn = th["none_cls"][0, s]
+        m &= (c["p"] > pn) if gt_none else (c["p"] >= pn)
+        return set(zip(s[m].tolist(), d[m].tolist()))
+    assert mutant() == want and all(mutant(**{k: True}) != want for k in ("le_keep", "gt_link", "gt_none")), [mutant(**{k: True}) for k in ("le_keep", "gt_link", "gt_none")]
+    # a real head (random weights): the default variant is the decode of record on every frame, exactly
+    torch.manual_seed(0)
+    m = JK.JTokenHead().eval()
+    m.set_step(JK.SWITCH)
+    sb = JK.synthetic_batch(3, 48, seed=2)
+    toks = [dict(pos=sb["pos"][b].double().numpy(), cell=np.arange(48)) for b in range(3)]
+    frames = E.batch_dump(E.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
+    n_rec = 0
+    for fr_, val in zip(frames, sb["valid"].numpy()):
+        d = E.decode_variant(fr_, val)
+        assert all(np.array_equal(d["rec"][k], fr_["rec"][k]) for k in fr_["rec"]) and np.array_equal(d["keep"], fr_["keep"])
+        n_rec += len(fr_["rec"]["src"])
+    assert n_rec > 0
+    print(f"decode_variant: the defaults equal the record decode exactly (hand frame and {n_rec} links of a real head on 3 frames), a lower link threshold only adds links, the none gate off adds the links of sources whose none mass is above them, a higher keep "
+          "threshold adds nodes (e shifted so that the scorer keeps them), thresholds below the candidates and a dump of before the variants refused, check_record catches a record that is not the default variant; a hand frame on "
+          "the thresholds (p = 0.3, p = p(none), p_none = 0.6) kills the mutants p > thr, p > p(none), p_none <= keep: ok")
+
+
 def test_dump_roundtrip():
     torch.manual_seed(0)
     m = JK.JTokenHead().eval()
@@ -163,7 +233,7 @@ def test_writer_no_gt():
     K = 4
     out, tok = stub_out(K, {0: {1: 0.8}, 1: {2: 0.8}}, [0.1] * K)
     pred, f = pred_of(out, tok)
-    assert list(inspect.signature(E.frame_prediction).parameters) == ["tokens", "f", "decode"], "the writer's inputs are the tokens and the dump frame"
+    assert list(inspect.signature(E.frame_prediction).parameters) == ["tokens", "f", "decode", "keep_thr"], "the writer's inputs are the tokens and the dump frame"
     gt_leaks = {"section": lambda nd: nd.update(section=np.arange(len(nd["pos"]))), "flags": lambda nd: nd.update(flags=np.ones_like(nd["flags"])), "pos": lambda nd: nd.update(pos=nd["pos"] + 0.7),
                 "extra field": lambda nd: nd.update(piece=np.zeros(len(nd["pos"]), int)), "s": lambda nd: nd.update(s=np.ones_like(nd["s"]))}
     real = LP.to_pred
@@ -413,6 +483,103 @@ def test_parity_timing():
               f"K {K}: head {t['median_ms']['head']:.0f} ms, whole {t['median_ms']['whole']:.0f} ms, {t['params']} parameters, {t['gmacs_head']:.2f} GMACs, two stamped files: ok")
 
 
+def test_sweep():
+    """the sweep on 3 cache frames with the untrained head (it keeps nodes and links): 24 cells, one is the record, the numbers move monotonically in the counts, the table is never overwritten"""
+    import shutil
+    if not CACHE_OK or not os.path.exists(SMOKE):
+        print("sweep: SKIPPED (no cache or no smoke model)")
+        return
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, out = os.path.join(tmp, "runs"), os.path.join(tmp, "out")
+        os.makedirs(os.path.join(runs, "h"))
+        os.makedirs(out)
+        ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
+        ck["state"] = E.floor_model().state_dict()
+        torch.save(ck, os.path.join(runs, "h", "model.pt"))
+        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        import pickle
+        dp = os.path.join(runs, "h", "token_val_n3.pkl")
+        d = pickle.load(open(dp, "rb"))
+        planted = 0
+        for f, t in zip(d["frames"], [E.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]):        # p_none in [0.5, 0.7) on 12 valid tokens per frame: the keep threshold changes the kept nodes; keep and record stay consistent
+            v = np.flatnonzero(t["valid"])[:12]
+            f["pnone"][v] = np.where(np.arange(len(v)) % 2, np.float32(0.65), np.float32(0.55))
+            f["keep"] = t["valid"] & (f["pnone"] < np.float32(0.5))
+            f["rec"] = E.decode_variant(f, t["valid"])["rec"]
+            planted += len(v)
+        pickle.dump(d, open(dp, "wb"))
+        try:                                                                                                # --split is required (argparse exits)
+            E.parse_args(["sweep", "--run", "h", "--seed", "0", "--max", "3"])
+        except SystemExit:
+            pass
+        else:
+            raise RuntimeError("a sweep without --split was accepted")
+        path = E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--max", "3"]), runs, out)
+        tab = json.load(open(path))
+        rows = tab["rows"]
+        assert len(rows) == 24 and sum(r["record"] for r in rows) == 1 and all(r["frames"] == 3 for r in rows), rows
+        assert (tab["every"], tab["max"], tab["drop_seed"]) == (1, 3, 0) and tab["dump"]["sha256"] and "steps" in tab, tab.keys()
+        cell = lambda lt, kt, g: next(r for r in rows if (r["link_thr"], r["keep_thr"], r["none_gate"]) == (lt, kt, g))  # noqa: E731
+        for kt in E.SWEEP_KEEP:
+            for g in (True, False):
+                lp = [cell(lt, kt, g)["links_per_frame"] for lt in E.SWEEP_LINK]
+                assert all(x <= y for x, y in zip(lp, lp[1:])), "a lower link threshold only adds links"
+            assert all(cell(lt, kt, True)["links_per_frame"] <= cell(lt, kt, False)["links_per_frame"] for lt in E.SWEEP_LINK), "no none gate only adds links"
+        for lt in E.SWEEP_LINK:
+            kn = [cell(lt, kt, True)["kept_nodes_per_frame"] for kt in E.SWEEP_KEEP]
+            assert all(x < y for x, y in zip(kn, kn[1:])), "the planted p_none 0.55 / 0.65: each higher keep threshold adds nodes"
+        assert len({r["topo_F1"] for r in rows}) > 1, "the variants differ in the score"
+        must_fail(E.sweep, E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--max", "3"]), runs, out)
+        print(f"sweep: 24 cells on 3 frames of an untrained head with {planted} planted p_none in [0.5, 0.7) (links per frame {min(r['links_per_frame'] for r in rows):.0f} - {max(r['links_per_frame'] for r in rows):.0f}), counts monotone in both thresholds and the gate, "
+              "kept nodes rise strictly with the keep threshold, the record cell marked, --split required, the file names every / max / drop seed / steps / the dump's sha256, never overwritten: ok")
+
+
+def test_every():
+    """--every N: the sample, the file names, the meta of the dump, and score / sweep reading the subset back (frames 0, 3, 6 of VAL with --max 3; the TRAIN sample every third = 291 frames)"""
+    import pickle
+    import shutil
+    s = E.sample(8414, "train")
+    assert len(E.sample(8414, "train", 3)) == 291 and E.sample(8414, "train", 3).tolist() == s[::3].tolist() and E.sample(873, "val", 3).tolist()[:3] == [0, 3, 6] and E.sample(873, "val", 1).tolist() == list(range(873))
+    if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(E.planb_path(0)):
+        print("every: the sample ok, the dump / score / sweep part SKIPPED (no cache, smoke model or stored plain B)")
+        return
+    import qgraph_eval as QE
+    ds = E.open_cache("val", 0)
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
+        out = os.path.join(scratch, "out")
+        os.makedirs(os.path.join(runs, "h"))
+        os.makedirs(out)
+        ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
+        ck["state"] = E.floor_model().state_dict()                                                       # an untrained head that keeps nodes and links
+        torch.save(ck, os.path.join(runs, "h", "model.pt"))
+        shutil.copy(E.planb_path(0), os.path.join(scratch, "planb_s0.pkl"))
+        with patched((E, "SCRATCH", scratch)):
+            E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)
+            path = os.path.join(runs, "h", "token_val_every3_n3.pkl")
+            d = pickle.load(open(path, "rb"))
+            assert d["meta"]["every"] == 3 and d["meta"]["idx"] == [0, 3, 6] and d["meta"]["tokens"] == [ds.tokens[i] for i in (0, 3, 6)] and [f["token"] for f in d["frames"]] == d["meta"]["tokens"], d["meta"]
+            must_fail(E.dump, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)       # never overwritten
+            cards = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--every", "3", "--max", "3"]), runs, out)
+            assert sorted(os.listdir(out)) == ["h_token_card_argmax_every3_n3.json", "h_token_card_rec_every3_n3.json"], os.listdir(out)
+            fr = QE.val_frames()
+            want = E.score_preds([E.frame_prediction(ds[i]["tokens_np"], f, "rec") for i, f in zip((0, 3, 6), d["frames"])], [fr[i] for i in (0, 3, 6)], log=lambda *a, **k: None)["graph"]
+            c = cards["rec"]
+            assert c["frames"] == 3 and all(abs(c["metrics"][k] - want[k]) < 1e-12 for k in E.KEYS) and "topo_F1" in c["info"]["paired_vs_plain_b"] and c["info"]["g1_topo_F1"] is None, "the card scores frames 0, 3, 6"
+            pb = QE.graph_numbers([E.stored_plain_b(0)["rec"]["graph"][i] for i in (0, 3, 6)])
+            assert all(c["info"]["plain_b"][k] == pb[k] for k in E.KEYS) and "paired_vs_bsec0_close" not in c["info"], "plain B on frames 0, 3, 6; no B' records of the first frames indexed by the subsample"
+            tab = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--every", "3", "--max", "3"]), runs, out)))
+            assert os.path.exists(os.path.join(out, "h_token_sweep_every3_n3.json")) and tab["frames"] == 3 and len(tab["rows"]) == 24
+            rec = next(r for r in tab["rows"] if r["record"])
+            assert abs(rec["topo_F1"] - want["topo_F1"]) < 1e-12, "the record cell of the sweep is the record card on the same frames"
+            v = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--every", "3", "--max", "3", "--link-thr", "0.1", "--keep-thr", "0.6", "--no-none-gate"]), runs, out)["rec"]
+            row = next(r for r in tab["rows"] if (r["link_thr"], r["keep_thr"], r["none_gate"]) == (0.1, 0.6, False))
+            assert all(abs(v["metrics"][k] - row[k]) < 1e-12 for k in E.SWEEP_KEYS), "a variant card equals its sweep cell"
+            assert all(abs(v["info"]["record"][k] - want[k]) < 1e-12 for k in E.KEYS) and "topo_F1" in v["info"]["paired_vs_record"] and v["info"]["record_vs_stored_card"]["topo_F1"] == 0.0, "the record beside the variant"
+    print("every: the TRAIN sample every third = 291 frames; dump --every 3 --max 3 takes VAL frames 0, 3, 6 (file token_val_every3_n3.pkl, meta every / idx / tokens, never overwritten), score and sweep read it back (names ..._every3_n3), the card and the sweep's record cell equal a direct scoring of frames 0, 3, 6, "
+          "plain B is read at frames 0, 3, 6, a variant card equals its sweep cell and carries the record of the same dump (paired, against the stored record card): ok")
+
+
 def test_score_max():
     """dump then score of 3 frames, end to end on a smoke head: the controls of `ctl --max 3` (bsec0_close: the pickle for the paired interval) and planted hi / rule cards, g1 against the hand formula"""
     import pickle
@@ -441,6 +608,10 @@ def test_score_max():
                 assert abs(c["info"]["g1_topo_F1"] - want) < 1e-12 and "exceed 1" in c["info"]["g1_note"], c["info"]["g1_topo_F1"]
                 assert "topo_F1" in c["info"]["paired_vs_plain_b"] and "topo_F1" in c["info"]["paired_vs_bsec0_close"] and "plain_b_dump" in c["info"]
                 assert c["protocol"]["reference"].startswith("val")
+            v = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--max", "3", "--link-thr", "0.1", "--keep-thr", "0.6", "--no-none-gate"]), runs, out)
+            assert list(v) == ["rec"] and os.path.exists(os.path.join(out, "h_token_card_rec_lt0.1_kt0.6_nng_n3.json")), (list(v), os.listdir(out))
+            dv = v["rec"]["info"]["decode_variant"]
+            assert (dv["link_thr"], dv["keep_thr"], dv["none_gate"]) == (0.1, 0.6, False) and "g1_topo_F1" in v["rec"]["info"], dv
             for f in os.listdir(out):
                 if f.startswith("h_token_card"):
                     os.remove(os.path.join(out, f))
@@ -458,7 +629,100 @@ def test_score_max():
     print("score_max: ctl --max 3 (bsec0_close pickle, K in the file name), dump --max 3, score --max 3 with planted controls: g1 equals the hand formula, the paired intervals vs plain B and vs bsec0_close, the cards in the out folder; a dump of another run and a missing plain B record are refused: ok")
 
 
-TESTS = [test_keep_rule, test_decode_fork, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_score_max]
+def test_fixture():
+    """E369: the untrained prior head on 3 VAL frames = c-rule (PASS, every count by the verdict), lam 0 FAILs; the verdict rules at their boundaries for both modes; E370 stage A (--run) on a smoke run of the plain head: the
+    numbers per class and a FAIL; the json lands stamped in the out folder, never overwritten"""
+    c = dict(rule=1000, present=999, extra=1, kept_diff=0, rule_in_short=900, rule_in_long=100, present_in_short=855, present_in_long=80, valid=1000)
+    t = dict(head=0.6, rule=0.6, rule_in=0.6)
+    assert E.fixture_verdict(c, t, "val", "e369")[0] and not E.fixture_verdict(dict(c, present=998), t, "val", "e369")[0] and not E.fixture_verdict(dict(c, extra=2), t, "val", "e369")[0]
+    assert not E.fixture_verdict(dict(c, kept_diff=1), t, "val", "e369")[0] and not E.fixture_verdict(c, dict(t, head=0.6011), "val", "e369")[0] and E.fixture_verdict(c, dict(t, head=0.6011), "train", "e369")[0], "topo F1 on VAL only"
+    c7 = dict(c, extra=50, kept_diff=10)
+    assert E.fixture_verdict(c7, t, "train", "e370a")[0] and not E.fixture_verdict(dict(c7, present_in_short=854), t, "train", "e370a")[0] and not E.fixture_verdict(dict(c7, present_in_long=79), t, "train", "e370a")[0]
+    assert not E.fixture_verdict(dict(c7, extra=51), t, "train", "e370a")[0] and not E.fixture_verdict(dict(c7, kept_diff=11), t, "train", "e370a")[0]
+    if not CACHE_OK:
+        print("fixture: the verdicts ok, the cache part SKIPPED (no cache)")
+        return
+    import glob
+    with tempfile.TemporaryDirectory() as tmp:
+        assert E.fixture(E.parse_args(["fixture", "--seed", "0", "--split", "val", "--max", "3"]), out_dir=tmp) == 0
+        (p,) = glob.glob(os.path.join(tmp, "fix_s0_val_n3_*.json"))
+        d = json.load(open(p))
+        assert d["ok"] and d["counts"]["present"] == d["counts"]["rule"] - d["counts"]["out_gate"] and d["counts"]["extra"] == 0 and d["counts"]["kept_diff"] == 0 and d["topo_F1"]["head"] == d["topo_F1"]["rule_in"], d
+        assert E.fixture(E.parse_args(["fixture", "--seed", "0", "--split", "val", "--max", "3", "--lam", "0"]), out_dir=tmp) == 1, "mutant lam 0: no rule link delivered"
+        assert len(glob.glob(os.path.join(tmp, "fix_s0_val_n3_*.json"))) == 2, "a second fixture never overwrites the first"
+        runs = os.path.join(tmp, "runs")
+        JKT_ = E.JKT
+        JKT_.train(JKT_.parse_args(["--name", "a", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--teacher", "rule"]), runs, 500, 48)
+        rc = E.fixture(E.parse_args(["fixture", "--seed", "0", "--run", "a", "--split", "val", "--max", "3"]), runs, out_dir=tmp)
+        (q,) = glob.glob(os.path.join(tmp, "token_fixture_val_n3_*.json"))
+        dq = json.load(open(q))
+        assert dq["mode"] == "e370a" and rc == int(not dq["ok"]) and {"short", "long", "extra", "kept_agree", "topo_diff_restricted"} <= set(dq["numbers"]) and dq["steps"] == 20, dq["numbers"]
+    print(f"fixture: the verdicts at their boundaries (E369: present 0.999, extra 0.001, kept identical, topo F1 0.001 on VAL only; E370 stage A: short 0.95, long 0.80, extra 0.05, kept 0.99); the untrained prior head on 3 VAL frames PASSes "
+          f"({d['counts']['rule']} c-rule links, {d['counts']['out_gate']} outside the gate, topo F1 {d['topo_F1']['head']:.4f} = c-rule in the gate), lam 0 FAILs, stamped files; a 20-step teacher smoke head read as stage A (short {dq['numbers']['short']:.3f}, "
+          f"rc {rc}): ok")
+
+
+def test_ctl_train():
+    """ctl --split train --every 3: the arm rule on the TRAIN sample, the card name with train / every, the other arms refused there; read_ctl never returns a TRAIN card for the VAL g1"""
+    with tempfile.TemporaryDirectory() as d:
+        json.dump(dict(metrics=dict(topo_F1=0.7), info=dict(K=512), split="train"), open(os.path.join(d, "rule_e292_a_s0_K512.json"), "w"))       # a TRAIN card under a VAL name is not read either
+        assert E.read_ctl("rule", "e292_a", 0, 512, d) is None
+    assert E.ctl_name("rule", "e292_a", 0, 512, 0, "train", 3) == "rule_e292_a_s0_K512_train_every3.json" and E.ctl_name("rule", "e292_a", 0, 512) == "rule_e292_a_s0_K512.json"
+    must_fail(E.ctl, E.parse_args(["ctl", "--seed", "0", "--ident", "e292_a", "--split", "train", "--every", "3", "--arms", "hi", "--max", "2"]))
+    if not CACHE_OK:
+        print("ctl_train: names ok, the cache part SKIPPED (no cache)")
+        return
+    with tempfile.TemporaryDirectory() as scratch:
+        os.makedirs(os.path.join(scratch, "out"))
+        with patched((E, "SCRATCH", scratch)):
+            paths = E.ctl(E.parse_args(["ctl", "--seed", "0", "--ident", "e292_a", "--split", "train", "--every", "3", "--max", "2"]))
+        (p,) = paths.values()
+        c = json.load(open(p))
+        assert os.path.basename(p) == f"rule_e292_a_s0_K{E.open_cache('train', 0).K}_train_every3_n2.json" and c["split"] == "train" and c["frames"] == 2 and c["info"]["every"] == 3, (p, c["info"])
+    print("ctl_train: c-rule on 2 frames of the TRAIN sample every third (card rule_<ident>_s<S>_K<K>_train_every3[_n2].json, split train), other arms refused there, read_ctl never returns a TRAIN card: ok")
+
+
+def test_graphs():
+    """graphs: the delivered graphs of a dump in the schema of pass1.pkl (3 VAL frames of the untrained head), a second system appended, a duplicate name refused, the per-frame table pooled = the scorer's topo F1; mutants:
+    a frame order swap and a GT field in a system record fail `check_graphs`"""
+    import pickle
+    if not CACHE_OK or not os.path.exists(SMOKE):
+        print("graphs: SKIPPED (no cache or no smoke model)")
+        return
+    import qgraph_eval as QE
+    with tempfile.TemporaryDirectory() as tmp:
+        runs = os.path.join(tmp, "runs")
+        os.makedirs(os.path.join(runs, "h"))
+        ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
+        ck["state"] = E.floor_model().state_dict()
+        torch.save(ck, os.path.join(runs, "h", "model.pt"))
+        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        out = os.path.join(tmp, "g", "graphs.pkl")
+        os.makedirs(os.path.dirname(out))
+        g_args = ["graphs", "--run", "h", "--seed", "0", "--max", "3", "--out", out]
+        E.graphs(E.parse_args(g_args + ["--name", "S1"]), runs)
+        E.graphs(E.parse_args(g_args + ["--name", "S1_v", "--link-thr", "0.1", "--keep-thr", "0.6", "--no-none-gate"]), runs)
+        must_fail(E.graphs, E.parse_args(g_args + ["--name", "S1"]), runs)                                    # a name the file holds
+        doc, tab = pickle.load(open(out, "rb")), json.load(open(os.path.join(tmp, "g", "perframe_table.json")))
+        frames = QE.val_frames()[:3]
+        E.check_graphs(doc, frames)
+        r0 = doc["frames"][0]
+        assert sorted(r0) == ["gt", "k", "man_pts", "n_man", "row", "scene", "sys", "token"] and sorted(r0["sys"]) == ["S1", "S1_v"] and sorted(r0["gt"][0]) == ["kinds", "pts", "tier", "vis"] and r0["gt"][0]["tier"].dtype == np.int8
+        ds = E.open_cache("val", 0)
+        d = pickle.load(open(os.path.join(runs, "h", "token_val_n3.pkl"), "rb"))
+        want = E.score_preds([E.frame_prediction(ds[i]["tokens_np"], f, "rec") for i, f in enumerate(d["frames"])], frames, log=lambda *x, **k: None)["graph"]["topo_F1"]
+        assert abs(tab["sys"]["S1"]["pooled_topo_F1"] - want) < 1e-12 and len(tab["sys"]["S1"]["topo_F1"]) == 3 and tab["sys"]["S1_v"]["decode"] == "rec_lt0.1_kt0.6_nng", tab["sys"]["S1"]
+        swapped = dict(doc, frames=[doc["frames"][1], doc["frames"][0], doc["frames"][2]])
+        must_fail(E.check_graphs, swapped, frames)
+        leak = pickle.loads(pickle.dumps(doc))
+        leak["frames"][1]["sys"]["S1"]["tier"] = np.zeros(3, np.int8)
+        must_fail(E.check_graphs, leak, frames)
+    print(f"graphs: 3 VAL frames in the schema of pass1.pkl (k, token, row, scene, gt pieces with tier / vis / kinds, maneuvers, sys lines + maneuver counts), a second system appended, a duplicate refused, the per-frame table "
+          f"pooled = the scorer's topo F1 ({want:.4f}); mutants (frame order swap, a GT field in a system record) fail: ok")
+
+
+TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max,
+         test_fixture, test_ctl_train, test_graphs]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
