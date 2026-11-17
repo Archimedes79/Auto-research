@@ -5,7 +5,7 @@
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [a decode variant] --ref-run R2 [--ref-run-cell S,L,K,on|off]   # CPU, E376: + R2's dump of the same read-out at the same decode or that cell, paired R - R2 -> token_card_.._vs_<R2>[_rc<cell>].json
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --argmax --keep-thr K                                          # CPU, E376: the argmax decode at another keep threshold -> token_card_argmax_kt<K>..json
-    wsl bash tools/env/_py14.sh jtoken_eval.py anatomy --run R --seed S [--split val] [--link-thr-long 0.2] [--keep-thr 0.6] [--every N]   # CPU, E376: the delivered long links by category + the long-link and existence AP -> runs/R/token_anatomy_long_ltl<T>_kt<K>..json
+    wsl bash tools/env/_py14.sh jtoken_eval.py anatomy --run R --seed S [--split val] [--link-thr-long 0.2] [--keep-thr 0.6] [--every N]   # CPU, E376: the delivered long links by category + the long-link and existence AP (+ E377: the near-node none tokens) -> runs/R/token_anatomy_long_ltl<T>_kt<K>..json
     wsl bash tools/env/_py14.sh jtoken_eval.py sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the grid of decode variants on the TRAIN sample -> runs/R/token_sweep[_perclass]_train.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a|e273_p [--arms hi,hi_y,rule,floor,bsec0_plain,bsec0_close] [--max N]   # CPU: the controls -> runs/eval/e365_ctl/<arm>_<ident>_s<S>_K<K>.json
     wsl bash tools/env/_py14.sh jtoken_eval.py ctl   --seed S --ident e292_a --split train --every 3                                    # CPU: c-rule on the TRAIN sample -> runs/eval/e365_ctl/rule_<ident>_s<S>_K<K>_train_every3.json
@@ -29,7 +29,9 @@ B''s e >= 0.5; floor = the untrained head (random init seed 0, the key weights o
 (`--ident e292_a`: B' with the Matrix-NMS layer, `e273_p`: plain B). Tests: evaluation/tests/test_jtoken_eval.py
 Anatomy (E376, promoted from temp/_session_scratch_d113/anatomy_long.py): a long link is DELIVERED at p >= T_L with both ends kept (p_none < K; the long class of the D115 decode, no none gate); each is tp (the ends are assigned to the
 GT nodes of a GT long link), dup_of_true, wrong_pair or false_end (`link_category`); the long-link AP ranks every long candidate of the dump with both ends kept, the existence AP every valid token (`average_precision`); the mass
-concentration (`concentration`) reads the head's own probabilities on its training label G(i) in both classes.
+concentration (`concentration`) reads the head's own probabilities on its training label G(i) in both classes. Its section near_none (E377, promoted from temp/e377/e377_near.py and e377_dup.py; `near_frame`): the none tokens near an
+assigned token (E377's label `jtoken.near_none`) and far from one, the duplicates (none tokens in some G(i)), their kept shares and median p_none, and the token degree >= 3 points of the delivered token graph (links short 0.3 / long T_L,
+keep K, no none gate) that touch a near / far / duplicate token's link.
 """
 import argparse
 import hashlib
@@ -820,10 +822,53 @@ def concentration_numbers(s, n, zero=0):
     return dict(sources=len(n), zero_mass_sources=zero, share_median=v(s, np.median), share_mean=v(s, np.mean), above_mean=v(n, np.mean), above_2plus=v(n >= 2, np.mean), above_mean_given_one=v(n[n >= 1], np.mean))
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ the near-node none tokens (E377)
+NEAR_COUNTS = ("none", "near", "far", "dup", "dup_near", "kept_near", "kept_far", "kept_dup", "deg3", "deg3_touch_near", "deg3_touch_far", "deg3_touch_dup")
+
+
+def near_frame(f, valid, item, keep_thr, thr_long):
+    """one dump frame and its cache item (`lane_ptok_data.PTokData`: tokens_np pos / dirv, ytype, y) -> the counts of NEAR_COUNTS and the p_none of the near / far tokens. near = `jtoken.near_none` (E377's label: a valid none token,
+    ytype 0, within NEAR_R m inclusive and heading cosine >= NEAR_COS of a valid assigned token), far = the other valid none tokens, dup = the valid none tokens in some G(i) (their column of y non-empty); kept = p_none < keep_thr; the
+    delivered token graph = `decode_variant` at link short LINK_THR / long thr_long / keep_thr, no none gate; deg3 = its tokens of degree (in + out) >= 3; a deg3 token touches X when it is an end of a delivered link with an end in X"""
+    v, yt, tok = np.asarray(valid, bool), np.asarray(item["ytype"]), item["tokens_np"]
+    th = lambda x: torch.from_numpy(np.asarray(x))[None]  # noqa: E731
+    near = JK.near_none(th(np.asarray(tok["pos"], float)), th(np.asarray(tok["dirv"], float)), th(v), th(yt))[0].numpy()
+    none = v & (yt == 0)
+    far, dup = none & ~near, none & (np.asarray(item["y"]) > 0).any(0)
+    d = decode_variant(f, v, LINK_THR, keep_thr, False, thr_long)
+    keep, s, e = d["keep"], d["rec"]["src"].astype(int), d["rec"]["dst"].astype(int)
+    deg3 = np.bincount(s, minlength=len(v)) + np.bincount(e, minlength=len(v)) >= 3
+
+    def touch(x):
+        hit, end = x[s] | x[e], np.zeros(len(v), bool)
+        end[s[hit]] = True
+        end[e[hit]] = True
+        return deg3 & end
+
+    pn = np.asarray(f["pnone"], float)
+    n = dict(none=none, near=near, far=far, dup=dup, dup_near=dup & near, kept_near=keep & near, kept_far=keep & far, kept_dup=keep & dup, deg3=deg3, deg3_touch_near=touch(near), deg3_touch_far=touch(far), deg3_touch_dup=touch(dup))
+    return dict(counts={k: int(n[k].sum()) for k in NEAR_COUNTS}, pnone_near=pn[near], pnone_far=pn[far])
+
+
+def near_numbers(parts):
+    """the frames' `near_frame` parts pooled -> the anatomy's section near_none: counts, per_frame (count / frames), shares (kept_near / near, kept_far / far, kept_dup / dup, dup_near / dup, deg3_touch_<x> / deg3; 0 over an empty
+    denominator) and the median p_none of the near / far tokens (None without one)"""
+    n = {k: sum(p["counts"][k] for p in parts) for k in NEAR_COUNTS}
+    share = lambda a, b: n[a] / max(n[b], 1)  # noqa: E731
+    med = lambda k: float(np.median(np.concatenate([p[k] for p in parts]))) if sum(len(p[k]) for p in parts) else None  # noqa: E731
+    return dict(r=JK.NEAR_R, cos=JK.NEAR_COS, link_thr=LINK_THR, frames=len(parts), counts=n, per_frame={k: x / max(len(parts), 1) for k, x in n.items()},
+                shares=dict(kept_near=share("kept_near", "near"), kept_far=share("kept_far", "far"), kept_dup=share("kept_dup", "dup"), dup_near=share("dup_near", "dup"),
+                            **{f"deg3_touch_{x}": share(f"deg3_touch_{x}", "deg3") for x in ("near", "far", "dup")}),
+                median_pnone=dict(near=med("pnone_near"), far=med("pnone_far")),
+                note="near = `jtoken.near_none` (a valid none token, ytype 0, within r m inclusive and heading cosine >= cos of a valid assigned token, ytype != 0), far = the other valid none tokens, dup = the valid none tokens in some G(i) "
+                     "(the column of the cache's y non-empty); kept = p_none < keep_thr; deg3 = tokens of in + out degree >= 3 in the delivered token graph (links short link_thr / long link_thr_long, both ends kept, no none gate); "
+                     "deg3_touch_<x> = deg3 tokens at an end of a delivered link with an end in x")
+
+
 def anatomy(a, runs=RUNS, out_dir=None):
     """E376: the anatomy of the delivered long links of the run's dump at --link-thr-long / --keep-thr (module docstring; `anatomy_numbers`; the GT side: the cache's gt_id / uout / uin, read once, and the frame's table of
-    `lane_tok_data.TokData`) and the mass concentration of the head in both classes (`concentration`, a CPU forward of --model on the same frames) -> runs/R/token_anatomy_long_ltl<T>_kt<K>[_step<N>][_<split>][_every<N>].json,
-    never overwritten (out_dir or --max: <out_dir or temp/e365/out>/R_token_anatomy_..[_n<N>].json), and a table"""
+    `lane_tok_data.TokData`) and the mass concentration of the head in both classes (`concentration`, a CPU forward of --model on the same frames) and the near-node none tokens (E377: `near_frame` on the cache item, `near_numbers`)
+    -> runs/R/token_anatomy_long_ltl<T>_kt<K>[_step<N>][_<split>][_every<N>].json, never overwritten (out_dir or --max: <out_dir or temp/e365/out>/R_token_anatomy_..[_n<N>].json), and a table"""
     import lane_tok_data as TD
     assert a.link_thr_long >= KEEP_P, f"the dump holds the candidates with p >= {KEEP_P}"
     a.drop, a.drop_seed = 0.0, 0
@@ -835,13 +880,15 @@ def anatomy(a, runs=RUNS, out_dir=None):
     td = TD.TokData(a.split, LATTICE, feats=False)
     assert [td.tokens[int(i)] for i in idx] == [ds.tokens[int(i)] for i in idx], "the GT tables are not the frames of the cache"
     gid, uout, uin = (np.asarray(ds.c.f[k][idx]) for k in ("gt_id", "uout", "uin"))
-    parts, n_gt = [], 0
+    parts, nparts, n_gt = [], [], 0
     for k, (i, f, t, v) in enumerate(zip(idx, r["fr"], r["toks"], r["valid"])):
         lab = gt_labels(t, v, td.table(int(i)), gid[k], uout[k], uin[k])
         parts.append(anatomy_frame(f, v, lab, a.keep_thr))
+        nparts.append(near_frame(f, v, ds[int(i)], a.keep_thr, a.link_thr_long))
         n_gt += len(lab["gt_long"])
     num = anatomy_numbers(parts, n_gt, a.link_thr_long)
     num["concentration"] = concentration(JKT.load_model(a.run, "cpu", runs, name=a.model)[0], ds, idx, r["fr"], r["valid"])
+    num["near_none"] = near_numbers(nparts)
     JV.write_json(path, _jsonable(dict(run=a.run, model=a.model, seed=a.seed, split=a.split, every=a.every, max=a.max, frames=len(idx), K=ds.K, link_thr_long=a.link_thr_long, keep_thr=a.keep_thr, dump=_file_id(r["path"]),
                                        near=dict(r=LC.R_NEAR, cos=LC.COS_NEAR), **num, note="delivered = long candidate with p >= link_thr_long and both ends kept (p_none < keep_thr), no none gate; categories of `link_category`; "
                                        "median_b_long = the median of the PRODUCT sigmoid(uout[src]) * sigmoid(uin[dst]), median_typed of the product p_entry(src) * p_exit(dst); AP = the mean precision at the positives, ties broken "
@@ -856,6 +903,13 @@ def anatomy(a, runs=RUNS, out_dir=None):
     for c, x in num["concentration"].items():
         print(f"  {c:<5} {x['sources']} sources with a GT successor ({x['zero_mass_sources']} with no mass on it): largest member's share of G(i)'s mass median {fmt(x['share_median'], '.3f')} mean {fmt(x['share_mean'], '.3f')}; candidates >= {LINK_THR} per source "
               f"{fmt(x['above_mean'], '.3f')}, 2 or more {fmt(x['above_2plus'], '.3f')}, per source with one or more {fmt(x['above_mean_given_one'], '.3f')}")
+    x = num["near_none"]
+    pf, sh, md = x["per_frame"], x["shares"], x["median_pnone"]
+    print(f"  near: none tokens within {x['r']:g} m and cos >= {x['cos']:g} of an assigned token (`jtoken.near_none`), per frame; delivered token graph at links short {LINK_THR:g} / long {a.link_thr_long:g}, keep {a.keep_thr:g}, no none gate")
+    for k in ("near", "far"):
+        print(f"    {k:<4} {pf[k]:7.1f}  kept {pf['kept_' + k]:6.1f} (share {sh['kept_' + k]:.3f})  median p_none {fmt(md[k], '.3f')}")
+    print(f"    dup  {pf['dup']:7.1f}  kept {pf['kept_dup']:6.1f} (share {sh['kept_dup']:.3f})  in some G(i), near {sh['dup_near']:.3f}")
+    print(f"    degree >= 3 tokens {pf['deg3']:.1f}: touching the link of a near token {sh['deg3_touch_near']:.3f}, of a far none token {sh['deg3_touch_far']:.3f}, of a duplicate {sh['deg3_touch_dup']:.3f}")
     print(f"written {os.path.relpath(path, ROOT)}")
     return path
 
