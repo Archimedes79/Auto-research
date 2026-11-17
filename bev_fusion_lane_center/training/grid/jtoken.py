@@ -15,7 +15,7 @@ the SAME Linear (after a shared LayerNorm) after layer 1 (keys of layers 2 and 3
 Wiring layer (on top of layer 3, attention weights only): class c in {short: chord <= 8 m, long: chord > 8 m}, z^c_ij = q^c_i.k^c_j / sqrt(32) + bias^c(g_ij) + log(w_j + 1e-3) + b^c_j on the allowed gate of `jtok.pair_geometry`
 (padding masked as key and source) + ONE learned none slot per class (key k^c_none and a bias): p^c(.|i) = softmax over {allowed keys} + {none}. Two handle scales per pair from an MLP of (x_i, x_j, g_ij).
 Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (as `jtok2.gt_classes`; ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
-when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
+(E376 `pos_loss="max"`: -log max_{j in G(i)} p^c(j|i)) when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
 + type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. Tests: test_jtoken.py
 c-rule (`rule_links`, THE one code path of the rule: the arm `rule` of `jtoken_eval.py ctl`, the E369 prior and the E370 teacher call it): E357's `lo_near` on the valid tokens with B' e_p >= 0.5.
 E369 (`JTokenHead(prior="rule")`): c-rule's links r and B''s existence as a FIXED prior: z^c_ij += lam r^c_ij (r^c = r inside the gate of class c), the none slot of class c += lam (1 - has^c_i) + mu, the type none logit
@@ -50,6 +50,7 @@ INPUTS = ("tok", "pos", "dirv", "e", "e_raw", "flags", "s", "uout", "uin", "vali
 GT_KEYS = ("y", "ylong", "yscale", "ytype")                                 # the keys of the batch that carry GT (the loss reads them, the forward never)
 RULE_P = 0.5                                                                # c-rule's nodes: the valid tokens with B' e_p >= 0.5
 LAM, MU = 12.0, 10.4                                                        # E369 prior: a rule link starts at p 0.73 - 0.82 (5 - 95 % of the destination key bias, TRAIN sample seed 0), the none slot at lam + mu without one
+POS_LOSS = ("sum", "max")                                                   # the likelihood of a source with GT successors (`_source_nll`): -log sum over its group (default) or -log max (E376)
 
 
 def _const(t):
@@ -272,22 +273,28 @@ def decode_argmax(out):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ loss
-def _source_nll(pos, none, has_g, none_weight):
-    """per source: the likelihood of its GT successors (-log sum_{G(i)} p) when G(i) is non-empty, `none_weight` x -log p(none|i) when it is empty (the sources with a GT successor are not touched by the weight)"""
-    return torch.where(has_g, pos, none * none_weight)
+def _source_nll(lp, G, none_weight, pos_loss="sum"):
+    """per source and class: lp (B, 2, K, K + 1) the log-probabilities of the per-source softmax (the none slot last), G (B, 2, K, K) the in-class GT successor groups -> (B, 2, K). G(i) non-empty: the likelihood of
+    its GT successors, -log sum_{G(i)} p ('sum') or -log max_{G(i)} p ('max', E376: the mass on ONE member of the group; with one member the two are the same); G(i) empty: `none_weight` x -log p(none|i) (the sources
+    with a GT successor are not touched by the weight)"""
+    assert pos_loss in POS_LOSS, pos_loss
+    K = G.shape[-1]
+    g = lp[..., :K].masked_fill(~G, NEG)
+    pos = -(torch.logsumexp(g, -1) if pos_loss == "sum" else g.amax(-1))
+    return torch.where(G.any(-1), pos, -lp[..., K] * none_weight)
 
 
-def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0):
+def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum"):
     """the likelihood of the module docstring -> (loss, info); batch: y (B, K, K), ylong (B, K, K), yscale (B, K, K, 2), ytype (B, K). info: nll_s, nll_l, ce1, ce3, scale_l1 and the counts gt_links, pos_pairs (in-gate GT
     links), gt_outside (links with no gate), gt_class (in the gate, but `ylong` disagrees with the token chord: a statistic, the class of a link is the token chord's). The long scale target is the fitted yscale
     of the long-class links (finite where the cache fitted one). none_weight W (default 1: the loss of before): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes, and (ii) the type
-    cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid tokens of the frame, as torch's weighted mean).
+    cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid tokens of the frame, as torch's weighted mean). pos_loss 'sum' (default: the loss of
+    before) or 'max' (E376): the likelihood of the sources with a non-empty G(i), in both classes (`_source_nll`); the empty-G terms, the type cross-entropy and the scale term are the same under both.
     A target batch of `rule_teacher` holds yskip (B, 2, K): those sources are left out of their class. scale_w = 0: no scale term, `yscale` is not read"""
     dev, cand, lp, valid = out["logp"].device, out["cand"], out["logp"], out["valid"]
-    K = cand.shape[-1]
     y, yl = batch["y"].to(dev) > 0, batch["ylong"].to(dev).bool()
     G = y[:, None] & cand                                                  # (B, 2, K, K): the in-gate GT successors of each class (the class of a pair = its token chord, as `jtok2.gt_classes`)
-    nll = _source_nll(-torch.logsumexp(lp[..., :K].masked_fill(~G, NEG), -1), -lp[..., K], G.any(-1), none_weight)
+    nll = _source_nll(lp, G, none_weight, pos_loss)
     rows = cand.any(-1) & valid[:, None]                                    # the sources of a class: valid tokens with a candidate of it
     if "yskip" in batch:
         rows = rows & ~batch["yskip"].to(dev)
