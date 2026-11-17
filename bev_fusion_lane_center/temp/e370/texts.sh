@@ -1,0 +1,3 @@
+HYP="E370: a rule-distilled initialisation (stage A: the c-rule links and B-prime existence / types as teacher labels, no GT; stage B: the E365 GT loss from the stage-A weights) lets the token head end above the rule and over the okayish gate with no rule in the delivered system."
+PRED="stage A meets the per-class fixture (65 %); stage-B VAL topo F1 0.63 (0.58 - 0.69), F1@1.0 0.78 (0.74 - 0.82), lanes found 0.61 (0.55 - 0.67); PASS about 12 %"
+RULE="E370 card section 0 (by hand): the okayish gate of E365 unchanged on the stage-B head at the decode of record (G-topo >= 0.6359 / 0.6349, F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937, G-cost, G-simple); ABOVE-RULE, B-ADDS, SCHEDULE as labels; the stage-A fixture per class is a diagnosis; VAL 873, no TEST"
