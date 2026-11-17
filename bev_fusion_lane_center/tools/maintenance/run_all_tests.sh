@@ -98,4 +98,5 @@ run "token speed path: same loss / gradients / weights as the plain head, real b
 run "token loader on the GPU: same batches and epoch order as the DataLoader" grid/test_lane_ptok_gpu.py
 run "token cache into another root" grid/test_build_tokcache_root.py
 run "jarm: one arm of a token experiment (card words, cells, table)" jarm.py selftest
+run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
 exit $fail
