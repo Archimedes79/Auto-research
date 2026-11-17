@@ -13,7 +13,9 @@ the same effect on the batch as the loader's own `token_drop`, which draws once 
 `--pos-loss max` (E376; default sum = the loss of before): a source with GT successors is trained on -log max over its group instead of -log of its sum (one winner among the duplicates; a fork's group holds both branches).
 `--none-weight-near W` (E377; default: --none-weight, the loss of before): the none weight of the none tokens within 2 m / cos 0.5 of an assigned token (`jtoken.near_none`), in their empty-G source terms and their type
 cross-entropy; the near tokens per frame of a batch are `n_near` in the info of every step (the log rows) and in the first-loss line.
-`--prior rule` (E369) builds the head with c-rule as a fixed prior (`jtoken.JTokenHead(prior=)`; in `build_head`, so `load_model` rebuilds it). `--teacher rule` (E370 stage A, a training option only, not in `build_head`):
+`--prior rule` (E369) builds the head with c-rule as a fixed prior (`jtoken.JTokenHead(prior=)`; in `build_head`, so `load_model` rebuilds it). `live_inputs` (S4, E372: the head keeps the graph of its inputs,
+`jtoken.JTokenHead(live_inputs=)`) has no flag here (the cached inputs carry no graph): `build_head` reads it from a run's args (absent = False), so a joint run's model.pt rebuilds with it; not in `arch` (the same weights: an
+--init of a cached-input head is accepted) and not in the recipe. `--teacher rule` (E370 stage A, a training option only, not in `build_head`):
 the targets are `jtoken.rule_teacher`'s (c-rule's links inside the gate, B''s own types; no GT key is read), no scale term. `--init <model.pt>` (E370 stage B): the weights of another run of the same architecture
 (refused otherwise), the head's step buffer CARRIED (the key weights stay the head's own 1 - p_none: the step-0 graph is the init's), a fresh optimiser and schedule; only at a fresh start (`ckpt.pt` takes precedence on a
 resume); the recipe records the path and its sha256. `--snapshots 0,500,...`: model_step<N>.pt after N updates (the format of model.pt: `load_model(..., name=)`), never overwritten; the later ones are taken by the trainer's eval
@@ -44,7 +46,7 @@ import jtoken as JK  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "d", "layers", "heads", "ffn", "token_drop", "none_weight", "none_weight_near", "pos_loss", "prior", "teacher", "init", "init_sha256", "head_seed")
-ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0, none_weight_near=None, pos_loss="sum", prior="none", teacher="none", init=None, init_sha256=None, head_seed=None)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
+ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0, none_weight_near=None, pos_loss="sum", prior="none", teacher="none", init=None, init_sha256=None, head_seed=None, live_inputs=False)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
 
 
@@ -122,9 +124,9 @@ def to_device(b, dev):
 
 
 def build_head(args):
-    """the head of a run's recipe (its args: d, layers, heads, ffn, prior, with the defaults of a run of before these options): the one place that builds it, for the trainer and `load_model` (the teacher is no part of the head)"""
+    """the head of a run's recipe (its args: d, layers, heads, ffn, prior, live_inputs, with the defaults of a run of before these options): the one place that builds it, for the trainer and `load_model` (the teacher is no part of the head)"""
     d, heads, layers, ffn, prior = arch(args)
-    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, **({"prior": prior} if prior != "none" else {}))
+    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, live_inputs=bool(args.get("live_inputs", ARCH_DEFAULTS["live_inputs"])), **({"prior": prior} if prior != "none" else {}))
 
 
 def arch(args):

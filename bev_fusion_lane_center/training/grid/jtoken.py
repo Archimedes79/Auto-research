@@ -7,7 +7,8 @@
     batch = synthetic_batch(B, K, seed)                       # a random batch that follows the batch dict (tests and the trainer's --smoke)
 
 Input keys (B frames, K tokens): tok (B,K,64), pos (B,K,2) m, dirv (B,K,2) unit, e / e_raw (B,K) logits, flags (B,K,8) logits, s / uout / uin (B,K) logits, valid (B,K) bool. All of them are constants (the cached B' is
-frozen: the forward cuts the graph at them, no gradient reaches B' and none goes through the hard top-K).
+frozen: the forward cuts the graph at them, no gradient reaches B' and none goes through the hard top-K). S4 (E372) `JTokenHead(live_inputs=True)`: the forward keeps their graph (a live B' in the training step gets the gradient
+of the head's loss); the values, and so every output, are the same.
 Embedding: x0 = LN(Linear(tok) + MLP[Fourier(pos), dirv, e, e_raw, flags, s, uout, uin]). 3 pre-norm self-attention layers (4 heads, FFN 128): the logit of head h = q.k / 4 + bias_h(g_ij) + log(w_j + 1e-3), bias = an MLP
 13 -> 32 -> H of the 13 `jtok.pair_geometry` features (the existence enters them as sigmoid(e)), padding tokens masked as keys.
 Soft pruning: the key weight w_j is sigmoid(e_j) (input) in layer 1 and for the first SWITCH training steps in every layer; afterwards w_j = 1 - p_none(j) of the head's OWN type softmax (7 types, type 0 = none), read by
@@ -56,7 +57,7 @@ NEAR_R, NEAR_COS = 2.0, 0.5                                                 # E3
 
 
 def _const(t):
-    """a cached input: no gradient into B' (the one place that cuts the graph)"""
+    """a cached input: no gradient into B' (the one place that cuts the graph; skipped under `live_inputs`)"""
     return t.detach()
 
 
@@ -159,9 +160,9 @@ def rule_teacher(out, batch):
 
 class JTokenHead(nn.Module):
     """prior: None or "rule" (E369, module docstring; lam / mu are buffers); past_block: None or a module called after layer 1 as past_block(x, pos, dirv, valid, past) when `forward` gets a `past` (the S2 hook);
-    map_block: None or a module called after layer 2 as map_block(x, pos, dirv, valid, maps) when `forward` gets `maps` (the S3 hook)"""
+    map_block: None or a module called after layer 2 as map_block(x, pos, dirv, valid, maps) when `forward` gets `maps` (the S3 hook); live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, prior=None, lam=LAM, mu=MU, past_block=None, map_block=None):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, prior=None, lam=LAM, mu=MU, past_block=None, map_block=None, live_inputs=False):
         super().__init__()
         assert prior in (None, "rule"), prior
         assert map_block is None or layers >= 2, "the map hook sits after layer 2"
@@ -189,6 +190,7 @@ class JTokenHead(nn.Module):
             nn.init.constant_(self.sc_o.bias, math.log((1 / 3 - 0.05) / (1.25 - 1 / 3)))
         self.past_block = past_block
         self.map_block = map_block
+        self.live_inputs = live_inputs
 
     def set_step(self, n):
         self.step.fill_(n)
@@ -206,7 +208,7 @@ class JTokenHead(nn.Module):
         return t, 1.0 - t.softmax(-1)[..., 0]                               # logits, 1 - p_none
 
     def forward(self, batch, past=None, maps=None):
-        b = {k: _const(batch[k]) for k in INPUTS}
+        b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
         g, allowed = JT.pair_geometry(pos, dirv, valid, e=w_in)
