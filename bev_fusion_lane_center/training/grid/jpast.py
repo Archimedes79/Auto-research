@@ -13,8 +13,10 @@ softmax over {the past keys} + {none}; the heads are concatenated and projected 
 through the projection). The 7 features of cross_geometry: cos and sin of the turn from the query heading to the key heading, the offset pos_k - pos_q along / across the QUERY heading (across = its left normal) / 20, the distance / 20, e_q, e_k
 (the card says 8 and names these 7).
 `make_past`: the key weight w of the previous tokens is sigmoid(e) of the cached existence while `learned` is False (the first `jtoken.SWITCH` training steps: the head's own read-out is still untrained) and the previous step's own 1 - p_none (`out_prev['w']`) after
-it; the state x and w are NOT detached (the gradient runs through the steps); only the input keys of the frames are read (pos, dirv, valid, e): nothing of the GT enters the state. `PastBlock.use` is the kill measure of the card: u = RMS(block(x, past) - block(x, none
-key only)) / RMS(x) on the valid tokens. Tests: grid/test_jpast.py (hand-computed values, a loop reference of the block, the invariances, the mutants)
+it; the state x and w are NOT detached (the gradient runs through the steps); only the input keys of the frames are read (pos, dirv, valid, e): nothing of the GT enters the state.
+`PastBlock.use` is the kill measure of the card: u = RMS(block(x, past) - block(x, past of ANOTHER SAMPLE of the batch)) / RMS(x) on the valid tokens (`roll_past`: every tensor of the past dict rolled by one along the batch axis, the current tokens and e_cur unchanged; a batch of one sample
+needs a donor past from outside, `UseMeter.donor`). It is 0 when the block ignores the CONTENT of the past. u_none = RMS(block(x, past) - block(x, none key only)) / RMS(x) is reported next to it and is NOT a test of use: any content-free attention satisfies it, W_o (mean v_past - v_none)
+is a constant. Tests: grid/test_jpast.py (hand-computed values, a loop reference of the block, the invariances, a block that ignores the past content, the mutants)
 """
 import math
 
@@ -59,27 +61,37 @@ def make_past(out_prev, frame_prev, frame_cur, rel_R, rel_t, learned, has_prev=N
     return dict(x=out_prev["x"], pos=pos, dirv=dirv, valid=valid, e=e, e_cur=_const(frame_cur["e"]).float().sigmoid(), w=out_prev["w"] if learned else e)
 
 
+def roll_past(past, shift=1):
+    """the past of ANOTHER SAMPLE of the batch: every tensor of the past dict rolled by `shift` along the batch axis; e_cur (the existence of the CURRENT tokens, whose queries read the past) and a missing w stay"""
+    return {k: (v.roll(shift, 0) if torch.is_tensor(v) and k != "e_cur" else v) for k, v in past.items()}
+
+
+SUMS = ("d2_none", "x2", "n", "d2_other", "x2_other", "n_other")            # what `PastBlock.use` returns and `UseMeter` adds up
+
+
 class UseMeter:
-    """the kill measure u of the card as a forward hook on a `PastBlock` (the head calls it as block(x, pos, dirv, valid, past)): every call with a non-empty past adds (sum (y - y_none)^2, sum x^2, valid tokens); `take()` -> (u, valid tokens) of the calls since the
-    last `take` (None without a call) and clears (`take_sums`: the three sums); `detach()` removes the hook"""
+    """the kill measures of the card as a forward hook on a `PastBlock` (the head calls it as block(x, pos, dirv, valid, past)): every call with a non-empty past adds the sums of `PastBlock.use`; `donor` = None or a past dict that a batch of ONE sample
+    compares with (set by the caller before the forward); `take()` -> dict(u, u_none, n, n_other) of the calls since the last `take` (None without a call; u None without a comparison with another sample's past) and clears (`take_sums`: the sums); `detach()` removes the hook"""
 
     def __init__(self, block):
-        self.acc, self.handle = [0.0, 0.0, 0], block.register_forward_hook(self._hook)
+        self.acc, self.donor, self.handle = dict.fromkeys(SUMS, 0), None, block.register_forward_hook(self._hook)
 
     def _hook(self, block, args, out):
         x, pos, dirv, valid, past = args
         if not past:
             return
-        for i, v in enumerate(block.use(x.detach(), pos, dirv, valid, (out - x).detach())):
-            self.acc[i] += v
+        for k, v in block.use(x.detach(), pos, dirv, valid, (out - x).detach(), past, self.donor).items():
+            self.acc[k] += v
 
     def take_sums(self):
-        s, self.acc = self.acc, [0.0, 0.0, 0]
-        return tuple(s)
+        s, self.acc = self.acc, dict.fromkeys(SUMS, 0)
+        return s
 
     def take(self):
-        d2, x2, n = self.take_sums()
-        return (math.sqrt(d2 / max(x2, 1e-30)), n) if n else None
+        s = self.take_sums()
+        if not s["n"]:
+            return None
+        return dict(u=math.sqrt(s["d2_other"] / max(s["x2_other"], 1e-30)) if s["n_other"] else None, u_none=math.sqrt(s["d2_none"] / max(s["x2"], 1e-30)), n=s["n"], n_other=s["n_other"])
 
     def detach(self):
         self.handle.remove()
@@ -129,12 +141,18 @@ class PastBlock(nn.Module):
         return x + self.delta(x, pos, dirv, valid, past)
 
     @torch.no_grad()
-    def use(self, x, pos, dirv, valid, y):
-        """the kill measure of the card from the block's own update y = block(x, past) - x (as the forward made it): -> (sum of (y - y_none)^2, sum of x^2, valid tokens) over the valid tokens and the D channels, y_none = the update with the none key only;
-        u = sqrt(sum1 / sum2) = RMS(y - y_none) / RMS(x), summed over batches before the ratio"""
+    def use(self, x, pos, dirv, valid, y, past=None, donor=None):
+        """the kill measures of the card from the block's own update y = block(x, past) - x (as the forward made it) -> dict of sums over the valid tokens and the D channels (`SUMS`): d2_none = sum (y - y_none)^2 with y_none = the update with the none key only,
+        x2 = sum x^2, n = valid tokens; d2_other = sum (y - y_other)^2 with y_other = the update with the past of ANOTHER SAMPLE of the batch (`roll_past(past)`, B >= 2) or with `donor` (a past dict for this batch: a batch of one), x2_other = x2 and n_other = n
+        when it was made (0 without: a batch of one sample and no donor). u = sqrt(d2_other / x2_other), u_none = sqrt(d2_none / x2): RMS of the difference / RMS(x), summed over batches before the ratio"""
         m = valid.to(x.dtype)[..., None]
-        y0 = self.delta(x, pos, dirv, valid, None)
-        return float((((y - y0) * m) ** 2).sum()), float(((x * m) ** 2).sum()), int(valid.sum())
+        sq = lambda ref: float((((y - ref) * m) ** 2).sum())  # noqa: E731
+        x2, n = float(((x * m) ** 2).sum()), int(valid.sum())
+        out = dict(d2_none=sq(self.delta(x, pos, dirv, valid, None)), x2=x2, n=n, d2_other=0.0, x2_other=0.0, n_other=0)
+        other = donor if donor is not None else (roll_past(past) if past and x.shape[0] >= 2 else None)
+        if other is not None:
+            out.update(d2_other=sq(self.delta(x, pos, dirv, valid, other)), x2_other=x2, n_other=n)
+        return out
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ selftest (the mutants of test_jpast.py run it)
@@ -300,23 +318,82 @@ def selftest():
     mh = make_past(out_prev, fr, fr, Rb, tb, False, torch.tensor([True, False]))                         # a sample without a previous keyframe gets the all-invalid past = the none key only
     assert torch.equal(mh["valid"][0], valid[0]) and not mh["valid"][1].any() and torch.equal(b(x, pos, dirv, valid, mh)[1], b(x, pos, dirv, valid, None)[1]) and not torch.equal(b(x, pos, dirv, valid, mh)[0], b(x, pos, dirv, valid, None)[0])
     assert torch.equal(make_past(out_prev, fr, fr, Rb, tb, False)["valid"], valid) and torch.equal(m0["valid"], valid), "has_prev None: every sample has a past"
-    # u, the kill measure: 0 without a past (the none key only), 0 at zero init, > 0 with a past and a trained block, = the RMS ratio by hand
-    ysub = lambda blk, pa: blk(x, pos, dirv, valid, pa) - x  # noqa: E731
-    assert b0.use(x, pos, dirv, valid, ysub(b0, past))[0] == 0.0 and b.use(x, pos, dirv, valid, ysub(b, None))[0] < 1e-9 and b.use(x, pos, dirv, valid, ysub(b, dict(past, valid=torch.zeros_like(past["valid"]))))[0] < 1e-9
-    y = ysub(b, past)
-    d2_, x2_, n_ = b.use(x, pos, dirv, valid, y)
-    y0 = ysub(b, None)
-    m = valid[..., None].double()
-    assert abs(d2_ - float((((y - y0).double() * m) ** 2).sum())) < 1e-6 * max(d2_, 1) and abs(x2_ - float(((x.double() * m) ** 2).sum())) < 1e-6 * x2_ and n_ == int(valid.sum()) and d2_ > 0
-    um = UseMeter(b)                                                                                       # the hook: calls without a past are not counted, the sums are those of `use`, `take` clears
+    # u, the kill measures (module docstring): u_none (the none key only) is 0 without a past and at zero init; u (the past of ANOTHER SAMPLE) needs B >= 2 or a donor
+    ysub = lambda blk, xx, pp, pa: blk(xx, pp[0], pp[1], pp[2], pa) - xx  # noqa: E731
+    xs = (x, pos, dirv, valid)
+    u0 = b0.use(x, pos, dirv, valid, ysub(b0, x, xs[1:], past), past)
+    assert u0["d2_none"] == 0.0 and u0["d2_other"] == 0.0 and u0["n_other"] == int(valid.sum()) and u0["n"] == int(valid.sum()), "at zero init the block changes nothing"
+    nopast = dict(past, valid=torch.zeros_like(past["valid"]))
+    assert b.use(x, pos, dirv, valid, ysub(b, x, xs[1:], None), None)["d2_none"] < 1e-9 and b.use(x, pos, dirv, valid, ysub(b, x, xs[1:], nopast), nopast)["d2_none"] < 1e-9 and b.use(x, pos, dirv, valid, ysub(b, x, xs[1:], None), None)["n_other"] == 0
+    y = ysub(b, x, xs[1:], past)
+    su = b.use(x, pos, dirv, valid, y, past)
+    y0, y1 = ysub(b, x, xs[1:], None), ysub(b, x, xs[1:], roll_past(past))                              # the references by hand: none key only, the other sample's past
+    mm = valid[..., None].double()
+    d2n, d2o = (float((((y - r_).double() * mm) ** 2).sum()) for r_ in (y0, y1))
+    assert abs(su["d2_none"] - d2n) < 1e-6 * max(d2n, 1) and abs(su["d2_other"] - d2o) < 1e-6 * max(d2o, 1) and abs(su["x2"] - float(((x.double() * mm) ** 2).sum())) < 1e-6 * su["x2"] and su["x2_other"] == su["x2"] and su["n"] == su["n_other"] == int(valid.sum()) and d2n > 0 and d2o > 0
+    rp = roll_past(past)                                                                                    # the other sample's past: every tensor rolled by one along the batch axis, e_cur stays, a missing w stays
+    assert all(torch.equal(rp[k][0], past[k][1]) and torch.equal(rp[k][1], past[k][0]) for k in ("x", "pos", "dirv", "valid", "e", "w")) and torch.equal(rp["e_cur"], past["e_cur"]) and roll_past(dict(past, w=None))["w"] is None and not torch.equal(rp["x"], past["x"])
+    one = {k: (v[:1] if torch.is_tensor(v) else v) for k, v in past.items()}                                 # a batch of ONE sample: no other sample, n_other 0; with a donor (sample 1's past) = what the batch gave sample 0
+    y_one = b(x[:1], pos[:1], dirv[:1], valid[:1], one) - x[:1]
+    s1 = b.use(x[:1], pos[:1], dirv[:1], valid[:1], y_one, one)
+    assert s1["n_other"] == 0 and s1["d2_other"] == 0.0 and s1["x2_other"] == 0.0 and s1["d2_none"] > 0 and s1["n"] == int(valid[0].sum())
+    donor = dict({k: (v[1:2] if torch.is_tensor(v) else v) for k, v in past.items()}, e_cur=one["e_cur"])
+    s2 = b.use(x[:1], pos[:1], dirv[:1], valid[:1], y_one, one, donor)
+    assert s2["n_other"] == int(valid[0].sum()) and abs(s2["d2_other"] - float((((y - y1)[:1].double() * mm[:1]) ** 2).sum())) < 1e-6 * max(d2o, 1), "a donor is the other sample"
+    # the critic's case by hand: a block that ignores the CONTENT of the past. q = 0, geometry bias 0, key weights 1, v = the constant 1 for every key, v_none = 0, o = identity: with n valid past keys every valid query token gets
+    # y = t on all D channels, t = 1.001 n / (1 + 1.001 n): u_none = t / RMS(x) > 0, u = 0. A block that READS the content (v = LayerNorm of the past state): y = a S, S = sum of the valid keys' LN(x), a = 1.001 / (1 + 1.001 n)
+    def plain(content):
+        blk = PastBlock()
+        with torch.no_grad():
+            for p_ in (blk.q.weight, blk.q.bias, blk.bias[2].weight, blk.bias[2].bias, blk.v_none, blk.kv.weight):
+                p_.zero_()
+            blk.kv.bias.zero_()
+            blk.o.weight.copy_(torch.eye(D))
+            if content:
+                blk.kv.weight[D:].copy_(torch.eye(D))
+            else:
+                blk.kv.bias[D:] = 1.0
+        return blk
+    fq, fk = _frame(2, 7, 11, n_invalid=2), _frame(2, 6, 12, n_invalid=2)                                  # 5 valid query tokens per sample, 4 valid past keys per sample (n = 4), different contents
+    pk = dict(_past_of(fk, fq["e"]), w=torch.ones(2, 6))
+    qa = (fq["x"], fq["pos"], fq["dirv"], fq["valid"])
+    n_, a_ = 4, 1.001 / (1 + 1.001 * 4)
+    x2q = float((fq["x"].double()[fq["valid"]] ** 2).sum())
+    blind = plain(False)
+    sb = blind.use(*qa, blind(*qa, pk) - fq["x"], pk)
+    t_ = n_ * a_
+    assert abs(sb["d2_none"] - 10 * D * t_ ** 2) < 1e-5 * 10 * D * t_ ** 2 and sb["d2_other"] < 1e-9 and sb["n"] == sb["n_other"] == 10 and abs(math.sqrt(sb["d2_none"] / sb["x2"]) - t_ / math.sqrt(x2q / (10 * D))) < 1e-5, f"a block that ignores the past content: {sb}"
+    reader = plain(True)
+    ln = lambda t: (t - t.mean(-1, keepdim=True)) / (t.var(-1, unbiased=False, keepdim=True) + 1e-5).sqrt()  # noqa: E731
+    S = [ln(fk["x"].double()[i][:4]).sum(0) for i in range(2)]
+    sr = reader.use(*qa, reader(*qa, pk) - fq["x"], pk)
+    w_none, w_other = 5 * a_ ** 2 * float((S[0] ** 2).sum() + (S[1] ** 2).sum()), 5 * a_ ** 2 * 2 * float(((S[0] - S[1]) ** 2).sum())
+    assert abs(sr["d2_none"] - w_none) < 1e-5 * w_none and abs(sr["d2_other"] - w_other) < 1e-5 * w_other and sr["d2_other"] > 1.0, f"a block that reads the past content: {sr}"
+    um = UseMeter(blind)                                                                                    # the hook on these blocks: u = 0 and u_none > 0 for the blind one, a batch of one + a donor
+    blind(*qa, pk)
+    tk = um.take()
+    assert tk["u"] < 1e-6 and abs(tk["u_none"] - math.sqrt(sb["d2_none"] / sb["x2"])) < 1e-9 and tk["n"] == tk["n_other"] == 10 and um.take() is None
+    pk1 = {k: (v[:1] if torch.is_tensor(v) else v) for k, v in pk.items()}
+    blind(*(t[:1] for t in qa), pk1)
+    tk = um.take()
+    assert tk["u"] is None and tk["u_none"] > 0 and tk["n_other"] == 0 and tk["n"] == 5, "a batch of one sample without a donor has no u"
+    um.detach()
+    um = UseMeter(reader)
+    um.donor = dict({k: (v[1:2] if torch.is_tensor(v) else v) for k, v in pk.items()}, e_cur=pk1["e_cur"])
+    reader(*(t[:1] for t in qa), pk1)
+    tk = um.take()
+    x2_0 = float((fq["x"].double()[0][fq["valid"][0]] ** 2).sum())
+    assert abs(tk["u"] - math.sqrt(5 * a_ ** 2 * float(((S[0] - S[1]) ** 2).sum()) / x2_0)) < 1e-5 and tk["n_other"] == 5, "a donor for a batch of one"
+    um.detach()
+    um = UseMeter(b)                                                                                       # the hook: calls without a past are not counted, the sums are those of `use`, `take` clears, two calls add up
     b(x, pos, dirv, valid, None), b(x, pos, dirv, valid, {})
     assert um.take() is None
     yh = b(x, pos, dirv, valid, past)
     s3 = um.take_sums()
-    assert s3 == b.use(x, pos, dirv, valid, yh - x) and um.take() is None
+    assert s3 == b.use(x, pos, dirv, valid, yh - x, past) and um.take() is None and set(s3) == set(SUMS)
     b(x, pos, dirv, valid, past), b(x, pos, dirv, valid, past)
-    u2, n2 = um.take()
-    assert abs(u2 - math.sqrt(s3[0] / s3[1])) < 1e-9 and n2 == 2 * s3[2], "u over two calls"
+    tk = um.take()
+    assert abs(tk["u"] - math.sqrt(s3["d2_other"] / s3["x2_other"])) < 1e-9 and abs(tk["u_none"] - math.sqrt(s3["d2_none"] / s3["x2"])) < 1e-9 and tk["n"] == 2 * s3["n"] and tk["n_other"] == 2 * s3["n_other"], "u over two calls"
     um.detach()
     b(x, pos, dirv, valid, past)
     assert um.take() is None, "a detached meter still counts"
