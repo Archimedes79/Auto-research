@@ -18,6 +18,7 @@ import tempfile
 import types
 
 os.environ["CUDA_VISIBLE_DEVICES"] = ""                                      # this test never touches the GPU
+import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -544,7 +545,268 @@ def test_arch_options():
           f"rebuilt by load_model, an old config resumes with the defaults and another recipe is refused; token drop: targets of removed tokens go, no re-contraction, a new draw per step, {same}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options]
+# ------------------------------------------------------------------------------------------------------------------------------ c-rule: E369 prior, E370 teacher, S2 hook, --init
+RULE_HAND = {(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 12)}            # c-rule's links of `_rule_frame` by hand; (9, 12) is 0.2 m long: outside the gate (MIN_CHORD 0.3 m)
+TYPE_HAND = [6, 1, 1, 2, 2, 1, 1, 4, 1, 1, 0, 1, 1, 0, 0, 0]                                                 # B''s own types of `_rule_frame` (e_p < 0.5 and padding: 0)
+
+
+def _rule_frame(K=16):
+    """one hand frame: lane A tokens 0-5 (x 0, y 0 .. 10 m, heading +y), token 10 at y 11 m with e < 0 (no node), lane B tokens 6-9 (y 22 .. 28 m: 5 -> 6 is lo_near's long link), token 11 at (5, 0) heading +x (a node
+    without links), token 12 0.2 m ahead of token 9, padding 13-15; flags: 0 start, 3 split, 4 split + merge, 7 stop, 10 exit (no node) -> a batch of one frame with `tokens_np`"""
+    pos = np.zeros((1, K, 2), np.float32)
+    dirv = np.tile(np.array([0.0, 1.0], np.float32), (1, K, 1))
+    for i in range(6):
+        pos[0, i] = (0.0, 2.0 * i)
+    for n, i in enumerate(range(6, 10)):
+        pos[0, i] = (0.0, 22.0 + 2.0 * n)
+    pos[0, 10], pos[0, 11], pos[0, 12] = (0.0, 11.0), (5.0, 0.0), (0.0, 28.2)
+    dirv[0, 11] = (1.0, 0.0)
+    pos[0, 13:] = 30.0
+    valid = np.arange(K) < 13
+    e = np.where(valid, 2.0, -6.0).astype(np.float32)[None]
+    e[0, 10], e[0, 11] = -1.0, 0.5
+    fl = np.full((1, K, 8), -3.0, np.float32)
+    for i, cols in ((0, (4,)), (3, (2,)), (4, (2, 3)), (7, (0,)), (10, (1,))):
+        fl[0, i, list(cols)] = 3.0
+    g = torch.Generator().manual_seed(5)
+    t = lambda a: torch.from_numpy(a)  # noqa: E731
+    z = torch.zeros(1, K)
+    return JK.with_tokens_np(dict(tok=torch.randn(1, K, JK.TOK, generator=g), pos=t(pos), dirv=t(dirv), e=t(e), e_raw=t(e), flags=t(fl), s=z, uout=z, uin=z, valid=t(valid[None])))
+
+
+def _cache_batch(n=3):
+    """the first n VAL frames of the predicted-node cache of B' seed 0, or None when it is not there"""
+    import lane_ptok_data as LP
+    try:
+        ds = LP.PTokData("val", 0, "e292_a", None, 0.0)
+    except (AssertionError, FileNotFoundError) as e:
+        if isinstance(e, AssertionError) and "finished caches match" not in str(e):
+            raise
+        return None
+    return LP.collate([ds[i] for i in range(n)])
+
+
+def _pairs_of(m):
+    return {(int(i), int(j)) for i, j in m.nonzero().tolist()}
+
+
+def _ctl_rule(t):
+    """the links of the arm `rule` of `jtoken_eval.py ctl` (the control as it is scored)"""
+    import jtoken_eval as E
+    _, _, lk = E.rule_frame(t)
+    return set(zip(np.asarray(lk["src"]).tolist(), np.asarray(lk["dst"]).tolist()))
+
+
+def _delivered(m, b):
+    with torch.no_grad():
+        out = m(b)
+    return out, JK.decode(out)
+
+
+def test_prior():
+    """E369: the step-0 head with the prior delivers c-rule (inside the gate) and keeps the nodes with e >= 0, on the hand frame and on 3 VAL cache frames; the temperature (a rule link at p 0.65 - 0.9); the zero-init list and the
+    rest of the head as the plain one; gradient reaches the learned part (every parameter after one step), not lam / mu; the type prior inside `read_types` (the key weights after the switch equal the prior's; the mutant that adds
+    it outside fails); mutants: lam 0, mu 0, no type prior"""
+    b = _rule_frame()
+    assert _pairs_of(JK.rule_matrix(b["pos"], b["dirv"], b["valid"] & (b["e"].sigmoid() >= 0.5))[0]) == RULE_HAND == _ctl_rule(b["tokens_np"][0]), "c-rule by hand"
+
+    def step0_is_rule(m, bb, ref):
+        out, dec = _delivered(m, bb)
+        gate = out["cand"].any(1)
+        for f in range(len(ref)):
+            want = {(i, j) for i, j in ref[f] if gate[f, i, j]}
+            assert _pairs_of(dec["link"][f]) == want, (f, sorted(_pairs_of(dec["link"][f]) ^ want)[:6])
+            assert torch.equal(dec["keep"][f], bb["valid"][f] & (bb["e"][f] > 0)), f
+        return out, dec
+    torch.manual_seed(0)
+    m = JK.JTokenHead(prior="rule").eval()
+    out, dec = step0_is_rule(m, b, [RULE_HAND])
+    assert not dec["link"][0, 9, 12] and out["cand"][0, :, 9, 12].sum() == 0, "the rule link of 0.2 m is outside the gate"
+    p = JK.probs(out)["p"][0]
+    pr = torch.stack([p[i, j] for i, j in RULE_HAND - {(9, 12)}])
+    assert 0.65 < float(pr.min()) and float(pr.max()) < 0.9, pr                                               # the temperature: not one-hot
+    for name, kw in (("lam 0", dict(lam=0.0)), ("mu 0", dict(mu=0.0))):
+        torch.manual_seed(0)
+        mm = JK.JTokenHead(prior="rule", **kw).eval()
+        must_fail(lambda: (step0_is_rule(mm, b, [RULE_HAND]), holds(0.65 < float(torch.stack([JK.probs(mm(b))["p"][0][i, j] for i, j in RULE_HAND - {(9, 12)}]).min()) < 0.9)))
+    must_fail(patched, JK.JTokenHead, "read_types", lambda self, x, none_prior=None: JK.JTokenHead.__dict__["read_types"](self, x, None), step0_is_rule, m, b, [RULE_HAND])     # mutant: no type prior
+    cb = _cache_batch(3)
+    n_cache = "SKIPPED (no cache)"
+    if cb is not None:
+        ref = [_ctl_rule(t) for t in cb["tokens_np"]]
+        o, d = step0_is_rule(m, cb, ref)
+        n_cache = f"{int(d['link'].sum())} links of {sum(len(r) for r in ref)} rule links on 3 VAL cache frames"
+        assert torch.equal(d["keep"], cb["valid"] & torch.from_numpy(np.stack([t["e_p"] for t in cb["tokens_np"]]) >= 0.5)), "the kept nodes are c-rule's (e_p >= 0.5)"
+    # zero init: the four outputs zero, the rest is the plain head of the same seed; lam / mu are buffers
+    torch.manual_seed(0)
+    plain = JK.JTokenHead()
+    zero = ("types.", "wk.", "wbias.2.", "dest.")
+    sp, sm = plain.state_dict(), m.state_dict()
+    assert set(sm) - set(sp) == {"lam", "mu"} and float(m.lam) == JK.LAM and float(m.mu) == JK.MU and not any(n in ("lam", "mu") for n, _ in m.named_parameters())
+    assert all(float(sm[k].abs().max()) == 0.0 for k in sp if k.startswith(zero)) and all(torch.equal(sm[k], sp[k]) for k in sp if not k.startswith(zero)), "zero init: only the four outputs"
+    # p_none = sigmoid(-e) at step 0; the switch keeps the key weights (the prior inside read_types); the mutant that adds the prior outside fails after the switch
+    assert float((JK.probs(out)["pt"][0, :, 0] - torch.sigmoid(-b["e"][0]))[b["valid"][0]].abs().max()) < 1e-6
+
+    def same_after_switch(mm):
+        mm.set_step(0)
+        o0 = mm(b)
+        mm.set_step(JK.SWITCH + 1)
+        o1 = mm(b)
+        mm.set_step(0)
+        assert float((o0["logp"].exp() - o1["logp"].exp()).abs().max()) < 1e-5 and float((o0["types"] - o1["types"]).abs().max()) < 1e-4
+
+    def outside(self, x, none_prior=None):                                                                    # mutant: the key weight read before the prior is added
+        t = self.types(self.tnorm(x)).float()
+        w = 1.0 - t.softmax(-1)[..., 0]
+        return (t if none_prior is None else torch.cat([t[..., :1] + none_prior[..., None], t[..., 1:]], -1)), w
+    with torch.no_grad():
+        same_after_switch(m)
+        must_fail(patched, JK.JTokenHead, "read_types", outside, same_after_switch, m)
+    # gradient: the zero-init outputs at step 0, every parameter after one step; none into lam / mu or the inputs
+    torch.manual_seed(0)
+    mt = JK.JTokenHead(prior="rule")
+    sb = _batch(3)
+    live = {k: (v.clone().requires_grad_(True) if torch.is_tensor(v) and v.is_floating_point() else v) for k, v in sb.items()}
+    JK.jtoken_loss(mt(live), live)[0].backward()
+    assert all(float(getattr(mt, n).weight.grad.abs().sum()) > 0 for n in ("types", "wk", "dest")) and float(mt.wbias[2].weight.grad.abs().sum()) > 0, "the zero-init outputs get gradient at step 0"
+    assert all(live[k].grad is None for k in JK.INPUTS if live[k].is_floating_point()) and mt.lam.grad is None and not mt.lam.requires_grad, "no gradient into the inputs or the prior"
+    opt = torch.optim.Adam(mt.parameters(), lr=1e-3)
+    opt.step()
+    opt.zero_grad()
+    JK.jtoken_loss(mt(sb), sb)[0].backward()
+    dead = [n for n, q in mt.named_parameters() if q.grad is None or float(q.grad.abs().sum()) == 0.0]
+    assert not dead and float(mt.lam) == JK.LAM and float(mt.mu) == JK.MU, dead
+    print(f"prior: the step-0 head delivers c-rule inside the gate and keeps e >= 0 (hand frame: 9 links, the 0.2 m rule link outside the gate; {n_cache}), rule links at p {float(pr.min()):.2f} - {float(pr.max()):.2f}, p_none = sigmoid(-e); "
+          "mutants lam 0 / mu 0 / no type prior fail; zero init of types / wk / wbias[-1] / dest, the rest = the plain head of the seed, lam / mu buffers; the switch keeps the outputs (the prior added outside read_types fails); "
+          "gradient: the zero outputs at step 0, every parameter after one step, none into lam / mu / the inputs: ok")
+
+
+class _Past(torch.nn.Module):
+    """a dummy S2 block: x + Linear(the mean past state); identity at zero init"""
+
+    def __init__(self, zero=True):
+        super().__init__()
+        self.lin = torch.nn.Linear(JK.D, JK.D)
+        self.seen = None
+        if zero:
+            torch.nn.init.zeros_(self.lin.weight)
+            torch.nn.init.zeros_(self.lin.bias)
+
+    def forward(self, x, pos, dirv, valid, past):
+        self.seen = past
+        return x + self.lin(past["x"].mean(1, keepdim=True))
+
+
+def test_past():
+    b = _batch(2)
+    torch.manual_seed(0)
+    base = JK.JTokenHead().eval()
+    m = JK.JTokenHead(past_block=_Past()).eval()
+    m.load_state_dict(dict(base.state_dict(), **{f"past_block.{k}": v for k, v in m.past_block.state_dict().items()}))
+    with torch.no_grad():
+        o0, o1 = base(b), m(b)
+        past = dict(x=o1["x"], pos=b["pos"], dirv=b["dirv"], valid=b["valid"], w=o1["w"], e=b["e"])
+        o2 = m(b, past)
+        assert m.past_block.seen is past, "the past dict reaches the block untouched"
+        assert all(torch.equal(o0[k], o1[k]) and torch.equal(o0[k], o2[k]) for k in ("logp", "types", "types1", "scale", "x", "w")), "no past / a zero block: the output of the plain head"
+        assert o0["x"].shape == (2, 48, JK.D) and o0["w"].shape == (2, 48) and torch.allclose(o0["w"], 1 - o0["types"].softmax(-1)[..., 0])
+        m.past_block = _Past(zero=False)
+        must_fail(holds, torch.equal(m(b, past)["logp"], o0["logp"]))                                          # a live block changes the output: it is called
+        m.past_block = _Past(zero=True)
+        m.past_block.lin = torch.nn.Identity()
+        m.past_block.forward = lambda x, pos, dirv, valid, past: x                                             # a block that ignores past: the head reads none of its keys
+        assert torch.equal(m(b, {"anything": 1})["logp"], o0["logp"])
+    print("past: the S2 hook after layer 1 (no past or a zero block = the plain head bit for bit, a live block changes the output, the past dict reaches the block untouched and the head reads none of its keys), out['x'] (B, K, D), out['w'] = 1 - p_none: ok")
+
+
+def test_teacher():
+    """E370 stage A: `rule_teacher` = c-rule's links inside the gate, B''s own types, the out-of-gate rule link left out of its class (not 'none'); the stage-A loss reads no GT key and no yscale; on 3 cache frames the targets
+    are the links of the scored control `jtoken_eval.rule_frame` inside the gate"""
+    b = _rule_frame()
+    torch.manual_seed(0)
+    m = JK.JTokenHead()
+    out = m(b)
+    tb = JK.rule_teacher(out, b)
+    assert _pairs_of(tb["y"][0]) == RULE_HAND - {(9, 12)} and tb["ytype"][0].tolist() == TYPE_HAND and tb["rule_links"] == 10 and tb["rule_out_gate"] == 1, (sorted(_pairs_of(tb["y"][0])), tb["ytype"][0].tolist())
+    assert _pairs_of(tb["ylong"][0]) == {(5, 6)} and tb["yskip"][0].nonzero().tolist() == [[0, 9]], tb["yskip"].nonzero()
+    gt_free = {k: v for k, v in b.items() if k not in JK.GT_KEYS}
+    loss_fn = JKT.make_loss(None, teacher="rule")
+    loss, info = loss_fn(m, gt_free)                                                                          # no y / ylong / yscale / ytype / gt_* / label in the batch
+    assert torch.isfinite(loss) and "scale_l1" not in info and info["rule_out_gate"] == 1.0
+
+    def g9(tt):                                                                                               # the gradient on the short-class row of source 9 (its rule link is outside the gate)
+        o = m(b)
+        o["logp"].retain_grad()
+        JK.jtoken_loss(o, tt, scale_w=0.0)[0].backward()
+        return float(o["logp"].grad[0, 0, 9].abs().sum())
+    assert g9(tb) == 0.0 and g9({k: v for k, v in tb.items() if k != "yskip"}) > 0, "source 9 is left out of the short class, not taught none"
+    must_fail(holds, g9({k: v for k, v in tb.items() if k != "yskip"}) == 0.0)
+    cb = _cache_batch(3)
+    n_cache = "SKIPPED (no cache)"
+    if cb is not None:
+        with torch.no_grad():
+            oc = m(cb)
+        tc = JK.rule_teacher(oc, {k: v for k, v in cb.items() if k not in JK.GT_KEYS + ("label",)})
+        gate = oc["cand"].any(1)
+        for f, t in enumerate(cb["tokens_np"]):
+            want = _ctl_rule(t)
+            assert _pairs_of(tc["y"][f]) == {(i, j) for i, j in want if gate[f, i, j]}, f
+            keep = t["valid"] & (t["e_p"] >= 0.5)
+            import lane_tokcache as LC
+            yt = np.zeros(len(keep), int)
+            yt[keep] = LC.types_of(t["flags_p"][keep] >= 0.5)
+            assert np.array_equal(tc["ytype"][f].numpy(), yt), f
+        n_cache = f"{int(tc['y'].sum())} target links = the scored c-rule inside the gate on 3 VAL cache frames, {int(tc['rule_out_gate'])} outside"
+    print(f"teacher: the targets = c-rule's links inside the gate (hand frame 9 of 10, {n_cache}), B''s own types (split > merge > stop > exit > boundary > lane, e_p < 0.5 -> none), the 0.2 m rule link left out of the short class "
+          "(no gradient on its row; the mutant that teaches it none has one); stage A runs on a batch without any GT key, no scale term: ok")
+
+
+def test_init():
+    """E370 stage B: --init loads the weights and the step buffer bit for bit (the step-0 snapshot = the init), ckpt.pt takes precedence on a resume, the recipe holds the path and its sha256, another architecture or another init
+    is refused; the stage-B model.pt loads with the plain load_model and has the S1 keys; snapshots model_step<N>.pt are written once and read by load_model"""
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0"]
+        JKT.train(JKT.parse_args(["--name", "a", "--teacher", "rule"] + base), runs, 500, 48)
+        JKT.train(JKT.parse_args(["--name", "big", "--d", "96"] + base), runs, 500, 48)
+        JKT.train(JKT.parse_args(["--name", "pri", "--prior", "rule"] + base), runs, 500, 48)
+        a_pt = os.path.join(runs, "a", "model.pt")
+        ma, aa = JKT.load_model("a", "cpu", runs)
+        assert aa["teacher"] == "rule" and ma._step_py == 20 and set(ma.state_dict()) == set(JK.JTokenHead().state_dict()), "the teacher is no part of the head"
+        argv = ["--name", "b", "--init", a_pt, "--snapshots", "0,5,10"] + base
+        calls, real = [0], JK.jtoken_loss
+
+        def dying(out, batch, **k):                                                                            # a kill at the 7th step (the checkpoint of step 5 exists)
+            calls[0] += 1
+            if calls[0] == 7:
+                raise KeyboardInterrupt("kill")
+            return real(out, batch, **k)
+        JK.jtoken_loss = dying
+        try:
+            try:
+                JKT.train(JKT.parse_args(argv), runs, 5, 48)
+            except KeyboardInterrupt:
+                pass
+        finally:
+            JK.jtoken_loss = real
+        s0 = torch.load(os.path.join(runs, "b", "model_step0.pt"), map_location="cpu", weights_only=False)
+        assert all(torch.equal(v, ma.state_dict()[k]) for k, v in s0["state"].items()) and s0["steps"] == 0, "the step-0 snapshot is the init, step buffer included"
+        t5 = os.path.getmtime(os.path.join(runs, "b", "model_step5.pt"))
+        JKT.train(JKT.parse_args(argv), runs, 5, 48)                                                           # the resume: ckpt.pt, not the init
+        log = open(os.path.join(runs, "b", "train.log"), encoding="utf-8").read()
+        assert "resumed from" in log and "not loaded: resumed from ckpt.pt" in log and os.path.getmtime(os.path.join(runs, "b", "model_step5.pt")) == t5, "a snapshot is never overwritten"
+        mb, ab = JKT.load_model("b", "cpu", runs)
+        assert ab["init"] == a_pt and ab["init_sha256"] == JKT.file_sha256(a_pt) and mb._step_py == 40 and set(mb.state_dict()) == set(JK.JTokenHead().state_dict()), (mb._step_py, ab["init"])
+        for n in (0, 5, 10):
+            assert JKT.load_model("b", "cpu", runs, name=f"model_step{n}.pt")[0]._step_py >= 20
+        must_fail(JKT.train, JKT.parse_args(["--name", "b", "--init", os.path.join(runs, "big", "model.pt"), "--snapshots", "0,5,10"] + base), runs, 5, 48)      # another init in the same folder
+        for other in ("big", "pri"):
+            must_fail(JKT.train, JKT.parse_args(["--name", f"c_{other}", "--init", os.path.join(runs, other, "model.pt")] + base), runs, 5, 48)                 # another architecture (d 96, the prior)
+        must_fail(JKT.parse_args, ["--name", "x", "--init", os.path.join(runs, "nothing.pt")])
+    print("init: weights and step buffer bit for bit (step-0 snapshot = the stage-A head, step 20 -> 40 after 20 more), ckpt.pt first on a resume, path + sha256 in the recipe, another init / d 96 / the prior refused; the teacher run "
+          "and the stage-B run have the S1 state keys and load with load_model; snapshots 0 / 5 / 10 written once, read by load_model: ok")
+
+
+TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_prior, test_past, test_teacher, test_init]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
