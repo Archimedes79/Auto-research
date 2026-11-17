@@ -1,7 +1,9 @@
 """jarm.py - one arm of a token-head experiment in ONE command (train -> dumps -> TRAIN sweep -> pinned cell -> scores), and the table of arms. Replaces the per-experiment bash chains (sup / read / texts / choose scripts).
 
-    wsl python3 tools/jarm.py run E383 f_s0 --seed 0 --head-seed 2 [--ref e373_cb_s0] [--trainer jtoken_fast_train.py] [--window] [--dry] -- --none-weight 0.25 [more trainer args]
+    wsl python3 tools/jarm.py run E383 f_s0 --seed 0 --head-seed 2 [--ref e373_cb_s0] [--trainer jtoken_fast_train.py] [--curve] [--window] [--dry] -- --none-weight 0.25 [more trainer args]
     wsl python3 tools/jarm.py table e373_cb_s0 e383_f_s0 e383_k_s0 [--cell 0.3,0.2,0.6,off | --cell pinned]      # pooled VAL numbers per head, differences to the FIRST (the reference)
+    wsl python3 tools/jarm.py curve e383_f_s0 e373_cb_s0 [--band 100:0.3,600:0.05]                                  # a speed-change arm vs its reference: the data-order fingerprint (gt_links / pos_pairs / gt_outside equal at every logged step) + the loss band
+                                                                                                                    # (default 0.05 / 0.03 / 0.02 at steps 500 / 2000 / 12000: a gross-failure check, not twin evidence); exit 1 outside
     wsl python3 tools/jarm.py selftest
 
 `run` works on the run `<id lower>_<arm>` (here e383_f_s0); each step runs only when its output is missing (the same command continues a crashed or stopped arm) and the arm STOPS at the first step that fails:
@@ -12,7 +14,7 @@
   5. scores      VAL at the pinned cell and at D115 (0.3, 0.2, 0.6, gate off); with --ref only the paired cards (`--ref-run <ref> --ref-run-cell D115`, same tokens only: NOT for a K-384 arm against K-512 heads).
 Every step is launched by `run.py` with the experiment card's own words (title, prediction, rule and kill from experiments/<id>_*/experiment.md): no text to copy; ids `<id>.<step>_<arm>`; GPU steps ask for 6000 MB of RAM.
 `--window` waits for the allowed GPU window (weekdays 08:30 - 17:30, nights 22:00 - 07:00) before every GPU launch. TEST is never touched (`--split val`). The numbers are the cards' (`runs/<run>/token_card_*.json`).
-**What it does not do:** it decides nothing (verdicts stay by hand, by the card's rule); it does not enforce the card's kill beyond a non-finite loss (a loss-curve band or a no-learning rule is the caller's check); the E376 anatomy and ensembles are not steps.
+**What it does not do:** it decides nothing (verdicts stay by hand, by the card's rule); it does not enforce the card's kill beyond a non-finite loss and, with --curve (needs --ref), the `curve` check after training (a fired check stops the arm: NOT-PARITY; a no-learning rule is the caller's check); the E376 anatomy and ensembles are not steps.
 """
 import argparse
 import datetime
@@ -107,8 +109,9 @@ def dump_cut(path):
 
 
 class Arm:
-    def __init__(self, eid, arm, seed, head_seed, ref=None, trainer="jtoken_train.py", extra="", window=False, dry=False, texts=None):
+    def __init__(self, eid, arm, seed, head_seed, ref=None, trainer="jtoken_train.py", extra="", window=False, dry=False, texts=None, curve_check=False):
         self.eid, self.arm, self.seed, self.head_seed, self.ref, self.trainer, self.extra, self.window, self.dry = eid, arm, seed, head_seed, ref, trainer, extra, window, dry
+        self.curve_check = curve_check
         assert not arm.startswith(("vs_", "cell", "d115", "dump", "sweep", "choose")), f"arm name {arm}: it would make run ids of another arm's steps"
         self.run = f"{eid.lower()}_{arm}"
         self.texts = texts or (("dry", "dry", "dry") if dry else card_texts(eid))
@@ -190,6 +193,11 @@ class Arm:
     def go(self):
         if not self.train():
             return 1
+        if self.curve_check and self.ref and not self.dry:                              # a speed-change arm: a fired check = NOT-PARITY, chase before use (no dumps, no scores)
+            ok, text = curve(self.run, self.ref)
+            self.say(("curve check ok: " if ok else "STOPPED: curve check fired (NOT-PARITY, chase the difference before anything uses this path): ") + text)
+            if not ok:
+                return 1
         if self.readout() is None:
             return 1
         table([self.ref, self.run] if self.ref else [self.run], "pinned")
@@ -207,6 +215,28 @@ def table(runs, cell):
     base = rows[0][2]
     for r, c, m in rows[1:]:
         print(("  " + r + " - " + rows[0][0]).ljust(34) + "".join((f"{m[k] - base[k]:+.4f}" if k in m and k in base else "-").rjust(12) for k in METRICS))
+
+
+BAND = {500: 0.05, 2000: 0.03, 12000: 0.02}
+FINGERPRINT = ("gt_links", "pos_pairs", "gt_outside")                                    # integer columns of the log: they come from the batch alone, so equal columns = the same data order
+
+
+def curve(run, ref, band=BAND):
+    """the gross-failure check of a speed-change arm against its reference (a loose band, NOT twin evidence: head seeds of the same recipe differ by a third of it): (1) the data-order fingerprint, the integer columns `FINGERPRINT` of runs/<run>/log.jsonl
+    must equal the reference's at EVERY logged step both runs have (and there must be one: the GPU loader reproduces the plain loader's order); (2) the logged `total` against the same step of runs/<ref> at the steps of `band` -> (ok, text);
+    a missing file or step is not ok"""
+    def load(r):
+        f = os.path.join(RUNS, r, "log.jsonl")
+        return {j["step"]: j for j in (json.loads(l) for l in open(f)) if "total" in j} if os.path.exists(f) else {}
+    a, b = load(run), load(ref)
+    rows = {s: (a.get(s, {}).get("total"), b.get(s, {}).get("total")) for s in band}
+    ok_band = all(x is not None and y is not None and abs(x - y) <= band[s] for s, (x, y) in rows.items())
+    common = sorted(set(a) & set(b))
+    bad = [s for s in common if any(a[s].get(k) != b[s].get(k) for k in FINGERPRINT)]
+    ok_order = bool(common) and not bad
+    text = f"{run} vs {ref}: " + ", ".join(f"step {s}: " + ("missing" if x is None or y is None else f"{x:.4f} vs {y:.4f} (diff {x - y:+.4f}, band {band[s]})") for s, (x, y) in rows.items())
+    text += f"; data order {'equal at all ' + str(len(common)) + ' common logged steps' if ok_order else ('differs at steps ' + str(bad[:5]) if bad else 'no common logged step')}"
+    return ok_band and ok_order, text + (" -> inside the band, same order" if ok_band and ok_order else " -> OUTSIDE the band, other order or missing")
 
 
 class FakeArm(Arm):
@@ -313,6 +343,16 @@ def selftest():
             open(os.path.join(d, "e9_d", "log.txt"), "w").write("12:00:00 step 1 loss 3.2\n")  # neither: relaunched 6 times, then stopped
             f = FakeArm("E9", "d", 0, 2, fail=("",))
             assert f.train() is False and f.log == [""] * 6, f.log
+            base = {500: 0.70, 2000: 0.48, 12000: 0.36}
+            for r, rows, gl in (("cA", base, 100), ("cB", {500: 0.72, 2000: 0.49, 12000: 0.37}, 100), ("cC", {**base, 12000: 0.40}, 100), ("cD", {**base, 500: 0.76}, 100), ("cE", {**base, 2000: 0.52}, 100),
+                                ("cF", {**base, 12000: 0.33}, 100), ("cG", base, 101)):          # cG: another data order (gt_links of the batch differs)
+                os.makedirs(os.path.join(d, r))
+                open(os.path.join(d, r, "log.jsonl"), "w").write("".join(json.dumps(dict(step=s, total=v, gt_links=gl + s, pos_pairs=gl, gt_outside=3)) + chr(10) for s, v in rows.items()) + json.dumps(dict(step=7, val={})) + chr(10))
+            assert curve("cB", "cA")[0] and curve("cB", "cA", {500: 0.05})[0], "inside the band"
+            assert not curve("cC", "cA")[0] and not curve("cD", "cA")[0] and not curve("cE", "cA")[0] and not curve("cF", "cA")[0], "outside at 12000 (+), at 500, at 2000, at 12000 (-): each step and both signs count"
+            assert not curve("nope", "cA")[0] and not curve("cA", "nope")[0], "a missing run is not ok"
+            ok_g, text_g = curve("cG", "cA")
+            assert not ok_g and "differs at steps" in text_g, "the same losses on another data order are not parity (the fingerprint columns)"
             f = FakeArm("E9", "d", 0, 2)                                                  # run.py exit 2 (refused): no relaunch
             f.launch = lambda step, *a, **k: (f.log.append(step), 2)[1]
             assert f.train() is False and f.log == [""], f.log
@@ -342,9 +382,14 @@ def build_parser():
     r.add_argument("--trainer", default="jtoken_train.py")
     r.add_argument("--window", action="store_true")
     r.add_argument("--dry", action="store_true")
+    r.add_argument("--curve", action="store_true", help="a speed-change arm: after training run `curve` against --ref (data-order fingerprint + loss band); a fired check stops the arm before any read-out step")
     t = sub.add_parser("table")
     t.add_argument("runs", nargs="+")
     t.add_argument("--cell", default=D115)
+    c = sub.add_parser("curve")
+    c.add_argument("run")
+    c.add_argument("ref")
+    c.add_argument("--band", default=None, help="STEP:DIFF,STEP:DIFF (default 500:0.05,2000:0.03,12000:0.02), e.g. 100:0.3,300:0.1,600:0.05 for the early twin check of a short run")
     sub.add_parser("selftest")
     return ap
 
@@ -367,7 +412,11 @@ def main():
         return selftest()
     if a.cmd == "table":
         return table(a.runs, a.cell)
-    sys.exit(Arm(a.id, a.arm, a.seed, a.head_seed, a.ref, a.trainer, " ".join(a.extra), a.window, a.dry).go())
+    if a.cmd == "curve":
+        ok, text = curve(a.run, a.ref, BAND if a.band is None else {int(s): float(d) for s, d in (x.split(":") for x in a.band.split(","))})
+        print(text)
+        sys.exit(0 if ok else 1)
+    sys.exit(Arm(a.id, a.arm, a.seed, a.head_seed, a.ref, a.trainer, " ".join(a.extra), a.window, a.dry, curve_check=a.curve).go())
 
 
 if __name__ == "__main__":
