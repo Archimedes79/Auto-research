@@ -13,6 +13,10 @@
     wsl bash tools/env/_py14.sh jtoken_eval.py fixture --seed S --run R --split train --every 3                                        # CPU, E370 stage A: the run's head against c-rule (per class, in the gate) -> runs/R/token_fixture_.._<UTC>.json
     wsl bash tools/env/_py14.sh jtoken_eval.py graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --link-thr-long T_L --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
     wsl bash tools/env/_py14.sh jtoken_eval.py dump|score|sweep|graphs|fixture --run R --model model_step<N>.pt ...                       # a snapshot of `jtoken_train --snapshots` instead of model.pt: every file name carries _step<N>
+    wsl bash tools/env/_py14.sh jtoken_eval.py dump --live --run R --seed S [--bs 4] [--split val|train] [--every N] [--cpu] [--max N]   # GPU, E372: B' + the head on the LIVE tokens -> runs/R/token_<split>_live.pkl
+    wsl bash tools/env/_py14.sh jtoken_eval.py score|sweep|anatomy --live ...                                                            # CPU, E372: a live dump read with its own tokens (its B' checked: `check_b`); every file name carries _live
+    wsl bash tools/env/_py14.sh jtoken_eval.py score --live --run R --seed S [a decode] --ref-run R2 [--ref-cache]                       # CPU, E372: paired BY FRAME with R2's live dump, or (--ref-cache) with R2's CACHE dump (the parity read) -> .._live_vs_<R2>[_cache]..json
+    wsl bash tools/env/_py14.sh jtoken_eval.py live-diff --run R --seed S --against P [--split val] [--max N]                           # CPU, E372: did B' move (cells, positions, n_valid, the live labels) -> runs/R/token_live_diff_vs_<P>.json
     wsl bash tools/env/_py14.sh jtoken_eval.py check-layer1 --seed S [--dump PATH]                                                       # CPU: this scorer fed B's stored dump reproduces runs/eval/e324s_val/card_s<S>.json (PASS / FAIL)
     wsl bash tools/env/_py14.sh jtoken_eval.py check-parity --run R --seed S [--b-run runs/e292_a_s<S>] [--n 20]                         # CPU: the head from the cache tokens (fp16 tok) against tokens recomputed live from B' (fp32)
     wsl bash tools/env/_py14.sh jtoken_eval.py timing --run R [--b-run runs/e292_a_s<S>] [--K 384] [--cpu]                               # parameters, GMACs, ms (GPU only when idle: < 2 GB used and no run.py job)
@@ -32,6 +36,12 @@ GT nodes of a GT long link), dup_of_true, wrong_pair or false_end (`link_categor
 concentration (`concentration`) reads the head's own probabilities on its training label G(i) in both classes. Its section near_none (E377, promoted from temp/e377/e377_near.py and e377_dup.py; `near_frame`): the none tokens near an
 assigned token (E377's label `jtoken.near_none`) and far from one, the duplicates (none tokens that are a GT successor of some source: the column of y non-empty, no gate), their kept shares and median p_none, and the token degree >= 3
 points of the delivered token graph (links short 0.3 / long T_L, keep K, no none gate; in + out degree of the directed graph, not the scorer's junction points) that touch a near / far / duplicate token's link.
+Live read-out (E372 S4, `dump --live`): B' runs with the head (`lane_live_tok.LiveSource`, frozen, no_grad; `live_source`: the run's own trained B' `b_state` (a joint run), else runs/<ident>_s<S>; a run that trained the node head
+without a b_state is refused) on the cache's frames in its order: B' in batches of --bs (default 4, the cache build's), the head in batches of 8 (the cache dump's); the labels as the cache makes them (gate on, no token drop). Each record
+of the dump also holds the frame's own `tokens_np` (the read-out writes the nodes from them, not from the cache), the label side (`lab`: the anatomy and `live-diff` read it) and the head's mass concentration (`conc`: a CPU forward
+cannot remake the tokens of a GPU dump); meta live, bs_b, bs_head, b_source (with the sha256 of the B' state that ran and of its node head), tokens_exact (every frame's token fields bit-equal to the cache's: the parity read of a
+cache-trained run) and tokens_exact_frames; its cards carry them. Every read of a live dump checks its B' (`check_b`: a run with train_nodes its own b_state, whose node head differs from runs/<ident>_s<S>'s; any other run that node head).
+Two live dumps hold other tokens of the same frames: `--ref-run` pairs them by frame; `--ref-cache` pairs the live read-out with the reference's cache dump (the parity read: the topo / junction F1 difference in `paired_vs_ref_run`).
 """
 import argparse
 import hashlib
@@ -75,6 +85,10 @@ CLOSE, PLAIN = "close:1.5@0.5", "plain@0.5"
 NODE_KEYS = ["cell", "dirv", "e", "flags", "pos", "s", "section"]
 THIRD = 1 / 3
 UNMATCHED_LIMIT = 0.005                                                      # parity: the valid tokens that only one side has, at most this share of the cache's valid tokens
+LIVE_BS = 4                                                                  # the batch of B' in a live dump: the cache build's (`lane_live_tok`: GPU parity with the cache is claimed at bs 4 only)
+HEAD_BS = 8                                                                  # the batch of the head in every dump (cache and live): the cache dump's
+TOKEN_KEYS = ("cell", "tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid")      # the token fields of a live dump compared with the cache's (`tokens_exact`)
+LIVE_META = ("live", "b_source", "bs_b", "bs_head", "tokens_exact", "tokens_exact_frames")           # the meta of a live dump that its cards carry
 MACS_NOTE = "matmul, linear and einsum only; softmax, norms, GELU, the pair-geometry features and the sort are not counted"
 
 
@@ -145,18 +159,23 @@ def model_sfx(name):
     return "" if n is None else f"_step{n}"
 
 
+def live_sfx(a):
+    """'' or _live: a read-out of the LIVE tokens of B' (`dump --live`); a command without --live is a cache read-out"""
+    return "_live" if getattr(a, "live", False) else ""
+
+
 def dump_path(a, runs, n=0):
-    """the dump of a read-out: runs/R/token[_step<N>]_<split>[_every<E>][_drop..][_n<n>].pkl (n: the frames of a `--max` dump)"""
-    return os.path.join(runs, a.run, f"token{model_sfx(a.model)}_{a.split}{every_sfx(a)}{JV.suffix(2.5, a.drop, a.drop_seed)}{f'_n{n}' if n else ''}.pkl")
+    """the dump of a read-out: runs/R/token[_step<N>]_<split>[_every<E>][_drop..][_live][_n<n>].pkl (n: the frames of a `--max` dump)"""
+    return os.path.join(runs, a.run, f"token{model_sfx(a.model)}_{a.split}{every_sfx(a)}{JV.suffix(2.5, a.drop, a.drop_seed)}{live_sfx(a)}{f'_n{n}' if n else ''}.pkl")
 
 
 def card_sfx(a):
-    """the part of a card or sweep name after its decode: [_step<N>][_<split> unless val][_every<E>][_drop..]"""
-    return model_sfx(a.model) + ("" if a.split == "val" else f"_{a.split}") + every_sfx(a) + JV.suffix(2.5, a.drop, a.drop_seed)
+    """the part of a card or sweep name after its decode: [_step<N>][_<split> unless val][_every<E>][_drop..][_live]"""
+    return model_sfx(a.model) + ("" if a.split == "val" else f"_{a.split}") + every_sfx(a) + JV.suffix(2.5, a.drop, a.drop_seed) + live_sfx(a)
 
 
-def batches(ds, idx, bs=8, workers=0):
-    return torch.utils.data.DataLoader(torch.utils.data.Subset(ds, [int(i) for i in idx]), batch_size=bs, shuffle=False, num_workers=workers, collate_fn=LP.collate)
+def batches(ds, idx, bs=HEAD_BS, workers=0, collate=LP.collate):
+    return torch.utils.data.DataLoader(torch.utils.data.Subset(ds, [int(i) for i in idx]), batch_size=bs, shuffle=False, num_workers=workers, collate_fn=collate)
 
 
 def apply_drop(b, drop, drop_seed):
@@ -205,6 +224,100 @@ def batch_dump(out, b):
                            none_cls=none_cls[i].astype(np.float32), cand=cand_of(cs, cd, p[i], longm[i], scale[i]),
                            rec=links_of(lrec[i], p[i], longm[i], scale[i]), argmax=links_of(lalt[i], p[i], longm[i], scale[i])))
     return frames
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ the live read-out (E372)
+def state_sha(sd, prefix=""):
+    """sha256 over the tensors of a state dict whose names start with `prefix`, in sorted name order (name, dtype, shape and bytes of each): the identity of a B' that ran"""
+    h = hashlib.sha256()
+    for k in sorted(k for k in sd if k.startswith(prefix)):
+        t = sd[k].detach().cpu().contiguous()
+        h.update(f"{k}|{t.dtype}|{tuple(t.shape)}|".encode())
+        h.update(t.numpy().tobytes())
+    return h.hexdigest()
+
+
+def b_shas(sd):
+    """the identity of a B' state: sha_state (every tensor) and sha_nodes (the node head, `nodes.*`)"""
+    return dict(sha_state=state_sha(sd), sha_nodes=state_sha(sd, "nodes."))
+
+
+def base_b(kw):
+    """runs/<ident>_s<seed>: the B' of the run's cache (relative to the project folder)"""
+    return f"runs/{kw['ident']}_s{kw['seed']}"
+
+
+def live_source(path, ck, kw, K):
+    """B' of a live read-out (`dump --live`) on the CPU, frozen, eval -> (`lane_live_tok.LiveSource`, b_source). ck = the run's checkpoint (`path`): a joint run carries its trained B' as `b_state` (a complete `QGraph` state, loaded
+    strictly into the architecture of `base_b`); a run that trained the node head (args train_nodes) without one is refused (no fall-back); every other run reads `base_b`. b_source = kind, the file read (path, sha256, mtime), the
+    architecture's run and `b_shas` of the state that runs"""
+    import lane_live_tok as LT
+    import qpredict as QP
+    own = "b_state" in ck
+    assert own or not ck["args"].get("train_nodes"), f"{path}: a run that trained B''s node head (train_nodes) must carry it (b_state): no fall-back to {base_b(kw)}"
+    mb = QP.load_model(_abs(base_b(kw)), "cpu")
+    if own:
+        mb.load_state_dict(ck["b_state"])
+    src = dict(kind="b_state" if own else "base", file=_file_id(path if own else os.path.join(_abs(base_b(kw)), "model.pt")), arch=base_b(kw), **b_shas(mb.state_dict()))
+    return LT.LiveSource(mb, K, train_nodes=False).eval(), src
+
+
+def check_b(meta, ck, kw):
+    """the B' a live dump ran (`b_shas` in its b_source) is the one its run demands: a run that trained the node head (args train_nodes) its own `b_state`, whose node head differs from `base_b`'s; every other run (train_nodes 0, a
+    cache-trained head: the parity read) the node head of `base_b` (and its `b_state` when it has one)"""
+    got = meta["b_source"]
+    base = state_sha(torch.load(os.path.join(_abs(base_b(kw)), "model.pt"), map_location="cpu")["state"], "nodes.")
+    if "b_state" in ck:
+        assert {k: got[k] for k in ("sha_state", "sha_nodes")} == b_shas(ck["b_state"]), "the live dump did not run the run's own B' (b_state)"
+    if ck["args"].get("train_nodes"):
+        assert "b_state" in ck and got["sha_nodes"] != base, f"a run that trained B''s node head ran the node head of {base_b(kw)} (or carries no b_state)"
+    else:
+        assert got["sha_nodes"] == base, f"a run with B''s node head frozen did not run the node head of {base_b(kw)}"
+
+
+def live_data(split, seed, ident):
+    """the frames of a live read-out: `lane_live_tok.LiveData` (x, table, token, row; the frames of the cache of B' seed `seed`, its order asserted)"""
+    import lane_live_tok as LT
+    return LT.LiveData(split, seed, ident)
+
+
+def live_records(out, b):
+    """`batch_dump` of a live batch `b` (`LiveSource.labelled`), each record with the frame's own `tokens_np`, `lab` (the label side the anatomy and `live-diff` read: gt_id, ytype, the target pairs of y as (P, 2) indices, B''s
+    uout / uin of the tokens, the label counts `lane_live_tok.STATS`) and `conc` (`head_concentration` of the frame: the anatomy's mass concentration)"""
+    import lane_live_tok as LT
+    npy = lambda t: t.detach().cpu().numpy()  # noqa: E731
+    frames = batch_dump(out, b)
+    for j, f in enumerate(frames):
+        f.update(tokens_np=b["tokens_np"][j], conc=head_concentration({k: out[k][j:j + 1].detach().cpu() for k in ("cand", "logp")}, b["y"][j:j + 1].cpu()),
+                 lab=dict(gt_id=npy(b["label"]["gt_id"][j]), ytype=npy(b["ytype"][j]).astype(np.int8), ypair=np.argwhere(npy(b["y"][j]) > 0).astype(np.int16), uout=npy(b["uout"][j]), uin=npy(b["uin"][j]),
+                          stats={k: int(b["lab"][j][k]) for k in LT.STATS}))
+    return frames
+
+
+def same_tokens_as_cache(tk, ds, idx):
+    """per frame of the live tokens `tk` (B, K, ...) of the cache frames idx: every field of TOKEN_KEYS bit-equal to the cache's (values compared in float64, which holds both exactly; tok is float16 in the cache)"""
+    return [all(np.array_equal(tk[k][j].detach().cpu().numpy().astype(np.float64), np.asarray(ds.c.f[k][int(i)]).astype(np.float64)) for k in TOKEN_KEYS) for j, i in enumerate(idx)]
+
+
+def live_dump(a, m, kw, ds, idx, dev, runs):
+    """the records of a live dump (`live_records`) of the cache frames idx: `live_data` (asserted: the frames of the cache `ds`, in its order) in batches of HEAD_BS (the head's, as the cache dump), B' (`live_source`) on chunks of --bs of
+    them (default LIVE_BS: the cache build's), under no_grad `tokens` -> `labelled` (the gate on, no token drop: the labels as the cache makes them) -> the head -> (frames, the meta entries live, b_source, bs_b, bs_head, tokens_exact =
+    the token fields of every frame bit-equal to the cache's (`same_tokens_as_cache`; the parity read of a cache-trained run), tokens_exact_frames)"""
+    import lane_live_tok as LT
+    path = os.path.join(runs, a.run, a.model)
+    src, b_source = live_source(path, torch.load(path, map_location="cpu", weights_only=False), kw, ds.K)
+    src = src.to(dev)
+    data = live_data(a.split, kw["seed"], kw["ident"])
+    assert list(data.tokens) == list(ds.tokens) and [int(r) for r in data.rows] == [int(r) for r in ds.rows], "the live frames are not the frames of the cache, in its order"
+    frames, exact, bs = [], [], a.bs or LIVE_BS
+    for n, b in enumerate(batches(data, idx, collate=LT.collate)):
+        with torch.no_grad():
+            tks = [src.tokens(b["x"][c:c + bs])[1] for c in range(0, len(b["x"]), bs)]
+            tk = {k: torch.cat([t[k] for t in tks]) for k in tks[0]}
+            exact += same_tokens_as_cache(tk, ds, idx[n * HEAD_BS:(n + 1) * HEAD_BS])
+            lb = src.labelled(tk, b["table"], b["token"], b["row"], token_drop=0.0, gate=True)
+            frames += live_records(run_head(m, lb, dev), lb)
+    return frames, dict(live=True, b_source=b_source, bs_b=bs, bs_head=HEAD_BS, tokens_exact=all(exact), tokens_exact_frames=int(sum(exact)))
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the writer
@@ -479,6 +592,8 @@ def read_ctl(arm, ident, seed, K, ctl_dir=CTL, n=0):
 # ------------------------------------------------------------------------------------------------------------------------------ commands
 def dump(a, runs=RUNS):
     assert a.cpu or torch.cuda.is_available(), "no GPU: the read-outs of a card are dumped on the GPU; --cpu only for tests"
+    assert a.live or a.bs is None, "--bs is the batch of B' in a live read-out: give --live"
+    assert not (a.live and a.drop > 0), "--live: no --drop (the live read-out reads the tokens as B' makes them)"
     dev = "cpu" if a.cpu else "cuda"
     if dev == "cuda":
         import gpu_gate
@@ -490,12 +605,15 @@ def dump(a, runs=RUNS):
     idx = sample(len(ds), a.split, a.every)[: a.max or None]
     path = dump_path(a, runs, len(idx) if a.max else 0)
     assert not os.path.exists(path), f"a stored dump is never overwritten: {path}"
-    frames = []
-    for b in batches(ds, idx, workers=0 if a.cpu else 2):
-        frames += batch_dump(run_head(m, apply_drop(b, a.drop, a.drop_seed), dev), b)
+    if a.live:
+        frames, live = live_dump(a, m, kw, ds, idx, dev, runs)
+    else:
+        frames, live = [], {}
+        for b in batches(ds, idx, workers=0 if a.cpu else 2):
+            frames += batch_dump(run_head(m, apply_drop(b, a.drop, a.drop_seed), dev), b)
     step = model_step(a.model)
     meta = dict(run=a.run, seed=a.seed, split=a.split, drop=a.drop, drop_seed=a.drop_seed, idx=idx.tolist(), every=a.every, tokens=[ds.tokens[i] for i in idx], K=ds.K, ident=kw["ident"], cache=ds.dir,
-                steps=args.get("steps") if step is None else step, model=a.model)
+                steps=args.get("steps") if step is None else step, model=a.model, **live)
     with open(path, "wb") as fh:
         pickle.dump(dict(meta=meta, frames=frames), fh)
     kept = np.mean([f["keep"].sum() for f in frames])
@@ -524,35 +642,42 @@ def parse_cell(s):
 
 
 def read_dump(a, runs, n_max):
-    """the dump of this read-out (of the weights `a.model`; a dump of before --model counts as model.pt's) with everything the scorer needs, checked against the cache -> dict(ck, args, kw, ds, idx, meta, fr, toks, valid, frames, path)"""
+    """the dump of this read-out (of the weights `a.model`; a dump of before --model counts as model.pt's) with everything the scorer needs, checked against the cache -> dict(ck, args, kw, ds, idx, meta, fr, toks, valid, frames, path, live).
+    A live dump (`a.live`, its meta live) brings its own tokens (`tokens_np` of every record); the cache gives only the frames"""
     ck = torch.load(os.path.join(runs, a.run, a.model), map_location="cpu", weights_only=False)
     args = ck["args"]
     assert args["seed"] == a.seed, f"--seed {a.seed} does not match the run (seed {args['seed']})"
+    live = bool(live_sfx(a))
     path = dump_path(a, runs, n_max)
     d = pickle.load(open(path, "rb"))
     meta, fr = d["meta"], d["frames"]
     kw = cache_kw(args)
     ds = open_cache(a.split, kw["seed"], kw["ident"], kw["K"], kw.get("cache"))
     idx = sample(len(ds), a.split, a.every)[: n_max or None]
-    assert meta["run"] == a.run and meta.get("model", "model.pt") == a.model and meta.get("every", 1) == a.every and meta["idx"] == idx.tolist() and meta["drop"] == a.drop and meta["drop_seed"] == a.drop_seed and [f["token"] for f in fr] == [ds.tokens[i] for i in idx], \
-        "the dump is not the dump of this read-out (run, model, frames, drop)"
-    toks = [ds[int(i)]["tokens_np"] for i in idx]
-    assert all(np.array_equal(f["cell"], t["cell"]) for f, t in zip(fr, toks)), "the dump's tokens are not the cache's (a stale dump or cache)"
+    assert meta["run"] == a.run and meta.get("model", "model.pt") == a.model and meta.get("every", 1) == a.every and meta["idx"] == idx.tolist() and meta["drop"] == a.drop and meta["drop_seed"] == a.drop_seed and [f["token"] for f in fr] == [ds.tokens[i] for i in idx] \
+        and bool(meta.get("live")) == live, "the dump is not the dump of this read-out (run, model, frames, drop, live)"
+    if live:
+        check_b(meta, ck, kw)
+    toks = [f["tokens_np"] for f in fr] if live else [ds[int(i)]["tokens_np"] for i in idx]          # live: the tokens this run's B' made for its head (the cache's are another B''s or another device's)
+    assert all(np.array_equal(f["cell"], t["cell"]) for f, t in zip(fr, toks)), "the dump's cells are not its tokens_np's" if live else "the dump's tokens are not the cache's (a stale dump or cache)"
     valid = [np.asarray(t["valid"], bool) & (JV.keep_nodes(f["token"], ds.K, a.drop, a.drop_seed) if a.drop > 0 else True) for t, f in zip(toks, fr)]     # the tokens the head saw
     assert all(np.array_equal(v & (f["pnone"] < np.float32(KEEP_THR)), f["keep"]) for v, f in zip(valid, fr)), "the valid tokens rebuilt from the cache are not the ones the dump's kept nodes came from"
     all_frames = frames_of(a.split, ds)
-    return dict(ck=ck, args=args, kw=kw, ds=ds, idx=idx, meta=meta, fr=fr, toks=toks, valid=valid, frames=[all_frames[int(i)] for i in idx], path=path)
+    return dict(ck=ck, args=args, kw=kw, ds=ds, idx=idx, meta=meta, fr=fr, toks=toks, valid=valid, frames=[all_frames[int(i)] for i in idx], path=path, live=live)
 
 
 def same_tokens(r, rr):
-    """two read-outs (`read_dump`) hold the same frames in the same order and per frame the same tokens (cells) and the same valid tokens: one cache, so a paired comparison of their heads"""
+    """two read-outs (`read_dump`) hold the same frames in the same order; two cache read-outs also per frame the same tokens (cells) and the same valid tokens (one cache: a paired comparison of their heads). A live read-out on
+    either side (each B' makes its own tokens) is paired by frame only"""
     assert r["idx"].tolist() == rr["idx"].tolist() and [f["token"] for f in r["fr"]] == [f["token"] for f in rr["fr"]], "the reference run's dump holds other frames"
-    assert all(np.array_equal(x["cell"], y["cell"]) and np.array_equal(u, w) for x, y, u, w in zip(r["fr"], rr["fr"], r["valid"], rr["valid"])), "the reference run's dump holds other tokens (another cache)"
+    if not (r.get("live") or rr.get("live")):
+        assert all(np.array_equal(x["cell"], y["cell"]) and np.array_equal(u, w) for x, y, u, w in zip(r["fr"], rr["fr"], r["valid"], rr["valid"])), "the reference run's dump holds other tokens (another cache)"
 
 
 def read_ref(a, r, runs, n_max):
-    """--ref-run: the dump of the SAME read-out (split, every, drop, drop seed, --max) of another run, of its model.pt (`read_dump`), refused unless its frames and tokens are those of this read-out `r` (`same_tokens`)"""
-    rr = read_dump(argparse.Namespace(**dict(vars(a), run=a.ref_run, model="model.pt")), runs, n_max)
+    """--ref-run: the dump of the SAME read-out (split, every, drop, drop seed, --max, live) of another run, of its model.pt (`read_dump`), refused unless its frames (and, two cache read-outs, its tokens) are those of this read-out `r`
+    (`same_tokens`); --ref-cache: the reference's CACHE dump against this live read-out (the parity read)"""
+    rr = read_dump(argparse.Namespace(**dict(vars(a), run=a.ref_run, model="model.pt", live=a.live and not a.ref_cache)), runs, n_max)
     same_tokens(r, rr)
     return rr
 
@@ -604,10 +729,13 @@ def score(a, runs=RUNS, out_dir=None):
     also scores that cell on the same dump: its numbers (`ref_cell`) and the paired scene-bootstrap interval of the variant against it (`paired_vs_ref_cell`: the keys of `qgraph_eval.paired` + junction F1 / P / R, `paired_junction`).
     --ref-run R2 (E376) also scores R2's dump of the same read-out (`read_ref`: its model.pt, the same frames and tokens) at the same decode, or at --ref-run-cell S,L,K,on|off: its numbers and cell (`ref_run`) and the paired interval of
     this run minus R2 (`paired_vs_ref_run`, the keys of `paired_vs_ref_cell`, the same draws); the card's name ends in _vs_<R2>[_rc<cell>, only when R2 is read at another cell].
-    --argmax --keep-thr K (E376): the head's argmax decode at another keep threshold (`decode_argmax_variant`, after `check_argmax`) -> the card token_card_argmax_kt<K>..json"""
+    --argmax --keep-thr K (E376): the head's argmax decode at another keep threshold (`decode_argmax_variant`, after `check_argmax`) -> the card token_card_argmax_kt<K>..json.
+    --live (E372): the live dump (`dump --live`) with its own tokens (`check_b` first), the names carry _live, the card info the dump's LIVE_META, no g1 (its controls are on the cache's tokens); --ref-run then reads R2's live dump paired
+    by frame, or with --ref-cache R2's CACHE dump (the parity read; the name ends in _vs_<R2>_cache[_rc<cell>])"""
     n_max = a.max
     assert not a.argmax or (a.link_thr, a.link_thr_long, a.no_none_gate, a.ref_cell) == (LINK_THR, None, False, None), "--argmax takes --keep-thr only"
     assert a.ref_run or a.ref_run_cell is None, "--ref-run-cell is the cell of --ref-run"
+    assert not a.ref_cache or (a.live and a.ref_run), "--ref-cache reads --ref-run's cache dump against this live read-out: give --live and --ref-run"
     assert a.ref_run is None or a.model == "model.pt", "--ref-run compares the model.pt heads: no --model snapshot"
     vsfx = f"_kt{a.keep_thr:g}" if a.argmax else variant_suffix(a)
     assert vsfx or a.ref_cell is None, "--ref-cell is compared with a decode variant: give --link-thr / --link-thr-long / --keep-thr / --no-none-gate"
@@ -616,7 +744,7 @@ def score(a, runs=RUNS, out_dir=None):
     nsfx = f"_n{n_max}" if n_max else ""
     decs = ("argmax",) if a.argmax else ("rec",) if vsfx else DECODES
     rcells = {d: ref_run_cell(a, d) for d in decs}
-    rsfx = {d: f"_vs_{a.ref_run}" + (cell_sfx(rcells[d]) if rcells[d] else "") if a.ref_run else "" for d in decs}
+    rsfx = {d: f"_vs_{a.ref_run}" + ("_cache" if a.ref_cache else "") + (cell_sfx(rcells[d]) if rcells[d] else "") if a.ref_run else "" for d in decs}
     card_path = lambda d, v, x="": os.path.join(out_dir, f"{a.run}_token_card_{d}{v}{sfx}{nsfx}{x}.json") if n_max else os.path.join(runs, a.run, f"token_card_{d}{v}{sfx}{x}.json")  # noqa: E731
     paths = {d: card_path(d, vsfx, rsfx[d]) for d in decs}
     held = [p for p in paths.values() if os.path.exists(p)]
@@ -675,13 +803,13 @@ def score(a, runs=RUNS, out_dir=None):
             extra["plain_b_dump"] = ref.get("dump")
             if b0 is not None:
                 extra["paired_vs_bsec0_close"] = QE.paired(res["rec"], pick(b0["rec"]), frames)
-            ctl_hi, ctl_rule = (read_ctl(x, kw["ident"], a.seed, ds.K, out_dir or CTL, n_max) if a.every == 1 else None for x in ("hi", "rule"))        # the controls are scored on the first N / all frames: not on a subsample
+            ctl_hi, ctl_rule = (read_ctl(x, kw["ident"], a.seed, ds.K, out_dir or CTL, n_max) if a.every == 1 and not a.live else None for x in ("hi", "rule"))        # the controls are scored on the first N / all frames: not on a subsample; on the cache's tokens: not for a live read-out
             extra["g1_topo_F1"] = None if ctl_hi is None or ctl_rule is None else g1(res["graph"]["topo_F1"], ctl_hi, ctl_rule)
             if extra["g1_topo_F1"] is not None:
                 extra["g1_note"] = G1_NOTE
         rule = "the argmax decode at another keep threshold (`decode_argmax_variant`)" if a.argmax else "the variant of `decode_variant`" if vsfx else "rec: p >= 0.3 and p >= p(none), both ends kept (p_none < 0.5); argmax: one link per source and class"
         out[dec] = write_card(paths[dec], f"{a.run}_token_{dec}{vsfx}{sfx}{nsfx}{rsfx[dec]}", res, len(frames), a.split, run=a.run, model=a.model, seed=a.seed, decode=dec, drop=a.drop, drop_seed=a.drop_seed, steps=ck.get("steps"), head_params=params,
-                              K=ds.K, ident=kw["ident"], decode_rule=rule, **extra)
+                              K=ds.K, ident=kw["ident"], decode_rule=rule, **({k: r["meta"][k] for k in LIVE_META} if r["live"] else {}), **extra)
     return out
 
 
@@ -804,15 +932,18 @@ def head_concentration(out, y):
 
 def concentration(m, ds, idx, fr, valid):
     """the mass concentration of the head `m` on the cache frames idx, per class (a CPU forward, batch 1: the dump does not hold the probabilities below KEEP_P; its p_none must agree with the dump's `fr` to 1e-3 on the `valid`
-    tokens) -> class -> `concentration_numbers` over the sources with a non-empty G(i) (`head_concentration`)"""
-    got = {c: ([], [], []) for c in ("short", "long")}
+    tokens) -> class -> `concentration_numbers` over the sources with a non-empty G(i) (`head_concentration`, `pool_concentration`)"""
+    parts = []
     for b, f, v in zip(batches(ds, idx, bs=1), fr, valid):
         out = run_head(m, b, "cpu")
         assert np.abs(JK.probs(out)["pt"][0, :, 0].numpy() - f["pnone"])[v].max(initial=0.0) < 1e-3, f"frame {f['token']}: the head's p_none is not the dump's"
-        for c, x in head_concentration(out, b["y"]).items():
-            for lst, val in zip(got[c], x):
-                lst.append(val)
-    return {c: concentration_numbers(np.concatenate(sh), np.concatenate(ab), sum(z)) for c, (sh, ab, z) in got.items()}
+        parts.append(head_concentration(out, b["y"]))
+    return pool_concentration(parts)
+
+
+def pool_concentration(parts):
+    """the frames' `head_concentration` parts pooled -> class -> `concentration_numbers`"""
+    return {c: concentration_numbers(np.concatenate([p[c][0] for p in parts]), np.concatenate([p[c][1] for p in parts]), sum(p[c][2] for p in parts)) for c in ("short", "long")}
 
 
 def concentration_numbers(s, n, zero=0):
@@ -866,10 +997,18 @@ def near_numbers(parts):
                      "long link_thr_long, both ends kept, no none gate; a two-way pair counts twice), not the scorer's junction points; deg3_touch_<x> = deg3 tokens at an end of a delivered link with an end in x")
 
 
+def pair_matrix(pairs, K):
+    """(P, 2) token indices -> the (K, K) uint8 matrix with ones there (y of a live record's `lab`)"""
+    y = np.zeros((K, K), np.uint8)
+    y[pairs[:, 0], pairs[:, 1]] = 1
+    return y
+
+
 def anatomy(a, runs=RUNS, out_dir=None):
     """E376: the anatomy of the delivered long links of the run's dump at --link-thr-long / --keep-thr (module docstring; `anatomy_numbers`; the GT side: the cache's gt_id / uout / uin, read once, and the frame's table of
     `lane_tok_data.TokData`) and the mass concentration of the head in both classes (`concentration`, a CPU forward of --model on the same frames) and the near-node none tokens (E377: `near_frame` on the cache item, `near_numbers`)
-    -> runs/R/token_anatomy_long_ltl<T>_kt<K>[_step<N>][_<split>][_every<N>].json, never overwritten (out_dir or --max: <out_dir or temp/e365/out>/R_token_anatomy_..[_n<N>].json), and a table"""
+    -> runs/R/token_anatomy_long_ltl<T>_kt<K>[_step<N>][_<split>][_every<N>][_live].json, never overwritten (out_dir or --max: <out_dir or temp/e365/out>/R_token_anatomy_..[_n<N>].json), and a table. --live: the label side and the
+    concentration of the live dump's records (`live_records`), not the cache's"""
     import lane_tok_data as TD
     assert a.link_thr_long >= KEEP_P, f"the dump holds the candidates with p >= {KEEP_P}"
     a.drop, a.drop_seed = 0.0, 0
@@ -880,15 +1019,21 @@ def anatomy(a, runs=RUNS, out_dir=None):
     ds, idx = r["ds"], r["idx"]
     td = TD.TokData(a.split, LATTICE, feats=False)
     assert [td.tokens[int(i)] for i in idx] == [ds.tokens[int(i)] for i in idx], "the GT tables are not the frames of the cache"
-    gid, uout, uin = (np.asarray(ds.c.f[k][idx]) for k in ("gt_id", "uout", "uin"))
+    if r["live"]:
+        labs = [f["lab"] for f in r["fr"]]
+        gid, uout, uin = ([x[k] for x in labs] for k in ("gt_id", "uout", "uin"))
+        item = lambda k, i: dict(tokens_np=r["toks"][k], ytype=labs[k]["ytype"].astype(np.int64), y=pair_matrix(labs[k]["ypair"], ds.K))  # noqa: E731
+    else:
+        gid, uout, uin = (np.asarray(ds.c.f[k][idx]) for k in ("gt_id", "uout", "uin"))
+        item = lambda k, i: ds[int(i)]  # noqa: E731
     parts, nparts, n_gt = [], [], 0
     for k, (i, f, t, v) in enumerate(zip(idx, r["fr"], r["toks"], r["valid"])):
         lab = gt_labels(t, v, td.table(int(i)), gid[k], uout[k], uin[k])
         parts.append(anatomy_frame(f, v, lab, a.keep_thr))
-        nparts.append(near_frame(f, v, ds[int(i)], a.keep_thr, a.link_thr_long))
+        nparts.append(near_frame(f, v, item(k, i), a.keep_thr, a.link_thr_long))
         n_gt += len(lab["gt_long"])
     num = anatomy_numbers(parts, n_gt, a.link_thr_long)
-    num["concentration"] = concentration(JKT.load_model(a.run, "cpu", runs, name=a.model)[0], ds, idx, r["fr"], r["valid"])
+    num["concentration"] = pool_concentration([f["conc"] for f in r["fr"]]) if r["live"] else concentration(JKT.load_model(a.run, "cpu", runs, name=a.model)[0], ds, idx, r["fr"], r["valid"])
     num["near_none"] = near_numbers(nparts)
     JV.write_json(path, _jsonable(dict(run=a.run, model=a.model, seed=a.seed, split=a.split, every=a.every, max=a.max, frames=len(idx), K=ds.K, link_thr_long=a.link_thr_long, keep_thr=a.keep_thr, dump=_file_id(r["path"]),
                                        near=dict(r=LC.R_NEAR, cos=LC.COS_NEAR), **num, note="delivered = long candidate with p >= link_thr_long and both ends kept (p_none < keep_thr), no none gate; categories of `link_category`; "
@@ -912,6 +1057,45 @@ def anatomy(a, runs=RUNS, out_dir=None):
     print(f"    dup  {pf['dup']:7.1f}  kept {pf['kept_dup']:6.1f} (share {sh['kept_dup']:.3f})  in some G(i), near {sh['dup_near']:.3f}")
     print(f"    degree >= 3 tokens {pf['deg3']:.1f}: touching the link of a near token {sh['deg3_touch_near']:.3f}, of a far none token {sh['deg3_touch_far']:.3f}, of a duplicate {sh['deg3_touch_dup']:.3f}")
     print(f"written {os.path.relpath(path, ROOT)}")
+    return path
+
+
+def label_numbers(fr):
+    """the live labels of a dump's records (`lab` stats) pooled: target pairs per GT link, valid tokens per frame, GT node coverage (assigned GT nodes / GT nodes)"""
+    s = {k: sum(f["lab"]["stats"][k] for f in fr) for k in ("n_pairs", "n_links", "n_valid", "n_gt", "n_gt_assigned")}
+    return dict(pos_pairs=s["n_pairs"], gt_links=s["n_links"], pos_pairs_per_gt_link=s["n_pairs"] / max(s["n_links"], 1), n_valid_per_frame=s["n_valid"] / max(len(fr), 1), gt_coverage=s["n_gt_assigned"] / max(s["n_gt"], 1))
+
+
+def live_diff(a, runs=RUNS, out_dir=None):
+    """E372: did B' move? The live dump of --run against the live dump of --against (P: the parity read of the same seed, the cache-trained champion with the untouched B') on the same frames (`same_tokens`; both through `read_dump`,
+    so `check_b` holds for both): the share of frames whose top-K cell list changed (as a list, as a set), |delta pos| of the cells valid in both (median, p90), delta n_valid per frame, and the moving-label numbers of both
+    (`label_numbers`) -> runs/R/token_live_diff_vs_<P>[_<split>][_every<N>].json, never overwritten (--max or out_dir: <out_dir or temp/e365/out>/R_token_live_diff_vs_<P>.._n<N>.json)"""
+    a.live, a.drop, a.drop_seed, a.model = True, 0.0, 0, "model.pt"
+    name = f"token_live_diff_vs_{a.against}{'' if a.split == 'val' else '_' + a.split}{every_sfx(a)}{f'_n{a.max}' if a.max else ''}.json"
+    path = os.path.join(out_dir or os.path.join(SCRATCH, "out"), f"{a.run}_{name}") if out_dir or a.max else os.path.join(runs, a.run, name)
+    assert not os.path.exists(path), f"a stored table is never overwritten: {path}"
+    r = read_dump(a, runs, a.max)
+    p = read_dump(argparse.Namespace(**dict(vars(a), run=a.against)), runs, a.max)
+    same_tokens(r, p)
+    order, sets, dpos, dvalid = [], [], [], []
+    for f, g, t, u, v, w in zip(r["fr"], p["fr"], r["toks"], p["toks"], r["valid"], p["valid"]):
+        order.append(not np.array_equal(f["cell"], g["cell"]))
+        sets.append(set(f["cell"].tolist()) != set(g["cell"].tolist()))
+        where = {int(c): k for k, c in enumerate(g["cell"])}
+        both = [(k, where[int(c)]) for k, c in enumerate(f["cell"]) if int(c) in where and v[k] and w[where[int(c)]]]
+        i, j = (np.array([x[n] for x in both], int) for n in (0, 1))
+        dpos.append(np.linalg.norm(np.asarray(t["pos"], float)[i] - np.asarray(u["pos"], float)[j], axis=1) if both else np.zeros(0))
+        dvalid.append(int(v.sum()) - int(w.sum()))
+    dp = np.concatenate(dpos)
+    lr, lp = label_numbers(r["fr"]), label_numbers(p["fr"])
+    doc = dict(run=a.run, against=a.against, seed=a.seed, split=a.split, every=a.every, max=a.max, frames=len(order), dumps={a.run: _file_id(r["path"]), a.against: _file_id(p["path"])},
+               b_source={a.run: r["meta"]["b_source"], a.against: p["meta"]["b_source"]}, cells=dict(order_changed_share=float(np.mean(order)), set_changed_share=float(np.mean(sets))),
+               pos=dict(common_valid_cells=len(dp), median_abs_delta_m=float(np.median(dp)) if len(dp) else None, p90_abs_delta_m=float(np.percentile(dp, 90)) if len(dp) else None),
+               n_valid=dict(delta_mean=float(np.mean(dvalid)), delta_abs_mean=float(np.mean(np.abs(dvalid)))), labels={a.run: lr, a.against: lp, "delta": {k: lr[k] - lp[k] for k in lr}},
+               note="cells: the top-K list of a frame differs (order) / as a set; pos: |delta| of the cells valid in both dumps; n_valid: run minus against per frame; labels: the live labels of each dump (n_pairs / n_links, n_valid, n_gt_assigned / n_gt)")
+    JV.write_json(path, _jsonable(doc))
+    print(f"{a.run} vs {a.against} ({len(order)} frames): cell list changed on {doc['cells']['order_changed_share']:.3f} of the frames (as a set {doc['cells']['set_changed_share']:.3f}), median |delta pos| {doc['pos']['median_abs_delta_m']} m over "
+          f"{len(dp)} common valid cells, delta n_valid {doc['n_valid']['delta_mean']:+.2f} per frame; target pairs per GT link {lr['pos_pairs_per_gt_link']:.3f} vs {lp['pos_pairs_per_gt_link']:.3f}, GT node coverage {lr['gt_coverage']:.4f} vs {lp['gt_coverage']:.4f}; written {os.path.relpath(path, ROOT)}")
     return path
 
 
@@ -1357,9 +1541,11 @@ def parse_args(argv=None):
         s.add_argument("--drop", type=float, default=0.0, help="the degraded read-out: the share of the tokens removed (0.17)")
         s.add_argument("--drop-seed", type=int, default=0)
         s.add_argument("--every", type=int, default=1, help="every N-th frame of the split's sample (TRAIN: 873 evenly spaced frames; every 3 = 291); the file names carry _every<N>; score and sweep read the dump with the same value")
+        s.add_argument("--live", action="store_true", help="E372: the LIVE tokens of B' (dump: B' runs with the head; score / sweep: the live dump with its own tokens); the file names carry _live")
         if name == "dump":
             s.add_argument("--cpu", action="store_true", help="tests only: dump on the CPU")
             s.add_argument("--max", type=int, default=0, help="only the first N frames (a test of the pipeline; `score --max N` reads it)")
+            s.add_argument("--bs", type=int, default=None, help=f"--live: the batch of B' (default {LIVE_BS}, the cache build's: the GPU parity holds at bs 4 only; the head runs at {HEAD_BS} as the cache dump); in the dump's meta")
         else:
             s.add_argument("--max", type=int, default=0, help="score the dump of `dump --max N` (cards to temp/e365/out/)")
         if name == "score":
@@ -1370,6 +1556,7 @@ def parse_args(argv=None):
             s.add_argument("--ref-cell", type=parse_cell, default=None, help="with a variant: S,L,K,on|off = a reference cell (link short, link long, keep, none gate) scored on the same dump; the card gets its numbers and the paired interval")
             s.add_argument("--ref-run", default=None, help="another run's dump of the same read-out (its model.pt, the same cache) scored at the same decode: its numbers and the paired interval this run - it; the card's name ends in _vs_<run>")
             s.add_argument("--ref-run-cell", type=parse_cell, default=None, help="S,L,K,on|off: --ref-run read at this cell instead of this read-out's decode; the name gets _rc<cell> when it is not the card's own cell")
+            s.add_argument("--ref-cache", action="store_true", help="with --live: --ref-run's CACHE dump instead of its live dump (the parity read); the name ends in _vs_<run>_cache")
             s.add_argument("--argmax", action="store_true", help="the argmax decode (one link per source and class) at --keep-thr instead of the record's 0.5 -> token_card_argmax_kt<K>..json")
         if name == "sweep":
             s.add_argument("--grid", default="default", choices=tuple(SWEEP_GRIDS), help="default: the 24 cells (link x keep x none gate); perclass (E375): link short x link long x keep, none gate off (36 cells)")
@@ -1382,6 +1569,14 @@ def parse_args(argv=None):
     s.add_argument("--max", type=int, default=0, help="the dump of `dump --max N` (a test; the json goes to temp/e365/out/)")
     s.add_argument("--link-thr-long", type=float, default=0.2, help="a long link is delivered at p >= T_L (the D115 decode: 0.2)")
     s.add_argument("--keep-thr", type=float, default=0.6, help="a node is kept at p_none < K (the D115 decode: 0.6)")
+    s.add_argument("--live", action="store_true", help="E372: the live dump (its own tokens, labels and concentration); the name carries _live")
+    s = sub.add_parser("live-diff")
+    s.add_argument("--run", required=True)
+    s.add_argument("--seed", type=int, required=True)
+    s.add_argument("--against", required=True, help="the run whose live dump is the reference (the parity read: the cache-trained champion read live with the untouched B')")
+    s.add_argument("--split", choices=("val", "train"), default="val")
+    s.add_argument("--every", type=int, default=1)
+    s.add_argument("--max", type=int, default=0, help="the live dumps of `dump --live --max N` (a test; the json goes to temp/e365/out/)")
     s = sub.add_parser("ctl")
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--ident", required=True, choices=("e292_a", "e273_p"))
@@ -1438,7 +1633,7 @@ def parse_args(argv=None):
 def main(argv=None):
     a = parse_args(argv)
     torch.set_num_threads(2)
-    r = {"dump": dump, "score": score, "sweep": sweep, "anatomy": anatomy, "ctl": ctl, "fixture": fixture, "graphs": graphs, "check-layer1": check_layer1, "check-parity": check_parity, "timing": timing}[a.cmd](a)
+    r = {"dump": dump, "score": score, "sweep": sweep, "anatomy": anatomy, "live-diff": live_diff, "ctl": ctl, "fixture": fixture, "graphs": graphs, "check-layer1": check_layer1, "check-parity": check_parity, "timing": timing}[a.cmd](a)
     sys.exit(r if isinstance(r, int) else 0)
 
 

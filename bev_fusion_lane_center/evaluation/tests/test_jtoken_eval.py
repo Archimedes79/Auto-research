@@ -21,7 +21,8 @@ command on 3 frames, delivered = the decode's long links, the near_none section'
 overwritten), near_none (E377, the anatomy's section: a hand frame with a twin at 1.0 m, one at exactly 2.0 m, one at 2.01 m, one at 1.0 m with heading cosine 0.4, a near and a far duplicate, a token near a none token only,
 padding and a link below its source's p(none); every count, share and median by hand; textual mutants of `jtoken.near_none` read through the anatomy (radius <, heading test dropped, assigned test dropped), the duplicates
 from the row of y, the none gate on), argmax_keep (E376 score --argmax --keep-thr: the rebuilt argmax = the dump's on a real head and a hand frame with ties and
-p_none at the threshold, a winner below the floor refused above the record keep, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring, self-pairs with --ref-run at the rec / argmax / argmax kt0.6 decodes).
+p_none at the threshold, a winner below the floor refused above the record keep, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring, self-pairs with --ref-run at the rec / argmax / argmax kt0.6 decodes),
+live (E372 dump / score / sweep / anatomy --live, --ref-cache, live-diff, `check_b`: a stub source with the cache's tokens gives the cache's records and read-outs; a joint run's own tokens, frame pairing, B' identity refusals; see its docstring).
 """
 import contextlib
 import json
@@ -1253,8 +1254,204 @@ def test_argmax_keep():
           "a direct scoring (token_card_argmax_kt<K>); self-pairs with --ref-run at rec, argmax and argmax kt0.6 = their own numbers (the argmax ones not the rec card's), diff 0, interval [0, 0]; a link threshold refused: ok")
 
 
+def test_live():
+    """E372 live read-out. Hand: `same_tokens` pairs a live read-out by frame only, `pair_matrix`, `state_sha`, the refusals before anything is read. Cache + B' (runs/e292_a_s0): `live_source` (a cache-trained run reads
+    runs/e292_a_s0, a joint run its b_state, train_nodes without b_state refused); a stub source that hands the CACHE tokens to the live path (the real label step, the real B' identity): the live dump's records = the cache dump's,
+    tokens_exact on every frame, its tokens_np / labels = the cache's, score / anatomy / sweep --live = the cache read-outs, the parity read (--ref-cache) with diff 0 and the interval [0, 0]; a joint run with shifted, reversed tokens
+    (B' at bs 2): tokens_exact on no frame, scored on its own tokens (a read_dump that takes the cache's is caught), paired by frame, live-diff by hand (|delta pos| sqrt 2, every list reordered, no set change, h's label counts = the
+    cache's); `check_b`: a fall-back to runs/e292_a_s0 (a mutant of live_source), a node head that did not move, a frozen run with a trained head, a cache dump under the live name: refused"""
+    import pickle
+    import shutil
+    r = dict(idx=np.arange(2), fr=[dict(token="a", cell=np.arange(4)), dict(token="b", cell=np.arange(4) + 9)], valid=[np.ones(4, bool), np.ones(4, bool)], live=True)
+    other = pickle.loads(pickle.dumps(dict(r, live=False)))
+    other["fr"][0]["cell"][2], other["valid"][1][0] = 99, False
+    E.same_tokens(r, other)                                                                                  # a live side: other cells and valid tokens of the same frames are paired
+    must_fail(E.same_tokens, dict(r, live=False), other)                                                     # two cache read-outs: refused
+    x = pickle.loads(pickle.dumps(r))
+    x["fr"][1]["token"] = "c"
+    must_fail(E.same_tokens, r, x)                                                                           # other frames: refused, live or not
+    sd = {"nodes.w": torch.arange(4.0), "pyr.b": torch.ones(2, dtype=torch.int64)}
+    assert E.state_sha(sd) == E.state_sha(dict(reversed(list(sd.items())))) and E.state_sha(sd, "nodes.") != E.state_sha(sd), "the name order does not count, the prefix does"
+    moved = dict(sd, **{"pyr.b": torch.zeros(2, dtype=torch.int64)})
+    assert E.state_sha(moved, "nodes.") == E.state_sha(sd, "nodes.") and E.state_sha(moved) != E.state_sha(sd) and E.state_sha({"nodes.w": torch.arange(4.0).view(2, 2)}) != E.state_sha({"nodes.w": torch.arange(4.0)})
+    assert E.pair_matrix(np.array([[0, 2], [1, 0]], np.int16), 3).tolist() == [[0, 0, 1], [1, 0, 0], [0, 0, 0]] and not E.pair_matrix(np.zeros((0, 2), np.int16), 3).any()
+    # tokens_exact: every token field of the card (cells, tok, pos, dirv, e, e_raw, s, uout, uin, flags, valid) bit-equal to the cache's; float16 tok against its float32 copy is equal, one flipped value in any field is not
+    assert E.TOKEN_KEYS == ("cell", "tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid")
+    rng = np.random.default_rng(0)
+    shapes = dict(cell=(), tok=(6,), pos=(2,), dirv=(2,), e=(), e_raw=(), s=(), uout=(), uin=(), flags=(8,), valid=())
+    cache = {k: (np.arange(5, dtype=np.int16) if k == "cell" else np.ones(5, bool) if k == "valid" else rng.random((5,) + s).astype(np.float16 if k == "tok" else np.float32)) for k, s in shapes.items()}
+    fake = types.SimpleNamespace(c=types.SimpleNamespace(f={k: v[None] for k, v in cache.items()}))
+    live_tk = {k: torch.from_numpy(v.astype(np.float32) if k == "tok" else v.astype(np.int64) if k == "cell" else v)[None] for k, v in cache.items()}
+    assert E.same_tokens_as_cache(live_tk, fake, np.array([0])) == [True]
+    for k in E.TOKEN_KEYS:
+        t = {q: v.clone() for q, v in live_tk.items()}
+        t[k].view(-1)[1] = ~t[k].view(-1)[1] if k == "valid" else t[k].view(-1)[1] + 1
+        assert E.same_tokens_as_cache(t, fake, np.array([0])) == [False], k
+    for bad in (["score", "--run", "h", "--seed", "0", "--ref-run", "h", "--ref-cache"], ["score", "--run", "h", "--seed", "0", "--live", "--ref-cache"]):
+        must_fail(E.score, E.parse_args(bad))                                                                # --ref-cache needs --live and --ref-run (refused before anything is read)
+    must_fail(E.dump, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--bs", "4"]))
+    must_fail(E.dump, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--live", "--drop", "0.17"]))
+    base_pt = os.path.join(E.ROOT, "runs", "e292_a_s0", "model.pt")
+    if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(E.planb_path(0)) or not os.path.exists(base_pt):
+        print("live: the hand part ok, the cache part SKIPPED (no cache, smoke model, stored plain B or runs/e292_a_s0)")
+        return
+    import lane_live_tok as LT
+    import lane_tok_data as TD
+    import qgraph_eval as QE
+    ds = E.open_cache("val", 0)
+    td = TD.TokData("val", E.LATTICE, feats=False)
+    base = torch.load(base_pt, map_location="cpu")["state"]
+
+    class Frames(torch.utils.data.Dataset):                                                                  # the stand-in of LiveData: x names the cache frame
+        tokens, rows = ds.tokens, ds.rows
+
+        def __len__(self):
+            return len(ds)
+
+        def __getitem__(self, i):
+            return dict(x=torch.full((1, 1, 1), float(i)), token=ds.tokens[i], row=ds.rows[i], table=td.table(i))
+
+    class CacheB:                                                                                            # the stand-in of LiveSource: the CACHE tokens of the frames named by x (shift > 0: pos + shift m and the token order reversed)
+        def __init__(self, shift):
+            self.shift = shift
+
+        def to(self, dev):
+            return self
+
+        def tokens(self, x):
+            tk = {k: torch.from_numpy(np.stack([np.array(ds.c.f[k][int(i)]) for i in x.flatten(1)[:, 0]])) for k in ("cell", "e_p", "flags_p", "s_p") + LT.GRAPH_KEYS + ("valid",)}
+            tk["tok"] = tk["tok"].float()
+            if self.shift:
+                tk = {k: v.flip(1) for k, v in tk.items()}
+                tk["pos"] = tk["pos"] + self.shift
+            return None, tk
+
+        def labelled(self, tk, tables, token, row, token_drop=0.0, seed=0, gate=True):
+            return LT.live_batch(tk, tables, token, row, ds.K, token_drop, seed, gate)
+
+    real_source = E.live_source
+
+    def live(shift, source=real_source):                                                                     # the real B' identity (`live_source`), the stub's tokens
+        return (E, "live_source", lambda path, ck, kw, K: (CacheB(shift), source(path, ck, kw, K)[1])), (E, "live_data", lambda split, seed, ident: Frames())
+
+    def joint(runs, name, b_state, train_nodes=1):
+        _floor_run(runs, name, 0, train_nodes=train_nodes, live_inputs=True)
+        p = os.path.join(runs, name, "model.pt")
+        ck = torch.load(p, map_location="cpu", weights_only=False)
+        if b_state is not None:
+            ck["b_state"] = b_state
+        torch.save(ck, p)
+        return p, ck
+
+    with tempfile.TemporaryDirectory() as tmp:
+        runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
+        out = os.path.join(scratch, "out")
+        os.makedirs(out)
+        shutil.copy(E.planb_path(0), os.path.join(scratch, "planb_s0.pkl"))
+        _floor_run(runs)
+        trained = {k: v.clone() for k, v in base.items()}
+        key = next(k for k in sorted(trained) if k.startswith("nodes.") and trained[k].is_floating_point())
+        trained[key] += 0.01                                                                                 # a node head that moved
+        jp, jck = joint(runs, "j", trained)
+        kw = dict(seed=0, ident="e292_a")
+        src, bs_ = real_source(jp, jck, kw, ds.K)
+        assert bs_["kind"] == "b_state" and bs_["sha_nodes"] == E.state_sha(trained, "nodes.") != E.state_sha(base, "nodes.") and torch.equal(src.model.state_dict()[key], trained[key]) and not src.model.nodes.training
+        hck = torch.load(os.path.join(runs, "h", "model.pt"), map_location="cpu", weights_only=False)
+        assert real_source("h", hck, kw, ds.K)[1]["sha_state"] == E.state_sha(base), "a cache-trained run reads runs/e292_a_s0"
+        must_fail(real_source, jp, {k: v for k, v in jck.items() if k != "b_state"}, kw, ds.K)                # train_nodes without b_state: refused, no fall-back
+        with patched((E, "SCRATCH", scratch)):
+            base_args = ["--seed", "0", "--max", "3"]
+            E.dump(E.parse_args(["dump", "--run", "h", "--cpu"] + base_args), runs)
+            with patched(*live(0.0)):
+                E.dump(E.parse_args(["dump", "--live", "--run", "h", "--cpu"] + base_args), runs)
+            dc, dl = (pickle.load(open(os.path.join(runs, "h", f"token_val{s}_n3.pkl"), "rb")) for s in ("", "_live"))
+            m = dl["meta"]
+            assert m["live"] and (m["bs_b"], m["bs_head"], m["tokens_exact"], m["tokens_exact_frames"]) == (4, 8, True, 3) and m["b_source"]["kind"] == "base" and m["b_source"]["sha_nodes"] == E.state_sha(base, "nodes.") and "live" not in dc["meta"]
+            eq = lambda x, y: x.keys() == y.keys() and all(eq(x[k], y[k]) for k in x) if isinstance(x, dict) else np.array_equal(x, y)  # noqa: E731
+            for i, (f, g) in enumerate(zip(dc["frames"], dl["frames"])):                                     # the live path on the cache's tokens = the cache path: records, tokens, labels
+                item = ds[i]
+                assert all(eq(f[k], g[k]) for k in f), i
+                assert all(np.array_equal(g["tokens_np"][k], item["tokens_np"][k]) for k in item["tokens_np"]), i
+                lab = g["lab"]
+                assert np.array_equal(lab["gt_id"], item["label"]["gt_id"]) and np.array_equal(lab["ytype"], item["ytype"]) and np.array_equal(E.pair_matrix(lab["ypair"], ds.K), item["y"]), i
+                assert all(np.array_equal(lab[k], ds.c.f[k][i]) for k in ("uout", "uin")) and lab["stats"] == {k: int(ds.c.f[k][i]) for k in LT.STATS}, i
+            sc = ["score", "--run", "h"] + base_args
+            c0, c1 = E.score(E.parse_args(sc), runs, out), E.score(E.parse_args(sc + ["--live"]), runs, out)
+            assert all(c0[d]["metrics"] == c1[d]["metrics"] for d in ("rec", "argmax")) and all(c1["rec"]["info"][k] == m[k] for k in E.LIVE_META) and "live" not in c0["rec"]["info"]
+            assert c1["rec"]["info"]["g1_topo_F1"] is None and os.path.exists(os.path.join(out, "h_token_card_argmax_live_n3.json")), "no g1 for a live read-out (its controls are the cache's)"
+            d115 = ["--link-thr", "0.3", "--link-thr-long", "0.2", "--keep-thr", "0.6", "--no-none-gate"]
+            par = E.score(E.parse_args(sc + ["--live", "--ref-run", "h", "--ref-cache"] + d115), runs, out)["rec"]
+            rf, pr = par["info"]["ref_run"], par["info"]["paired_vs_ref_run"]
+            assert os.path.exists(os.path.join(out, "h_token_card_rec_lt0.3_ltl0.2_kt0.6_nng_live_n3_vs_h_cache.json")) and rf["dump"]["path"].endswith("token_val_n3.pkl"), rf["dump"]
+            assert par["info"]["tokens_exact"] and all((pr[k]["diff"], pr[k]["lo"], pr[k]["hi"]) == (0.0, 0.0, 0.0) for k in ("topo_F1", "junction_F1")), (par["info"]["tokens_exact"], pr["topo_F1"])
+            an = ["anatomy", "--run", "h"] + base_args + ["--link-thr-long", "0.05"]
+            a0, a1 = (json.load(open(E.anatomy(E.parse_args(an + x), runs, out))) for x in ([], ["--live"]))
+            assert os.path.exists(os.path.join(out, "h_token_anatomy_long_ltl0.05_kt0.6_live_n3.json")) and a0["delivered"] > 0
+            assert all(a0[k] == a1[k] for k in a0 if k != "dump"), [k for k in a0 if k != "dump" and a0[k] != a1[k]]          # the live labels and the concentration of the dump = the cache's and a CPU forward
+            with patched((E, "SWEEP_GRIDS", dict(E.SWEEP_GRIDS, perclass=[(0.3, 0.2, 0.6, False)]))):
+                sw = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--split", "val", "--grid", "perclass", "--live"] + base_args), runs, out)))
+            assert os.path.basename(sw["dump"]["path"]) == "token_val_live_n3.pkl" and os.path.exists(os.path.join(out, "h_token_sweep_perclass_live_n3.json")) and sw["rows"][0]["topo_F1"] == par["metrics"]["topo_F1"]
+            # a joint run whose B' made other tokens (pos + 1 m, the order reversed): read on its own tokens, paired by frame, live-diff by hand
+            with patched(*live(1.0)):
+                E.dump(E.parse_args(["dump", "--live", "--run", "j", "--cpu", "--bs", "2"] + base_args), runs)
+            dj = pickle.load(open(os.path.join(runs, "j", "token_val_live_n3.pkl"), "rb"))
+            mj = dj["meta"]
+            assert (mj["bs_b"], mj["bs_head"], mj["tokens_exact"], mj["tokens_exact_frames"]) == (2, 8, False, 0) and mj["b_source"]["kind"] == "b_state" and mj["b_source"]["sha_nodes"] == E.state_sha(trained, "nodes.")
+            direct = lambda toks: E.score_preds([E.frame_prediction(t, f_, "rec") for t, f_ in zip(toks, dj["frames"])], QE.val_frames()[:3], log=lambda *x, **k: None)["graph"]  # noqa: E731
+            own = direct([f_["tokens_np"] for f_ in dj["frames"]])
+            cj = E.score(E.parse_args(["score", "--run", "j", "--live", "--ref-run", "h"] + base_args), runs, out)["rec"]
+            assert all(cj["metrics"][k] == own[k] for k in E.KEYS) and cj["metrics"] != c1["rec"]["metrics"], "the joint run is scored on its own tokens"
+            rf, pr = cj["info"]["ref_run"], cj["info"]["paired_vs_ref_run"]
+            assert rf["dump"]["path"].endswith("token_val_live_n3.pkl") and abs(pr["topo_F1"]["diff"] - (cj["metrics"]["topo_F1"] - c1["rec"]["metrics"]["topo_F1"])) < 1e-12, rf
+            mut = _mutant(E.read_dump, 'toks = [f["tokens_np"] for f in fr] if live else [ds[int(i)]["tokens_np"] for i in idx]', 'toks = [ds[int(i)]["tokens_np"] for i in idx]')
+            with patched((E, "read_dump", mut)):                                                             # a read_dump that takes the cache's tokens: the test above fails
+                os.makedirs(os.path.join(tmp, "out_m"))
+                try:
+                    cm = E.score(E.parse_args(["score", "--run", "j", "--live"] + base_args), runs, os.path.join(tmp, "out_m"))["rec"]
+                    assert any(cm["metrics"][k] != own[k] for k in E.KEYS), "mutant survived: the cache's tokens give the same numbers"
+                except AssertionError as e:
+                    assert "mutant survived" not in str(e), e
+            ld = json.load(open(E.live_diff(E.parse_args(["live-diff", "--run", "j", "--against", "h"] + base_args), runs, out)))
+            nv = sum(int(np.asarray(ds[i]["tokens_np"]["valid"]).sum()) for i in range(3))
+            assert os.path.exists(os.path.join(out, "j_token_live_diff_vs_h_n3.json")) and ld["frames"] == 3
+            assert ld["cells"] == dict(order_changed_share=1.0, set_changed_share=0.0) and ld["pos"]["common_valid_cells"] == nv and abs(ld["pos"]["median_abs_delta_m"] - np.sqrt(2)) < 1e-5 and ld["n_valid"]["delta_mean"] == 0.0, ld
+            lh = ld["labels"]["h"]
+            want = {k: sum(int(ds.c.f[k][i]) for i in range(3)) for k in ("n_pairs", "n_links", "n_gt", "n_gt_assigned", "n_valid")}
+            assert (lh["pos_pairs"], lh["gt_links"], lh["gt_coverage"], lh["n_valid_per_frame"]) == (want["n_pairs"], want["n_links"], want["n_gt_assigned"] / want["n_gt"], want["n_valid"] / 3), lh
+            must_fail(E.live_diff, E.parse_args(["live-diff", "--run", "j", "--against", "h"] + base_args), runs, out)          # never overwritten
+            # check_b: what ran must be what the run demands
+            def refused(name, why):
+                try:
+                    E.score(E.parse_args(["score", "--run", name, "--live"] + base_args), runs, out)
+                except AssertionError as e:
+                    assert why in str(e), (name, str(e))
+                else:
+                    raise RuntimeError(f"{name}: accepted although it must be refused ({why})")
+            fallback = _mutant(E.live_source, '    if own:\n        mb.load_state_dict(ck["b_state"])', '    if False:\n        mb.load_state_dict(ck["b_state"])')
+            joint(runs, "j2", trained)                                                                       # the joint run read with runs/e292_a_s0 (a fall-back of live_source)
+            joint(runs, "j3", {k: v.clone() for k, v in base.items()})                                       # a joint run whose node head did not move
+            for name, src_fn in (("j2", fallback), ("j3", real_source)):
+                with patched(*live(1.0, src_fn)):
+                    E.dump(E.parse_args(["dump", "--live", "--run", name, "--cpu"] + base_args), runs)
+            refused("j2", "did not run the run's own B'")
+            refused("j3", "ran the node head of runs/e292_a_s0")
+            joint(runs, "z", None, train_nodes=0)
+            shutil.copy(os.path.join(runs, "j", "token_val_live_n3.pkl"), os.path.join(runs, "z", "token_val_live_n3.pkl"))
+            d = pickle.load(open(os.path.join(runs, "z", "token_val_live_n3.pkl"), "rb"))
+            d["meta"]["run"] = "z"
+            pickle.dump(d, open(os.path.join(runs, "z", "token_val_live_n3.pkl"), "wb"))
+            refused("z", "did not run the node head of runs/e292_a_s0")                                       # a frozen-B' run read with a trained node head
+            shutil.copy(os.path.join(runs, "h", "token_val_n3.pkl"), os.path.join(runs, "j", "token_val_live_n3.pkl"))
+            refused("j", "not the dump of this read-out")                                                    # the cache dump under the live name: no fall-back to the cache tokens
+    print(f"live: same_tokens pairs a live read-out by frame only (two cache read-outs and other frames refused), pair_matrix, state_sha (order-free, prefix, dtype / shape / bytes), the refusals of --ref-cache, --bs and --drop; "
+          f"live_source (the joint run's b_state, runs/e292_a_s0 for a cache-trained run, train_nodes without b_state refused); the stub source with the cache's tokens: the live dump's 3 records, tokens_np and labels = the cache's, "
+          f"tokens_exact 3 of 3, score / anatomy / sweep --live = the cache read-outs (topo F1 {c1['rec']['metrics']['topo_F1']:.4f}, no g1), the parity read with diff 0; the joint run (pos + 1 m, reversed, B' at bs 2): tokens_exact 0 of 3, "
+          f"scored on its own tokens (topo F1 {cj['metrics']['topo_F1']:.4f}; the cache-token mutant caught), paired by frame, live-diff by hand (|delta pos| sqrt 2 over {nv} cells, every list reordered, no set change, the labels' counts of h "
+          "= the cache's); refused: a fall-back to runs/e292_a_s0 (live_source mutant), a node head that did not move, a frozen run with a trained head, the cache dump under the live name: ok")
+
+
 TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_decode_perclass, test_dump_roundtrip, test_writer_no_gt, test_oracle_hi, test_drop, test_controls, test_readout_dump, test_numbers, test_parity_timing, test_sweep, test_every, test_score_max,
-         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_anatomy, test_near_none, test_argmax_keep]
+         test_fixture, test_ctl_train, test_graphs, test_snapshot, test_ref_run, test_anatomy, test_near_none, test_argmax_keep, test_live]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
