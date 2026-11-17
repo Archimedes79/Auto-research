@@ -53,8 +53,6 @@ def cost(model, x=None):
                 continue
             pm += npar(mod) / 1e6
             mm += macs(f"{name}.jmodel.jm.{n_}")
-            for i in range(len(mod) if isinstance(mod, torch.nn.ModuleList) else 0):                    # a ModuleList is not called itself: its blocks are
-                pass
         out[k] = dict(params_m=pm, macs_g=mm)
     if getattr(jm, "attn", None) is not None:
         out["maps: attention (attn)"] = dict(params_m=npar(jm.attn) / 1e6, macs_g=macs(f"{name}.jmodel.jm.attn"))
@@ -139,4 +137,5 @@ if __name__ == "__main__":
     if bp:
         print("B's parameters by block (", a.base, "):", {k: round(v, 3) for k, v in bp.items()}, "M")
     if a.out:
-        json.dump(dict(blocks=res, b_params_m=bp), open(a.out, "w"), indent=1)
+        with open(a.out, "w") as fh:
+            json.dump(dict(blocks=res, b_params_m=bp), fh, indent=1)

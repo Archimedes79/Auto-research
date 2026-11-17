@@ -102,6 +102,37 @@ def test_oracle():
     assert abs(one["F1@1.0"] - QE.graph_numbers([rec["graph"][3]])["F1@1.0"]) < 1e-12
 
 
+def test_lean_scoring():
+    """lean=True (the token read-outs) = the same numbers as the full scorer where it computes them: graph numbers (without the section keys), node / assignment numbers, the junction
+    counts and the per-frame records; no tier numbers, no topo marbles, no lane GT loaded by graph_counts"""
+    same = lambda a, b: a.keys() == b.keys() and all(a[k] == b[k] or (a[k] != a[k] and b[k] != b[k]) for k in a)         # nan == nan
+
+    def deep(a, b):                                                   # exact equality of nested dicts / lists / arrays / numbers (nan == nan)
+        if isinstance(a, dict):
+            return isinstance(b, dict) and a.keys() == b.keys() and all(deep(a[k], b[k]) for k in a)
+        if isinstance(a, (list, tuple)):
+            return isinstance(b, (list, tuple)) and len(a) == len(b) and all(deep(x, y) for x, y in zip(a, b))
+        a, b = np.asarray(a), np.asarray(b)
+        return a.shape == b.shape and bool(np.all((a == b) | (np.isnan(a.astype(float)) & np.isnan(b.astype(float)))))
+
+    fr, preds = frames()
+    shifted_ = shifted(preds, 1.5)
+    for ps in (preds, shifted_):                                      # a perfect and a degraded prediction
+        full, rf = score(ps, fr, records=True)
+        lean, rl = score(ps, fr, records=True, lean=True)
+        sec = ("pieces_per_gt_piece", "id_switches_per_100m")
+        assert same({k: v for k, v in full["graph"].items() if k not in sec}, lean["graph"]), "the lean graph numbers are the full ones"
+        assert same(lean["nodes"], full["nodes"]) and same(lean["assign"], full["assign"]) and lean["lane_missing"] == full["lane_missing"]
+        assert all(np.array_equal(a["lane"]["junc"], b["lane"]["junc"]) for a, b in zip(rf["graph"], rl["graph"])), "the junction counts are the same"
+        assert all(deep(a[k], b[k]) for a, b in zip(rf["graph"], rl["graph"]) for k in ("rec", "topo", "dp")) and deep(rf["node"], rl["node"]) and deep(rf["assign"], rl["assign"])
+        assert all(not b["lane"]["marb"].any() and "sec" not in b and "tier" not in b for b in rl["graph"]), "lean computes no marbles, no section and no tier counts"
+        assert lean["tier"] == {}, "no tier numbers"
+    f0 = fr[0]
+    f0._lane = f0._ref = None
+    QE.graph_counts(QE.readout(preds[0])[0], f0, lean=True)
+    assert f0._ref is None, "a lean graph_counts does not load the lane GT"
+
+
 # ------------------------------------------------------------------------------------------------------------------------------ degradations
 def shifted(preds, d):
     out = []
@@ -363,7 +394,7 @@ def test_reproduce_lane_suite_run():
     assert abs(out["Q"] - ref["Q"]) < 1e-9 and abs(out["F1@1.0"] - ref["F1@1.0"]) < 1e-9
 
 
-CHECKS = [("frames, tokens and the store", test_frames_tokens_and_store), ("oracle through the scorer", test_oracle), ("readout structure", test_readout_structure), ("nodes shifted", test_shift_nodes),
+CHECKS = [("frames, tokens and the store", test_frames_tokens_and_store), ("oracle through the scorer", test_oracle), ("lean scoring = full scoring", test_lean_scoring), ("readout structure", test_readout_structure), ("nodes shifted", test_shift_nodes),
           ("Hermite path, flags, directions", test_hermite_path_flags_and_directions),
           ("nodes dropped, links cut", test_drop_nodes_and_cut_links), ("sections swapped / relabelled", test_sections_swap_and_relabel),
           ("assignment degraded", test_assignment_degradations), ("empty prediction", test_empty_prediction), ("paired bootstrap", test_paired_bootstrap),

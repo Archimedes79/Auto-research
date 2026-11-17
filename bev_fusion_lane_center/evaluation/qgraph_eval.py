@@ -452,14 +452,18 @@ def section_counts(meta, ref):
     return np.array([distinct, switches, len(by_gt), ref.length], float)
 
 
-def graph_counts(graph, frame):
+def graph_counts(graph, frame, lean=False):
     """the additive counts of one frame: rec (bootstrap.frame_records: Q, S, J, F1, lanes found ... as `lane_suite.LcrMetric`), topo (topo_metrics.frame_record: as `LcrTopoMetric`),
     lane (lane_task topo_counts: junctions, as `LaneTopoMetric`), dp (Douglas-Peucker vertices and length of the polylines, for vert100_dp), sec (section counts; only for a readout graph
-    and a frame with a stored lane GT)"""
+    and a frame with a stored lane GT). lean=True (the token read-outs: they report the graph numbers, the junction counts and the node / assignment counts, nothing of the tier and
+    section numbers, and the topo marbles of `lane` are not read): computes only rec, topo, dp and the junction counts of lane, loads no lane GT (every number it does compute is
+    the same as with lean=False)"""
     raw = to_raw(graph)
     gt = getattr(frame, "gt", frame)
     c = dict(rec=SB.frame_records([raw], [gt])[0], topo=TM.frame_record(raw, gt), dp=np.array(SB._vstats(raw, False)),
-             lane=MS.topo_counts(LaneGraph.of(raw), LaneGraph.of({"pts": gt["pts"], "edges": gt.get("edges")}), box=CFG.box, **CFG.topo))
+             lane=MS.topo_counts(LaneGraph.of(raw), LaneGraph.of({"pts": gt["pts"], "edges": gt.get("edges")}), box=CFG.box, marbles=not lean, **CFG.topo))
+    if lean:
+        return c
     meta = getattr(graph, "meta", None)
     if meta and "nodes" in meta and hasattr(frame, "ref"):
         try:
@@ -497,20 +501,21 @@ def graph_metrics(graph, frame):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ frames
-def score_frames(preds, frames, thr_e=0.5, thr_link=0.5, records=False):
+def score_frames(preds, frames, thr_e=0.5, thr_link=0.5, records=False, lean=False):
     """pooled numbers over frames: preds[i] is a prediction dict (qformat) or a delivered raw graph dict (pts, edges: then only the graph numbers). Frames whose lane GT is not stored
-    count for the graph numbers but not for the node / assignment numbers (`lane_missing`). records=True also returns the per-frame counts (for `paired`)"""
+    count for the graph numbers but not for the node / assignment numbers (`lane_missing`). records=True also returns the per-frame counts (for `paired`). lean=True: see `graph_counts`
+    (no tier numbers, no section numbers, no topo marbles: the `graph` numbers other than pieces_per_gt_piece / id_switches_per_100m and the node / assignment numbers are the same)"""
     rec = dict(graph=[], node=[], assign=[])
     miss = 0
     for p, f in zip(preds, frames):
         cached = getattr(f, "_ref", None) is not None                        # a frame loaded before keeps its lane GT; one loaded here lets it go (873 of them are large)
         if "pts" in p:
-            rec["graph"].append(graph_counts(p, f))
+            rec["graph"].append(graph_counts(p, f, lean))
             if not cached:                                                       # graph_counts now loads the lane GT for the tier counts: let it go again
                 f._lane = f._ref = None
             continue
         graph, _ = readout(p, thr_e, thr_link)
-        rec["graph"].append(graph_counts(graph, f))
+        rec["graph"].append(graph_counts(graph, f, lean))
         try:
             ref = f.ref()
         except FileNotFoundError:

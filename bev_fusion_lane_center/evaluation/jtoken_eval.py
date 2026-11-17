@@ -49,6 +49,7 @@ reference's cache dump (the parity read: the topo / junction F1 difference in `p
 Ensemble (E379 arm e2, promoted from temp/e379/ens_step0.py): one frame per frame from the cache dumps of two runs of the same read-out (`mean_frame`), decoded and scored as one head's dump.
 """
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -201,10 +202,7 @@ def run_head(m, b, dev):
 
 def links_of(link, p, longm, scale):
     """the links of one frame from the boolean (K, K) link matrix of a decode, the probabilities, the chord class (> 8 m) and the head's handle scales (K, K, 2): the head's scales for the long links, 1/3 for the short ones"""
-    src, dst = np.nonzero(link)
-    lg = longm[src, dst]
-    ab = np.where(lg[:, None], scale[src, dst], THIRD)
-    return dict(src=src.astype(np.int16), dst=dst.astype(np.int16), p=p[src, dst].astype(np.float32), long=lg, a=ab[:, 0].astype(np.float32), b=ab[:, 1].astype(np.float32))
+    return cand_of(*np.nonzero(link), p, longm, scale)
 
 
 def cand_of(cs, cd, p, longm, scale):
@@ -535,6 +533,12 @@ def pred_of_dump(d, spec, sec0):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ scoring
+@functools.lru_cache(maxsize=1)
+def _train_graph_gt():
+    """the old graph GT of the 8414 TRAIN frames (a 97 MB pickle: loaded once per process, `read_dump` of a TRAIN dump is called two or three times by `ensemble` / `--ref-run`)"""
+    return pickle.load(open(f"{QE.LS.B123}/graph_gt_train.pkl", "rb"))
+
+
 def frames_of(split, ds):
     """the scorer's Frame of every cache frame, in the cache order (VAL = `qgraph_eval.val_frames()`; TRAIN from the train files of the same layout)"""
     if split == "val":
@@ -542,7 +546,7 @@ def frames_of(split, ds):
     else:
         tokens = json.load(open(f"{QE.LS.B123}/feats/train_tokens.json"))
         scene = np.load(f"{QE.LS.B123}/poses_train.npz")["scene"]
-        gt = pickle.load(open(f"{QE.LS.B123}/graph_gt_train.pkl", "rb"))
+        gt = _train_graph_gt()
         fr = [QE.Frame(k, int(r), tokens[r], int(scene[r]), gt[r]) for k, r in enumerate(ds.rows)]
     assert [f.token for f in fr] == list(ds.tokens), "the scorer's frames are not the frames of the cache, in order"
     return fr
@@ -555,7 +559,7 @@ def score_preds(preds, frames, log=print):
     with JT.lattice(LATTICE):
         JT.check_lattice(LATTICE)
         for a in range(0, len(frames), 100):
-            out, r = QE.score_frames(preds[a:a + 100], frames[a:a + 100], records=True)
+            out, r = QE.score_frames(preds[a:a + 100], frames[a:a + 100], records=True, lean=True)       # lean: no tier / section numbers, no topo marbles (nothing below reads them)
             miss += out["lane_missing"]
             for k in rec:
                 rec[k] += r[k]
@@ -1494,8 +1498,7 @@ def graphs(a, runs=RUNS):
         pred = frame_prediction(t, f, "rec", a.keep_thr)
         graph, _ = QE.readout(pred, 0.5, 0.5)
         with JT.lattice(LATTICE):
-            topo.append(QE.graph_counts(graph, fm)["topo"])
-        fm._lane = fm._ref = None
+            topo.append(QE.graph_counts(graph, fm, lean=True)["topo"])                                # lean: loads no lane GT (frame_record below loads it once)
         base, mans = frame_record(fm)
         recs.append((base, sys_record(QE.to_raw(graph), mans, fm)))
         fm._lane = fm._ref = None

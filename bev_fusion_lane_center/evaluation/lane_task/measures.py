@@ -170,15 +170,16 @@ def _junctions(xy: np.ndarray, ed: np.ndarray) -> np.ndarray:
 
 
 def topo_counts(pred: LaneGraph, gt: LaneGraph, ds: float = 1.0, seed_step: float = 5.0, L: float = 30.0, snap: float = 2.0,
-                r: float = 2.0, j_tol: float = 3.0, box=None) -> Counts:
-    """TOPO marbles and junctions of one frame. Directed when both graphs are (travel direction respected), else undirected"""
+                r: float = 2.0, j_tol: float = 3.0, box=None, marbles: bool = True) -> Counts:
+    """TOPO marbles and junctions of one frame. Directed when both graphs are (travel direction respected), else undirected.
+    marbles=False skips the marbles (about 3/4 of the time: `marb` stays zero, `junc` is the same): for callers that only read the junction numbers"""
     gx, ge = gt.point_graph(ds)
     px, pe = pred.point_graph(ds)
     undirected = not (gt.directed and pred.directed)
     if undirected:
         ge, pe = _symmetric(ge), _symmetric(pe)
     out = {"marb": np.zeros(4), "junc": np.zeros(3)}
-    sd = gt.dense(seed_step, box)
+    sd = gt.dense(seed_step, box) if marbles else ()
     if len(sd) and len(gx):
         seeds = np.unique(nn_index(sd.xy, gx)[1])
         Rg = _reach(gx, ge, seeds, L)
