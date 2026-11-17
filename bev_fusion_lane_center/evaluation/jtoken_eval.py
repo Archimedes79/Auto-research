@@ -9,6 +9,7 @@
     wsl bash tools/env/_py14.sh jtoken_eval.py fixture --seed S --split train|val [--every 3] [--lam 12 --mu 10.4]                     # CPU, E369: the untrained --prior rule head against c-rule -> runs/eval/e369_fix/fix_s<S>_<split>.._<UTC>.json, PASS / FAIL
     wsl bash tools/env/_py14.sh jtoken_eval.py fixture --seed S --run R --split train --every 3                                        # CPU, E370 stage A: the run's head against c-rule (per class, in the gate) -> runs/R/token_fixture_.._<UTC>.json
     wsl bash tools/env/_py14.sh jtoken_eval.py graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
+    wsl bash tools/env/_py14.sh jtoken_eval.py dump|score|sweep|graphs|fixture --run R --model model_step<N>.pt ...                       # a snapshot of `jtoken_train --snapshots` instead of model.pt: every file name carries _step<N>
     wsl bash tools/env/_py14.sh jtoken_eval.py check-layer1 --seed S [--dump PATH]                                                       # CPU: this scorer fed B's stored dump reproduces runs/eval/e324s_val/card_s<S>.json (PASS / FAIL)
     wsl bash tools/env/_py14.sh jtoken_eval.py check-parity --run R --seed S [--b-run runs/e292_a_s<S>] [--n 20]                         # CPU: the head from the cache tokens (fp16 tok) against tokens recomputed live from B' (fp32)
     wsl bash tools/env/_py14.sh jtoken_eval.py timing --run R [--b-run runs/e292_a_s<S>] [--K 384] [--cpu]                               # parameters, GMACs, ms (GPU only when idle: < 2 GB used and no run.py job)
@@ -29,6 +30,7 @@ import hashlib
 import json
 import os
 import pickle
+import re
 import subprocess
 import sys
 import time
@@ -117,6 +119,31 @@ def sample(n, split, every=1):
 def every_sfx(a):
     """'' or _every<N> in the file names of a read-out that takes every N-th frame of the sample"""
     return f"_every{a.every}" if a.every > 1 else ""
+
+
+def model_step(name):
+    """None for model.pt, N for a snapshot model_step<N>.pt of `jtoken_train --snapshots`; any other name is refused"""
+    if name == "model.pt":
+        return None
+    m = re.fullmatch(r"model_step(\d+)\.pt", name)
+    assert m, f"--model {name}: model.pt or a snapshot model_step<N>.pt"
+    return int(m.group(1))
+
+
+def model_sfx(name):
+    """'' or _step<N>: the part of every read-out file name that says which weights were read"""
+    n = model_step(name)
+    return "" if n is None else f"_step{n}"
+
+
+def dump_path(a, runs, n=0):
+    """the dump of a read-out: runs/R/token[_step<N>]_<split>[_every<E>][_drop..][_n<n>].pkl (n: the frames of a `--max` dump)"""
+    return os.path.join(runs, a.run, f"token{model_sfx(a.model)}_{a.split}{every_sfx(a)}{JV.suffix(2.5, a.drop, a.drop_seed)}{f'_n{n}' if n else ''}.pkl")
+
+
+def card_sfx(a):
+    """the part of a card or sweep name after its decode: [_step<N>][_<split> unless val][_every<E>][_drop..]"""
+    return model_sfx(a.model) + ("" if a.split == "val" else f"_{a.split}") + every_sfx(a) + JV.suffix(2.5, a.drop, a.drop_seed)
 
 
 def batches(ds, idx, bs=8, workers=0):
@@ -399,17 +426,19 @@ def dump(a, runs=RUNS):
     if dev == "cuda":
         import gpu_gate
         gpu_gate.wait_for_room(who=f"jtoken_eval dump {a.run}")
-    m, args = JKT.load_model(a.run, dev, runs)
+    m, args = JKT.load_model(a.run, dev, runs, name=a.model)
     assert args["seed"] == a.seed, f"--seed {a.seed} does not match the run (seed {args['seed']})"
     kw = cache_kw(args)
     ds = open_cache(a.split, kw["seed"], kw["ident"], kw["K"], kw.get("cache"))
     idx = sample(len(ds), a.split, a.every)[: a.max or None]
-    path = os.path.join(runs, a.run, f"token_{a.split}{every_sfx(a)}{JV.suffix(2.5, a.drop, a.drop_seed)}{f'_n{len(idx)}' if a.max else ''}.pkl")
+    path = dump_path(a, runs, len(idx) if a.max else 0)
     assert not os.path.exists(path), f"a stored dump is never overwritten: {path}"
     frames = []
     for b in batches(ds, idx, workers=0 if a.cpu else 2):
         frames += batch_dump(run_head(m, apply_drop(b, a.drop, a.drop_seed), dev), b)
-    meta = dict(run=a.run, seed=a.seed, split=a.split, drop=a.drop, drop_seed=a.drop_seed, idx=idx.tolist(), every=a.every, tokens=[ds.tokens[i] for i in idx], K=ds.K, ident=kw["ident"], cache=ds.dir, steps=args.get("steps"))
+    step = model_step(a.model)
+    meta = dict(run=a.run, seed=a.seed, split=a.split, drop=a.drop, drop_seed=a.drop_seed, idx=idx.tolist(), every=a.every, tokens=[ds.tokens[i] for i in idx], K=ds.K, ident=kw["ident"], cache=ds.dir,
+                steps=args.get("steps") if step is None else step, model=a.model)
     with open(path, "wb") as fh:
         pickle.dump(dict(meta=meta, frames=frames), fh)
     kept = np.mean([f["keep"].sum() for f in frames])
@@ -423,18 +452,18 @@ def variant_suffix(a):
 
 
 def read_dump(a, runs, n_max):
-    """the dump of this read-out with everything the scorer needs, checked against the cache -> dict(ck, args, kw, ds, idx, meta, fr, toks, valid, frames, path)"""
-    ck = torch.load(os.path.join(runs, a.run, "model.pt"), map_location="cpu", weights_only=False)
+    """the dump of this read-out (of the weights `a.model`; a dump of before --model counts as model.pt's) with everything the scorer needs, checked against the cache -> dict(ck, args, kw, ds, idx, meta, fr, toks, valid, frames, path)"""
+    ck = torch.load(os.path.join(runs, a.run, a.model), map_location="cpu", weights_only=False)
     args = ck["args"]
     assert args["seed"] == a.seed, f"--seed {a.seed} does not match the run (seed {args['seed']})"
-    nsfx = f"_n{n_max}" if n_max else ""
-    path = os.path.join(runs, a.run, f"token_{a.split}{every_sfx(a)}{JV.suffix(2.5, a.drop, a.drop_seed)}{nsfx}.pkl")
+    path = dump_path(a, runs, n_max)
     d = pickle.load(open(path, "rb"))
     meta, fr = d["meta"], d["frames"]
     kw = cache_kw(args)
     ds = open_cache(a.split, kw["seed"], kw["ident"], kw["K"], kw.get("cache"))
     idx = sample(len(ds), a.split, a.every)[: n_max or None]
-    assert meta["run"] == a.run and meta.get("every", 1) == a.every and meta["idx"] == idx.tolist() and meta["drop"] == a.drop and meta["drop_seed"] == a.drop_seed and [f["token"] for f in fr] == [ds.tokens[i] for i in idx], "the dump is not the dump of this read-out (run, frames, drop)"
+    assert meta["run"] == a.run and meta.get("model", "model.pt") == a.model and meta.get("every", 1) == a.every and meta["idx"] == idx.tolist() and meta["drop"] == a.drop and meta["drop_seed"] == a.drop_seed and [f["token"] for f in fr] == [ds.tokens[i] for i in idx], \
+        "the dump is not the dump of this read-out (run, model, frames, drop)"
     toks = [ds[int(i)]["tokens_np"] for i in idx]
     assert all(np.array_equal(f["cell"], t["cell"]) for f, t in zip(fr, toks)), "the dump's tokens are not the cache's (a stale dump or cache)"
     valid = [np.asarray(t["valid"], bool) & (JV.keep_nodes(f["token"], ds.K, a.drop, a.drop_seed) if a.drop > 0 else True) for t, f in zip(toks, fr)]     # the tokens the head saw
@@ -449,7 +478,7 @@ def score(a, runs=RUNS, out_dir=None):
     (`paired_vs_record`; its numbers against the stored record card are reported, not asserted: a re-dump may differ); the defaults are the decode of record, both decodes"""
     n_max, vsfx = a.max, variant_suffix(a)
     out_dir = (out_dir or os.path.join(SCRATCH, "out")) if n_max else None
-    sfx = ("" if a.split == "val" else f"_{a.split}") + every_sfx(a) + JV.suffix(2.5, a.drop, a.drop_seed)
+    sfx = card_sfx(a)
     nsfx = f"_n{n_max}" if n_max else ""
     decs = ("rec",) if vsfx else DECODES
     card_path = lambda d, v: os.path.join(out_dir, f"{a.run}_token_card_{d}{v}{sfx}{nsfx}.json") if n_max else os.path.join(runs, a.run, f"token_card_{d}{v}{sfx}.json")  # noqa: E731
@@ -495,7 +524,7 @@ def score(a, runs=RUNS, out_dir=None):
             extra["g1_topo_F1"] = None if ctl_hi is None or ctl_rule is None else g1(res["graph"]["topo_F1"], ctl_hi, ctl_rule)
             if extra["g1_topo_F1"] is not None:
                 extra["g1_note"] = G1_NOTE
-        out[dec] = write_card(paths[dec], f"{a.run}_token_{dec}{vsfx}{sfx}{nsfx}", res, len(frames), a.split, run=a.run, seed=a.seed, decode=dec, drop=a.drop, drop_seed=a.drop_seed, steps=ck.get("steps"), head_params=params,
+        out[dec] = write_card(paths[dec], f"{a.run}_token_{dec}{vsfx}{sfx}{nsfx}", res, len(frames), a.split, run=a.run, model=a.model, seed=a.seed, decode=dec, drop=a.drop, drop_seed=a.drop_seed, steps=ck.get("steps"), head_params=params,
                               K=ds.K, ident=kw["ident"], decode_rule="rec: p >= 0.3 and p >= p(none), both ends kept (p_none < 0.5); argmax: one link per source and class" if not vsfx else "the variant of `decode_variant`", **extra)
     return out
 
@@ -505,10 +534,10 @@ SWEEP_KEYS = ("topo_F1", "topo_P", "topo_R", "F1@1.0", "lanes_found", "dup_frac"
 
 
 def sweep(a, runs=RUNS, out_dir=None):
-    """the decode variants of one dump on its read-out frames: link threshold {0.3, 0.2, 0.1, 0.05} x keep threshold {0.5, 0.6, 0.7} x none gate {on, off} -> one table runs/R/token_sweep_<split>[_drop..].json (--max N: temp/e365/out/..._n<N>.json),
+    """the decode variants of one dump on its read-out frames: link threshold {0.3, 0.2, 0.1, 0.05} x keep threshold {0.5, 0.6, 0.7} x none gate {on, off} -> one table runs/R/token_sweep[_step<N>]_<split>[_drop..].json (--max N: temp/e365/out/..._n<N>.json),
     never overwritten; the cell (0.3, 0.5, on) is the decode of record. For choosing a decode on TRAIN frames (the head was trained on them: the table says what the output could deliver, not what it does on VAL)"""
     n_max = a.max
-    sfx = ("" if a.split == "val" else f"_{a.split}") + every_sfx(a) + JV.suffix(2.5, a.drop, a.drop_seed)
+    sfx = card_sfx(a)
     path = os.path.join((out_dir or os.path.join(SCRATCH, "out")) if n_max else os.path.join(runs, a.run), f"{a.run + '_' if n_max else ''}token_sweep{sfx}{f'_n{n_max}' if n_max else ''}.json")
     assert not os.path.exists(path), f"a stored table is never overwritten: {path}"
     r = read_dump(a, runs, n_max)
@@ -522,7 +551,7 @@ def sweep(a, runs=RUNS, out_dir=None):
                 rows.append(dict(link_thr=lt, keep_thr=kt, none_gate=gate, record=(lt, kt, gate) == (LINK_THR, KEEP_THR, True), frames=len(fr), kept_nodes_per_frame=float(np.mean([f["keep"].sum() for f in fr])),
                                  links_per_frame=float(np.mean([len(f["rec"]["src"]) for f in fr])), **{k: res["graph"][k] for k in SWEEP_KEYS}))
                 print(f"link {lt:<5g} keep {kt:<4g} gate {'on ' if gate else 'off'}  " + "  ".join(f"{k} {rows[-1][k]:.4f}" for k in SWEEP_KEYS) + f"  links/frame {rows[-1]['links_per_frame']:.1f}", flush=True)
-    JV.write_json(path, _jsonable(dict(run=a.run, seed=a.seed, split=a.split, every=a.every, max=a.max, drop=a.drop, drop_seed=a.drop_seed, steps=r["ck"].get("steps"), dump=_file_id(r["path"]), frames=len(r["frames"]), rows=rows, K=r["ds"].K,
+    JV.write_json(path, _jsonable(dict(run=a.run, model=a.model, seed=a.seed, split=a.split, every=a.every, max=a.max, drop=a.drop, drop_seed=a.drop_seed, steps=r["ck"].get("steps"), dump=_file_id(r["path"]), frames=len(r["frames"]), rows=rows, K=r["ds"].K,
                                        note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
     print(f"written {os.path.relpath(path, ROOT)}")
     return path
@@ -628,10 +657,11 @@ def fixture_verdict(c, topo, split, mode):
 def fixture(a, runs=RUNS, out_dir=None):
     """E369 (no --run): the untrained `--prior rule` head (built after `trainer.seed_all(seed)` as the trainer builds it, step 0, lam / mu as given) or E370 stage A (--run R: the run's head) on the frames of the read-out
     (`sample`, --every, --max), against c-rule on the same frames: links present / extra, kept-node differences, the rule links outside the head's gate, the GT loss of the head on these frames (`jtoken_loss`, eval mode), topo F1 of the
-    head, of c-rule and of c-rule restricted to the gate (the standard scorer) -> PASS / FAIL by FIX_E369 / FIX_E370; a stamped json in runs/eval/e369_fix/ (no --run) or runs/R/ (token_fixture_...), --max: temp/e365/out/. 0 / 1"""
+    head, of c-rule and of c-rule restricted to the gate (the standard scorer) -> PASS / FAIL by FIX_E369 / FIX_E370; a stamped json in runs/eval/e369_fix/ (no --run) or runs/R/ (token_fixture[_step<N>]_..., --model), --max: temp/e365/out/. 0 / 1"""
     mode = "e370a" if a.run else "e369"
+    assert a.run or a.model == "model.pt", "--model reads a snapshot of a run: give --run"
     if a.run:
-        m, args = JKT.load_model(a.run, "cpu", runs)
+        m, args = JKT.load_model(a.run, "cpu", runs, name=a.model)
         assert args["seed"] == a.seed, f"--seed {a.seed} does not match the run (seed {args['seed']})"
         kw = cache_kw(args)
     else:
@@ -662,12 +692,12 @@ def fixture(a, runs=RUNS, out_dir=None):
     stored = read_ctl("rule", kw["ident"], a.seed, ds.K) if a.split == "val" and a.every == 1 and not a.max else None
     doc = dict(mode=mode, ok=ok, rule=FIX_E369 if mode == "e369" else FIX_E370, numbers=num, counts=c, topo_F1=topo, graph={k: {q: v[q] for q in KEYS} for k, v in res.items()},
                gt_loss=sum(l_ * n_ for l_, n_ in losses) / max(len(toks), 1), split=a.split, every=a.every, max=a.max, frames=len(frames), K=ds.K, ident=kw["ident"], seed=a.seed, cache=ds.dir,
-               run=a.run, steps=int(m.step), lam=float(m.lam) if hasattr(m, "lam") else None, mu=float(m.mu) if hasattr(m, "mu") else None, rule_card_topo_F1=stored, rule_vs_card=None if stored is None else topo["rule"] - stored,
+               run=a.run, model=a.model if a.run else None, steps=int(m.step), lam=float(m.lam) if hasattr(m, "lam") else None, mu=float(m.mu) if hasattr(m, "mu") else None, rule_card_topo_F1=stored, rule_vs_card=None if stored is None else topo["rule"] - stored,
                note="links of the decode of record against c-rule (`rule_frame`) per frame; gt_loss = jtoken_loss with the GT targets of the cache on these frames, eval mode, the mean over frames of the batch means")
     tag = f"{a.split}{f'_every{a.every}' if a.every > 1 else ''}{f'_n{a.max}' if a.max else ''}"
     folder = (out_dir or os.path.join(SCRATCH, "out")) if a.max else (os.path.join(runs, a.run) if a.run else FIX_DIR)
     os.makedirs(folder, exist_ok=True)
-    path = _write_stamped(folder, (f"token_fixture_{tag}" if a.run else f"fix_s{a.seed}_{tag}"), doc)
+    path = _write_stamped(folder, (f"token_fixture{model_sfx(a.model)}_{tag}" if a.run else f"fix_s{a.seed}_{tag}"), doc)
     print(json.dumps(dict(numbers=num, counts=c, topo_F1=topo, gt_loss=doc["gt_loss"], rule_vs_card=doc["rule_vs_card"]), indent=1))
     print(f"{'PASS' if ok else 'FAIL'}: fixture {mode}, seed {a.seed}, {a.split} ({len(frames)} frames)" + (f", run {a.run}" if a.run else f", lam {doc['lam']:g} mu {doc['mu']:g}") + f"; written {os.path.relpath(path, ROOT)}")
     return int(not ok)
@@ -707,9 +737,11 @@ def check_graphs(doc, frames):
 
 
 def graphs(a, runs=RUNS):
-    """the DELIVERED graphs of the run's VAL dump (the decode of record, or the variant of --link-thr / --keep-thr / --no-none-gate) in the schema of temp/qual_report_1115/pass1.pkl, as system `--name`: a new file, or one more system
-    in an existing --out (its frames must be the VAL frames in order; a name it holds is refused); per frame the topo F1 / P / R (`qgraph_eval.graph_counts` inside the 2 m lattice block, as the cards) into perframe_table.json next to
-    --out (merged the same way). The pooled topo F1 is compared with the stored card of the same decode (a difference goes into `mismatch`). Writes only derived data, atomically; never overwrites a system"""
+    """the DELIVERED graphs of the run's VAL dump (of --model; the decode of record, or the variant of --link-thr / --keep-thr / --no-none-gate) in the schema of temp/qual_report_1115/pass1.pkl, as system `--name`: a new file, or one
+    more system in an existing --out (its frames must be the VAL frames in order); per frame the topo F1 / P / R (`qgraph_eval.graph_counts` inside the 2 m lattice block, as the cards) into perframe_table.json next to --out (merged
+    the same way). The pooled topo F1 is compared with the stored card of the same model and decode: a difference goes into `mismatch` as ('pooled_topo_F1', name, pooled, card), one pooled entry per system (pass1's entries are per
+    frame). Writes only derived data: both files to temp names, then the table renamed first and the pickle last, so a name in the pickle is a finished write (or a system of another tool) and is refused, never overwritten;
+    a name in the table only is the rest of an interrupted write and is written again"""
     TM = QE.TM
     out_path = _abs(a.out)
     table_path = os.path.join(os.path.dirname(out_path), "perframe_table.json")
@@ -721,7 +753,7 @@ def graphs(a, runs=RUNS):
     if doc is not None:
         check_graphs(doc, frames)
         assert a.name not in doc["frames"][0]["sys"], f"{out_path} already holds the system {a.name}: never overwritten"
-    assert tab is None or (a.name not in tab["sys"] and tab["tokens"] == [f.token for f in frames]), f"{table_path}: holds {a.name} or other frames"
+    assert tab is None or tab["tokens"] == [f.token for f in frames], f"{table_path}: other frames"
     fr = r["fr"]
     if vsfx:
         check_record(fr, r["valid"])
@@ -739,7 +771,7 @@ def graphs(a, runs=RUNS):
         if (k + 1) % 100 == 0:
             print(f"   {k + 1}/{len(frames)} frames", flush=True)
     pooled = TM.pooled(topo)["topo_F1"]
-    card = os.path.join(runs, a.run, f"token_card_rec{vsfx}.json")
+    card = os.path.join(runs, a.run, f"token_card_rec{vsfx}{card_sfx(a)}.json")
     ref = json.load(open(card))["metrics"]["topo_F1"] if os.path.exists(card) and not a.max else None
     if doc is None:
         sys.path.append(os.path.join(ROOT, "tools", "viz"))
@@ -757,11 +789,13 @@ def graphs(a, runs=RUNS):
     check_graphs(doc, frames)
     per = [TM.pooled([x]) for x in topo]
     tab = tab or dict(tokens=[f.token for f in frames], rows=[f.row for f in frames], scenes=[f.scene for f in frames], sys={})
-    tab["sys"][a.name] = dict(run=a.run, seed=a.seed, decode="rec" + vsfx, dump=_file_id(r["path"]), pooled_topo_F1=pooled, card_topo_F1=ref,
+    tab["sys"][a.name] = dict(run=a.run, model=a.model, seed=a.seed, decode="rec" + vsfx, dump=_file_id(r["path"]), pooled_topo_F1=pooled, card_topo_F1=ref,
                               topo_F1=[x["topo_F1"] for x in per], topo_P=[x["topo_P"] for x in per], topo_R=[x["topo_R"] for x in per])
-    for path, write in ((out_path, lambda fh: pickle.dump(doc, fh)), (table_path, lambda fh: fh.write(json.dumps(_jsonable(tab)).encode()))):
+    files = ((table_path, lambda fh: fh.write(json.dumps(_jsonable(tab)).encode())), (out_path, lambda fh: pickle.dump(doc, fh)))      # the table first, the pickle last
+    for path, write in files:
         with open(path + ".tmp", "wb") as fh:
             write(fh)
+    for path, _ in files:
         os.replace(path + ".tmp", path)
     print(f"{a.name}: {len(frames)} frames, pooled topo F1 {pooled:.4f} (stored card {ref}), maneuvers realised {sum(s['man_ok'] for _, s in recs)} of {sum(s['man_n'] for _, s in recs)}; written {out_path} and {table_path}")
     return 0
@@ -955,9 +989,11 @@ def timing(a, runs=RUNS):
 def parse_args(argv=None):
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
+    model_arg = lambda s: s.add_argument("--model", default="model.pt", help="the weights of the run: model.pt or a snapshot model_step<N>.pt (`jtoken_train --snapshots`); the file names carry _step<N>")  # noqa: E731
     for name in ("dump", "score", "sweep"):
         s = sub.add_parser(name)
         s.add_argument("--run", required=True)
+        model_arg(s)
         s.add_argument("--seed", type=int, required=True)
         s.add_argument("--split", choices=("val", "train"), **({"required": True} if name == "sweep" else {"default": "val"}))
         s.add_argument("--drop", type=float, default=0.0, help="the degraded read-out: the share of the tokens removed (0.17)")
@@ -985,6 +1021,7 @@ def parse_args(argv=None):
     s = sub.add_parser("fixture")
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--run", default=None, help="E370 stage A: the run's head (else E369: the untrained --prior rule head of the seed)")
+    model_arg(s)
     s.add_argument("--ident", default="e292_a", choices=("e292_a", "e273_p"), help="the cache of the untrained head (a run uses its own)")
     s.add_argument("--split", required=True, choices=("val", "train"))
     s.add_argument("--every", type=int, default=1)
@@ -993,6 +1030,7 @@ def parse_args(argv=None):
     s.add_argument("--mu", type=float, default=JK.MU)
     s = sub.add_parser("graphs")
     s.add_argument("--run", required=True)
+    model_arg(s)
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--name", required=True, help="the system name in the file")
     s.add_argument("--out", required=True, help="the graphs pickle (pass1 schema; an existing one gets the system added); perframe_table.json goes next to it")
@@ -1018,6 +1056,7 @@ def parse_args(argv=None):
     s.add_argument("--cpu", action="store_true")
     a = ap.parse_args(argv)
     assert getattr(a, "every", 1) >= 1, f"--every {a.every}: at least 1"
+    model_step(getattr(a, "model", "model.pt"))                                         # refuses another name before anything is loaded
     return a
 
 
