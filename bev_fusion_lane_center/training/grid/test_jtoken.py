@@ -4,12 +4,13 @@
 
 likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT successors (one of them with `ylong` against the token
 chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over
-the sources, no valid mask; the none slot trains the empty sources), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination, argmax;
+the sources, no valid mask; the none slot trains the empty sources), pos_loss (E376: -log sum / -log max over G(i) by hand with duplicates and a fork, one member = the same loss, the max raises one member; textual
+mutants), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination, argmax;
 mutants: other thresholds / ends / no valid mask), head (shapes, every parameter gets gradient, the gate and the chord classes against an independent distance, order and padding invariance with a padding mutant),
 key_bias (the head's own p_none gets gradient from layer 2 on after the switch and not before; the step mirror survives load_state_dict; no gradient reaches the cached inputs), writer_free (the forward reads no GT
 key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches, kill, resume, another recipe refused, no loader
-import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none),
-prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
+import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none), pos_loss_trainer (E376:
+--pos-loss sum = the champion's 20 smoke steps bit for bit, max differs), prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
 read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
 head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 """
@@ -98,15 +99,17 @@ def _with_logp(out, cand=None):
     return dict(out, cand=c, logp=JK.wiring_logp(out["z"], out["zn"], c))
 
 
-def _hand_loss(f, z, zn, t1, t3, w=1.0):
-    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
+def _hand_loss(f, z, zn, t1, t3, w=1.0, pos="sum"):
+    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights); pos = the likelihood of a source with
+    GT successors, -log sum ('sum') or -log max ('max') of p over G(i). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
     res = []
     for c, cs in enumerate((f["short"], f["long"])):
         rows = []
         for i, js in cs.items():
             G = [j for a, j in f["gt"] if a == i and j in js]
             den = lse(*[z[c][i][j] for j in js], zn[c][i])
-            rows.append(-(lse(*[z[c][i][j] for j in G]) - den) if G else -w * (zn[c][i] - den))
+            zg = [z[c][i][j] for j in G]
+            rows.append(-((lse(*zg) if pos == "sum" else max(zg)) - den) if G else -w * (zn[c][i] - den))
         res.append(sum(rows) / len(rows) if rows else None)
     wt = lambda n: w if f["ytype"][n] == 0 else 1.0  # noqa: E731
     ce = lambda t: sum(wt(n) * -(t[n][f["ytype"][n]] - lse(*t[n])) for n in range(f["K"]) if f["valid"][n]) / sum(wt(n) for n in range(f["K"]) if f["valid"][n])  # noqa: E731
@@ -159,8 +162,8 @@ def test_none_weight():
     assert abs(float(l1) - float(l5)) > 1e-3 and float(JK.jtoken_loss(out, b)[0]) == float(JK.jtoken_loss(out, b, none_weight=1.0)[0]), "W changes the loss, W = 1 is the loss of before"
     assert any(not [j for a, j in f["gt"] if a == i and j in js] for f in frames for i, js in f["short"].items()) and any(f["ytype"][n] == 0 and f["valid"][n] for f in frames for n in range(f["K"])), "the frames have empty-G sources and none tokens"
     orig = JK._source_nll
-    must_fail(patched, JK, "_source_nll", lambda pos, none, has_g, w: w * torch.where(has_g, pos, none), _check_hand, out, b, frames, 0.5)        # the weight on the sources WITH a GT successor too
-    must_fail(patched, JK, "_source_nll", lambda pos, none, has_g, w: orig(pos, none, has_g, 1.0), _check_hand, out, b, frames, 0.5)                # no weight on the none sources
+    must_fail(patched, JK, "_source_nll", lambda lp, G, w, pl="sum": w * orig(lp, G, 1.0, pl), _check_hand, out, b, frames, 0.5)        # the weight on the sources WITH a GT successor too
+    must_fail(patched, JK, "_source_nll", lambda lp, G, w, pl="sum": orig(lp, G, 1.0, pl), _check_hand, out, b, frames, 0.5)            # no weight on the none sources
     x, mk, wk = torch.full((1, 2), 0.1), torch.ones(1, 2, dtype=torch.bool), torch.full((1, 2), 0.1)       # weights summing below 1: sum(w x) / sum(w) = 0.2 / 0.2 = 1, not 0.2 / 1
     assert abs(float(JK._frame_mean(x, mk, wk)) - 1.0) < 1e-6 and abs(float(JK._frame_mean(x, mk)) - 0.1) < 1e-6 and float(JK._frame_mean(x, torch.zeros_like(mk), wk)) == 0.0
     orig_fm = JK._frame_mean
@@ -174,6 +177,55 @@ def test_none_weight():
         assert torch.equal(o2["z"].grad[0, 0, 0], o1["z"].grad[0, 0, 0]) and not torch.equal(o2["zn"].grad[0, 0, 1], o1["zn"].grad[0, 0, 1]), "frame 1 source 0 has a GT successor (short): untouched; source 1 (long class: empty) moves"
     print("none_weight: the loss by hand with W = 0.5 on the two hand frames (empty-G sources x W in both classes, the none class of the CE x W, normalised by the sum of the weights), W = 1 = the loss of before, "
           "mutants (the weight on the non-empty sources too, no weight on the none sources, the CE divided by the token count) fail, a source with a GT successor is untouched: ok")
+
+
+PF = (_frame(6, {0: [1, 2, 3], 1: [2], 3: [4, 5]}, {4: [0, 1], 2: [5]}, [(0, 1), (0, 2), (1, 2), (3, 4), (3, 5), (4, 0), (4, 1)], [(4, 0), (4, 1)], [1] * 6, [True] * 6),
+      _frame(6, {0: [1, 2], 2: [3]}, {1: [3, 4]}, [(0, 1), (1, 3)], [(1, 3)], [1] * 6, [True] * 6))
+# frame 1, short: 0 -> {1, 2} two tokens near ONE GT successor (duplicates; 3 a candidate outside the group), 1 -> {2} one member, 3 -> {4, 5} a fork (both branches in ONE group); long: 4 -> {0, 1} duplicates, 2 -> none.
+# frame 2: one member in every non-empty group, 2 -> none (short)
+
+
+def _pos_out(frames=PF):
+    """the hand frames with leaf logits; in frame 1 the candidate 0 -> 3 (outside the group) is the largest logit of source 0: a max over all candidates differs from the max over the group"""
+    out, b, frames = _hand(frames)
+    if frames[0] is PF[0]:
+        with torch.no_grad():
+            out["z"][0, 0, 0, 3] = out["z"][0, 0, 0, :3].max() + 1.0
+    return _with_logp(out), b, frames
+
+
+def _check_pos(pos, mod=JK):
+    """asserts nll_s / nll_l of `mod.jtoken_loss(none_weight=0.25, pos_loss=pos)` (jtoken or a textual mutant) on PF against the hand values, and that the rest of the loss is that of 'sum' -> (nll_s, nll_l)"""
+    out, b, frames = _pos_out()
+    z, zn, t1, t3 = (x.detach().tolist() for x in (out["z"], out["zn"], out["types1"], out["types"]))
+    per = [_hand_loss(f, z[n], zn[n], t1[n], t3[n], 0.25, pos) for n, f in enumerate(frames)]
+    nll_s, nll_l = (sum(p[k] for p in per if p[k] is not None) / sum(p[k] is not None for p in per) for k in range(2))
+    (loss, info), (l_sum, i_sum) = mod.jtoken_loss(out, b, none_weight=0.25, pos_loss=pos), JK.jtoken_loss(out, b, none_weight=0.25)
+    assert abs(info["nll_s"] - nll_s) < 1e-5 and abs(info["nll_l"] - nll_l) < 1e-5, (pos, info["nll_s"], nll_s, info["nll_l"], nll_l)
+    assert abs(float(loss) - float(l_sum) - (info["nll_s"] + info["nll_l"] - i_sum["nll_s"] - i_sum["nll_l"])) < 1e-5, "only the likelihood of the sources with a GT successor may change"
+    return nll_s, nll_l
+
+
+def test_pos_loss():
+    """E376 --pos-loss: -log sum (default) and -log max over G(i) by hand on a toy batch with duplicates and a fork in both classes (none weight 0.25: the empty-G sources keep it); one member in every group: max = sum bit
+    for bit; under max the gradient raises the winning member only (the other member of a duplicate pair or of a fork is pushed down: the max keeps one branch); textual mutants fail"""
+    hand = {pos: _check_pos(pos) for pos in JK.POS_LOSS}
+    assert hand["max"][0] > hand["sum"][0] + 1e-3 and hand["max"][1] > hand["sum"][1] + 1e-3, hand
+    one, b1, _ = _pos_out(PF[1:])
+    assert torch.equal(JK.jtoken_loss(one, b1, none_weight=0.25)[0], JK.jtoken_loss(one, b1, none_weight=0.25, pos_loss="max")[0]), "one member in every G(i): max = sum"
+    out, b, _ = _pos_out()
+    gz = {pos: torch.autograd.grad(JK.jtoken_loss(_with_logp(out), b, none_weight=0.25, pos_loss=pos)[0], out["z"])[0][0, 0] for pos in JK.POS_LOSS}
+    for i, (j1, j2) in ((0, (1, 2)), (3, (4, 5))):                                                          # duplicates, a fork (short class of frame 1)
+        win, lose = (j1, j2) if out["z"][0, 0, i, j1] > out["z"][0, 0, i, j2] else (j2, j1)
+        assert gz["sum"][i, win] < 0 and gz["sum"][i, lose] < 0 and gz["max"][i, win] < 0 and gz["max"][i, lose] > 0, (i, gz["sum"][i], gz["max"][i])
+    must_fail(JK.jtoken_loss, out, b, pos_loss="mean")
+    mutants = {"the max over the wrong axis": [("g.amax(-1)", "g.amax(-2)")], "the max over all candidates instead of the group": [("g.amax(-1)", "lp[..., :K].amax(-1)")],
+               "the option ignored": [("_source_nll(lp, G, none_weight, pos_loss)", "_source_nll(lp, G, none_weight)")], "logsumexp kept under max": [("g.amax(-1)", "torch.logsumexp(g, -1)")]}
+    for edits in mutants.values():
+        must_fail(_check_pos, "max", _mutant(*edits))
+    print(f"pos_loss: nll_s / nll_l by hand on two frames (duplicates and a fork in the short class, duplicates in the long class, one-member groups, empty-G sources at W 0.25): sum {hand['sum'][0]:.6f} / {hand['sum'][1]:.6f}, "
+          f"max {hand['max'][0]:.6f} / {hand['max'][1]:.6f}, the rest of the loss unchanged; one member in every group: max = sum bit for bit; under max the losing member of a duplicate pair and of a fork is pushed down "
+          f"(under sum both go up); an unknown mode refused; textual mutants ({', '.join(mutants)}) fail: ok")
 
 
 def test_wiring_logp():
@@ -430,7 +482,7 @@ def test_trainer():
         assert (args["seed"], args["steps"], args["bs"]) == (0, 20, 2) and int(m.step) == 20 and m._step_py == 20, "the step buffer of the head must follow the run through the kill and the resume"
         rows = [json.loads(r) for r in open(os.path.join(rd, "log.jsonl"))]
         assert all(k in rows[-1] for k in ("nll_s", "nll_l", "ce1", "ce3", "gpu_gb")), rows[-1]
-        for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--K", "256"], ["--prior", "rule"], ["--teacher", "rule"]):
+        for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--K", "256"], ["--prior", "rule"], ["--teacher", "rule"], ["--pos-loss", "max"]):
             must_fail(JKT.train, JKT.parse_args(argv + other), runs=runs, ckpt_every=5, **kw)                # another recipe in the same folder
         assert "lane_ptok_data" not in sys.modules, "--smoke must not import the loader"
         # a non-smoke run through a fake loader that returns (None, batches) like `lane_ptok_data.loader`
@@ -549,6 +601,28 @@ def test_arch_options():
         assert all(math.isfinite(v) for v in rows.values()) and rows["p3"] != rows["p0"] and rows["w5"] != rows["p0"], rows
     print(f"arch_options: defaults = the old head (127131 parameters, 20 smoke steps reproduce the recorded loss 2.8015905 and the weights, also with --none-weight 1), d96 / layers 4: {counts['d96l4']} parameters (ffn 512: {counts['d96l4f']}), d32 / l2 / h2: {counts['d32l2h2']}, "
           f"rebuilt by load_model, an old config resumes with the defaults and another recipe is refused; token drop: targets of removed tokens go, no re-contraction, a new draw per step, {same}: ok")
+
+
+def test_pos_loss_trainer():
+    """E376: --pos-loss sum = the champion recipe (--none-weight 0.25) bit for bit (the loss of each of 20 smoke steps and the final weights, same process); --pos-loss max trains finite and differs; the value is in
+    model.pt's args (another value is refused at a resume: `trainer`)"""
+    losses, real, now = {}, JK.jtoken_loss, [None]
+
+    def recording(out, batch, **k):                                           # the loss of every step
+        r = real(out, batch, **k)
+        losses[now[0]].append(float(r[0]))
+        return r
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25"]
+        for name, extra in (("champ", []), ("sum", ["--pos-loss", "sum"]), ("max", ["--pos-loss", "max"])):
+            now[0], losses[name] = name, []
+            patched(JK, "jtoken_loss", recording, JKT.train, JKT.parse_args(["--name", name] + base + extra), runs, 500, 48)
+        ck = {n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False) for n in losses}
+    assert len(losses["champ"]) == 20 and losses["sum"] == losses["champ"] and all(torch.equal(v, ck["champ"]["state"][k]) for k, v in ck["sum"]["state"].items()), "--pos-loss sum changes the champion recipe"
+    assert all(math.isfinite(v) for v in losses["max"]) and losses["max"] != losses["champ"] and losses["max"][0] > losses["champ"][0], losses
+    assert (ck["champ"]["args"]["pos_loss"], ck["max"]["args"]["pos_loss"]) == ("sum", "max")
+    print(f"pos_loss_trainer: --pos-loss sum = the champion recipe --none-weight 0.25 bit for bit (the loss of each of 20 smoke steps, last {losses['champ'][-1]:.6f}, the final weights); --pos-loss max differs "
+          f"(first loss {losses['max'][0]:.6f} against {losses['champ'][0]:.6f}, last {losses['max'][-1]:.6f}), finite; pos_loss in model.pt's args: ok")
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ c-rule: E369 prior, E370 teacher, S2 hook, --init
@@ -950,7 +1024,8 @@ def test_head_seed():
           f"head_seed in the recipe (another one refused); the log names both seeds and 127131 parameters; a shuffling DataLoader as the loader: first batch {order['f0']} (default, --head-seed 0) vs {order['f0h2']} (--head-seed 2); {real}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_prior, test_past, test_maps, test_teacher, test_init, test_head_seed]
+TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer, test_prior, test_past,
+         test_maps, test_teacher, test_init, test_head_seed]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
