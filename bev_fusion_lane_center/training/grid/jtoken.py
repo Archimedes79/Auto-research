@@ -16,7 +16,8 @@ Wiring layer (on top of layer 3, attention weights only): class c in {short: cho
 (padding masked as key and source) + ONE learned none slot per class (key k^c_none and a bias): p^c(.|i) = softmax over {allowed keys} + {none}. Two handle scales per pair from an MLP of (x_i, x_j, g_ij).
 Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (as `jtok2.gt_classes`; ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
 (E376 `pos_loss="max"`: -log max_{j in G(i)} p^c(j|i)) when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
-+ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. Tests: test_jtoken.py
++ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. E377 `none_weight_near`: the none tokens near an assigned token (`near_none`, a label of the batch)
+get their own none weight in both places the none weight acts. Tests: test_jtoken.py
 c-rule (`rule_links`, THE one code path of the rule: the arm `rule` of `jtoken_eval.py ctl`, the E369 prior and the E370 teacher call it): E357's `lo_near` on the valid tokens with B' e_p >= 0.5.
 E369 (`JTokenHead(prior="rule")`): c-rule's links r and B''s existence as a FIXED prior: z^c_ij += lam r^c_ij (r^c = r inside the gate of class c), the none slot of class c += lam (1 - has^c_i) + mu, the type none logit
 += log 6 - e_j inside `read_types` (both readings: at zero type logits p_none = sigmoid(-e), and the key weight 1 - p_none of the switch carries it); lam, mu are buffers; the type Linear, `wk`, the last layer of `wbias` and
@@ -51,6 +52,7 @@ GT_KEYS = ("y", "ylong", "yscale", "ytype")                                 # th
 RULE_P = 0.5                                                                # c-rule's nodes: the valid tokens with B' e_p >= 0.5
 LAM, MU = 12.0, 10.4                                                        # E369 prior: a rule link starts at p 0.73 - 0.82 (5 - 95 % of the destination key bias, TRAIN sample seed 0), the none slot at lam + mu without one
 POS_LOSS = ("sum", "max")                                                   # the likelihood of a source with GT successors (`_source_nll`): -log sum over its group (default) or -log max (E376)
+NEAR_R, NEAR_COS = 2.0, 0.5                                                 # E377 `near_none`: within NEAR_R m (inclusive) of an assigned token whose heading has a cosine >= NEAR_COS (2 m covers 98.6 % of the TRAIN duplicates)
 
 
 def _const(t):
@@ -276,39 +278,53 @@ def decode_argmax(out):
 def _source_nll(lp, G, none_weight, pos_loss="sum"):
     """per source and class: lp (B, 2, K, K + 1) the log-probabilities of the per-source softmax (the none slot last), G (B, 2, K, K) the in-class GT successor groups -> (B, 2, K). G(i) non-empty: the likelihood of
     its GT successors, -log sum_{G(i)} p ('sum') or -log max_{G(i)} p ('max', E376: the mass on ONE member of the group; with one member the two are the same); G(i) empty: `none_weight` x -log p(none|i) (the sources
-    with a GT successor are not touched by the weight)"""
+    with a GT successor are not touched by the weight); `none_weight` a number or (B, K) per source (E377)"""
     assert pos_loss in POS_LOSS, pos_loss
     K = G.shape[-1]
     g = lp[..., :K].masked_fill(~G, NEG)
     pos = -(torch.logsumexp(g, -1) if pos_loss == "sum" else g.amax(-1))
-    return torch.where(G.any(-1), pos, -lp[..., K] * none_weight)
+    return torch.where(G.any(-1), pos, -lp[..., K] * (none_weight[:, None] if torch.is_tensor(none_weight) else none_weight))
 
 
-def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum"):
+def near_none(pos, dirv, valid, ytype):
+    """E377, a label of the loss from the training labels and the token geometry (nothing at inference reads it): pos, dirv (B, K, 2), valid (B, K) bool, ytype (B, K) -> (B, K) bool, the valid none tokens (ytype 0)
+    within NEAR_R m (inclusive) of a valid ASSIGNED token (ytype != 0) whose heading has a cosine >= NEAR_COS with their own: the duplicates and near-twins of a real node"""
+    asg = valid & (ytype != 0)
+    d2 = (pos[:, :, None] - pos[:, None]).square().sum(-1)                  # (B, K, K) squared distances: exact at NEAR_R (no sqrt, no matmul)
+    cos = (dirv[:, :, None] * dirv[:, None]).sum(-1)
+    return valid & (ytype == 0) & ((d2 <= NEAR_R ** 2) & (cos >= NEAR_COS) & asg[:, None, :]).any(-1)
+
+
+def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum", none_weight_near=None):
     """the likelihood of the module docstring -> (loss, info); batch: y (B, K, K), ylong (B, K, K), yscale (B, K, K, 2), ytype (B, K). info: nll_s, nll_l, ce1, ce3, scale_l1 and the counts gt_links, pos_pairs (in-gate GT
     links), gt_outside (links with no gate), gt_class (in the gate, but `ylong` disagrees with the token chord: a statistic, the class of a link is the token chord's). The long scale target is the fitted yscale
     of the long-class links (finite where the cache fitted one). none_weight W (default 1: the loss of before): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes, and (ii) the type
     cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid tokens of the frame, as torch's weighted mean). pos_loss 'sum' (default: the loss of
     before) or 'max' (E376): the likelihood of the sources with a non-empty G(i), in both classes (`_source_nll`); the empty-G terms, the type cross-entropy and the scale term are the same under both.
+    none_weight_near W' (E377; None = W): replaces W for the near none tokens (`near_none` of the batch's pos / dirv / ytype and out's valid) in both places, their empty-G source terms (both classes) and their type
+    cross-entropy weight (still normalised by the sum of the weights of the valid tokens of the frame); given, info has n_near = the near tokens per frame (the mean over the frames of the batch).
     A target batch of `rule_teacher` holds yskip (B, 2, K): those sources are left out of their class. scale_w = 0: no scale term, `yscale` is not read"""
     dev, cand, lp, valid = out["logp"].device, out["cand"], out["logp"], out["valid"]
     y, yl = batch["y"].to(dev) > 0, batch["ylong"].to(dev).bool()
     G = y[:, None] & cand                                                  # (B, 2, K, K): the in-gate GT successors of each class (the class of a pair = its token chord, as `jtok2.gt_classes`)
-    nll = _source_nll(lp, G, none_weight, pos_loss)
+    yt = batch["ytype"].to(dev).long()
+    wn = none_weight                                                        # the none weight of a token: of its empty-G source terms and, for a none token, of its type CE; a scalar when it is the same for all
+    if none_weight_near is not None:
+        near = near_none(batch["pos"].to(dev).float(), batch["dirv"].to(dev).float(), valid, yt)
+        if none_weight_near != none_weight:
+            wn = torch.where(near, none_weight_near, none_weight)          # (B, K)
+    nll = _source_nll(lp, G, wn, pos_loss)
     rows = cand.any(-1) & valid[:, None]                                    # the sources of a class: valid tokens with a candidate of it
     if "yskip" in batch:
         rows = rows & ~batch["yskip"].to(dev)
     nll_s, nll_l = (_frame_mean(nll[:, c], rows[:, c]) for c in range(2))
-    yt = batch["ytype"].to(dev).long()
-    wt = None
-    if none_weight != 1.0:
-        wt = torch.ones(NTYPE, device=dev)
-        wt[0] = none_weight
-        wt = wt[yt]
+    wt = torch.where(yt == 0, wn, 1.0) if torch.is_tensor(wn) or none_weight != 1.0 else None
     ce1, ce3 = (_frame_mean(F.cross_entropy(t.float().flatten(0, 1), yt.flatten(), reduction="none").view_as(yt) * (1.0 if wt is None else wt), valid, wt) for t in (out["types1"], out["types"]))
     loss = nll_s + nll_l + type_w * (ce1 + ce3)
     info = dict(nll_s=float(nll_s), nll_l=float(nll_l), ce1=float(ce1), ce3=float(ce3), gt_links=float(y.sum()), pos_pairs=float(G.sum()), gt_outside=float((y & ~cand.any(1)).sum()),
                 gt_class=float((y & cand.any(1) & (yl != (out["chord"] > SHORT))).sum()))
+    if none_weight_near is not None:
+        info["n_near"] = float(near.sum(1).float().mean())
     if not scale_w:
         return loss, info
     ys = batch["yscale"].to(dev).float()
