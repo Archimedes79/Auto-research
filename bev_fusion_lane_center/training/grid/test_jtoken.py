@@ -94,27 +94,28 @@ def _with_logp(out, cand=None):
     return dict(out, cand=c, logp=JK.wiring_logp(out["z"], out["zn"], c))
 
 
-def _hand_loss(f, z, zn, t1, t3):
-    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
+def _hand_loss(f, z, zn, t1, t3, w=1.0):
+    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
     res = []
     for c, cs in enumerate((f["short"], f["long"])):
         rows = []
         for i, js in cs.items():
             G = [j for a, j in f["gt"] if a == i and j in js]
             den = lse(*[z[c][i][j] for j in js], zn[c][i])
-            rows.append(-(lse(*[z[c][i][j] for j in G]) - den) if G else -(zn[c][i] - den))
+            rows.append(-(lse(*[z[c][i][j] for j in G]) - den) if G else -w * (zn[c][i] - den))
         res.append(sum(rows) / len(rows) if rows else None)
-    ce = lambda t: sum(-(t[n][f["ytype"][n]] - lse(*t[n])) for n in range(f["K"]) if f["valid"][n]) / sum(f["valid"])  # noqa: E731
+    wt = lambda n: w if f["ytype"][n] == 0 else 1.0  # noqa: E731
+    ce = lambda t: sum(wt(n) * -(t[n][f["ytype"][n]] - lse(*t[n])) for n in range(f["K"]) if f["valid"][n]) / sum(wt(n) for n in range(f["K"]) if f["valid"][n])  # noqa: E731
     return res[0], res[1], ce(t1), ce(t3)
 
 
-def _check_hand(out, batch, frames):
+def _check_hand(out, batch, frames, w=1.0):
     """asserts the numbers of `jtoken_loss` against the hand values of every frame, averaged per frame (a class that a frame lacks adds nothing)"""
     z, zn, t1, t3 = (x.detach().tolist() for x in (out["z"], out["zn"], out["types1"], out["types"]))
-    per = [_hand_loss(f, z[b], zn[b], t1[b], t3[b]) for b, f in enumerate(frames)]
+    per = [_hand_loss(f, z[b], zn[b], t1[b], t3[b], w) for b, f in enumerate(frames)]
     mean = lambda k: (lambda v: sum(v) / len(v))([p[k] for p in per if p[k] is not None])  # noqa: E731
     nll_s, nll_l, ce1, ce3 = (mean(k) for k in range(4))
-    loss, info = JK.jtoken_loss(out, batch)
+    loss, info = JK.jtoken_loss(out, batch, none_weight=w)
     assert abs(info["nll_s"] - nll_s) < 1e-5 and abs(info["nll_l"] - nll_l) < 1e-5 and abs(info["ce1"] - ce1) < 1e-5 and abs(info["ce3"] - ce3) < 1e-5 and abs(info["scale_l1"] - 0.1) < 1e-6, (info, nll_s, nll_l, ce1, ce3)
     assert abs(float(loss) - (nll_s + nll_l + 0.5 * (ce1 + ce3) + 0.5 * 0.1)) < 1e-5
     assert (info["gt_links"], info["pos_pairs"], info["gt_outside"], info["gt_class"]) == (6.0, 5.0, 1.0, 1.0), info
@@ -130,7 +131,7 @@ def test_likelihood():
     must_fail(_check_hand, _with_logp(dict(out, zn=torch.full_like(out["zn"], -1e4))), b, frames)                       # no none slot
     must_fail(_check_hand, out, dict(b, y=b["y"].transpose(1, 2), ylong=b["ylong"].transpose(1, 2)), frames)            # a swapped link direction
     must_fail(_check_hand, _with_logp(out, torch.ones_like(out["cand"])), b, frames)                                    # no gate
-    must_fail(patched, JK, "_frame_mean", lambda x, m: (x * m).sum() / m.sum().clamp_min(1), _check_hand, out, b, frames)   # a global mean over the sources / tokens instead of per frame
+    must_fail(patched, JK, "_frame_mean", lambda x, m, w=None: (x * m).sum() / m.sum().clamp_min(1), _check_hand, out, b, frames)   # a global mean over the sources / tokens instead of per frame
     must_fail(_check_hand, dict(out, valid=torch.ones_like(out["valid"])), b, frames)                                    # no valid mask (the padded tokens of frame 2 in the type CE)
     # sources without a candidate are masked: their none logit changes nothing; the empty sources are trained by the none slot (and push their candidates down)
     out2 = dict(out, zn=out["zn"].detach().clone())
@@ -144,6 +145,31 @@ def test_likelihood():
     assert float(z_g[~out["cand"][0]].abs().max()) == 0.0, "a logit outside the gate gets gradient"
     print("likelihood: the loss by hand on two frames (three GT successors incl. one with ylong against the token chord, empty G -> none, GT link outside the gate -> none, masked sources, padding, a frame without a long "
           "source, the per-frame normalisation), mutants (no none slot, swapped direction, no gate, global mean, no valid mask) fail, the none slot trains the empty sources and pushes their candidates down: ok")
+
+
+def test_none_weight():
+    out, b, frames = _hand()
+    out = _with_logp(out)
+    l1 = _check_hand(out, b, frames, 1.0)
+    l5 = _check_hand(out, b, frames, 0.5)                                                       # W = 0.5 by hand: the empty-G sources x 0.5 in both classes, the none class of the CE x 0.5, normalised by the weights
+    assert abs(float(l1) - float(l5)) > 1e-3 and float(JK.jtoken_loss(out, b)[0]) == float(JK.jtoken_loss(out, b, none_weight=1.0)[0]), "W changes the loss, W = 1 is the loss of before"
+    assert any(not [j for a, j in f["gt"] if a == i and j in js] for f in frames for i, js in f["short"].items()) and any(f["ytype"][n] == 0 and f["valid"][n] for f in frames for n in range(f["K"])), "the frames have empty-G sources and none tokens"
+    orig = JK._source_nll
+    must_fail(patched, JK, "_source_nll", lambda pos, none, has_g, w: w * torch.where(has_g, pos, none), _check_hand, out, b, frames, 0.5)        # the weight on the sources WITH a GT successor too
+    must_fail(patched, JK, "_source_nll", lambda pos, none, has_g, w: orig(pos, none, has_g, 1.0), _check_hand, out, b, frames, 0.5)                # no weight on the none sources
+    x, mk, wk = torch.full((1, 2), 0.1), torch.ones(1, 2, dtype=torch.bool), torch.full((1, 2), 0.1)       # weights summing below 1: sum(w x) / sum(w) = 0.2 / 0.2 = 1, not 0.2 / 1
+    assert abs(float(JK._frame_mean(x, mk, wk)) - 1.0) < 1e-6 and abs(float(JK._frame_mean(x, mk)) - 0.1) < 1e-6 and float(JK._frame_mean(x, torch.zeros_like(mk), wk)) == 0.0
+    orig_fm = JK._frame_mean
+    must_fail(patched, JK, "_frame_mean", lambda x, m, w=None: orig_fm(x, m), _check_hand, out, b, frames, 0.5)                                     # weighted terms divided by the token count instead of the sum of the weights
+    # the sources with a GT successor are not touched by W: the gradient of the row of frame 0, source 0 (G non-empty) is identical, the none logit of source 1 (G empty) moves
+    for w_ in (0.5, 2.0):
+        o2 = _with_logp(dict(out, z=out["z"].detach().clone().requires_grad_(), zn=out["zn"].detach().clone().requires_grad_()))
+        JK.jtoken_loss(o2, b, none_weight=w_)[0].backward()
+        o1 = _with_logp(dict(out, z=out["z"].detach().clone().requires_grad_(), zn=out["zn"].detach().clone().requires_grad_()))
+        JK.jtoken_loss(o1, b)[0].backward()
+        assert torch.equal(o2["z"].grad[0, 0, 0], o1["z"].grad[0, 0, 0]) and not torch.equal(o2["zn"].grad[0, 0, 1], o1["zn"].grad[0, 0, 1]), "frame 1 source 0 has a GT successor (short): untouched; source 1 (long class: empty) moves"
+    print("none_weight: the loss by hand with W = 0.5 on the two hand frames (empty-G sources x W in both classes, the none class of the CE x W, normalised by the sum of the weights), W = 1 = the loss of before, "
+          "mutants (the weight on the non-empty sources too, no weight on the none sources, the CE divided by the token count) fail, a source with a GT successor is untouched: ok")
 
 
 def test_wiring_logp():
@@ -428,7 +454,97 @@ def test_trainer():
           "no loader import; a non-smoke run through a fake loader (ident, K, cache passed, (None, batches) unpacked): ok")
 
 
-TESTS = [test_likelihood, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer]
+def test_arch_options():
+    import numpy as np
+    # defaults = the head of the first build, bit for bit
+    dflt = JKT.parse_args(["--name", "x", "--none-weight", "1.0"])
+    torch.manual_seed(0)
+    new = JKT.build_head(vars(dflt))
+    torch.manual_seed(0)
+    old = JK.JTokenHead()
+    assert list(new.state_dict()) == list(old.state_dict()) and all(torch.equal(v, old.state_dict()[k]) for k, v in new.state_dict().items()), "default options must build the old head"
+    assert JK.count_params(new) == 127131 and JKT.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
+    # 20 synthetic steps with the defaults reproduce what the committed code did (recorded from the committed code before the changes, 2 threads: seed 0, bs 2, K 48). THESE CONSTANTS HOLD IN THIS TEST'S PROCESS ONLY (this file
+    # sets 2 threads; a fresh process with another thread count / BLAS order gives 2.8011269 for the same run): the portable check is the same-process one below (defaults against the explicit default arguments)
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        JKT.train(JKT.parse_args(["--name", "r", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0"]), runs, 500, 48)
+        row = [json.loads(r) for r in open(os.path.join(runs, "r", "log.jsonl"))][-1]
+        sd = torch.load(os.path.join(runs, "r", "model.pt"), map_location="cpu", weights_only=False)["state"]
+        tot = sum(float(v.double().abs().sum()) for v in sd.values() if v.dtype.is_floating_point)
+        assert abs(row["total"] - 2.8015905141830446) < 1e-12 and abs(row["nll_s"] - 1.288527250289917) < 1e-12 and abs(tot / 8250.530362168049 - 1) < 1e-14, (row["total"], tot)
+        JKT.train(JKT.parse_args(["--name", "r2", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--d", "64", "--layers", "3", "--heads", "4", "--ffn", "128", "--token-drop", "0.0", "--none-weight", "1.0"]), runs, 500, 48)
+        rows2 = [json.loads(r) for r in open(os.path.join(runs, "r2", "log.jsonl"))]
+        sd2 = torch.load(os.path.join(runs, "r2", "model.pt"), map_location="cpu", weights_only=False)["state"]
+        assert [r["total"] for r in rows2] == [json.loads(r)["total"] for r in open(os.path.join(runs, "r", "log.jsonl"))] and list(sd2) == list(sd) and all(torch.equal(v, sd[k]) for k, v in sd2.items()), "explicit default arguments = the defaults, same process, bit for bit"
+        # the other sizes: parameter counts, one smoke run, the rebuild by load_model, a recipe that differs is refused, an old run folder resumes with the defaults
+        counts = {}
+        for name, kw in (("d96l4", ["--d", "96", "--layers", "4"]), ("d96l4f", ["--d", "96", "--layers", "4", "--ffn", "512"]), ("d32l2h2", ["--d", "32", "--layers", "2", "--heads", "2"])):
+            JKT.train(JKT.parse_args(["--name", name, "--seed", "0", "--smoke", "--bs", "2", "--workers", "0"] + kw), runs, 500, 48)
+            m, a = JKT.load_model(name, "cpu", runs)
+            counts[name] = JK.count_params(m)
+            assert a["d"] == int(kw[1]) and m.proj.out_features == a["d"] and len(m.layers) == a["layers"] and m.layers[0].ffn[0].out_features == (a["ffn"] or 2 * a["d"]) and counts[name] != 127131
+        assert counts["d96l4f"] > counts["d96l4"]
+        must_fail(JKT.build_head, dict(d=70, heads=4))                                                     # d must be a multiple of the heads
+        must_fail(JKT.build_head, dict(ffn=0))                                                             # 0 is not "the default"
+        for bad in (["--d", "70"], ["--d", "96", "--heads", "5"], ["--ffn", "0"], ["--ffn", "-4"], ["--layers", "0"], ["--token-drop", "-0.1"], ["--token-drop", "1.0"]):
+            must_fail(JKT.parse_args, ["--name", "x"] + bad)                                               # refused before anything is built or loaded
+        assert JKT.parse_args(["--name", "x", "--token-drop", "0.5", "--ffn", "96", "--d", "96", "--heads", "6"]).token_drop == 0.5
+        os.makedirs(os.path.join(runs, "old"))
+        json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3)), open(os.path.join(runs, "old", "config.json"), "w"))     # a config of before the options
+        a_old = vars(JKT.parse_args(["--name", "old", "--bs", "2", "--steps", "20"]))
+        JKT.check_start(a_old, os.path.join(runs, "old"))
+        must_fail(JKT.check_start, dict(a_old, d=96), os.path.join(runs, "old"))
+        must_fail(JKT.check_start, dict(a_old, token_drop=0.1), os.path.join(runs, "old"))
+        os.makedirs(os.path.join(runs, "big"))                                                             # the reverse: a run of d 96 / layers 4 is not resumed by the default command line
+        json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3, d=96, layers=4)), open(os.path.join(runs, "big", "config.json"), "w"))
+        a_big = vars(JKT.parse_args(["--name", "big", "--bs", "2", "--steps", "20"]))
+        must_fail(JKT.check_start, a_big, os.path.join(runs, "big"))
+        JKT.check_start(dict(a_big, d=96, layers=4), os.path.join(runs, "big"))
+        must_fail(JKT.check_start, dict(a_big, d=96, layers=4, ffn=192), os.path.join(runs, "big"))         # ffn None and the explicit 2 x d are the same head: refused all the same (conservative)
+    # token drop: the effect on a batch, the draw per step
+    sb = JK.synthetic_batch(2, 48, seed=1)
+    keep = torch.ones(2, 48, dtype=torch.bool)
+    keep[0, 3] = keep[1, 12] = False
+    out = JKT.drop_tokens(sb, keep)
+    assert not out["valid"][0, 3] and not out["valid"][1, 12] and out["valid"].sum() == sb["valid"].sum() - 2 and out["ytype"][0, 3] == 0 and out["ytype"][1, 12] == 0
+    assert out["y"][0, :, 3].sum() == 0 and out["y"][0, 3, :].sum() == 0 and out["y"][0, 4, 5] == sb["y"][0, 4, 5] and out["y"][1, 12, :].sum() == 0
+    assert out["ylong"][1, 11, 12] == 0 and torch.isnan(out["yscale"][0, 3]).all() and torch.equal(out["gt_out"] if "gt_out" in out else sb["ytype"], sb["gt_out"] if "gt_out" in sb else sb["ytype"])
+    assert sb["y"][0, 2, 3] == 1 and out["y"][0, 2, 3] == 0, "a GT link into a removed token is lost, the link through it is not bridged"
+    assert torch.equal(JKT.drop_tokens(sb, torch.ones(2, 48, dtype=torch.bool))["y"], sb["y"])
+    toks = ["a", "b"]
+    k1, k1b, k2, k3 = JKT.step_keep(toks, 48, 0.3, 0, 5), JKT.step_keep(toks, 48, 0.3, 0, 5), JKT.step_keep(toks, 48, 0.3, 0, 6), JKT.step_keep(toks, 48, 0.3, 1, 5)
+    big = JKT.step_keep(["a"] * 1, 100000, 0.3, 0, 5)
+    assert (k1 == k1b).all() and not (k1 == k2).all() and not (k1 == k3).all() and abs(big.mean() - 0.7) < 0.01, "reproducible per (seed, step, token), new draw per step, the share"
+    assert JKT.step_keep(["a"], 48, 0.0, 0, 5).all()
+    # the same effect as the loader's own token_drop on a cache frame (when the cache exists)
+    import lane_ptok_data as LP                                                                              # an ImportError is a failure, not a skip
+    from jtok_eval import keep_nodes
+    try:
+        base, dropped = LP.PTokData("val", 0, "e292_a", None, 0.0), LP.PTokData("val", 0, "e292_a", None, 0.17)
+    except (AssertionError, FileNotFoundError) as e:                                                         # only the cache lookup may skip the comparison
+        if isinstance(e, AssertionError) and "finished caches match" not in str(e):
+            raise
+        base = None
+    if base is None:
+        same = "loader comparison SKIPPED (no cache)"
+    else:
+        b = LP.collate([base[i] for i in range(2)])
+        kp = torch.from_numpy(np.stack([keep_nodes(t, base.K, 0.17, 0) for t in b["token"]]))
+        mine = JKT.drop_tokens(b, kp)
+        ref = LP.collate([dropped[i] for i in range(2)])
+        assert all(torch.equal(mine[k], ref[k]) or (k == "yscale" and torch.equal(mine[k].nan_to_num(-7), ref[k].nan_to_num(-7))) for k in ("valid", "ytype", "y", "ylong", "yscale")), "drop_tokens is the loader's token_drop on the batch"
+        same = "equal to the loader's token_drop on 2 cache frames"
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:                                                    # a training run with token drop: finite, differs from the run without
+        rows = {}
+        for name, extra in (("p0", []), ("p3", ["--token-drop", "0.3"]), ("w5", ["--none-weight", "0.5"])):
+            JKT.train(JKT.parse_args(["--name", name, "--seed", "0", "--smoke", "--bs", "2", "--workers", "0"] + extra), runs, 500, 48)
+            rows[name] = [json.loads(r) for r in open(os.path.join(runs, name, "log.jsonl"))][-1]["total"]
+        assert all(math.isfinite(v) for v in rows.values()) and rows["p3"] != rows["p0"] and rows["w5"] != rows["p0"], rows
+    print(f"arch_options: defaults = the old head (127131 parameters, 20 smoke steps reproduce the recorded loss 2.8015905 and the weights, also with --none-weight 1), d96 / layers 4: {counts['d96l4']} parameters (ffn 512: {counts['d96l4f']}), d32 / l2 / h2: {counts['d32l2h2']}, "
+          f"rebuilt by load_model, an old config resumes with the defaults and another recipe is refused; token drop: targets of removed tokens go, no re-contraction, a new draw per step, {same}: ok")
+
+
+TESTS = [test_likelihood, test_none_weight, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options]
 
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]

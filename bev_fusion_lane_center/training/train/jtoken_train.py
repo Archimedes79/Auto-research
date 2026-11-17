@@ -6,6 +6,10 @@ The model is `grid/jtoken.JTokenHead` (the whole trainable path: B' is cached, n
 cache=)` (imported only when the loop starts): `--cache` = the cache ROOT (default `runs/e365_cache`), `--ident` = the frozen head whose tokens are cached (`e292_a` = B', `e273_p` = plain B), `--K` only when the root
 holds more than one K for the seed. `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache, no loader): the plumbing test and the memory check.
 The loop, the run-directory contract, the checkpoint every 500 steps with resume, the roll-back guard and the `clock` line are those of `jtok2_train.py` / `trainer.fit`; AdamW lr 1e-3, 5 % warm-up, cosine to 0.
+Architecture options (all in the recipe and in `model.pt`, `load_model` rebuilds the same head through `build_head`; the defaults are the head of the first build, bit for bit): `--d` 64, `--layers` 3, `--heads` 4, `--ffn` (default 2 x d).
+`--token-drop P` removes each valid token with probability P in every training step (a new draw per step, seeded by (seed, the head's step counter, the frame token)): the removed token is not valid, has type none and loses every target pair (`drop_tokens`,
+the same effect on the batch as the loader's own `token_drop`, which draws once per frame and cache seed, the same removal every epoch); the targets are NOT re-contracted over the removed tokens (GT links through a removed token are lost, not bridged).
+`--none-weight W` (default 1 = the loss of before) multiplies the loss of the sources whose GT successor set is empty (target: the none slot) and the type cross-entropy of the none class (`jtoken.jtoken_loss`).
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
 are TEST-ONLY arguments (a run uses 500 / 384).
@@ -15,7 +19,9 @@ import json
 import os
 import sys
 import time
+import zlib
 
+import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -24,7 +30,8 @@ for sub_ in ("training", "training/grid", "training/data", "training/data/prep",
 import jtoken as JK  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr")
+RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "d", "layers", "heads", "ffn", "token_drop", "none_weight")
+ARCH_DEFAULTS = dict(d=64, layers=3, heads=4, ffn=None, token_drop=0.0, none_weight=1.0)     # what a run of before these options means (the head of the first build); ffn None = 2 x d
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
 
 
@@ -39,8 +46,24 @@ def parse_args(argv=None):
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--d", type=int, default=ARCH_DEFAULTS["d"], help="width of the head")
+    ap.add_argument("--layers", type=int, default=ARCH_DEFAULTS["layers"], help="self-attention layers")
+    ap.add_argument("--heads", type=int, default=ARCH_DEFAULTS["heads"], help="attention heads (d must be a multiple)")
+    ap.add_argument("--ffn", type=int, default=ARCH_DEFAULTS["ffn"], help="feed-forward width (default 2 x d)")
+    ap.add_argument("--token-drop", type=float, default=ARCH_DEFAULTS["token_drop"], dest="token_drop", help="train-time removal of each valid token with this probability, a new draw every step (seeded by seed, step, frame token)")
+    ap.add_argument("--none-weight", type=float, default=ARCH_DEFAULTS["none_weight"], dest="none_weight", help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
-    return ap.parse_args(argv)
+    a = ap.parse_args(argv)
+    check_options(vars(a))
+    return a
+
+
+def check_options(args):
+    """the options of the head and the loss, before anything is built or loaded: d a multiple of the heads, a positive ffn (0 is not 'the default': leave --ffn out), layers >= 1, a token drop in [0, 1)"""
+    assert args["heads"] > 0 and args["d"] > 0 and args["d"] % args["heads"] == 0, f"--d {args['d']} is not a multiple of --heads {args['heads']}"
+    assert args["layers"] >= 1, f"--layers {args['layers']}"
+    assert args["ffn"] is None or args["ffn"] > 0, f"--ffn {args['ffn']}: a positive width, or leave it out for 2 x d"
+    assert 0.0 <= args["token_drop"] < 1.0, f"--token-drop {args['token_drop']}: a probability in [0, 1)"
 
 
 def check_start(args, folder):
@@ -48,7 +71,7 @@ def check_start(args, folder):
     held = [f for f in ("config.json", "ckpt.pt", "model.pt") if os.path.exists(os.path.join(folder, f))]
     if held:
         c = json.load(open(os.path.join(folder, "config.json"))) if "config.json" in held else {}
-        old = {k: (c.get("args") or {}).get(k) for k in RECIPE}
+        old = {k: (c.get("args") or {}).get(k, ARCH_DEFAULTS.get(k)) for k in RECIPE}                    # a run of before the architecture options has the defaults; conservative: ffn None and the explicit 2 x d are the same head but count as another recipe
         assert c.get("design") == "jtoken" and old == {k: args[k] for k in RECIPE}, f"{folder} holds {held} of another run ({c.get('design')}, {old}): use another --name"
 
 
@@ -56,15 +79,46 @@ def to_device(b, dev):
     return {k: (v.to(dev, non_blocking=True) if torch.is_tensor(v) else v) for k, v in b.items()}
 
 
-def make_loss(run):
-    """`jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line)"""
+def build_head(args):
+    """the head of a run's recipe (its args: d, layers, heads, ffn, with the defaults of a run of before these options): the one place that builds it, for the trainer and `load_model`"""
+    g = lambda k: args.get(k) if args.get(k) is not None else ARCH_DEFAULTS[k]  # noqa: E731
+    d = g("d")
+    assert d % g("heads") == 0, f"--d {d} is not a multiple of --heads {g('heads')}"
+    ffn = 2 * d if args.get("ffn") is None else args["ffn"]
+    assert ffn > 0, f"ffn {ffn}"
+    return JK.JTokenHead(d=d, heads=g("heads"), layers=g("layers"), ffn=ffn)
+
+
+def step_keep(tokens, K, p, seed, step):
+    """(B, K) bool: the tokens that stay in a step: each is removed with probability `p` by a generator seeded with (seed, step, crc32 of the frame's token): a new draw every step, the same on a resume"""
+    return np.stack([np.random.default_rng([seed, step, zlib.crc32(t.encode())]).random(K) >= p for t in tokens])
+
+
+def drop_tokens(b, keep):
+    """the batch with the tokens outside `keep` (B, K) removed, as the loader's `token_drop` does it (`lane_ptok_data.PTokData`): not valid, type none, every target pair with a removed end gone (y, ylong, yscale); the targets are NOT re-contracted
+    over the removed tokens (the GT links through a removed token are lost, not bridged)"""
+    keep = keep.to(b["valid"].device)
+    out = dict(b, valid=b["valid"] & keep, ytype=torch.where(keep, b["ytype"], torch.zeros_like(b["ytype"])))
+    pair = keep[:, :, None] & keep[:, None, :]
+    out["y"] = torch.where(pair, b["y"], torch.zeros_like(b["y"]))
+    out["ylong"] = b["ylong"] & pair
+    out["yscale"] = torch.where(pair[..., None], b["yscale"], torch.full_like(b["yscale"], float("nan")))
+    return out
+
+
+def make_loss(run, token_drop=0.0, seed=0, none_weight=1.0):
+    """`jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line); token_drop > 0: `drop_tokens` with a draw of `step_keep` per step
+    (the step is the head's own training-step counter, which a resume and a roll-back keep)"""
     n, mark = [0], [time.time(), 0]
     gb = lambda f: f() / 1e9 if torch.cuda.is_available() else 0.0  # noqa: E731
 
     def loss_fn(m, b):
         n[0] += 1
         b = to_device(b, next(m.parameters()).device)
-        loss, info = JK.jtoken_loss(m(b), b)
+        if token_drop > 0:
+            toks = b.get("token") or [f"frame{i}" for i in range(b["valid"].shape[0])]                    # a synthetic batch has no frame tokens
+            b = drop_tokens(b, torch.from_numpy(step_keep(toks, b["valid"].shape[1], token_drop, seed, m._step_py)))
+        loss, info = JK.jtoken_loss(m(b), b, none_weight=none_weight)
         info.update(gpu_gb=gb(torch.cuda.max_memory_allocated), gpu_res_gb=gb(torch.cuda.max_memory_reserved))
         if n[0] == 10:
             mark[:] = [time.time(), 10]
@@ -81,7 +135,7 @@ def make_loss(run):
 def load_model(run, dev, runs=None):
     """-> (the head of runs/<run>/model.pt in eval mode, its args)"""
     ck = torch.load(os.path.join(runs or T.RUNS, run, "model.pt"), map_location="cpu", weights_only=False)
-    m = JK.JTokenHead()
+    m = build_head(ck["args"])
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), ck["args"]
 
@@ -98,10 +152,11 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
         _, loader = LP.loader("train", a.seed, a.bs, a.workers, ident=a.ident, K=a.K, **({"cache": a.cache} if a.cache else {}))
         batch_fn = None
     run = T.Run(a.name, root=runs)
-    model = JK.JTokenHead()
-    run.log(f"jtoken bs {a.bs}: {args['steps']} steps, lr {a.lr}, trainable {JK.count_params(model) / 1e6:.3f} M (the whole head; B' is cached), "
+    model = build_head(args)
+    run.log(f"jtoken bs {a.bs}: {args['steps']} steps, lr {a.lr}, trainable {JK.count_params(model) / 1e6:.3f} M (the whole head, d {args['d']} layers {args['layers']} heads {args['heads']} ffn {args['ffn'] or 2 * args['d']}; B' is cached), "
+            + (f"token drop {a.token_drop} per step, " if a.token_drop > 0 else "") + (f"none weight {a.none_weight}, " if a.none_weight != 1.0 else "")
             + (f"synthetic batches, K {smoke_k}" if a.smoke else f"cache {a.cache or 'default root'}, ident {a.ident}, K {a.K or 'auto'}"))
-    T.fit(model, make_loss(run), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05, ckpt_every=ckpt_every, seed=a.seed, args=args,
+    T.fit(model, make_loss(run, a.token_drop, a.seed, a.none_weight), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05, ckpt_every=ckpt_every, seed=a.seed, args=args,
           device="cuda" if torch.cuda.is_available() else "cpu", config=dict(design="jtoken"))
     run.log(f"done {a.name}")
 
