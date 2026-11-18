@@ -1,23 +1,27 @@
 """jarm.py - one arm of a token-head experiment in ONE command (train -> dumps -> TRAIN sweep -> pinned cell -> scores), and the table of arms. Replaces the per-experiment bash chains (sup / read / texts / choose scripts).
 
     wsl python3 tools/jarm.py run E383 f_s0 --seed 0 --head-seed 2 [--ref e373_cb_s0] [--trainer jtoken_fast_train.py] [--curve [STEP:DIFF,...]] [--window] [--dry] -- --none-weight 0.25 [more trainer args]
+    wsl python3 tools/jarm.py ids E383 f_s0 f_s1 [--ref e373_cb_s0]                                                  # the run ids the arms launch, marked when the card's run_ids lack them (add them to the card)
     wsl python3 tools/jarm.py table e373_cb_s0 e383_f_s0 e383_k_s0 [--cell 0.3,0.2,0.6,off | --cell pinned]      # pooled VAL numbers per head, differences to the FIRST (the reference)
     wsl python3 tools/jarm.py curve e383_f_s0 e373_cb_s0 [--band 100:0.3,600:0.05]                                  # a speed-change arm vs its reference: the data-order fingerprint (gt_links / pos_pairs / gt_outside equal at every logged step) + the loss band
                                                                                                                     # (default 0.05 / 0.03 / 0.02 at steps 500 / 2000 / 12000: a gross-failure check, not twin evidence); exit 1 outside
     wsl python3 tools/jarm.py selftest
 
-`run` works on the run `<id lower>_<arm>` (here e383_f_s0); each step runs only when its output is missing (the same command continues a crashed or stopped arm) and the arm STOPS at the first step that fails:
+`run` works on the run `<id lower>_<arm>` (here e383_f_s0); the run ids come from the card: the training id `<E-id>.<arm>` must be listed in an arm's `run_ids` (else the run is refused here, before anything starts), the read-out ids `<E-id>.<step>_<arm>` are listed
+by `jarm.py ids` (put them into the card to have its rule registered for every step; unlisted ones run as diagnostics and say so); each step runs only when its output is missing (the same command continues a crashed or stopped arm) and the arm STOPS at the first step that fails:
   1. train       `<trainer> --name <run> --seed S --head-seed H --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 <the arguments after -->` (defaults = the champion recipe's frame; the extras are the arm's own,
                  e.g. `--none-weight 0.25 --cache runs/e383_cache --K 384`), relaunched (resume) up to 6 times; a `non-finite` line in the trainer's log (the card's kill) or a refusal of run.py (exit 2 / 3) stops it;
   2. dump_val, dump_train   the head on the cache tokens, VAL and the TRAIN sample (every 3), GPU; a dump that exists but is cut (a pickle without its end) stops the arm: it is never overwritten or deleted here;
   3. sweep       the per-class decode grid on the TRAIN sample (CPU);     4. choose   `jtoken_eval.py choose-cell` (E375's rule, written BEFORE any VAL score; no fallback: a missing cell stops the arm);
   5. scores      VAL at the pinned cell and at D115 (0.3, 0.2, 0.6, gate off); with --ref only the paired cards (`--ref-run <ref> --ref-run-cell D115`, same tokens only: NOT for a K-384 arm against K-512 heads).
 Every step is launched by `run.py` with the experiment card's own words (title, prediction, rule and kill from experiments/<id>_*/experiment.md): no text to copy; ids `<id>.<step>_<arm>`; GPU steps ask for 6000 MB of RAM.
+One jarm per arm (a lock /tmp/jarm_<run>.lock; a second one says so and exits 0) and a launch waits while a `run.py --id <id> ` of another supervisor is alive: what `tools/maintenance/keep_alive.sh` did for the chain supervisors (log, lock, wait, relaunch until done), which `jarm` absorbs.
 `--window` waits for the allowed GPU window (weekdays 08:30 - 17:30, nights 22:00 - 07:00) before every GPU launch. TEST is never touched (`--split val`). The numbers are the cards' (`runs/<run>/token_card_*.json`).
 **What it does not do:** it decides nothing (verdicts stay by hand, by the card's rule); it does not enforce the card's kill beyond a non-finite loss and, with --curve (needs --ref), the `curve` check after training (a fired check stops the arm: NOT-PARITY; a no-learning rule is the caller's check); the E376 anatomy and ensembles are not steps.
 """
 import argparse
 import datetime
+import fcntl
 import glob
 import json
 import os
@@ -46,6 +50,15 @@ def card_texts(eid, root=ROOT):
     pr = card.get("prediction")
     pred = pr if isinstance(pr, str) else f"{pr.get('value')} vs {pr.get('vs')}" if isinstance(pr, dict) else str(pr)
     return (card.get("title", eid), pred, "the card's rule (hard rule 4: written before the run): " + json.dumps(card.get("rule", []), separators=(",", ":")) + " | kill: " + str(card.get("kill", "")))
+
+
+def card_run_ids(eid, root=ROOT):
+    """every run id the experiment card of `eid` lists in its arms (`run_ids`): the ids whose launches get the card's rule registered (`experiment.card_for_run`, run.py: card_sha) and that `decide.py` reads"""
+    sys.path.insert(0, AR)
+    import experiment as X
+    dirs = sorted(glob.glob(os.path.join(root, "experiments", f"{eid}_*")))
+    card = X.read(X.source(dirs[0])) if dirs else {}
+    return {r for a in (card.get("arms") or {}).values() if isinstance(a, dict) for r in (a.get("run_ids") or [])}
 
 
 def in_window(now=None):
@@ -116,15 +129,49 @@ class Arm:
         self.run = f"{eid.lower()}_{arm}"
         self.texts = texts or (("dry", "dry", "dry") if dry else card_texts(eid))
 
+    def rid(self, step):
+        """the run.py id of a step: `<E-id>.<arm>` for the training, `<E-id>.<step>_<arm>` for the others"""
+        return f"{self.eid}.{step}_{self.arm}" if step else f"{self.eid}.{self.arm}"
+
+    def step_ids(self):
+        """every run id this arm launches, in order (the training, the read-out steps; the cell steps carry `_vs` with --ref): the list a card names in `run_ids` to have its rule registered for all of them"""
+        return [self.rid(x) for x in ("", "dump_val", "dump_train", "sweep", "choose", "cell_vs" if self.ref else "cell", "d115_vs" if self.ref else "d115")]
+
+    def check_ids(self, listed):
+        """the run ids come from the card: the training id MUST be listed (else run.py registers no rule for the arm, and `decide.py` has no run to gate) -> SystemExit; read-out ids that are not listed run as diagnostics
+        without a registered rule: say so once, with the line to add. `listed` = `card_run_ids`"""
+        if self.rid("") not in listed:
+            raise SystemExit(f"the card of {self.eid} does not list the run id {self.rid('')} in the run_ids of an arm: add it (and the read-out ids: `jarm.py ids {self.eid} {self.arm}{' --ref ' + self.ref if self.ref else ''}`) before the run: a run without its card is refused (hard rule 4)")
+        miss = [x for x in self.step_ids() if x not in listed]
+        if miss:
+            self.say(f"note: {len(miss)} read-out run id(s) are not listed in the card's run_ids ({', '.join(miss[:3])}{' ...' if len(miss) > 3 else ''}): they run as diagnostics without the card's rule registered; list them to register it")
+
     def say(self, msg):
         print(f"{time.strftime('%m-%d %H:%M:%S')} [jarm {self.run}] {msg}", flush=True)
+
+    def alive(self, rid):
+        """True while a `run.py --id <rid> ` of another supervisor is alive (a second launch of the same id would collide): the shared part of the old keep_alive.sh"""
+        out = subprocess.run(["pgrep", "-f", f"run.py --id {rid} "], capture_output=True, text=True).stdout.split()
+        return any(int(x) != os.getpid() for x in out)
+
+    def lock(self):
+        """one jarm per arm: an exclusive lock /tmp/jarm_<run>.lock held until the process ends -> True; False = another jarm runs this arm (say so and stop with exit 0)"""
+        self._lock = open(f"/tmp/jarm_{self.run}.lock", "w")
+        try:
+            fcntl.flock(self._lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return False
+        return True
 
     def launch(self, step, cmd, gpu, timeout, retries=0):
         """one run.py launch -> its exit code (0 = the run finished)"""
         while gpu and self.window and not in_window():
             time.sleep(60)
+        while not self.dry and self.alive(self.rid(step)):
+            self.say(f"{self.rid(step)} is alive under another supervisor: waiting")
+            time.sleep(30)
         h, p, r = self.texts
-        rid = f"{self.eid}.{step}_{self.arm}" if step else f"{self.eid}.{self.arm}"
+        rid = self.rid(step)
         line = ["python3", os.path.join(AR, "run.py"), "--id", rid, "--seed", str(self.seed), "--retries", str(retries), "--require-card", "--split", "val", "--timeout", str(timeout), "--hyp", h, "--pred", p, "--rule", r]
         line += (["--gpu", "--ram-mb", "6000"] if gpu else []) + ["--", "bash", "-c", cmd]
         self.say(f"{step or 'train'}: {cmd[:150]}")
@@ -358,6 +405,24 @@ def selftest():
             assert not curve("nope", "cA")[0] and not curve("cA", "nope")[0], "a missing run is not ok"
             ok_g, text_g = curve("cG", "cA")
             assert not ok_g and "differs at steps" in text_g, "the same losses on another data order are not parity (the fingerprint columns)"
+            lk1, lk2 = FakeArm("E9", "lk", 0, 2), FakeArm("E9", "lk", 0, 2)                # one jarm per arm: the second lock is refused while the first is held, and free again after
+            assert lk1.lock() and not lk2.lock(), "a second jarm of the same arm must not get the lock"
+            lk1._lock.close()
+            assert lk2.lock(), "the lock is free again when the holder ended"
+            lk2._lock.close()
+            al = FakeArm("E9", "al", 0, 2)
+            assert not al.alive("E9.nothing_runs_under_this_id"), "no process: not alive"
+            g0 = FakeArm("E9", "a", 0, 2, ref="ref")                                      # the run ids come from the card
+            assert g0.step_ids() == ["E9.a", "E9.dump_val_a", "E9.dump_train_a", "E9.sweep_a", "E9.choose_a", "E9.cell_vs_a", "E9.d115_vs_a"], g0.step_ids()
+            assert FakeArm("E9", "a", 0, 2).step_ids()[-2:] == ["E9.cell_a", "E9.d115_a"]
+            g0.check_ids(set(g0.step_ids()))                                             # all listed: silent and fine
+            g0.check_ids({"E9.a"})                                                       # only the training listed: a note, no stop
+            try:
+                g0.check_ids({"E9.b", "E9.dump_val_a"})
+                raise AssertionError("an unlisted training id must stop the run")
+            except SystemExit as e:
+                assert "E9.a" in str(e) and "jarm.py ids" in str(e), e
+            assert card_run_ids("E9", d) == {"E9.a"}, card_run_ids("E9", d)
             assert parse_band(None) == BAND and parse_band("100:0.15,500:0.05") == {100: 0.15, 500: 0.05}
             try:
                 parse(["run", "E9", "x", "--seed", "0", "--head-seed", "2", "--curve"])
@@ -401,6 +466,10 @@ def build_parser():
     r.add_argument("--window", action="store_true")
     r.add_argument("--dry", action="store_true")
     r.add_argument("--curve", nargs="?", const="", default=None, metavar="BAND", help="a speed-change arm: after training run `curve` against --ref (data-order fingerprint + loss band, optionally STEP:DIFF,... as `curve --band`); a fired check stops the arm before any read-out step")
+    i = sub.add_parser("ids", help="the run ids an arm launches (for the card's run_ids)")
+    i.add_argument("id")
+    i.add_argument("arm", nargs="+")
+    i.add_argument("--ref")
     t = sub.add_parser("table")
     t.add_argument("runs", nargs="+")
     t.add_argument("--cell", default=D115)
@@ -430,13 +499,24 @@ def main():
     a = parse(sys.argv[1:])
     if a.cmd == "selftest":
         return selftest()
+    if a.cmd == "ids":
+        listed = card_run_ids(a.id)
+        for arm in a.arm:
+            for x in Arm(a.id, arm, 0, 0, a.ref, dry=True).step_ids():
+                print(x + ("" if x in listed else "    (not in the card)"))
+        return 0
     if a.cmd == "table":
         return table(a.runs, a.cell)
     if a.cmd == "curve":
         ok, text = curve(a.run, a.ref, parse_band(a.band))
         print(text)
         sys.exit(0 if ok else 1)
-    sys.exit(Arm(a.id, a.arm, a.seed, a.head_seed, a.ref, a.trainer, " ".join(a.extra), a.window, a.dry, curve_check=a.curve).go())
+    arm = Arm(a.id, a.arm, a.seed, a.head_seed, a.ref, a.trainer, " ".join(a.extra), a.window, a.dry, curve_check=a.curve)
+    arm.check_ids(card_run_ids(a.id))
+    if not a.dry and not arm.lock():
+        arm.say("another jarm runs this arm (lock /tmp/jarm_" + arm.run + ".lock): nothing to do")
+        sys.exit(0)
+    sys.exit(arm.go())
 
 
 if __name__ == "__main__":
