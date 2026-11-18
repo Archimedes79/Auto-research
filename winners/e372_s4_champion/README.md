@@ -1,10 +1,10 @@
 # E2E token champion, two stages (D120): one token head on the predicted nodes of the frozen lane head B', then trained together with B's node head (S4, E372); source + tests, no weights
 
-A winner folder: the source of the system, small enough to hand over; **no weights**. Written by `winner.py` on 2026-11-18 from commit `78713c4bd7`.
+A winner folder: the source of the system, small enough to hand over; **no weights**. Written by `winner.py` on 2026-11-18 from commit `2617b99927`.
 
 ## What is here
 
-`code/` holds 13 file(s), 689716 bytes. `MANIFEST.json` lists every file with its sha256; `python winner.py verify <this folder>` re-checks them.
+`code/` holds 13 file(s), 684635 bytes. `MANIFEST.json` lists every file with its sha256; `python winner.py verify <this folder>` re-checks them.
 
 ## Numbers to reproduce
 
