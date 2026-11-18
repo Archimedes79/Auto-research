@@ -235,6 +235,39 @@ def main():
             except ValueError:
                 pass
         print("  ok  keep_steps: 5 (not a multiple of save_every), 14 (above steps), 0, 4.0 and True (not a step) are refused at the start")
+        for bad in (0, -1):                              # keep 0 would prune nothing (cks[:-0] is empty), keep -1 would keep one: refused at the start
+            try:
+                run(tmp, "keep0", keep=bad)
+                raise AssertionError(f"keep {bad} must be refused")
+            except ValueError:
+                pass
+        print("  ok  keep: 0 and -1 are refused at the start (0 used to prune nothing)")
+        # a damaged newest checkpoint: torch 2.8 reads a file cut at 100 bytes as RuntimeError (zip archive) but one cut after the first 4 KB as OSError EINVAL; each falls back to the one before
+        cfg_d, _, _, _ = run(tmp, "dmg", save_every=4, keep=2)                       # ckpt_8 and ckpt_12
+        dd = os.path.join(tmp, "dmg")
+        raw = open(os.path.join(dd, "ckpt_00000012.pt"), "rb").read()
+        for cut in (100, 4000, 4100, len(raw) // 2, len(raw) - 10):
+            for f in os.listdir(dd):
+                if f.endswith(".damaged"):
+                    os.remove(os.path.join(dd, f))
+            open(os.path.join(dd, "ckpt_00000012.pt"), "wb").write(raw[:cut])
+            m_d, l_d = Net(), Loss()
+            o_d = torch.optim.AdamW(optim.param_groups(m_d, l_d, cfg_d.lr, cfg_d.weight_decay, cfg_d.lr_groups), lr=cfg_d.lr)
+            with contextlib.redirect_stdout(io.StringIO()):
+                got = checkpoint.resume(dd, m_d, l_d, o_d, EMA(m_d, cfg_d.ema), None, cfg_d)
+            assert got is not None and got[0] == 8 and os.path.exists(os.path.join(dd, "ckpt_00000012.pt.damaged")) and not os.path.exists(os.path.join(dd, "ckpt_00000012.pt")), f"a checkpoint cut at {cut} of {len(raw)} bytes must fall back to step 8"
+        print("  ok  resume: a newest checkpoint cut at 100 / 4000 / 4100 / half / minus 10 bytes is kept as .damaged and the one before is used")
+        open(os.path.join(dd, "ckpt_00000012.pt"), "wb").write(raw)
+        real_load = torch.load
+        torch.load = lambda *a, **k: (_ for _ in ()).throw(PermissionError(13, "Permission denied"))     # not damage: the run stops, nothing is renamed
+        try:
+            checkpoint.resume(dd, m_d, l_d, o_d, EMA(m_d, cfg_d.ema), None, cfg_d)
+            raise AssertionError("a permission error must stop the resume")
+        except PermissionError:
+            pass
+        finally:
+            torch.load = real_load
+        check(os.path.exists(os.path.join(dd, "ckpt_00000012.pt")), "resume: a permission error is not a damaged checkpoint (it stops, nothing is renamed)")
         events = []
 
         class Count(Hooks):

@@ -1541,7 +1541,7 @@ try:
             pass
         os.remove(lk + ".lock")
     # the selftests of the other tools and of the parts that live in their own files (the deep review of 2026-11-10: a tool change is gated by this file, so it runs them too)
-    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"], ["testgate.py", "--selftest"]):
+    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["gitfast.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"], ["testgate.py", "--selftest"]):
         if not os.path.exists(f"{HERE}/{extra[0]}"):
             continue
         ex = subprocess.run([sys.executable, f"{HERE}/{extra[0]}", *extra[1:]], capture_output=True, text=True)  # the real environment: these selftests build their own throw-away folders

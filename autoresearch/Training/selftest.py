@@ -331,6 +331,17 @@ def check_bad_steps(tmp):
     s, f, _ = cli_mod.summary(Run(os.path.join(root, "b_str")))
     assert [x.code for x in f if x.level == "warn"] == ["bad_config"] and s["total"] == 0, f
     assert Run(os.path.join(root, "a_good")).config_problems == []
+    # a config.json or Training.json that a crash tore in the middle of its write is a finding that names the file (it was {} and the status said only "steps unknown")
+    for name, fname, text in (("g_torn_cfg", "config.json", '{"steps": 3000, "lr": '), ("h_torn_opt", "Training.json", '{"log": "metrics.jsonl", '), ("i_list_cfg", "config.json", "[1, 2]")):
+        d = make(root, name, rows(5))
+        open(os.path.join(d, fname), "w").write(text)
+        r = Run(d)
+        assert len(r.config_problems) == 1 and r.config_problems[0].startswith(fname), (name, r.config_problems)
+        s, f, _ = cli_mod.summary(r)
+        assert [x.code for x in f if x.level == "warn"].count("bad_config") == 1 and fname in [x.text for x in f if x.code == "bad_config"][0], f
+    d = make(root, "j_no_files", rows(5))
+    os.remove(os.path.join(d, "config.json"))
+    assert Run(d).config_problems == [], "a missing config.json is no finding (a layout without one is allowed)"
 
 
 def check_compose_values(tmp):
@@ -781,6 +792,12 @@ def main():
             raise AssertionError("bad rule accepted")
         except ValueError:
             pass
+        try:
+            Rule("total@500 > 1 window 0")                                      # v[-0:] is the whole list: it would average the whole run
+            raise AssertionError("window 0 accepted")
+        except ValueError as e:
+            assert "window" in str(e), e
+        assert Rule("total@500 > 1 window 1").window == 1
         nanrun = Run(make(tmp, "nan2", rows(50, f=lambda x: dict(x, total=float("nan")))))
         assert Rule("total@500 > 1e9").evaluate(nanrun)[0] == "hit"
         with open(os.path.join(tmp, "good", "kill.txt"), "w") as f:

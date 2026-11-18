@@ -19,6 +19,7 @@ Standard-library Python (any interpreter: WSL, Windows, a Linux server). Most to
 | `keep3.py` | the best three networks of a problem and their checkpoints |
 | `provenance.py`, `lineage.py`, `package.py` | what a result card records, the verified chain network -> run -> code -> data, the result package and the clean-up of derived data |
 | `commit_paths.py`, `check_git.py` | commit exactly the named paths in the shared checkout; what may go into git and be pushed |
+| `gitfast.py` | read-only git calls through git.exe when this runs in WSL on a Windows drive (40-100x faster than the WSL git on 9p); imported by `check_git.py`, `provenance.py`, `check_structure.py`; `AR_GIT=wsl` forces the WSL git |
 | `check_numbers.py`, `check_structure.py` | numbers of a report against their sources; folder structure and dead paths of the living documents |
 | `archdraw.py` | architecture drawings from a JSON spec, checked against the code |
 | `topic_table.py` | the table of a research topic, made from its notes |
