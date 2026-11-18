@@ -99,4 +99,5 @@ run "token loader on the GPU: same batches and epoch order as the DataLoader" gr
 run "token cache into another root" grid/test_build_tokcache_root.py
 run "jarm: one arm of a token experiment (card words, cells, table)" jarm.py selftest
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
+run "simplify_stat: the simplification table of a report from git" tools/simplify_stat.py selftest
 exit $fail
