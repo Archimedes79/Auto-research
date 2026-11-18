@@ -13,6 +13,7 @@ import sys
 import tempfile
 import time
 import traceback
+import warnings
 from typing import Callable, List, Tuple
 
 import numpy as np
@@ -976,8 +977,19 @@ def _():
     rec.arm(["in", "conv"])
     with torch.no_grad():
         k(torch.ones(1, 1, 5))                                                # no positional argument for the pre-hook: the tap is skipped, the forward pass runs
-    assert rec.errors.get("in") == 1 and "in" not in rec.read(), (rec.errors, rec.read().keys())
-    assert rec.read()["conv"].min() == -1.0, "the record is the output of the tapped layer, not what an in-place ReLU made of it"
+    with warnings.catch_warnings(record=True) as caught:                      # a failing tap is not a silent gap: read() names it and its count
+        warnings.simplefilter("always")
+        got = rec.read()
+    assert rec.errors.get("in") == 1 and rec.failed == {"in": 1} and "in" not in got, (rec.errors, rec.failed, got.keys())
+    assert len(caught) == 1 and issubclass(caught[0].category, RuntimeWarning) and "'in': 1" in str(caught[0].message), [str(w.message) for w in caught]
+    assert got["conv"].min() == -1.0, "the record is the output of the tapped layer, not what an in-place ReLU made of it"
+    rec.arm(["conv"])                                                         # a new pass starts clean: no failure, no warning (errors keeps the total)
+    with torch.no_grad():
+        k(torch.ones(1, 1, 5))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        rec.read()
+    assert rec.failed == {} and rec.errors == {"in": 1} and not caught, (rec.failed, rec.errors, [str(w.message) for w in caught])
     rec.close()
 
 

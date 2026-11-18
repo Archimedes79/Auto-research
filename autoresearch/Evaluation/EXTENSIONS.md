@@ -36,7 +36,7 @@
 
 `qual debug SPEC [--taps a b]` writes `_debug.png` (one picture per tap by kind: feature maps as energy and PCA colours, maps, images, logits as maximum probability, bars), a statistics table, plausibility flags (non-finite, dead or constant, no spatial structure, extreme magnitude) and `_taps.npz` with the raw arrays. The flags are heuristics: they point, a human judges.
 
-For torch networks `torch_taps.TapRecorder(model, {name: Hook(path, when, pick, select)})` records by module path with forward hooks. `arm(names)` switches recording on for the next pass, `read()` returns the arrays. It never breaks a forward pass (a tap that cannot be read is skipped and counted). The hooks use only the tensors' own methods; torch is imported lazily in `count_ops` (chapter 5).
+For torch networks `torch_taps.TapRecorder(model, {name: Hook(path, when, pick, select)})` records by module path with forward hooks. `arm(names)` switches recording on for the next pass, `read()` returns the arrays. It never breaks a forward pass (a tap that cannot be read is skipped and counted in `errors`; `read()` then gives a RuntimeWarning that names it and its count in this pass, `failed`). The hooks use only the tensors' own methods; torch is imported lazily in `count_ops` (chapter 5).
 
 ## 4. Where the numbers come from
 `quant outliers RUN [--k --z --min-support]` returns three lists, every row with the command that draws it:

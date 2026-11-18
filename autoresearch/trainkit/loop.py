@@ -95,6 +95,8 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     control.stop_requested). The rules of a resume are the config class' (Config.RESUME_FREE, RESUME_SWITCHES, RESUME_ENV)."""
     hooks = hooks or Hooks()
     stop_check = stop_check or control.stop_requested
+    if cfg.keep < 1:                                            # cks[:-0] is nothing: keep 0 would prune nothing, and the run's newest checkpoint is what a resume continues from
+        raise ValueError(f"keep {cfg.keep}: must be at least 1")
     keep_steps = tuple(cfg.keep_steps or ())                    # None (a json null) = no list
     bad_keep = [s for s in keep_steps if not (isinstance(s, numbers.Integral) and not isinstance(s, bool) and 0 < s <= cfg.steps and cfg.save_every and s % cfg.save_every == 0)]
     if bad_keep:                                                # a step that is never saved keeps nothing: said at the start, not after days

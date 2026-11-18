@@ -71,6 +71,18 @@ def queue_checks(tmp, ok):
             assert queue_api._running(c0, [], {}) == [("ghost.eval", None, None)] and queue_api.resolve_item(c0, None) == (None, None, None), "only a training counts as the running one"
         finally:
             queue_api._slot_ids = real_slots
+        os.makedirs(os.path.join(proj, "runs", "g_one"))                              # two trainings hold slots: status without `i` must not pick one of them
+        os.makedirs(os.path.join(proj, "runs", "g_two"))
+        queue_api._slot_ids = lambda c: ["g.one", "g.two"]
+        try:
+            raises(T.status, "g.one, g.two")
+            assert queue_api.resolve_item(c0, "g.two")[0] == "g.two", "a named one is fine"
+        finally:
+            queue_api._slot_ids = real_slots
+        T.queue_add(job("d.dep"), start=False)                                        # an `after` that names the run folder (d_dep) is stored as the item's id (d.dep): the runner looks the id up
+        assert T.queue_add(job("d.then", after=["d_dep"]), start=False)["after"] == ["d.dep"]
+        T.queue_remove("d.then")
+        T.queue_remove("d.dep")
         raises(T.queue_hold, "words", "", all=True)
         raises(T.queue_resume, "words", "  ", all=True)
         raises(T.queue_hold, "name the item", "Mirko: test")                          # neither an item nor all: an error, a missing id never holds everything
