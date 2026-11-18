@@ -17,7 +17,7 @@
    "title": "2. The system: architecture and description",
    "part": "02_system.md",
    "svg": "02_system.svg",
-   "svg_caption": "The end-to-end token head. Solid = built and measured (stage S1), dashed = planned stages (PENDING), amber outline = a named hard step or budget. Not in the system: keypoint peaks + top-K 32, snap, attachment, wiring rule, close-node step."
+   "svg_caption": "The end-to-end token head. Solid = in the champion (stage 1 head, stage 2 = S4), dashed = measured blocks that are not in it (S2 / S2b, S3: TIE), amber outline = a named hard step or budget. Not in the system: keypoint peaks + top-K 32, snap, attachment, wiring rule, close-node step."
   },
   {
    "id": "gt",
@@ -248,6 +248,7 @@
   "../../experiments/E383_*/experiment.md",
   "../../experiments/E384_*/experiment.md",
   "../../experiments/E385_*/experiment.md",
+  "../../experiments/E387_*/experiment.md",
   "../../experiment_execution/decisions/D119.md",
   "../../experiment_execution/decisions/D113.md"
  ],

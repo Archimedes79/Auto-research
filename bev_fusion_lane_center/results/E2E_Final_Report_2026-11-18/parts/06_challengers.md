@@ -2,7 +2,7 @@
 
 **In short.** Every challenger below was judged by a rule that its card wrote before the run; "by hand" is said where a verdict is not from a rule. The champion since D120 is the two-stage recipe (the E365 token head with none weight 0.25 and the decode D115 as stage 1, then S4: the head and the node head of B' trained together); a challenger replaces it only by its rule. VAL 873 frames, two seeds written s0 / s1, topo F1 unless named; TEST is untouched.
 
-Table: Champion and challengers. A cell that says PENDING is not measured at the time of the build; numbers come from the cards named in the last column.
+Table: Champion and challengers. Numbers come from the cards named in the last column.
 
 | card | what it asks | the written rule (short) | result s0 / s1 | verdict | card |
 |---|---|---|---|---|---|
@@ -31,16 +31,18 @@ What S2 (E368) did, and what it did not do: the block is one cross-attention aft
 
 S2b adds the fusion that S2 lacks (Mirko's reading, D121: cross-attention followed by an MLP fusion is the natural form). The cross output c is not added; it is fused with the input x by a small MLP over [x, c and the evidence of the attention (the attention mass on real past keys against the none key)], and a per-token gate decides how much of the fused result replaces x, so that a token passes unchanged where the past does not help. The output is zero-initialised, so the start is the head without the block. The constraint D91 / D118 stands: one frame and one radar scan per step, the past only recursively at feature level.
 
-How it relates to E384: S2b is the token-level form of what E384 asked at the feature level (a recursive state inside the node head of B'). E384 stays closed by the oracle ceiling of its step 0 (chapter 4); S2b asks the same question one level up, where the head already reads the past. S2b is tested on the cached B' tokens (stage 1, card E387). The end-to-end confirmation, the S4 stage 2 with the past block in the head, is open and not part of this report: a stateful head needs sequences of three frames through B' in the live path, which is new code. A win at stage 1 alone is therefore labelled as such and is not the champion.
+How it relates to E384: S2b is the token-level form of what E384 asked at the feature level (a recursive state inside the node head of B'). E384 stays closed by the oracle ceiling of its step 0 (chapter 4); S2b asks the same question one level up, where the head already reads the past. S2b is tested on the cached B' tokens (stage 1, card E387). The end-to-end confirmation, the S4 stage 2 with the past block in the head, is open and not part of this report: a stateful head needs sequences of three frames through B' in the live path, which is new code. The result is a TIE at stage 1 (below), so the stage 2 over S2b is not needed.
 
 Table: S2b against its control (card E387, two seeds, VAL 873 frames; the numbers come from the card only, never typed here).
 
 | arm | topo F1 s0 / s1 | junction F1 s0 / s1 | lanes found | parameters | ms per frame | verdict |
 |---|---|---|---|---|---|---|
-| control z (E368 loader, no block) | PENDING | PENDING | PENDING | PENDING | PENDING | reference |
-| S2 (E368, cross-attention only) | +0.0042 / +0.0023 against z | | | 144,547 (head alone, +17,416) | head alone 7.88 against 6.66 (quiet) | TIE |
-| S2b (cross-attention + MLP + gate) | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING: the rule of the card |
+| control z (E368 loader, no block; stream read-out, each arm at its own pinned cell) | 0.6506 / 0.6617 | reference (the card gives differences) | reference | 127,131 (head alone) | head alone 6.19 (quiet) | reference |
+| S2 (E368, cross-attention only) | +0.0042 / +0.0023 against z (E368 read-out, keep 0.6) | | | 144,547 (head alone, +17,416) | head alone 7.88 against 6.66 (E368 timing); 7.86 against 6.19 in the E387 timing | TIE |
+| S2b (cross-attention + MLP + gate) | 0.6558 / 0.6608 (f - z +0.0051 [-0.0004, +0.0123] / -0.0009 [-0.0053, +0.0035]) | f - z +0.0006 / +0.0639 (seed 1: a cell effect, f's own cell trades duplicates for junction F1) | f - z +0.0048 / +0.0244 | 158,063 (head alone, +30,932) | head alone 8.49 (f - z +2.30); whole path 18.5 against the gate 19.7 | **TIE** (clause 1 fails on both seeds) |
 
-The report states the card's verdict as it is (a win, a TIE, or a labelled negative). If S2b fails its rule its code leaves again behind an archive tag, nothing is lost (D121). Whatever the verdict, the tokens of the past stay a block of the head: they are not in the champion unless S2b passes its rule and the stage 2 (S4) confirms it.
+**Result: TIE by the written rule of the card (E387, 2026-11-18 12:40): the champion takes no past block, neither the residual (E368) nor the fused (E387) one.** The head reads the past: on seed 0 the whole gain of f is the use of the past (f with every frame cold 0.6508 equals z 0.6506; stream against off +0.0050 [+0.0004, +0.0115]); on seed 1 it is +0.0017 [-0.0012, +0.0048]. But the fusion MLP adds nothing over the residual block (f - r +0.0002 on seed 0, -0.0036 on seed 1), and the gate halves the wrong flips and the right ones alike (it changes 6.1 - 7.5 kept nodes per frame, E368's block 8.1 - 11.5; gained and lost are about equal). The mean of f - z over the two seeds is +0.0021 at the own cells, inside the head-to-head noise of 0.003. The prediction of the card (f - z +0.004, hit window -0.002 .. +0.010) was a HIT, with the odds 77 % for a TIE. In one sentence of the lane chat: the past at the token level is read (a wrong past costs 0.026, stream against off +0.005 on one seed) but buys at most +0.005, and the gated fusion buys no more than the plain residual block.
+
+Limits (card section 3): two seeds with one cache seed each; the controls z and r are the stored E368 runs (the launch gate showed that the training path reproduces their step-100 / 200 losses to four digits); the capacity control was not run; S2b was tested with the S1 recipe (none weight 1.0), not the champion recipe (0.25). The code of S2 and S2b leaves main again behind a tag (nothing is lost, the stored runs stay); the question "does a recursive state at the token level lift the head" is closed for good in `closed_questions.md` together with E354 and E384.
 
 **sources** E373, E375, E376, E377, E378, E379, E368, E374, E372, E383, E384, E385 cards; D115, D121; E387 (the S2b card, lane chat).
