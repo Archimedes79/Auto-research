@@ -277,6 +277,11 @@ def queue_cmd(fn):
     return run
 
 
+def _exit_if(result, bad):
+    """1 when the outcome of one run in the result of hold ({id: text}) satisfies `bad`, else 0: a script that reads exit 0 as 'stopped' is not told so about a run that still runs"""
+    return 1 if any(bad(t) for t in result.values()) else 0
+
+
 @queue_cmd
 def cmd_queue_add(a):
     """compose a run like `compose`, run the project's checks, and put it in the queue; the runner starts it (also after the launcher of an earlier item died)"""
@@ -305,7 +310,8 @@ def cmd_queue_add(a):
         if r.returncode:
             print("\n".join("  " + x for x in (r.stdout + r.stderr).strip().splitlines()[-10:]))
             raise TQ.QueueError(f"the {name} found problems; nothing queued")
-    TQ.add(c, plan, a.id, [x for x in a.after.split(",") if x], a.priority, a.note)
+    from .api import resolve_after
+    TQ.add(c, plan, a.id, resolve_after(c, [x for x in a.after.split(",") if x]), a.priority, a.note)
     pid = TQ.ensure_runner(c) if not a.no_runner else 0
     print(f"queued {a.id}" + (f"; the runner is running (pid {pid})" if pid else "; no runner started (queue serve)"))
     TQ.show(c)
@@ -324,8 +330,8 @@ def cmd_queue_hold(a):
     TQ, c = _queue(a)
     if not a.ids and not a.all:
         raise TQ.QueueError("name the runs to hold, or --all")
-    TQ.hold(c, a.ids, a.all, a.words, a.reason, a.wait)
-    return 0
+    result = TQ.hold(c, a.ids, a.all, a.words, a.reason, a.wait)
+    return _exit_if(result, lambda t: t.startswith("RUNNING and NOT stopped") or (a.wait > 0 and "still running after" in t))      # the outcomes are printed; exit 1 says a run was not stopped (wait 0 asks and does not wait)
 
 
 @queue_cmd

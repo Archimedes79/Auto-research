@@ -4,6 +4,7 @@ A checkpoint is {"state": model.* and loss.* tensors, "opt", "ema", "step", "cfg
 "extra" ("scaler"; "data" = the position in the data, written when the data can be positioned: loop.py, data.py)}. `external` = state-key prefixes that are NOT saved
 because they come from elsewhere (a frozen pre-trained part of the model): they may be missing on a load, nothing else may."""
 import dataclasses
+import errno
 import json
 import os
 import pickle
@@ -143,9 +144,11 @@ def resume(out_dir, model, loss, opt, ema, scaler, cfg, external=()):
     for name in reversed(ckpts):
         try:
             ck = torch.load(os.path.join(out_dir, name), map_location="cpu", weights_only=False)
-        except (zipfile.BadZipFile, pickle.UnpicklingError, EOFError, RuntimeError) as e:
+        except (zipfile.BadZipFile, pickle.UnpicklingError, EOFError, RuntimeError, OSError) as e:
             if isinstance(e, RuntimeError) and "zip archive" not in str(e) and "PytorchStreamReader" not in str(e):
                 raise                                           # not a damaged file (e.g. out of memory): no fallback
+            if isinstance(e, OSError) and e.errno != errno.EINVAL:
+                raise                                           # a file cut after the first 4 KB reads as EINVAL (torch 2.8); a permission error or a missing file is not damage
             os.replace(os.path.join(out_dir, name), os.path.join(out_dir, name + ".damaged"))   # kept, no longer listed or pruned
             damaged.append(name)
             print(f"WARNING: {name} is damaged ({type(e).__name__}: {e}), kept as {name}.damaged; trying the one before", flush=True)

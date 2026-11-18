@@ -24,6 +24,8 @@ class Rule:
         self.text = text.strip()
         self.key, self.step, self.op = m.group(1), int(m.group(2)), m.group(3)
         self.value, self.window = float(m.group(4)), int(m.group(5) or DEFAULT_WINDOW)
+        if self.window < 1:                                           # v[-0:] is the whole list: `window 0` would average the whole run
+            raise ValueError(f"kill rule not understood: {text!r} (the window is at least 1 value)")
 
     def evaluate(self, run):
         """(status, measured value or None): status is 'pending', 'ok', 'hit' or 'unknown' (the key was never logged)"""

@@ -5,7 +5,7 @@ import os
 
 from . import health, modules
 from . import trainqueue as TQ
-from .api import TrainingError, _checked_plan, _machine, _map, _run_dir, _slot_ids, errors, shell
+from .api import TrainingError, _checked_plan, _machine, _map, _run_dir, _slot_ids, errors, one_running, resolve_after, shell
 from .runs import Run
 
 
@@ -30,11 +30,12 @@ def _running(c, items, states, only_trainings=False):
 
 
 def resolve_item(c, i):
-    """-> (id, queue item or None, number or None). i=None is the running training. A text is an id or a run folder name first; a number (an int, or a text of digits that is no
+    """-> (id, queue item or None, number or None). i=None is the running training (several running: an error). A text is an id or a run folder name first; a number (an int, or a text of digits that is no
     id) is the place in `queue_list`; what is neither in the queue is a run of the records (no item, no number)"""
     items = _ordered(TQ.load(c))
     if i is None:
         running = _running(c, items, _states(c, items), only_trainings=True)
+        one_running([x[0] for x in running])
         return running[0] if running else (None, None, None)
     if isinstance(i, bool):
         raise TrainingError("i is a queue number, an id or a run folder name")
@@ -143,7 +144,7 @@ class QueueMixin:
             problems.append("missing data: " + ", ".join(m["name"] for m in missing) + " (build it first)")
         if problems:
             raise TrainingError("nothing queued: " + "; ".join(problems))
-        TQ.add(c, plan, j["id"], j["after"], j["priority"], j["note"], extra=dict(job={k: v for k, v in j.items() if k != "project"}, kill=j["kill"]))
+        TQ.add(c, plan, j["id"], resolve_after(c, j["after"]), j["priority"], j["note"], extra=dict(job={k: v for k, v in j.items() if k != "project"}, kill=j["kill"]))
         if start:
             TQ.ensure_runner(c)
         return get_item(c, j["id"])                                        # the context of the job (its "project" may differ from this object's)
