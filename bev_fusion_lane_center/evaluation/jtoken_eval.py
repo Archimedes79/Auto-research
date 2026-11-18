@@ -60,6 +60,7 @@ import lane_ptok_data as LP  # noqa: E402
 import lane_tokcache as LC  # noqa: E402
 import qgraph_eval as QE  # noqa: E402
 import qgraph_readout as QR  # noqa: E402
+from pmap import pmap  # noqa: E402
 
 ST = QE.TM.ST                                                               # the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
 RUNS = JV.RUNS
@@ -848,17 +849,20 @@ def sweep(a, runs=RUNS, out_dir=None):
     assert not os.path.exists(path), f"a stored table is never overwritten: {path}"
     r = read_dump(a, runs, n_max)
     check_record(r["fr"], r["valid"])
-    rows = []
-    for lt, ltl, kt, gate in SWEEP_GRIDS[a.grid]:
+
+    def cell_row(cell):
+        lt, ltl, kt, gate = cell
         fr = [decode_variant(f, v, lt, kt, gate, ltl) for f, v in zip(r["fr"], r["valid"])]
         res = score_preds([frame_prediction(t, f, "rec", kt) for t, f in zip(r["toks"], fr)], r["frames"], log=lambda *x, **k: None)
         row = dict(link_thr=lt, link_thr_long=ltl, keep_thr=kt, none_gate=gate, record=(lt, ltl, kt, gate) == (LINK_THR, LINK_THR, KEEP_THR, True), frames=len(fr),
                    kept_nodes_per_frame=float(np.mean([f["keep"].sum() for f in fr])), links_per_frame=float(np.mean([len(f["rec"]["src"]) for f in fr])), **{k: res["graph"][k] for k in SWEEP_KEYS})
         row.update({k: res["graph"][k] for k in JUNCTION_KEYS}, junction_points_per_frame=float(np.mean([c["lane"]["junc"][0] for c in res["rec"]["graph"]])), long_links_per_frame=float(np.mean([f["rec"]["long"].sum() for f in fr])),
                    **{f"node_link_long_{k}": res["nodes"].get(f"link_long_{k}") for k in ("P", "R")})
-        rows.append(row)
         print(f"link {lt:<5g} long {ltl:<5g} keep {kt:<4g} gate {'on ' if gate else 'off'}  " + "  ".join(f"{k} {row[k]:.4f}" for k in SWEEP_KEYS + JUNCTION_KEYS)
-              + f"  links/frame {row['links_per_frame']:.1f}", flush=True)
+              + f"  links/frame {row['links_per_frame']:.1f}", flush=True)                   # the progress line of the cell (with --jobs N the lines of different cells interleave; the table is in grid order)
+        return row
+
+    rows = pmap(cell_row, SWEEP_GRIDS[a.grid], getattr(a, "jobs", 1))                          # --jobs N: the cells are independent, N forked processes, the same numbers in the same order
     JV.write_json(path, _jsonable(dict(run=a.run, model="model.pt", seed=a.seed, split=a.split, every=a.every, max=a.max, drop=a.drop, drop_seed=a.drop_seed, steps=r["ck"].get("steps"), dump=_file_id(r["path"]), frames=len(r["frames"]), rows=rows, K=r["ds"].K,
                                        grid="perclass", **live_meta(r), note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
     print(f"written {os.path.relpath(path, ROOT)}")
@@ -1355,6 +1359,7 @@ def parse_args(argv=None):
             s.add_argument("--argmax", action="store_true", help="the argmax decode (one link per source and class) at --keep-thr instead of the record's 0.5 -> token_card_argmax_kt<K>..json")
         if name == "sweep":
             s.add_argument("--grid", default="perclass", choices=tuple(SWEEP_GRIDS), help="perclass (E375, the only grid): link short x link long x keep, none gate off (36 cells)")
+            s.add_argument("--jobs", type=int, default=1, help="N forked processes score the cells (the same numbers in the same order; about 2.5x at 3); default 1 = the loop of before")
     s = sub.add_parser("ensemble")
     s.add_argument("--runs", required=True, help="A,B: two runs whose cache dumps of this read-out (model.pt, the same cache seed, frames and tokens) are averaged; the card goes to runs/A/")
     s.add_argument("--seed", type=int, required=True)

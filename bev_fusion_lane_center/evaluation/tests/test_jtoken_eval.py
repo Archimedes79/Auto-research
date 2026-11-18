@@ -518,6 +518,10 @@ def test_sweep():
         assert all(list(r) == ["link_thr", "link_thr_long", "keep_thr", "none_gate", "record", "frames", "kept_nodes_per_frame", "links_per_frame", *E.SWEEP_KEYS, *E.JUNCTION_KEYS, "junction_points_per_frame", "long_links_per_frame",
                                "node_link_long_P", "node_link_long_R"] for r in prow), "the per-class table keeps its rows and keys"
         assert all(np.isfinite(r[k]) for r in prow for k in E.JUNCTION_KEYS + ("junction_points_per_frame", "long_links_per_frame")), "the junction numbers and the long links of every row"
+        out3 = os.path.join(tmp, "out_jobs")                                                               # --jobs 3: the same table, the same order (forked cells; jobs 1 is the call above)
+        os.makedirs(out3)
+        pj = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--max", "3", "--jobs", "3"]), runs, out3)))
+        assert pj["rows"] == prow, "sweep --jobs 3 gives the rows of the serial sweep, to the last digit"
         import qgraph_eval as QE
         r0 = pcell[(0.1, 0.05, 0.6)]                                                                        # one row against a direct scoring of its decode
         d0 = E.score_preds([E.frame_prediction(t, E.decode_variant(f, t["valid"], 0.1, 0.6, False, 0.05), "rec", 0.6) for f, t in zip(d["frames"], toks)], QE.val_frames()[:3], log=lambda *a, **k: None)
