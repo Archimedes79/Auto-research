@@ -5,16 +5,14 @@
 likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT successors (one of them with `ylong` against the token
 chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over
 the sources, no valid mask; the none slot trains the empty sources), pos_loss (E376: -log sum / -log max over G(i) by hand with duplicates and a fork, one member = the same loss, the max raises one member; textual
-mutants), none_weight_near (E377: the near label and the loss by hand on a toy frame (a twin at 1.0 m, exactly 2.0 m, 2.01 m, a heading cosine 0.4, a duplicate in G(i), padding), n_near, unset / equal = the
-loss of before, no near token = any W; textual mutants), none_weight_near_trainer (E377: 20 smoke steps bit for bit at W = the none weight, n_near logged, resume refusal, the teacher branch), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination, argmax;
+mutants), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination, argmax;
 mutants: other thresholds / ends / no valid mask), head (shapes, every parameter gets gradient, the gate and the chord classes against an independent distance, order and padding invariance with a padding mutant),
 key_bias (the head's own p_none gets gradient from layer 2 on after the switch and not before; the step mirror survives load_state_dict; no gradient reaches the cached inputs), writer_free (the forward reads no GT
 key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches, kill, resume, another recipe refused, no loader
-import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit, also with --prior none --teacher none), pos_loss_trainer (E376:
---pos-loss sum = the champion's 20 smoke steps bit for bit, max differs), prior (E369: the step-0 head = c-rule in the gate on a hand frame and 3 VAL cache frames, temperature, zero init + scales 1/3, gradient, the type prior inside read_types; mutants lam 0, mu 0, no type prior, the prior outside
-read_types), past (the S2 hook), maps (the S3 hook: the plain head bit for bit without a block or maps, `{}` reaches the block, the call order with the S2 hook, the gradient into the block; textual mutants), live_inputs (S4: the default = the forward of before bit for bit, outputs and parameter gradients, no input gradient; live: the same values, a gradient on every float
-input, the full gradient against float64 central differences; textual mutants; build_head / load_model read it, absent = False), teacher (E370 stage A: targets = the scored c-rule in the gate, B''s types, out-of-gate sources left out, no GT key), init (weights + step buffer, ckpt first, sha256, architecture refused, snapshots with step buffer 20 + n, the hook's eval rows without 'total').
-head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
+import; a non-smoke run through a fake loader that returns (None, batches) with the ident / K / cache arguments), arch_options (defaults bit for bit; an old run's removed options (D117) at their default resume and load, another value is refused), pos_loss_trainer (E376:
+--pos-loss sum = the champion's 20 smoke steps bit for bit, max differs), live_inputs (S4: the default = the forward of before bit for bit, outputs and parameter gradients, no input gradient; live: the same values, a gradient on every float
+input, the full gradient against float64 central differences; textual mutants; build_head / load_model read it, absent = False).
+head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises (the trainer's step-0 head = build_head after seed_all(2)) and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 distill (E379 card v2 `distill_loss` = KL_s + KL_l by hand on two toy frames with two stub teachers incl. masked keys and an all-masked row, a teacher equal to the student gives 0 exactly, the gradient, no type term;
 textual mutants), distill_trainer (E379 --distill-from / --distill-weight: unset = the champion's 20 smoke steps (recorded constants), W 0 = the champion bit for bit, W 1 moves the weights, step 1 = + W x kd at W 1 / 4,
 gt_mean / kd_mean, the teacher key, the start check on the teachers' GT loss over the first 20 batches, the first batch through a persistent-worker DataLoader unchanged by the teachers, the first-batch log, float32
@@ -86,8 +84,7 @@ def _tensors(f):
         yl[i, j] = True
     for (i, j), v in f["scale"].items():
         ys[i, j] = torch.tensor(v)
-    geo = {k: torch.tensor(f[k], dtype=torch.float32) for k in ("pos", "dirv") if k in f}                  # the token geometry of a frame that has one (the E377 near label)
-    return dict(cand=cand, chord=chord, y=y, ylong=yl, yscale=ys, ytype=torch.tensor(f["ytype"]), valid=torch.tensor(f["valid"]), **geo)
+    return dict(cand=cand, chord=chord, y=y, ylong=yl, yscale=ys, ytype=torch.tensor(f["ytype"]), valid=torch.tensor(f["valid"]))
 
 
 def _hand(frames=(F1, F2)):
@@ -99,7 +96,7 @@ def _hand(frames=(F1, F2)):
     B = len(frames)
     z, zn, ty = torch.randn(B, 2, K, K, generator=g), torch.randn(B, 2, K, generator=g), torch.randn(B, K, 7, generator=g)
     out = dict(z=z.requires_grad_(), zn=zn.requires_grad_(), cand=st("cand"), chord=st("chord"), valid=st("valid"), scale=torch.full((B, K, K, 2), 0.4), types=ty, types1=ty.flip(-1))
-    return out, dict(y=st("y"), ylong=st("ylong"), yscale=st("yscale"), ytype=st("ytype"), **{k: st(k) for k in ("pos", "dirv") if k in ts[0]}), frames
+    return out, dict(y=st("y"), ylong=st("ylong"), yscale=st("yscale"), ytype=st("ytype")), frames
 
 
 def _with_logp(out, cand=None):
@@ -108,9 +105,8 @@ def _with_logp(out, cand=None):
 
 
 def _hand_loss(f, z, zn, t1, t3, w=1.0, pos="sum"):
-    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights), a number or a list per token (E377);
+    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights);
     pos = the likelihood of a source with GT successors, -log sum ('sum') or -log max ('max') of p over G(i). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
-    wn = lambda n: w[n] if isinstance(w, (list, tuple)) else w  # noqa: E731
     res = []
     for c, cs in enumerate((f["short"], f["long"])):
         rows = []
@@ -118,9 +114,9 @@ def _hand_loss(f, z, zn, t1, t3, w=1.0, pos="sum"):
             G = [j for a, j in f["gt"] if a == i and j in js]
             den = lse(*[z[c][i][j] for j in js], zn[c][i])
             zg = [z[c][i][j] for j in G]
-            rows.append(-((lse(*zg) if pos == "sum" else max(zg)) - den) if G else -wn(i) * (zn[c][i] - den))
+            rows.append(-((lse(*zg) if pos == "sum" else max(zg)) - den) if G else -w * (zn[c][i] - den))
         res.append(sum(rows) / len(rows) if rows else None)
-    wt = lambda n: wn(n) if f["ytype"][n] == 0 else 1.0  # noqa: E731
+    wt = lambda n: w if f["ytype"][n] == 0 else 1.0  # noqa: E731
     ce = lambda t: sum(wt(n) * -(t[n][f["ytype"][n]] - lse(*t[n])) for n in range(f["K"]) if f["valid"][n]) / sum(wt(n) for n in range(f["K"]) if f["valid"][n])  # noqa: E731
     return res[0], res[1], ce(t1), ce(t3)
 
@@ -231,86 +227,13 @@ def test_pos_loss():
         assert gz["sum"][i, win] < 0 and gz["sum"][i, lose] < 0 and gz["max"][i, win] < 0 and gz["max"][i, lose] > 0, (i, gz["sum"][i], gz["max"][i])
     must_fail(JK.jtoken_loss, out, b, pos_loss="mean")
     mutants = {"the max over the wrong axis": [("g.amax(-1)", "g.amax(-2)")], "the max over all candidates instead of the group": [("g.amax(-1)", "lp[..., :K].amax(-1)")],
-               "the option ignored": [("_source_nll(lp, G, wn, pos_loss)", "_source_nll(lp, G, wn)")], "logsumexp kept under max": [("g.amax(-1)", "torch.logsumexp(g, -1)")],
+               "the option ignored": [("_source_nll(lp, G, none_weight, pos_loss)", "_source_nll(lp, G, none_weight)")], "logsumexp kept under max": [("g.amax(-1)", "torch.logsumexp(g, -1)")],
                "the none slot inside the max": [("g.amax(-1)", "torch.cat([g, lp[..., K:]], -1).amax(-1)")]}
     for edits in mutants.values():
         must_fail(_check_pos, "max", _mutant(*edits))
     print(f"pos_loss: nll_s / nll_l by hand on two frames (duplicates and a fork in the short class, duplicates in the long class, one-member groups, empty-G sources at W 0.25): sum {hand['sum'][0]:.6f} / {hand['sum'][1]:.6f}, "
           f"max {hand['max'][0]:.6f} / {hand['max'][1]:.6f}, the rest of the loss unchanged; one member in every group: max = sum bit for bit; under max the losing member of a duplicate pair and of a fork is pushed down "
           f"(under sum both go up); an unknown mode refused; textual mutants ({', '.join(mutants)}) fail: ok")
-
-
-# E377 toy frame (metres, heading +y unless said): 0 (type 1) at (0, 0) and 1 (type 2) at (20, 0) are assigned; GT 0 -> 1 and 0 -> 7. NEAR (by hand): 2 a twin 1.0 m beside 0 (in no G), 3 exactly 2.0 m ahead of 0,
-# 7 a duplicate 0.5 m beside 1 and in G(0). FAR: 4 2.01 m behind 0, 5 1.0 m beside 0 with a heading cosine 0.4, 6 a far none token, 9 1.0 m beside 6 (near a NONE token only); 8 padding 0.5 m beside 0.
-# Empty-G sources: short 1 (assigned: keeps the none weight), 2, 3, 7 (near), 5 (far); long 7 (near), 4, 9 (far). NF_FAR = NF with 2, 3, 7 moved away: no near token
-NEAR_HAND = (2, 3, 7)
-NF = dict(_frame(10, {0: [1, 2, 7], 1: [9], 2: [3], 3: [4], 5: [6], 7: [1]}, {4: [6], 7: [9], 9: [0]}, [(0, 1), (0, 7)], [], [1, 2] + [0] * 8, [True] * 8 + [False, True]),
-          pos=[(0, 0), (20, 0), (1, 0), (0, 2), (0, -2.01), (-1, 0), (-15, 30), (20.5, 0), (0.5, 0), (-15, 31)],
-          dirv=[(0, 1), (0, 1), (0, 1), (0, 1), (0, 1), (math.sqrt(1 - 0.4 ** 2), 0.4), (1, 0), (0, 1), (0, 1), (1, 0)])
-NF_FAR = dict(NF, pos=[{2: (-30, -30), 3: (30, -30), 7: (30, 30)}.get(n, p) for n, p in enumerate(NF["pos"])])
-
-
-def _check_near(mod, w, W=0.73):
-    """asserts `mod.jtoken_loss(none_weight=w, none_weight_near=W)` (jtoken or a textual mutant) on the batch (NF, NF_FAR) against the hand values: the none weight of every token typed by hand (W on NEAR_HAND of NF,
-    w on every other token, also on the assigned empty-G source 1 and on all of NF_FAR) in the empty-G source terms of both classes and in the type CE with its denominator; n_near = (3 + 0) / 2 -> (loss, hand parts)"""
-    out, b, frames = _hand((NF, NF_FAR))
-    out = _with_logp(out)
-    wl = [[W if n in NEAR_HAND else w for n in range(NF["K"])], [w] * NF["K"]]
-    z, zn, t1, t3 = (x.detach().tolist() for x in (out["z"], out["zn"], out["types1"], out["types"]))
-    per = [_hand_loss(f, z[n], zn[n], t1[n], t3[n], wl[n]) for n, f in enumerate(frames)]
-    hand = [sum(p[k] for p in per) / len(per) for k in range(4)]
-    loss, info = mod.jtoken_loss(out, b, none_weight=w, none_weight_near=W)
-    got = [info[k] for k in ("nll_s", "nll_l", "ce1", "ce3")]
-    assert all(abs(g - h) < 1e-5 for g, h in zip(got, hand)) and abs(float(loss) - (hand[0] + hand[1] + 0.5 * (hand[2] + hand[3]))) < 1e-5, (w, W, got, hand)
-    assert info["n_near"] == 1.5, info["n_near"]
-    return loss, hand
-
-
-def test_none_weight_near():
-    """E377 --none-weight-near: the label `near_none` on the toy frame (NEAR_HAND, padding never near); the loss by hand on (NF, NF_FAR) at W 0.73 with none weight 0.25 and 1.0 (the CE weighting must switch on at 1);
-    n_near by hand; unset or equal to the none weight = the loss of before bit for bit (also 1.0 / 1.0); a batch without near tokens has the same loss under any W; textual mutants fail"""
-    out, b, _ = _hand((NF, NF_FAR))
-    near = JK.near_none(b["pos"], b["dirv"], out["valid"], b["ytype"])
-    assert near[0].nonzero().flatten().tolist() == list(NEAR_HAND) and not near[1].any(), near
-    den = {w: sum(0.73 if n in NEAR_HAND else (w if NF["ytype"][n] == 0 else 1.0) for n in range(NF["K"]) if NF["valid"][n]) for w in (0.25, 1.0)}
-    assert abs(den[0.25] - 5.19) < 1e-12 and abs(den[1.0] - 8.19) < 1e-12, den                               # the CE denominator of NF by hand: 2 assigned + 3 x 0.73 + 4 far none x w (champion 0.25: 3.75)
-    (l25, h25), (l1, h1) = _check_near(JK, 0.25), _check_near(JK, 1.0)
-    out = _with_logp(out)
-    loss = lambda **k: JK.jtoken_loss(out, b, **k)[0]  # noqa: E731
-    assert torch.equal(loss(none_weight=0.25), loss(none_weight=0.25, none_weight_near=0.25)) and torch.equal(loss(), loss(none_weight=1.0, none_weight_near=1.0)), "W = the none weight: the loss of before"
-    assert abs(float(l25) - float(loss(none_weight=0.25))) > 1e-3 and abs(float(l1) - float(loss())) > 1e-3, "W != the none weight changes the loss (at none weight 1 too: the CE weighting on)"
-    o0, b0, _ = _hand((NF_FAR,))
-    o0 = _with_logp(o0)
-    for w in (0.25, 1.0):
-        ref = JK.jtoken_loss(o0, b0, none_weight=w)[0]
-        assert all(torch.equal(JK.jtoken_loss(o0, b0, none_weight=w, none_weight_near=wn)[0], ref) for wn in (0.0, 0.25, 0.73, 1.0, 5.0)), f"no near token: W changes the loss at none weight {w}"
-    label = 'near = near_none(batch["pos"].to(dev).float(), batch["dirv"].to(dev).float(), valid, yt)'
-    mutants = {"the label from the column of y (v1's duplicates)": [(label, "near = valid & (yt == 0) & y.any(1)")], "the label from the row of y": [(label, "near = valid & (yt == 0) & y.any(-1)")],
-               "the weight on all none tokens": [(label, "near = valid & (yt == 0)")],
-               "on the type term only": [("_source_nll(lp, G, wn, pos_loss)", "_source_nll(lp, G, none_weight, pos_loss)")],
-               "on the source term only": [("torch.where(yt == 0, wn, 1.0)", "torch.where(yt == 0, none_weight, 1.0)")],
-               "the CE denominator of the scalar weight": [("valid, wt) for t in", "valid, None if wt is None else torch.where(yt == 0, none_weight, 1.0)) for t in")],
-               "< instead of <= at 2.0 m": [("d2 <= NEAR_R ** 2", "d2 < NEAR_R ** 2")], "the heading test dropped": [(" & (cos >= NEAR_COS)", "")],
-               "the assigned test dropped (near any other valid token)": [("asg[:, None, :]", "(valid[:, None, :] & ~torch.eye(valid.shape[-1], dtype=torch.bool))")],
-               "padding counted": [("return valid & (ytype == 0) & (", "return (ytype == 0) & (")],
-               "the option ignored": [("wn = torch.where(near, none_weight_near, none_weight)", "wn = none_weight")],
-               "the CE weighting off at none weight 1": [("if torch.is_tensor(wn) or none_weight != 1.0 else None", "if none_weight != 1.0 else None")]}
-    for edits in mutants.values():
-        must_fail(lambda mod: (_check_near(mod, 0.25), _check_near(mod, 1.0)), _mutant(*edits))
-    # the label's two remaining edges (code critic of the option): an opposite-heading twin is not near; a TYPED padding token is no anchor (frame: 0 assigned at (0, 0) heading +y, 1 none at (1, 0) heading -y,
-    # 2 padding with ytype 1 at (10, 0), 3 none at (11, 0) heading +y next to the padding token only, 4 none at (0, 1) heading +y: the one near token)
-    t = lambda x: torch.tensor([x], dtype=torch.float32)  # noqa: E731
-    edge = (t([(0, 0), (1, 0), (10, 0), (11, 0), (0, 1)]), t([(0, 1), (0, -1), (0, 1), (0, 1), (0, 1)]), torch.tensor([[True, True, False, True, True]]), torch.tensor([[1, 0, 1, 0, 0]]))
-
-    def check_edge(mod):
-        assert mod.near_none(*edge)[0].tolist() == [False, False, False, False, True], mod.near_none(*edge)
-    check_edge(JK)
-    for edits in ([("(cos >= NEAR_COS)", "(cos.abs() >= NEAR_COS)")], [("asg = valid & (ytype != 0)", "asg = (ytype != 0)")]):
-        must_fail(check_edge, _mutant(*edits))
-    print(f"none_weight_near: the near label on the toy frame = tokens {list(NEAR_HAND)} (a twin at 1.0 m, exactly 2.0 m, a duplicate in G(0) at 0.5 m; 2.01 m, cos 0.4, a far token, a token near a none token only and padding: not near); "
-          f"by hand at W 0.73 / none weight 0.25: nll_s {h25[0]:.6f} nll_l {h25[1]:.6f} ce1 {h25[2]:.6f} ce3 {h25[3]:.6f} (CE denominator of NF {den[0.25]:.2f}, champion 3.75), at W 0.73 / none weight 1.0: nll_s {h1[0]:.6f} "
-          f"nll_l {h1[1]:.6f} ce1 {h1[2]:.6f} ce3 {h1[3]:.6f} (denominator {den[1.0]:.2f}), n_near 1.5 (3 + 0 over 2 frames); unset / W = the none weight (0.25, 1.0) = the loss of before bit for bit; no near token: "
-          f"the same loss under W 0 - 5; textual mutants ({', '.join(mutants)}) fail; an opposite-heading twin and a token next to a typed padding token are not near (mutants |cos| and anchors without the valid mask fail): ok")
 
 
 def test_wiring_logp():
@@ -567,7 +490,7 @@ def test_trainer():
         assert (args["seed"], args["steps"], args["bs"]) == (0, 20, 2) and int(m.step) == 20 and m._step_py == 20, "the step buffer of the head must follow the run through the kill and the resume"
         rows = [json.loads(r) for r in open(os.path.join(rd, "log.jsonl"))]
         assert all(k in rows[-1] for k in ("nll_s", "nll_l", "ce1", "ce3", "gpu_gb")), rows[-1]
-        for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--K", "256"], ["--prior", "rule"], ["--teacher", "rule"], ["--pos-loss", "max"]):
+        for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--K", "256"], ["--pos-loss", "max"]):
             must_fail(JKT.train, JKT.parse_args(argv + other), runs=runs, ckpt_every=5, **kw)                # another recipe in the same folder
         assert "lane_ptok_data" not in sys.modules, "--smoke must not import the loader"
         # a non-smoke run through a fake loader that returns (None, batches) like `lane_ptok_data.loader`
@@ -596,7 +519,6 @@ def test_trainer():
 
 
 def test_arch_options():
-    import numpy as np
     # defaults = the head of the first build, bit for bit
     dflt = JKT.parse_args(["--name", "x", "--none-weight", "1.0"])
     torch.manual_seed(0)
@@ -604,7 +526,7 @@ def test_arch_options():
     torch.manual_seed(0)
     old = JK.JTokenHead()
     torch.manual_seed(0)
-    expl = JK.JTokenHead(prior=None, past_block=None, map_block=None, live_inputs=False)                   # the new constructor arguments at their defaults
+    expl = JK.JTokenHead(live_inputs=False)                                                                 # the constructor argument at its default
     for h in (new, expl):
         assert list(h.state_dict()) == list(old.state_dict()) and all(torch.equal(v, old.state_dict()[k]) for k, v in h.state_dict().items()), "default options must build the old head"
     assert JK.count_params(new) == 127131 and JKT.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
@@ -616,76 +538,31 @@ def test_arch_options():
         sd = torch.load(os.path.join(runs, "r", "model.pt"), map_location="cpu", weights_only=False)["state"]
         tot = sum(float(v.double().abs().sum()) for v in sd.values() if v.dtype.is_floating_point)
         assert abs(row["total"] - 2.8015905141830446) < 1e-12 and abs(row["nll_s"] - 1.288527250289917) < 1e-12 and abs(tot / 8250.530362168049 - 1) < 1e-14, (row["total"], tot)
-        JKT.train(JKT.parse_args(["--name", "r2", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--d", "64", "--layers", "3", "--heads", "4", "--ffn", "128", "--token-drop", "0.0", "--none-weight", "1.0", "--prior", "none", "--teacher", "none", "--snapshots", ""]), runs, 500, 48)
+        JKT.train(JKT.parse_args(["--name", "r2", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "1.0"]), runs, 500, 48)
         rows2 = [json.loads(r) for r in open(os.path.join(runs, "r2", "log.jsonl"))]
         sd2 = torch.load(os.path.join(runs, "r2", "model.pt"), map_location="cpu", weights_only=False)["state"]
         assert [r["total"] for r in rows2] == [json.loads(r)["total"] for r in open(os.path.join(runs, "r", "log.jsonl"))] and list(sd2) == list(sd) and all(torch.equal(v, sd[k]) for k, v in sd2.items()), "explicit default arguments = the defaults, same process, bit for bit"
-        # the other sizes: parameter counts, one smoke run, the rebuild by load_model, a recipe that differs is refused, an old run folder resumes with the defaults
-        counts = {}
-        for name, kw in (("d96l4", ["--d", "96", "--layers", "4"]), ("d96l4f", ["--d", "96", "--layers", "4", "--ffn", "512"]), ("d32l2h2", ["--d", "32", "--layers", "2", "--heads", "2"])):
-            JKT.train(JKT.parse_args(["--name", name, "--seed", "0", "--smoke", "--bs", "2", "--workers", "0"] + kw), runs, 500, 48)
-            m, a = JKT.load_model(name, "cpu", runs)
-            counts[name] = JK.count_params(m)
-            assert a["d"] == int(kw[1]) and m.proj.out_features == a["d"] and len(m.layers) == a["layers"] and m.layers[0].ffn[0].out_features == (a["ffn"] or 2 * a["d"]) and counts[name] != 127131
-        assert counts["d96l4f"] > counts["d96l4"]
-        must_fail(JKT.build_head, dict(d=70, heads=4))                                                     # d must be a multiple of the heads
-        must_fail(JKT.build_head, dict(ffn=0))                                                             # 0 is not "the default"
-        for bad in (["--d", "70"], ["--d", "96", "--heads", "5"], ["--ffn", "0"], ["--ffn", "-4"], ["--layers", "0"], ["--token-drop", "-0.1"], ["--token-drop", "1.0"]):
-            must_fail(JKT.parse_args, ["--name", "x"] + bad)                                               # refused before anything is built or loaded
-        assert JKT.parse_args(["--name", "x", "--token-drop", "0.5", "--ffn", "96", "--d", "96", "--heads", "6"]).token_drop == 0.5
+        assert JKT.arch({}) == (64, 4, 3, 128), "the champion's architecture"
         os.makedirs(os.path.join(runs, "old"))
         json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3)), open(os.path.join(runs, "old", "config.json"), "w"))     # a config of before the options
         a_old = vars(JKT.parse_args(["--name", "old", "--bs", "2", "--steps", "20"]))
         JKT.check_start(a_old, os.path.join(runs, "old"))
-        must_fail(JKT.check_start, dict(a_old, d=96), os.path.join(runs, "old"))
-        must_fail(JKT.check_start, dict(a_old, token_drop=0.1), os.path.join(runs, "old"))
-        os.makedirs(os.path.join(runs, "big"))                                                             # the reverse: a run of d 96 / layers 4 is not resumed by the default command line
-        json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3, d=96, layers=4)), open(os.path.join(runs, "big", "config.json"), "w"))
-        a_big = vars(JKT.parse_args(["--name", "big", "--bs", "2", "--steps", "20"]))
-        must_fail(JKT.check_start, a_big, os.path.join(runs, "big"))
-        JKT.check_start(dict(a_big, d=96, layers=4), os.path.join(runs, "big"))
-        must_fail(JKT.check_start, dict(a_big, d=96, layers=4, ffn=192), os.path.join(runs, "big"))         # ffn None and the explicit 2 x d are the same head: refused all the same (conservative)
-    # token drop: the effect on a batch, the draw per step
-    sb = JK.synthetic_batch(2, 48, seed=1)
-    keep = torch.ones(2, 48, dtype=torch.bool)
-    keep[0, 3] = keep[1, 12] = False
-    out = JKT.drop_tokens(sb, keep)
-    assert not out["valid"][0, 3] and not out["valid"][1, 12] and out["valid"].sum() == sb["valid"].sum() - 2 and out["ytype"][0, 3] == 0 and out["ytype"][1, 12] == 0
-    assert out["y"][0, :, 3].sum() == 0 and out["y"][0, 3, :].sum() == 0 and out["y"][0, 4, 5] == sb["y"][0, 4, 5] and out["y"][1, 12, :].sum() == 0
-    assert out["ylong"][1, 11, 12] == 0 and torch.isnan(out["yscale"][0, 3]).all() and torch.equal(out["gt_out"] if "gt_out" in out else sb["ytype"], sb["gt_out"] if "gt_out" in sb else sb["ytype"])
-    assert sb["y"][0, 2, 3] == 1 and out["y"][0, 2, 3] == 0, "a GT link into a removed token is lost, the link through it is not bridged"
-    assert torch.equal(JKT.drop_tokens(sb, torch.ones(2, 48, dtype=torch.bool))["y"], sb["y"])
-    toks = ["a", "b"]
-    k1, k1b, k2, k3 = JKT.step_keep(toks, 48, 0.3, 0, 5), JKT.step_keep(toks, 48, 0.3, 0, 5), JKT.step_keep(toks, 48, 0.3, 0, 6), JKT.step_keep(toks, 48, 0.3, 1, 5)
-    big = JKT.step_keep(["a"] * 1, 100000, 0.3, 0, 5)
-    assert (k1 == k1b).all() and not (k1 == k2).all() and not (k1 == k3).all() and abs(big.mean() - 0.7) < 0.01, "reproducible per (seed, step, token), new draw per step, the share"
-    assert JKT.step_keep(["a"], 48, 0.0, 0, 5).all()
-    # the same effect as the loader's own token_drop on a cache frame (when the cache exists)
-    import lane_ptok_data as LP                                                                              # an ImportError is a failure, not a skip
-    from jtok_eval import keep_nodes
-    try:
-        base, dropped = LP.PTokData("val", 0, "e292_a", None, 0.0), LP.PTokData("val", 0, "e292_a", None, 0.17)
-    except (AssertionError, FileNotFoundError) as e:                                                         # only the cache lookup may skip the comparison
-        if isinstance(e, AssertionError) and "finished caches match" not in str(e):
-            raise
-        base = None
-    if base is None:
-        same = "loader comparison SKIPPED (no cache)"
-    else:
-        b = LP.collate([base[i] for i in range(2)])
-        kp = torch.from_numpy(np.stack([keep_nodes(t, base.K, 0.17, 0) for t in b["token"]]))
-        mine = JKT.drop_tokens(b, kp)
-        ref = LP.collate([dropped[i] for i in range(2)])
-        assert all(torch.equal(mine[k], ref[k]) or (k == "yscale" and torch.equal(mine[k].nan_to_num(-7), ref[k].nan_to_num(-7))) for k in ("valid", "ytype", "y", "ylong", "yscale")), "drop_tokens is the loader's token_drop on the batch"
-        same = "equal to the loader's token_drop on 2 cache frames"
-    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:                                                    # a training run with token drop: finite, differs from the run without
-        rows = {}
-        for name, extra in (("p0", []), ("p3", ["--token-drop", "0.3"]), ("w5", ["--none-weight", "0.5"])):
-            JKT.train(JKT.parse_args(["--name", name, "--seed", "0", "--smoke", "--bs", "2", "--workers", "0"] + extra), runs, 500, 48)
-            rows[name] = [json.loads(r) for r in open(os.path.join(runs, name, "log.jsonl"))][-1]["total"]
-        assert all(math.isfinite(v) for v in rows.values()) and rows["p3"] != rows["p0"] and rows["w5"] != rows["p0"], rows
-    print(f"arch_options: defaults = the old head (127131 parameters, 20 smoke steps reproduce the recorded loss 2.8015905 and the weights, also with --none-weight 1), d96 / layers 4: {counts['d96l4']} parameters (ffn 512: {counts['d96l4f']}), d32 / l2 / h2: {counts['d32l2h2']}, "
-          f"rebuilt by load_model, an old config resumes with the defaults and another recipe is refused; token drop: targets of removed tokens go, no re-contraction, a new draw per step, {same}: ok")
+        must_fail(JKT.check_start, dict(a_old, none_weight=0.5), os.path.join(runs, "old"))
+        ck = torch.load(os.path.join(runs, "r", "model.pt"), map_location="cpu", weights_only=False)       # D117 (`check_removed`): an old run's removed options at their default resume and load as before, another value is refused
+        bad = dict(prior="rule", teacher="rule", init="runs/x/model.pt", token_drop=0.1, none_weight_near=0.73, d=96, heads=2, layers=4, ffn=512)
+        assert set(bad) == set(JKT.REMOVED), "a refusal test for every removed option"
+        for name, extra in [("o_dflt", dict(JKT.REMOVED))] + [(f"o_{k}", {k: v}) for k, v in bad.items()]:
+            os.makedirs(os.path.join(runs, name))
+            json.dump(dict(design="jtoken", args=dict(ck["args"], **extra)), open(os.path.join(runs, name, "config.json"), "w"))
+            torch.save(dict(ck, args=dict(ck["args"], **extra)), os.path.join(runs, name, "model.pt"))
+            if name == "o_dflt":
+                JKT.check_start(dict(ck["args"], name=name), os.path.join(runs, name))
+                assert all(torch.equal(v, sd[k]) for k, v in JKT.load_model(name, "cpu", runs)[0].state_dict().items())
+            else:
+                must_fail(JKT.check_start, dict(ck["args"], name=name), os.path.join(runs, name))
+                must_fail(JKT.load_model, name, "cpu", runs)
+    print("arch_options: defaults = the old head (127131 parameters, 20 smoke steps reproduce the recorded loss 2.8015905 and the weights, also with --none-weight 1), the architecture is the constant (64, 4, 3, 128); "
+          f"an old config resumes with the defaults and another recipe is refused; an old run's removed options (D117: {', '.join(JKT.REMOVED)}) at their default resume and load, another value is refused: ok")
 
 
 def test_pos_loss_trainer():
@@ -711,77 +588,7 @@ def test_pos_loss_trainer():
           f"(first loss {losses['max'][0]:.6f} against {losses['champ'][0]:.6f}, last {losses['max'][-1]:.6f}), finite; pos_loss in model.pt's args: ok")
 
 
-def test_none_weight_near_trainer():
-    """E377 in the trainer: --none-weight-near unset or equal to --none-weight = the run without it bit for bit (the loss of each of 20 smoke steps and the final weights, same process) at the champion's 0.25 and at 1.0;
-    0.73 differs (also at none weight 1), `n_near` in every log.jsonl row (>= the 4 duplicates of a synthetic frame), in the first-loss line, the start line names W; the value in model.pt's args, a resume with another value
-    refused, W < 0 refused; the teacher branch passes it on (`_rule_frame` under B''s types: n_near 1 = token 10, 1 m ahead of token 5)"""
-    losses, real, now = {}, JK.jtoken_loss, [None]
-
-    def recording(out, batch, **k):                                           # the loss of every step
-        r = real(out, batch, **k)
-        losses[now[0]].append(float(r[0]))
-        return r
-    nw = lambda w, wn=None: ["--none-weight", w] + ([] if wn is None else ["--none-weight-near", wn])  # noqa: E731
-    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
-        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0"]
-        for name, extra in (("champ", nw("0.25")), ("champ_n", nw("0.25", "0.25")), ("near", nw("0.25", "0.73")), ("w1", []), ("w1_n", nw("1.0", "1.0")), ("w1_near", nw("1.0", "0.73"))):
-            now[0], losses[name] = name, []
-            patched(JK, "jtoken_loss", recording, JKT.train, JKT.parse_args(["--name", name] + base + extra), runs, 500, 48)
-        ck = {n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False) for n in losses}
-        rows = {n: [r for r in map(json.loads, open(os.path.join(runs, n, "log.jsonl"))) if "total" in r] for n in ("near", "champ")}
-        log = open(os.path.join(runs, "near", "train.log"), encoding="utf-8").read()
-        JKT.check_start(ck["near"]["args"], os.path.join(runs, "near"))
-        for other in (None, 0.25, 0.5):
-            must_fail(JKT.check_start, dict(ck["near"]["args"], none_weight_near=other), os.path.join(runs, "near"))       # a resume with another value (or without the option) is refused
-        must_fail(JKT.check_start, dict(ck["champ"]["args"], none_weight_near=0.73), os.path.join(runs, "champ"))
-    same = lambda a, b: losses[a] == losses[b] and all(torch.equal(v, ck[b]["state"][k]) for k, v in ck[a]["state"].items())  # noqa: E731
-    assert len(losses["champ"]) == 20 and same("champ_n", "champ") and same("w1_n", "w1"), "W = the none weight changes the run"
-    assert losses["near"] != losses["champ"] and losses["w1_near"] != losses["w1"] and all(math.isfinite(v) for v in losses["near"] + losses["w1_near"]), losses
-    assert rows["near"] and all(r["n_near"] >= 4 for r in rows["near"]) and not any("n_near" in r for r in rows["champ"]), rows["near"][:2]
-    assert "none weight near 0.73 (none tokens within 2.0 m / cos 0.5 of an assigned token)" in log and "near none tokens per frame in this batch (n_near)" in log, log[:800]
-    assert (ck["near"]["args"]["none_weight_near"], ck["champ"]["args"]["none_weight_near"]) == (0.73, None)
-    must_fail(JKT.parse_args, ["--name", "x", "--none-weight-near", "-0.1"])
-    b = _rule_frame()
-    gt_free = {k: v for k, v in b.items() if k not in JK.GT_KEYS}
-    torch.manual_seed(0)
-    m = JK.JTokenHead()
-    (l_n, i_n), (l_0, i_0) = (JKT.make_loss(None, none_weight=0.25, teacher="rule", **k)(m, gt_free) for k in (dict(none_weight_near=0.73), {}))
-    assert i_n["n_near"] == 1.0 and "n_near" not in i_0 and float(l_n) != float(l_0), (i_n, float(l_n), float(l_0))
-    print(f"none_weight_near_trainer: unset / = --none-weight (0.25 and 1.0) = the run without it bit for bit (20 smoke steps, final weights); 0.73 differs (last loss {losses['near'][-1]:.6f} against {losses['champ'][-1]:.6f}; "
-          f"at none weight 1: {losses['w1_near'][-1]:.6f} against {losses['w1'][-1]:.6f}); n_near in the log rows ({min(r['n_near'] for r in rows['near']):.1f} - {max(r['n_near'] for r in rows['near']):.1f} per synthetic frame), "
-          f"in the first-loss line (the start line names W), not in a run without the option; in model.pt's args, another value refused at a resume, W < 0 refused; the teacher branch: n_near 1 on the hand frame: ok")
-
-
-# ------------------------------------------------------------------------------------------------------------------------------ c-rule: E369 prior, E370 teacher, S2 hook, --init
-RULE_HAND = {(0, 1), (1, 2), (2, 3), (3, 4), (4, 5), (5, 6), (6, 7), (7, 8), (8, 9), (9, 12), (12, 13)}    # c-rule's links of `_rule_frame` by hand; (9, 12) is 0.2 m long: outside the gate (MIN_CHORD 0.3 m)
-TYPE_HAND = [6, 1, 1, 2, 2, 1, 1, 4, 1, 1, 0, 1, 1, 1, 0, 0]                                                 # B''s own types of `_rule_frame` (e_p < 0.5 and padding: 0)
-
-
-def _rule_frame(K=16):
-    """one hand frame: lane A tokens 0-5 (x 0, y 0 .. 10 m, heading +y), token 10 at y 11 m with e < 0 (no node), lane B tokens 6-9 (y 22 .. 28 m: 5 -> 6 is lo_near's long link), token 11 at (5, 0) heading +x (a node
-    without links), token 12 0.2 m ahead of token 9 (9 -> 12 is c-rule's link, outside the gate; 9 has the short candidate 13), token 13 at y 31 m, padding 14-15; flags: 0 start, 3 split, 4 split + merge, 7 stop, 10 exit (no node)
-    -> a batch of one frame with `tokens_np`"""
-    pos = np.zeros((1, K, 2), np.float32)
-    dirv = np.tile(np.array([0.0, 1.0], np.float32), (1, K, 1))
-    for i in range(6):
-        pos[0, i] = (0.0, 2.0 * i)
-    for n, i in enumerate(range(6, 10)):
-        pos[0, i] = (0.0, 22.0 + 2.0 * n)
-    pos[0, 10], pos[0, 11], pos[0, 12], pos[0, 13] = (0.0, 11.0), (5.0, 0.0), (0.0, 28.2), (0.0, 31.0)
-    dirv[0, 11] = (1.0, 0.0)
-    pos[0, 14:] = 30.0
-    valid = np.arange(K) < 14
-    e = np.where(valid, 2.0, -6.0).astype(np.float32)[None]
-    e[0, 10], e[0, 11] = -1.0, 0.5
-    fl = np.full((1, K, 8), -3.0, np.float32)
-    for i, cols in ((0, (4,)), (3, (2,)), (4, (2, 3)), (7, (0,)), (10, (1,))):
-        fl[0, i, list(cols)] = 3.0
-    g = torch.Generator().manual_seed(5)
-    t = lambda a: torch.from_numpy(a)  # noqa: E731
-    z = torch.zeros(1, K)
-    return JK.with_tokens_np(dict(tok=torch.randn(1, K, JK.TOK, generator=g), pos=t(pos), dirv=t(dirv), e=t(e), e_raw=t(e), flags=t(fl), s=z, uout=z, uin=z, valid=t(valid[None])))
-
-
+# ------------------------------------------------------------------------------------------------------------------------------ the head seed, the live inputs (S4)
 def _cache_batch(n=3):
     """the first n VAL frames of the predicted-node cache of B' seed 0, or None when it is not there"""
     import lane_ptok_data as LP
@@ -792,183 +599,6 @@ def _cache_batch(n=3):
             raise
         return None
     return LP.collate([ds[i] for i in range(n)])
-
-
-def _pairs_of(m):
-    return {(int(i), int(j)) for i, j in m.nonzero().tolist()}
-
-
-def _ctl_rule(t):
-    """the links of the arm `rule` of `jtoken_eval.py ctl` (the control as it is scored)"""
-    import jtoken_eval as E
-    _, _, lk = E.rule_frame(t)
-    return set(zip(np.asarray(lk["src"]).tolist(), np.asarray(lk["dst"]).tolist()))
-
-
-def _delivered(m, b):
-    with torch.no_grad():
-        out = m(b)
-    return out, JK.decode(out)
-
-
-def test_prior():
-    """E369: the step-0 head with the prior delivers c-rule (inside the gate) and keeps the nodes with e >= 0, on the hand frame and on 3 VAL cache frames; the temperature (a rule link at p 0.65 - 0.9); the zero-init list and the
-    rest of the head as the plain one; gradient reaches the learned part (every parameter after one step), not lam / mu; the type prior inside `read_types` (the key weights after the switch equal the prior's; the mutant that adds
-    it outside fails); mutants: lam 0, mu 0, no type prior"""
-    b = _rule_frame()
-    assert _pairs_of(JK.rule_matrix(b["pos"], b["dirv"], b["valid"] & (b["e"].sigmoid() >= 0.5))[0]) == RULE_HAND == _ctl_rule(b["tokens_np"][0]), "c-rule by hand"
-
-    def step0_is_rule(m, bb, ref):
-        out, dec = _delivered(m, bb)
-        gate = out["cand"].any(1)
-        for f in range(len(ref)):
-            want = {(i, j) for i, j in ref[f] if gate[f, i, j]}
-            assert _pairs_of(dec["link"][f]) == want, (f, sorted(_pairs_of(dec["link"][f]) ^ want)[:6])
-            assert torch.equal(dec["keep"][f], bb["valid"][f] & (bb["e"][f] > 0)), f
-        return out, dec
-    torch.manual_seed(0)
-    m = JK.JTokenHead(prior="rule").eval()
-    out, dec = step0_is_rule(m, b, [RULE_HAND])
-    assert not dec["link"][0, 9, 12] and out["cand"][0, :, 9, 12].sum() == 0, "the rule link of 0.2 m is outside the gate"
-    p = JK.probs(out)["p"][0]
-    pr = torch.stack([p[i, j] for i, j in RULE_HAND - {(9, 12)}])
-    assert 0.65 < float(pr.min()) and float(pr.max()) < 0.9, pr                                               # the temperature: not one-hot
-    for name, kw in (("lam 0", dict(lam=0.0)), ("mu 0", dict(mu=0.0))):
-        torch.manual_seed(0)
-        mm = JK.JTokenHead(prior="rule", **kw).eval()
-        must_fail(lambda: (step0_is_rule(mm, b, [RULE_HAND]), holds(0.65 < float(torch.stack([JK.probs(mm(b))["p"][0][i, j] for i, j in RULE_HAND - {(9, 12)}]).min()) < 0.9)))
-    real_rt = JK.JTokenHead.read_types
-    must_fail(patched, JK.JTokenHead, "read_types", lambda self, x, none_prior=None: real_rt(self, x, None), step0_is_rule, m, b, [RULE_HAND])                                   # mutant: no type prior
-    cb = _cache_batch(3)
-    n_cache = "SKIPPED (no cache)"
-    if cb is not None:
-        ref = [_ctl_rule(t) for t in cb["tokens_np"]]
-        o, d = step0_is_rule(m, cb, ref)
-        n_cache = f"{int(d['link'].sum())} links of {sum(len(r) for r in ref)} rule links on 3 VAL cache frames"
-        assert torch.equal(d["keep"], cb["valid"] & torch.from_numpy(np.stack([t["e_p"] for t in cb["tokens_np"]]) >= 0.5)), "the kept nodes are c-rule's (e_p >= 0.5)"
-    # zero init: the four outputs zero, the rest is the plain head of the same seed; lam / mu are buffers
-    torch.manual_seed(0)
-    plain = JK.JTokenHead()
-    zero = ("types.", "wk.", "wbias.2.", "dest.", "sc_o.weight")
-    sp, sm = plain.state_dict(), m.state_dict()
-    assert set(sm) - set(sp) == {"lam", "mu"} and float(m.lam) == JK.LAM and float(m.mu) == float(torch.tensor(JK.MU)) and not any(n in ("lam", "mu") for n, _ in m.named_parameters())
-    assert all(float(sm[k].abs().max()) == 0.0 for k in sp if k.startswith(zero)) and all(torch.equal(sm[k], sp[k]) for k in sp if not k.startswith(zero + ("sc_o.bias",))), "zero init: only the four outputs (+ the scale head)"
-    assert float((out["scale"] - 1 / 3).abs().max()) < 1e-6, "the handle scales start at c-rule's 1/3"
-    # p_none = sigmoid(-e) at step 0; the switch keeps the key weights (the prior inside read_types); the mutant that adds the prior outside fails after the switch
-    assert float((JK.probs(out)["pt"][0, :, 0] - torch.sigmoid(-b["e"][0]))[b["valid"][0]].abs().max()) < 1e-6
-
-    def same_after_switch(mm):
-        mm.set_step(0)
-        o0 = mm(b)
-        mm.set_step(JK.SWITCH + 1)
-        o1 = mm(b)
-        mm.set_step(0)
-        assert float((o0["logp"].exp() - o1["logp"].exp()).abs().max()) < 1e-5 and float((o0["types"] - o1["types"]).abs().max()) < 1e-4
-
-    def outside(self, x, none_prior=None):                                                                    # mutant: the key weight read before the prior is added
-        t = self.types(self.tnorm(x)).float()
-        w = 1.0 - t.softmax(-1)[..., 0]
-        return (t if none_prior is None else torch.cat([t[..., :1] + none_prior[..., None], t[..., 1:]], -1)), w
-    with torch.no_grad():
-        same_after_switch(m)
-        must_fail(patched, JK.JTokenHead, "read_types", outside, same_after_switch, m)
-    # gradient: the zero-init outputs at step 0, every parameter after one step; none into lam / mu or the inputs
-    torch.manual_seed(0)
-    mt = JK.JTokenHead(prior="rule")
-    sb = _batch(3)
-    live = {k: (v.clone().requires_grad_(True) if torch.is_tensor(v) and v.is_floating_point() else v) for k, v in sb.items()}
-    JK.jtoken_loss(mt(live), live)[0].backward()
-    assert all(float(getattr(mt, n).weight.grad.abs().sum()) > 0 for n in ("types", "wk", "dest")) and float(mt.wbias[2].weight.grad.abs().sum()) > 0, "the zero-init outputs get gradient at step 0"
-    assert all(live[k].grad is None for k in JK.INPUTS if live[k].is_floating_point()) and mt.lam.grad is None and not mt.lam.requires_grad, "no gradient into the inputs or the prior"
-    opt = torch.optim.Adam(mt.parameters(), lr=1e-3)
-    opt.step()
-    opt.zero_grad()
-    JK.jtoken_loss(mt(sb), sb)[0].backward()
-    dead = [n for n, q in mt.named_parameters() if q.grad is None or float(q.grad.abs().sum()) == 0.0]
-    assert not dead and float(mt.lam) == JK.LAM and float(mt.mu) == float(torch.tensor(JK.MU)), dead
-    print(f"prior: the step-0 head delivers c-rule inside the gate and keeps e >= 0 (hand frame: 10 links, the 0.2 m rule link outside the gate; {n_cache}), rule links at p {float(pr.min()):.2f} - {float(pr.max()):.2f}, p_none = sigmoid(-e); "
-          "mutants lam 0 / mu 0 / no type prior fail; zero init of types / wk / wbias[-1] / dest, handle scales 1/3, the rest = the plain head of the seed, lam / mu buffers; the switch keeps the outputs (the prior added outside read_types fails); "
-          "gradient: the zero outputs at step 0, every parameter after one step, none into lam / mu / the inputs: ok")
-
-
-class _Hook(torch.nn.Module):
-    """a dummy hook block (S2 past / S3 maps): x + Linear(the mean of ctx['x']); the identity at zero init and on an empty or None ctx (`{}` = no map)"""
-
-    def __init__(self, zero=True):
-        super().__init__()
-        self.lin = torch.nn.Linear(JK.D, JK.D)
-        self.seen = None
-        if zero:
-            torch.nn.init.zeros_(self.lin.weight)
-            torch.nn.init.zeros_(self.lin.bias)
-
-    def forward(self, x, pos, dirv, valid, ctx):
-        self.seen = ctx
-        return x + self.lin(ctx["x"].mean(1, keepdim=True)) if ctx else x
-
-
-def test_past():
-    b = _batch(2)
-    torch.manual_seed(0)
-    base = JK.JTokenHead().eval()
-    m = JK.JTokenHead(past_block=_Hook()).eval()
-    m.load_state_dict(dict(base.state_dict(), **{f"past_block.{k}": v for k, v in m.past_block.state_dict().items()}))
-    with torch.no_grad():
-        o0, o1 = base(b), m(b)
-        past = dict(x=o1["x"], pos=b["pos"], dirv=b["dirv"], valid=b["valid"], w=o1["w"], e=b["e"])
-        o2 = m(b, past)
-        assert m.past_block.seen is past, "the past dict reaches the block untouched"
-        assert all(torch.equal(o0[k], o1[k]) and torch.equal(o0[k], o2[k]) for k in ("logp", "types", "types1", "scale", "x", "w")), "no past / a zero block: the output of the plain head"
-        assert o0["x"].shape == (2, 48, JK.D) and o0["w"].shape == (2, 48) and torch.allclose(o0["w"], 1 - o0["types"].softmax(-1)[..., 0])
-        m.past_block = _Hook(zero=False)
-        must_fail(holds, torch.equal(m(b, past)["logp"], o0["logp"]))                                          # a live block changes the output: it is called
-        m.past_block = _Hook(zero=True)
-        m.past_block.lin = torch.nn.Identity()
-        m.past_block.forward = lambda x, pos, dirv, valid, past: x                                             # a block that ignores past: the head reads none of its keys
-        assert torch.equal(m(b, {"anything": 1})["logp"], o0["logp"])
-    print("past: the S2 hook after layer 1 (no past or a zero block = the plain head bit for bit, a live block changes the output, the past dict reaches the block untouched and the head reads none of its keys), out['x'] (B, K, D), out['w'] = 1 - p_none: ok")
-
-
-def _order(m, b, *a):
-    """m(b, *a) without gradient -> the names of its layers and hook blocks in the order they ran; asserts the chain: every call got the x that the call before it returned"""
-    log = []
-    mods = [(f"layer{i}", l) for i, l in enumerate(m.layers, 1)] + [(n, getattr(m, f"{n}_block")) for n in ("past", "map") if getattr(m, f"{n}_block") is not None]
-    hs = [mod.register_forward_hook(lambda _m, inp, out, n=n: log.append((n, inp[0], out))) for n, mod in mods]
-    try:
-        with torch.no_grad():
-            m(b, *a)
-    finally:
-        for h in hs:
-            h.remove()
-    assert all(torch.equal(o, i) for (_, _, o), (_, i, _) in zip(log, log[1:])), [n for n, _, _ in log]
-    return [n for n, _, _ in log]
-
-
-def _maps_hook_ok(mod):
-    """the S3 hook of `mod.JTokenHead` (jtoken itself or a textual mutant of it)"""
-    b = _batch(2)
-    torch.manual_seed(0)
-    base = mod.JTokenHead().eval()
-    m = mod.JTokenHead(map_block=_Hook()).eval()
-    m.load_state_dict(dict(base.state_dict(), **{f"map_block.{k}": v for k, v in m.map_block.state_dict().items()}))
-    maps, past = dict(x=torch.randn(2, 5, JK.D)), dict(x=torch.randn(2, 48, JK.D))
-    with torch.no_grad():
-        o0 = base(b)
-        same = lambda o: all(torch.equal(o0[k], o[k]) for k in ("logp", "types", "types1", "scale", "x", "w"))  # noqa: E731
-        assert same(m(b)) and same(m(b, None, None)) and same(base(b, maps=maps)), "no maps / no block: the plain head bit for bit"
-        assert same(m(b, maps=maps)) and m.map_block.seen is maps, "a zero block: the plain head bit for bit; the maps dict reaches the block untouched"
-        live = m.map_block = _Hook(zero=False)
-        assert not torch.equal(m(b, maps=maps)["logp"], o0["logp"]), "a live block changes the output"
-        assert _order(m, b, None, maps) == ["layer1", "layer2", "map", "layer3"], "the map block once, after layer 2, before layer 3"
-        empty = {}
-        assert same(m(b, maps=empty)) and live.seen is empty and _order(m, b, None, empty) == ["layer1", "layer2", "map", "layer3"], "{} reaches the block (the head does not special-case it)"
-        assert same(m(b)) and _order(m, b) == ["layer1", "layer2", "layer3"], "maps None: the block is not called"
-        mp = mod.JTokenHead(past_block=_Hook(zero=False), map_block=_Hook(zero=False)).eval()
-        assert _order(mp, b, past, maps) == ["layer1", "past", "layer2", "map", "layer3"] and mp.past_block.seen is past and mp.map_block.seen is maps, "both hooks: layer 1 -> past -> layer 2 -> map -> layer 3"
-        assert _order(mp, b, past) == ["layer1", "past", "layer2", "layer3"] and _order(mp, b, None, maps) == ["layer1", "layer2", "map", "layer3"]
-    mg = mod.JTokenHead(map_block=_Hook())                                                                    # a zero block (the start of a training): the loss reaches its parameters
-    mod.jtoken_loss(mg(b, maps=maps), b)[0].backward()
-    assert all(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in mg.map_block.parameters()), "no gradient into the map block"
 
 
 def _mutant(*edits, double=False, of=JK):
@@ -987,20 +617,6 @@ def _mutant(*edits, double=False, of=JK):
     finally:
         sys.path[:] = path
     return mod
-
-
-def test_maps():
-    _maps_hook_ok(JK)
-    must_fail(JK.JTokenHead, layers=1, map_block=_Hook())                                                     # no layer 2: refused
-    cond, call = "self.map_block is not None and maps is not None", "self.map_block(x, pos, dirv, valid, maps)"
-    hook = f"if n == 2 and {cond}:"
-    mutants = {"after layer 3": [(hook, hook.replace("n == 2", "n == 3"))], "after every layer from 2 on": [(hook, hook.replace("n == 2 and ", ""))],
-               "before layer 2": [(hook, hook.replace("n == 2", "n == 0")), ("        types1, w1 = self.read_types(x, tp)\n", f"        if {cond}:\n            x = {call}\n        types1, w1 = self.read_types(x, tp)\n")],
-               "{} skipped": [(hook, hook.replace("maps is not None", "maps"))], "maps None passed on": [(hook, hook.replace(" and maps is not None", ""))], "the block gets past": [(call, call.replace("maps)", "past)"))]}
-    for edits in mutants.values():
-        must_fail(_maps_hook_ok, _mutant(*edits))
-    print(f"maps: the S3 hook after layer 2 (no block / maps None / a zero block = the plain head bit for bit, a live block changes the output, the maps dict reaches the block untouched and {{}} is passed on, called once "
-          f"between layer 2 and layer 3, with the S2 hook layer 1 -> past -> layer 2 -> map -> layer 3, the loss reaches a zero block, a 1-layer head refused); {len(mutants)} textual mutants fail ({', '.join(mutants)}): ok")
 
 
 def _live_ok(mod, before):
@@ -1055,7 +671,7 @@ def _live_fd_ok(mod):
 def test_live_inputs():
     """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach dropped under the default); `_live_fd_ok` (the full gradient of
     every float input, float64 finite differences) on jtoken and two textual mutants (the geometry path cut, the key weight of layers 2 - 3 cut before the switch); `build_head` reads it from a run's args (absent = False,
-    also through `load_model`); `arch` and the state keys do not hold it (an --init of a cached-input head is accepted)"""
+    also through `load_model`); `arch` and the state keys do not hold it"""
     line = "b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}"
     before = _mutant((line, "b = {k: _const(batch[k]) for k in INPUTS}"))
     g = _live_ok(JK, before)
@@ -1080,107 +696,24 @@ def test_live_inputs():
           f"(absent = False), not in arch or the state keys: ok")
 
 
-def test_teacher():
-    """E370 stage A: `rule_teacher` = c-rule's links inside the gate, B''s own types, the out-of-gate rule link left out of its class (not 'none'); the stage-A loss reads no GT key and no yscale; on 3 cache frames the targets
-    are the links of the scored control `jtoken_eval.rule_frame` inside the gate"""
-    b = _rule_frame()
-    torch.manual_seed(0)
-    m = JK.JTokenHead()
-    out = m(b)
-    tb = JK.rule_teacher(out, b)
-    assert _pairs_of(tb["y"][0]) == RULE_HAND - {(9, 12)} and tb["ytype"][0].tolist() == TYPE_HAND and tb["rule_links"] == 11 and tb["rule_out_gate"] == 1, (sorted(_pairs_of(tb["y"][0])), tb["ytype"][0].tolist())
-    assert _pairs_of(tb["ylong"][0]) == {(5, 6)} and tb["yskip"][0].nonzero().tolist() == [[0, 9]], tb["yskip"].nonzero()
-    gt_free = {k: v for k, v in b.items() if k not in JK.GT_KEYS}
-    loss_fn = JKT.make_loss(None, teacher="rule")
-    loss, info = loss_fn(m, gt_free)                                                                          # no y / ylong / yscale / ytype / gt_* / label in the batch
-    assert torch.isfinite(loss) and "scale_l1" not in info and info["rule_out_gate"] == 1.0
-
-    def g9(tt):                                                                                               # the gradient on the short-class row of source 9 (its rule link is outside the gate)
-        o = m(b)
-        o["logp"].retain_grad()
-        JK.jtoken_loss(o, tt, scale_w=0.0)[0].backward()
-        return float(o["logp"].grad[0, 0, 9].abs().sum())
-    assert g9(tb) == 0.0 and g9({k: v for k, v in tb.items() if k != "yskip"}) > 0, "source 9 is left out of the short class, not taught none"
-    must_fail(holds, g9({k: v for k, v in tb.items() if k != "yskip"}) == 0.0)
-    cb = _cache_batch(3)
-    n_cache = "SKIPPED (no cache)"
-    if cb is not None:
-        with torch.no_grad():
-            oc = m(cb)
-        tc = JK.rule_teacher(oc, {k: v for k, v in cb.items() if k not in JK.GT_KEYS + ("label",)})
-        gate = oc["cand"].any(1)
-        for f, t in enumerate(cb["tokens_np"]):
-            want = _ctl_rule(t)
-            assert _pairs_of(tc["y"][f]) == {(i, j) for i, j in want if gate[f, i, j]}, f
-            keep = t["valid"] & (t["e_p"] >= 0.5)
-            import lane_tokcache as LC
-            yt = np.zeros(len(keep), int)
-            yt[keep] = LC.types_of(t["flags_p"][keep] >= 0.5)
-            assert np.array_equal(tc["ytype"][f].numpy(), yt), f
-        n_cache = f"{int(tc['y'].sum())} target links = the scored c-rule inside the gate on 3 VAL cache frames, {int(tc['rule_out_gate'])} outside"
-    print(f"teacher: the targets = c-rule's links inside the gate (hand frame 10 of 11, {n_cache}), B''s own types (split > merge > stop > exit > boundary > lane, e_p < 0.5 -> none), the 0.2 m rule link left out of the short class "
-          "(no gradient on its row; the mutant that teaches it none has one); stage A runs on a batch without any GT key, no scale term: ok")
-
-
-def test_init():
-    """E370 stage B: --init loads the weights and the step buffer bit for bit (the step-0 snapshot = the init), ckpt.pt takes precedence on a resume, the recipe holds the path and its sha256, another architecture or another init
-    is refused; the stage-B model.pt loads with the plain load_model and has the S1 keys; snapshots model_step<N>.pt are written once and read by load_model"""
-    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
-        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0"]
-        JKT.train(JKT.parse_args(["--name", "a", "--teacher", "rule"] + base), runs, 500, 48)
-        JKT.train(JKT.parse_args(["--name", "big", "--d", "96"] + base), runs, 500, 48)
-        JKT.train(JKT.parse_args(["--name", "pri", "--prior", "rule"] + base), runs, 500, 48)
-        a_pt = os.path.join(runs, "a", "model.pt")
-        ma, aa = JKT.load_model("a", "cpu", runs)
-        assert aa["teacher"] == "rule" and ma._step_py == 20 and set(ma.state_dict()) == set(JK.JTokenHead().state_dict()), "the teacher is no part of the head"
-        argv = ["--name", "b", "--init", a_pt, "--snapshots", "0,5,10"] + base
-        calls, real = [0], JK.jtoken_loss
-
-        def dying(out, batch, **k):                                                                            # a kill at the 7th step (the checkpoint of step 5 exists)
-            calls[0] += 1
-            if calls[0] == 7:
-                raise KeyboardInterrupt("kill")
-            return real(out, batch, **k)
-        JK.jtoken_loss = dying
-        try:
-            try:
-                JKT.train(JKT.parse_args(argv), runs, 5, 48)
-            except KeyboardInterrupt:
-                pass
-        finally:
-            JK.jtoken_loss = real
-        s0 = torch.load(os.path.join(runs, "b", "model_step0.pt"), map_location="cpu", weights_only=False)
-        assert all(torch.equal(v, ma.state_dict()[k]) for k, v in s0["state"].items()) and s0["steps"] == 0, "the step-0 snapshot is the init, step buffer included"
-        t5 = os.path.getmtime(os.path.join(runs, "b", "model_step5.pt"))
-        JKT.train(JKT.parse_args(argv), runs, 5, 48)                                                           # the resume: ckpt.pt, not the init
-        log = open(os.path.join(runs, "b", "train.log"), encoding="utf-8").read()
-        assert "resumed from" in log and "not loaded: resumed from ckpt.pt" in log and os.path.getmtime(os.path.join(runs, "b", "model_step5.pt")) == t5, "a snapshot is never overwritten"
-        mb, ab = JKT.load_model("b", "cpu", runs)
-        assert ab["init"] == a_pt and ab["init_sha256"] == JKT.file_sha256(a_pt) and mb._step_py == 40 and set(mb.state_dict()) == set(JK.JTokenHead().state_dict()), (mb._step_py, ab["init"])
-        for n in (0, 5, 10):
-            assert JKT.load_model("b", "cpu", runs, name=f"model_step{n}.pt")[0]._step_py == 20 + n, n                    # the init's 20 forwards + n updates
-        evals = {r["step"]: r["val"] for r in map(json.loads, open(os.path.join(runs, "b", "log.jsonl"))) if "total" not in r}
-        assert evals == {5: {"snapshot": 5.0}, 10: {"snapshot": 10.0}, 15: {}, 20: {}}, evals                              # the eval rows of the snapshot hook (jtoken_train docstring)
-        must_fail(JKT.train, JKT.parse_args(["--name", "b", "--init", os.path.join(runs, "big", "model.pt"), "--snapshots", "0,5,10"] + base), runs, 5, 48)      # another init in the same folder
-        for other in ("big", "pri"):
-            must_fail(JKT.train, JKT.parse_args(["--name", f"c_{other}", "--init", os.path.join(runs, other, "model.pt")] + base), runs, 5, 48)                 # another architecture (d 96, the prior)
-        must_fail(JKT.parse_args, ["--name", "x", "--init", os.path.join(runs, "nothing.pt")])
-    print("init: weights and step buffer bit for bit (step-0 snapshot = the stage-A head, step 20 -> 40 after 20 more), ckpt.pt first on a resume, path + sha256 in the recipe, another init / d 96 / the prior refused; the teacher run "
-          "and the stage-B run have the S1 state keys and load with load_model; snapshots 0 / 5 / 10 written once, read by load_model with step buffer 20 + n; the eval rows of the hook (no 'total') at 5 / 10 / 15 / 20: ok")
-
-
 def test_head_seed():
     """--head-seed N: the head's initialisation and the data order use N, --seed keeps choosing the cache (the loader's seed); head_seed in the recipe; --head-seed equal to --seed (and none) = the default run bit for bit"""
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
-        base = ["--smoke", "--bs", "2", "--workers", "0", "--snapshots", "0"]
+        base = ["--smoke", "--bs", "2", "--workers", "0"]
+        step0, real_bh = {}, JKT.build_head
         for name, extra in (("s0", ["--seed", "0"]), ("s0h0", ["--seed", "0", "--head-seed", "0"]), ("s0h2", ["--seed", "0", "--head-seed", "2"]), ("s2", ["--seed", "2"])):
-            JKT.train(JKT.parse_args(["--name", name] + extra + base), runs, 500, 48)
-        st = lambda n, f="model_step0.pt": torch.load(os.path.join(runs, n, f), map_location="cpu", weights_only=False)["state"]  # noqa: E731
+            def built(args, name=name):                                                                       # the trainer's step-0 head
+                m = real_bh(args)
+                step0[name] = {k: v.clone() for k, v in m.state_dict().items()}
+                return m
+            patched(JKT, "build_head", built, JKT.train, JKT.parse_args(["--name", name] + extra + base), runs, 500, 48)
+        st = lambda n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False)["state"]  # noqa: E731
         same = lambda x, y: all(torch.equal(v, y[k]) for k, v in x.items())  # noqa: E731
+        seeded = lambda hs: (JKT.T.seed_all(hs), JKT.build_head({}).state_dict())[1]  # noqa: E731
         tot = lambda n: [json.loads(r)["total"] for r in open(os.path.join(runs, n, "log.jsonl")) if "total" in r]  # noqa: E731
-        assert same(st("s0h2"), st("s2")) and not same(st("s0h2"), st("s0")), "the head seed initialises the head"
+        assert same(step0["s0h2"], seeded(2)) and same(step0["s2"], seeded(2)) and same(step0["s0"], seeded(0)) and not same(step0["s0h2"], step0["s0"]), "the head seed initialises the head (build_head after seed_all)"
         assert tot("s0h2") == tot("s2") and tot("s0h2") != tot("s0"), "the data (smoke: the synthetic batches) follow the head seed"
-        assert same(st("s0h0", "model.pt"), st("s0", "model.pt")) and tot("s0h0") == tot("s0"), "--head-seed = --seed is the default run"
+        assert same(st("s0h0"), st("s0")) and tot("s0h0") == tot("s0"), "--head-seed = --seed is the default run"
         a = JKT.load_model("s0h2", "cpu", runs)[1]
         assert (a["seed"], a["head_seed"]) == (0, 2) and JKT.load_model("s0", "cpu", runs)[1]["head_seed"] is None
         must_fail(JKT.check_start, dict(a, head_seed=3), os.path.join(runs, "s0h2"))                           # another head seed in the same folder
@@ -1335,7 +868,7 @@ def _distill_runs(mod, runs, todo, band=(0.0, 100.0)):
         steps, held, real = [], [], mod.make_loss
 
         def rec(*a, **k):
-            held.extend(a[7] if len(a) > 7 else k.get("teachers", ()))
+            held.extend(a[3] if len(a) > 3 else k.get("teachers", ()))
             f = real(*a, **k)
 
             def g(m, b):
@@ -1473,7 +1006,7 @@ def _real_teachers():
 
 
 def _real_twin():
-    """the twin of the card (arm d, seed 0) on the real TRAIN cache, one step on the CPU with the card's teachers at W 0 and 2 loader workers (persistent) (--snapshots 0): the start check passes the card's band TEACHER_GT; the student's step-0 state =
+    """the twin of the card (arm d, seed 0) on the real TRAIN cache, one step on the CPU with the card's teachers at W 0 and 2 loader workers (persistent) (its step-0 head recorded at its build): the start check passes the card's band TEACHER_GT; the student's step-0 state =
     E373 cb's init rebuilt (seed_all(2), build_head of its args); the frame tokens of the first batch in train.log = the first batch of E373's order (seed_all(2), the TRAIN loader), and the first GT loss = E373's logged
     'first loss' (its first batch on its init; the GPU in bf16 there: to 2e-3) -> a note"""
     import hashlib
@@ -1483,10 +1016,16 @@ def _real_twin():
     if not all(os.path.exists(os.path.join(JKT.ROOT, p, "model.pt")) for p in REAL_TEACHERS) or not os.path.exists(os.path.join(LP.cache_dir("train", 0, "e292_a"), "meta.json")):
         return "twin SKIPPED (the E373 / E367 runs or the TRAIN cache of B' seed 0 are not there)"
     ea = torch.load(os.path.join(e373, "model.pt"), map_location="cpu", weights_only=False)["args"]
+    built, real_bh = [], JKT.build_head
+
+    def rec(args):                                                                                            # every head the trainer builds: the teachers first, the student last
+        m = real_bh(args)
+        built.append({k: v.clone() for k, v in m.state_dict().items()})
+        return m
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
-        JKT.train(JKT.parse_args(["--name", "twin", "--seed", "0", "--head-seed", "2", "--ident", "e292_a", "--steps", "1", "--bs", "8", "--workers", "2", "--none-weight", "0.25", "--snapshots", "0",
-                                  "--distill-from", ",".join(REAL_TEACHERS), "--distill-weight", "0"]), runs, 500)
-        s0 = torch.load(os.path.join(runs, "twin", "model_step0.pt"), map_location="cpu", weights_only=False)["state"]
+        patched(JKT, "build_head", rec, JKT.train, JKT.parse_args(["--name", "twin", "--seed", "0", "--head-seed", "2", "--ident", "e292_a", "--steps", "1", "--bs", "8", "--workers", "2", "--none-weight", "0.25",
+                                                                   "--distill-from", ",".join(REAL_TEACHERS), "--distill-weight", "0"]), runs, 500)
+        s0 = built[-1]
         log = open(os.path.join(runs, "twin", "train.log"), encoding="utf-8").read()
     JKT.T.seed_all(2)
     init = JKT.build_head(ea).state_dict()
@@ -1505,7 +1044,7 @@ def test_distill_trainer():
     """E379 (card v2) --distill-from / --distill-weight in the trainer (the champion recipe on synthetic batches; teacher b one past the switch): `_check_distill_runs` with a band that holds the teachers' mean GT loss
     over the first 20 batches and not every first-batch loss; gt / kd / kd_s / kd_l in the info of every step and in the log row; the start line (the teachers' GT loss on the first 20 batches) and the first-loss line (the parts,
     the teachers' GT loss on the first batch, the precision KL, the frame tokens) by hand; the student initialised as its teacher has KD 0 at step 1; refusals (the card's band, another cache seed, a step counter that is
-    not the run's steps, --teacher rule, W < 0, W without teachers, no model.pt, another W / no teachers at a resume, a changed teacher file at a resume); textual mutants of jtoken_train.py; `_real_teachers`, `_real_twin`"""
+    not the run's steps, W < 0, W without teachers, no model.pt, another W / no teachers at a resume, a changed teacher file at a resume); textual mutants of jtoken_train.py; `_real_teachers`, `_real_twin`"""
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         for name, extra in (("ta", ["--head-seed", "5"]), ("tb", ["--head-seed", "6"]), ("tc", ["--seed", "1"])):
             JKT.train(JKT.parse_args(["--name", name] + BASE + extra), runs, 500, 48)
@@ -1534,7 +1073,11 @@ def test_distill_trainer():
         assert i1["gt"] == r["champ"][0][0][0], "info['gt'] is the GT loss alone (the champion's first loss: the same head and batch)"
         assert "KL(the teachers' mean in float32 || under bf16 autocast) short " in log and "frame tokens of this batch []" in log and f"distill from {td}" in log, log[:2500]
         assert abs(steps[0][0] - r["champ"][0][0][0] - i1["kd"]) < 1e-5, "step 1: the champion's GT loss (the same head and batch) + 1 x KD"
-        si = _distill_runs(JKT, runs, [("init", ["--init", os.path.join(runs, "ta", "model.pt"), "--distill-from", os.path.join(runs, "ta")])], band)["init"][0]
+        os.makedirs(os.path.join(runs, "t0"))                                                                # a teacher of 0 steps = the student's step-0 head (seed_all(head seed 0), build_head)
+        ka = dict(torch.load(os.path.join(runs, "ta", "model.pt"), map_location="cpu", weights_only=False)["args"], steps=0, head_seed=None)
+        JKT.T.seed_all(0)
+        torch.save(dict(state=JKT.build_head(ka).state_dict(), args=ka, steps=0), os.path.join(runs, "t0", "model.pt"))
+        si = _distill_runs(JKT, runs, [("self", ["--distill-from", os.path.join(runs, "t0")])])["self"][0]
         assert si[0][1]["kd"] == 0.0 and all(i["kd"] > 0 for _, i in si[1:]), [i["kd"] for _, i in si[:3]]      # the student = its teacher on the same batch: 0 exactly
         # refusals
         must_fail(JKT.train, JKT.parse_args(["--name", "c0"] + BASE + ["--distill-from", td]), runs, 500, 48)  # the card's band (the toy teachers are not the card's)
@@ -1543,9 +1086,8 @@ def test_distill_trainer():
         must_fail(JKT.load_teachers, dict(distill_from=os.path.join(runs, "te"), seed=0, ident="e292_a", K=None), "cpu")
         for k, v in (("distill_weight", 0.5), ("distill_from", None)):
             must_fail(JKT.check_start, dict(a1, **{k: v}), os.path.join(runs, "w1"))
-        for bad in (["--distill-from", td, "--teacher", "rule"], ["--distill-from", td, "--distill-weight", "-0.5"], ["--distill-weight", "0.5"], ["--distill-from", os.path.join(runs, "nothing")], ["--distill-from", ""]):
+        for bad in (["--distill-from", td, "--distill-weight", "-0.5"], ["--distill-weight", "0.5"], ["--distill-from", os.path.join(runs, "nothing")], ["--distill-from", ""]):
             must_fail(JKT.parse_args, ["--name", "x"] + bad)
-        must_fail(JKT.make_loss, None, teacher="rule", teachers=r["w1"][3])
 
         class Other(torch.nn.Module):                                                                         # a teacher on other tokens (another gate)
             def __init__(self, t):
@@ -1587,12 +1129,12 @@ def test_distill_trainer():
           f"and the log row; through a shuffled DataLoader with a persistent worker the first batch with teachers = without = first_batches ({fb}); the start check on the mean of the first 20 batches (toy "
           f"teachers {means[0]:.4f} / {means[1]:.4f}, first batch {hand[0][0]:.4f} / {hand[1][0]:.4f}) and the first-batch line (= by hand, the precision KL, the frame tokens) logged; the teachers keep their counters (20, "
           f"{JK.SWITCH + 7}: past the switch), eval, frozen, float32 inside the loss under bf16 autocast; the student initialised as its teacher: KD 0 at step 1; the sha256 in the recipe; refusals (the card's band, another "
-          f"cache seed / ident / K / cache root, a step counter off its run's steps, a teacher on other tokens, --teacher rule, W < 0, W without teachers, no model.pt, another W / sha / no teachers at a resume, a changed teacher file); textual mutants "
+          f"cache seed / ident / K / cache root, a step counter off its run's steps, a teacher on other tokens, W < 0, W without teachers, no model.pt, another W / sha / no teachers at a resume, a changed teacher file); textual mutants "
           f"({', '.join(mutants)}) fail; {real}; {twin}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_none_weight_near, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
-         test_none_weight_near_trainer, test_prior, test_past, test_maps, test_live_inputs, test_teacher, test_init, test_head_seed, test_distill, test_distill_trainer]
+TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
+         test_live_inputs, test_head_seed, test_distill, test_distill_trainer]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want

@@ -15,20 +15,11 @@ Soft pruning: the key weight w_j is sigmoid(e_j) (input) in layer 1 and for the 
 the SAME Linear (after a shared LayerNorm) after layer 1 (keys of layers 2 and 3) and after layer 3 (keys of the wiring layer); both readings get the type CE, and the key-bias path carries gradient into them.
 Wiring layer (on top of layer 3, attention weights only): class c in {short: chord <= 8 m, long: chord > 8 m}, z^c_ij = q^c_i.k^c_j / sqrt(32) + bias^c(g_ij) + log(w_j + 1e-3) + b^c_j on the allowed gate of `jtok.pair_geometry`
 (padding masked as key and source) + ONE learned none slot per class (key k^c_none and a bias): p^c(.|i) = softmax over {allowed keys} + {none}. Two handle scales per pair from an MLP of (x_i, x_j, g_ij).
-Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (as `jtok2.gt_classes`; ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
+Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
 (E376 `pos_loss="max"`: -log max_{j in G(i)} p^c(j|i)) when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
-+ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. E377 `none_weight_near`: the none tokens near an assigned token (`near_none`, a label of the batch)
-get their own none weight in both places the none weight acts. Tests: test_jtoken.py
++ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. Tests: test_jtoken.py
 E379 (`distill_loss`, ensemble distillation; the trainer adds W x it to the loss above): p_T = the MEAN of the frozen teachers' PROBABILITIES on the same tokens (`teacher_logp`); kd = KL_s + KL_l, the KL(p_T || p) of the
 successor softmax (with the none slot) per class over the sources of the likelihood (`source_rows`), temperature 1; the type readings and the handle scales are not distilled (card v2).
-c-rule (`rule_links`, THE one code path of the rule: the arm `rule` of `jtoken_eval.py ctl`, the E369 prior and the E370 teacher call it): E357's `lo_near` on the valid tokens with B' e_p >= 0.5.
-E369 (`JTokenHead(prior="rule")`): c-rule's links r and B''s existence as a FIXED prior: z^c_ij += lam r^c_ij (r^c = r inside the gate of class c), the none slot of class c += lam (1 - has^c_i) + mu, the type none logit
-+= log 6 - e_j inside `read_types` (both readings: at zero type logits p_none = sigmoid(-e), and the key weight 1 - p_none of the switch carries it); lam, mu are buffers; the type Linear, `wk`, the last layer of `wbias` and
-`dest` start at zero and the handle scales at c-rule's 1/3, so the step-0 head delivers c-rule (inside the gate). E370 (`rule_teacher`): c-rule's links and B''s own types as the TARGETS of `jtoken_loss` (stage A; no GT key read).
-S2 hook: `JTokenHead(past_block=m)`, `forward(batch, past)`: after self-attention layer 1, x = m(x, pos, dirv, valid, past); `past` is passed UNTOUCHED (this file reads none of its keys); out['x'] (B, K, D) = the final
-token states, out['w'] (B, K) = 1 - p_none of the last reading.
-S3 hook: `JTokenHead(map_block=m)`, `forward(batch, past, maps)`: after self-attention layer 2, x = m(x, pos, dirv, valid, maps); `maps` is passed UNTOUCHED (this file reads none of its keys; `{}` = no map: the block
-itself must then act as the identity, the head does not special-case it). Order with both hooks: layer 1 -> past -> layer 2 -> map -> layer 3. No block, or past / maps None: the plain head bit for bit.
 """
 import math
 import os
@@ -45,17 +36,14 @@ for sub_ in (".", "..", "../data", "../data/prep"):
 import jtok as JT  # noqa: E402
 
 SHORT, NG = JT.SHORT, JT.NG
-NEG = -1e4                                                                  # the fill of a masked logit (as `jtok2.NEG`)
+NEG = -1e4                                                                  # the fill of a masked logit
 TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
 SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
 BANDS = 4
 NIN = 2 + 4 * BANDS + 2 + 1 + 1 + 8 + 3                                     # pos / HALF, its Fourier features, dirv, e, e_raw, 8 flags, s, uout, uin
 INPUTS = ("tok", "pos", "dirv", "e", "e_raw", "flags", "s", "uout", "uin", "valid")      # the only batch keys the forward reads
 GT_KEYS = ("y", "ylong", "yscale", "ytype")                                 # the keys of the batch that carry GT (the loss reads them, the forward never)
-RULE_P = 0.5                                                                # c-rule's nodes: the valid tokens with B' e_p >= 0.5
-LAM, MU = 12.0, 10.4                                                        # E369 prior: a rule link starts at p 0.73 - 0.82 (5 - 95 % of the destination key bias, TRAIN sample seed 0), the none slot at lam + mu without one
 POS_LOSS = ("sum", "max")                                                   # the likelihood of a source with GT successors (`_source_nll`): -log sum over its group (default) or -log max (E376)
-NEAR_R, NEAR_COS = 2.0, 0.5                                                 # E377 `near_none`: within NEAR_R m (inclusive) of an assigned token whose heading has a cosine >= NEAR_COS (2 m covers 98.6 % of the TRAIN duplicates)
 
 
 def _const(t):
@@ -107,67 +95,11 @@ def wiring_logp(z, zn, cand):
     return torch.cat([z.float().masked_fill(~cand, NEG), zn.float()[..., None]], -1).log_softmax(-1)
 
 
-# ------------------------------------------------------------------------------------------------------------------------------ c-rule (E369 prior, E370 teacher)
-def _jtok_eval():
-    """E357's rule code (`evaluation/jtok_eval.py`), imported on first use: only the rule options need it"""
-    ev = os.path.normpath(os.path.join(HERE, "..", "..", "evaluation"))
-    if ev not in sys.path:
-        sys.path.append(ev)
-    import jtok_eval
-    return jtok_eval
-
-
-def rule_links(pos, dirv, keep):
-    """c-rule on one frame: pos, dirv (K, 2), keep (K,) bool (its nodes) -> (src, dst) token ids: the `lo` link of every kept token (the nearest kept token ahead within 45 degrees of its heading, <= 8 m, heading
-    difference <= 60 degrees) and `lo_near`'s long link of every kept token without a `lo` successor (to the nearest kept token without a `lo` predecessor inside the allowed gate, chord > 8 m, <= 40 m)"""
-    JV = _jtok_eval()
-    idx = np.flatnonzero(keep)
-    p, d = np.asarray(pos, float)[idx], np.asarray(dirv, float)[idx]
-    src, dst = JV.rule_links(p, d)
-    s2, d2 = JV.open_links(p, d, src, dst, every=False)
-    return idx[np.concatenate([src, s2]).astype(int)], idx[np.concatenate([dst, d2]).astype(int)]
-
-
-def rule_matrix(pos, dirv, keep):
-    """c-rule's links of a batch: pos, dirv (B, K, 2), keep (B, K) bool -> (B, K, K) bool on the CPU, [b, i, j] = the link i -> j (a constant of the inputs: no gradient)"""
-    pos, dirv, keep = pos.detach().cpu().double().numpy(), dirv.detach().cpu().double().numpy(), keep.detach().cpu().numpy()
-    r = np.zeros(keep.shape + keep.shape[-1:], bool)
-    for b in range(len(r)):
-        s, d = rule_links(pos[b], dirv[b], keep[b])
-        r[b, s, d] = True
-    return torch.from_numpy(r)
-
-
-def rule_teacher(out, batch):
-    """E370 stage A: the targets of `jtoken_loss` made by c-rule and by B' itself; reads no GT key: per frame `tokens_np` (B''s e_p, flags_p, pos, dirv: the fields of c-rule), `valid` (the tokens the head saw) and the head's gate
-    (out: cand, chord) -> dict(y, ylong, ytype, yskip, rule_links, rule_out_gate). The nodes are the valid tokens with e_p >= 0.5; y = c-rule's links inside the gate, ylong = y and chord > 8 m; ytype = 0 for the other tokens, else
-    B''s own flags (`lane_tokcache.types_of(flags_p >= 0.5)`: split > merge > stop > exit > boundary > lane point); yskip (B, 2, K) = the sources whose rule link of the class (by chord) lies outside the gate: left out of the
-    wiring loss, not taught 'none'. No yscale: stage A has no scale term (`jtoken_loss(scale_w=0)`)"""
-    import lane_tokcache as LC
-    cand, chord = out["cand"], out["chord"]
-    valid = batch["valid"].bool().cpu().numpy()
-    K = cand.shape[-1]
-    r, ytype = np.zeros((len(valid), K, K), bool), np.zeros((len(valid), K), np.int64)
-    for b, t in enumerate(batch["tokens_np"]):
-        keep = valid[b] & (np.asarray(t["e_p"]) >= RULE_P)
-        s, d = rule_links(t["pos"], t["dirv"], keep)
-        r[b, s, d] = True
-        ytype[b, keep] = LC.types_of(np.asarray(t["flags_p"])[keep] >= RULE_P)
-    r = torch.from_numpy(r).to(cand.device)
-    gate, longm = cand.any(1), chord > SHORT
-    y, out_gate = r & gate, r & ~gate
-    return dict(y=y.to(torch.uint8), ylong=y & longm, ytype=torch.from_numpy(ytype).to(cand.device), yskip=torch.stack([(out_gate & ~longm).any(-1), (out_gate & longm).any(-1)], 1),
-                rule_links=float(r.sum()), rule_out_gate=float(out_gate.sum()))
-
-
 class JTokenHead(nn.Module):
-    """prior: None or "rule" (E369, module docstring; lam / mu are buffers); past_block: None or a module called after layer 1 as past_block(x, pos, dirv, valid, past) when `forward` gets a `past` (the S2 hook);
-    map_block: None or a module called after layer 2 as map_block(x, pos, dirv, valid, maps) when `forward` gets `maps` (the S3 hook); live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4)"""
+    """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, prior=None, lam=LAM, mu=MU, past_block=None, map_block=None, live_inputs=False):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False):
         super().__init__()
-        assert prior in (None, "rule"), prior
-        assert map_block is None or layers >= 2, "the map hook sits after layer 2"
         self.dq = dq
         self.proj = nn.Linear(TOK, d)
         self.mlp = nn.Sequential(nn.Linear(NIN, d), nn.GELU(), nn.Linear(d, d))
@@ -181,17 +113,6 @@ class JTokenHead(nn.Module):
         self.sc_i, self.sc_j, self.sc_g, self.sc_o = nn.Linear(d, 32), nn.Linear(d, 32, bias=False), nn.Linear(NG, 32, bias=False), nn.Linear(32, 2)      # the first Linear of (x_i, x_j, g_ij) split into three
         self.register_buffer("step", torch.zeros((), dtype=torch.long))
         self._step_py = 0                                                   # the Python mirror of `step` (no device sync per forward); kept by forward, set_step and load_state_dict
-        self.prior = prior
-        if prior:                                                           # E369: the fixed prior; the outputs of the learned part start at zero (wq, none_k keep their init: q . k and the none slot have a gradient)
-            self.register_buffer("lam", torch.tensor(float(lam)))
-            self.register_buffer("mu", torch.tensor(float(mu)))
-            for m in (self.types, self.wk, self.wbias[-1], self.dest):
-                nn.init.zeros_(m.weight)
-                nn.init.zeros_(m.bias)
-            nn.init.zeros_(self.sc_o.weight)                                # the handle scales start at c-rule's 1/3 (other scales change topo F1: the E369 fixture)
-            nn.init.constant_(self.sc_o.bias, math.log((1 / 3 - 0.05) / (1.25 - 1 / 3)))
-        self.past_block = past_block
-        self.map_block = map_block
         self.live_inputs = live_inputs
 
     def set_step(self, n):
@@ -202,32 +123,25 @@ class JTokenHead(nn.Module):
         super()._load_from_state_dict(*a, **k)
         self._step_py = int(self.step)
 
-    def read_types(self, x, none_prior=None):
-        """-> (type logits, 1 - p_none); none_prior (B, K) is added to the none logit HERE, so that the key weight 1 - p_none carries it"""
+    def read_types(self, x):
+        """-> (type logits, 1 - p_none)"""
         t = self.types(self.tnorm(x)).float()
-        if none_prior is not None:
-            t = torch.cat([t[..., :1] + none_prior[..., None], t[..., 1:]], -1)
         return t, 1.0 - t.softmax(-1)[..., 0]                               # logits, 1 - p_none
 
-    def forward(self, batch, past=None, maps=None):
+    def forward(self, batch):
         b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
         g, allowed = JT.pair_geometry(pos, dirv, valid, e=w_in)
         lw = lambda w: (w + 1e-3).log()  # noqa: E731
         learned = self._step_py >= SWITCH
-        tp = math.log(NTYPE - 1) - b["e"].float() if self.prior else None    # E369: p_none = sigmoid(-e) at zero type logits
         feat = torch.cat([pos / JT.HALF, fourier(pos), dirv, b["e"][..., None], b["e_raw"][..., None], b["flags"], b["s"][..., None], b["uout"][..., None], b["uin"][..., None]], -1).float()
         x = self.ln0(self.proj(b["tok"].float()) + self.mlp(feat))
         x = self.layers[0](x, g, lw(w_in), valid)
-        if self.past_block is not None and past is not None:
-            x = self.past_block(x, pos, dirv, valid, past)
-        types1, w1 = self.read_types(x, tp)
-        for n, layer in enumerate(self.layers[1:], 2):
+        types1, w1 = self.read_types(x)
+        for layer in self.layers[1:]:
             x = layer(x, g, lw(w1 if learned else w_in), valid)
-            if n == 2 and self.map_block is not None and maps is not None:
-                x = self.map_block(x, pos, dirv, valid, maps)
-        types3, w3 = self.read_types(x, tp)
+        types3, w3 = self.read_types(x)
         # the wiring layer
         B, K, _ = x.shape
         xn = self.lnw(x)
@@ -236,15 +150,11 @@ class JTokenHead(nn.Module):
         zn = torch.einsum("bicd,cd->bci", q, self.none_k).float() / math.sqrt(self.dq) + self.none_b[None, :, None]
         chord = g[..., 2] * 20.0
         cand = torch.stack([allowed & (chord <= SHORT), allowed & (chord > SHORT)], 1)
-        if self.prior:
-            r = rule_matrix(pos, dirv, valid & (w_in >= RULE_P)).to(z.device)[:, None] & cand                 # (B, 2, K, K): c-rule's links in the class of the pair, inside the gate
-            z = z + self.lam * r
-            zn = zn + self.lam * ~r.any(-1) + self.mu
         scale = 0.05 + 1.2 * self.sc_o(F.gelu(self.sc_i(xn)[:, :, None] + self.sc_j(xn)[:, None] + self.sc_g(g))).float().sigmoid()
         if self.training:
             self.step += 1
             self._step_py += 1
-        return dict(logp=wiring_logp(z, zn, cand), cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord, x=x, w=w3)
+        return dict(logp=wiring_logp(z, zn, cand), cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ probabilities and decodes
@@ -282,12 +192,12 @@ def decode_argmax(out):
 def _source_nll(lp, G, none_weight, pos_loss="sum"):
     """per source and class: lp (B, 2, K, K + 1) the log-probabilities of the per-source softmax (the none slot last), G (B, 2, K, K) the in-class GT successor groups -> (B, 2, K). G(i) non-empty: the likelihood of
     its GT successors, -log sum_{G(i)} p ('sum') or -log max_{G(i)} p ('max', E376: the mass on ONE member of the group; with one member the two are the same); G(i) empty: `none_weight` x -log p(none|i) (the sources
-    with a GT successor are not touched by the weight); `none_weight` a number or (B, K) per source (E377)"""
+    with a GT successor are not touched by the weight)"""
     assert pos_loss in POS_LOSS, pos_loss
     K = G.shape[-1]
     g = lp[..., :K].masked_fill(~G, NEG)
     pos = -(torch.logsumexp(g, -1) if pos_loss == "sum" else g.amax(-1))
-    return torch.where(G.any(-1), pos, -lp[..., K] * (none_weight[:, None] if torch.is_tensor(none_weight) else none_weight))
+    return torch.where(G.any(-1), pos, -lp[..., K] * none_weight)
 
 
 def source_rows(out):
@@ -295,45 +205,25 @@ def source_rows(out):
     return out["cand"].any(-1) & out["valid"][:, None]
 
 
-def near_none(pos, dirv, valid, ytype):
-    """E377, a label of the loss from the training labels and the token geometry (nothing at inference reads it): pos, dirv (B, K, 2), valid (B, K) bool, ytype (B, K) -> (B, K) bool, the valid none tokens (ytype 0)
-    within NEAR_R m (inclusive) of a valid ASSIGNED token (ytype != 0) whose heading has a cosine >= NEAR_COS with their own: the duplicates and near-twins of a real node"""
-    asg = valid & (ytype != 0)
-    d2 = (pos[:, :, None] - pos[:, None]).square().sum(-1)                  # (B, K, K) squared distances: exact at NEAR_R (no sqrt, no matmul)
-    cos = (dirv[:, :, None] * dirv[:, None]).sum(-1)
-    return valid & (ytype == 0) & ((d2 <= NEAR_R ** 2) & (cos >= NEAR_COS) & asg[:, None, :]).any(-1)
-
-
-def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum", none_weight_near=None):
+def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum"):
     """the likelihood of the module docstring -> (loss, info); batch: y (B, K, K), ylong (B, K, K), yscale (B, K, K, 2), ytype (B, K). info: nll_s, nll_l, ce1, ce3, scale_l1 and the counts gt_links, pos_pairs (in-gate GT
     links), gt_outside (links with no gate), gt_class (in the gate, but `ylong` disagrees with the token chord: a statistic, the class of a link is the token chord's). The long scale target is the fitted yscale
     of the long-class links (finite where the cache fitted one). none_weight W (default 1: the loss of before): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes, and (ii) the type
     cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid tokens of the frame, as torch's weighted mean). pos_loss 'sum' (default: the loss of
     before) or 'max' (E376): the likelihood of the sources with a non-empty G(i), in both classes (`_source_nll`); the empty-G terms, the type cross-entropy and the scale term are the same under both.
-    none_weight_near W' (E377; None = W): replaces W for the near none tokens (`near_none` of the batch's pos / dirv / ytype and out's valid) in both places, their empty-G source terms (both classes) and their type
-    cross-entropy weight (still normalised by the sum of the weights of the valid tokens of the frame); given, info has n_near = the near tokens per frame (the mean over the frames of the batch).
-    A target batch of `rule_teacher` holds yskip (B, 2, K): those sources are left out of their class. scale_w = 0: no scale term, `yscale` is not read"""
+    scale_w = 0: no scale term, `yscale` is not read"""
     dev, cand, lp, valid = out["logp"].device, out["cand"], out["logp"], out["valid"]
     y, yl = batch["y"].to(dev) > 0, batch["ylong"].to(dev).bool()
-    G = y[:, None] & cand                                                  # (B, 2, K, K): the in-gate GT successors of each class (the class of a pair = its token chord, as `jtok2.gt_classes`)
+    G = y[:, None] & cand                                                  # (B, 2, K, K): the in-gate GT successors of each class (the class of a pair = its token chord)
     yt = batch["ytype"].to(dev).long()
-    wn = none_weight                                                        # the none weight of a token: of its empty-G source terms and, for a none token, of its type CE; a scalar when it is the same for all
-    if none_weight_near is not None:
-        near = near_none(batch["pos"].to(dev).float(), batch["dirv"].to(dev).float(), valid, yt)
-        if none_weight_near != none_weight:
-            wn = torch.where(near, none_weight_near, none_weight)          # (B, K)
-    nll = _source_nll(lp, G, wn, pos_loss)
+    nll = _source_nll(lp, G, none_weight, pos_loss)
     rows = source_rows(out)
-    if "yskip" in batch:
-        rows = rows & ~batch["yskip"].to(dev)
     nll_s, nll_l = (_frame_mean(nll[:, c], rows[:, c]) for c in range(2))
-    wt = torch.where(yt == 0, wn, 1.0) if torch.is_tensor(wn) or none_weight != 1.0 else None
+    wt = torch.where(yt == 0, none_weight, 1.0) if none_weight != 1.0 else None
     ce1, ce3 = (_frame_mean(F.cross_entropy(t.float().flatten(0, 1), yt.flatten(), reduction="none").view_as(yt) * (1.0 if wt is None else wt), valid, wt) for t in (out["types1"], out["types"]))
     loss = nll_s + nll_l + type_w * (ce1 + ce3)
     info = dict(nll_s=float(nll_s), nll_l=float(nll_l), ce1=float(ce1), ce3=float(ce3), gt_links=float(y.sum()), pos_pairs=float(G.sum()), gt_outside=float((y & ~cand.any(1)).sum()),
                 gt_class=float((y & cand.any(1) & (yl != (out["chord"] > SHORT))).sum()))
-    if none_weight_near is not None:
-        info["n_near"] = float(near.sum(1).float().mean())
     if not scale_w:
         return loss, info
     ys = batch["yscale"].to(dev).float()
@@ -376,7 +266,7 @@ def count_params(model):
 # ------------------------------------------------------------------------------------------------------------------------------ a synthetic batch
 def synthetic_batch(B=8, K=48, seed=0):
     """random frames that follow the batch dict of the card (2a): per frame a lane of 10 tokens 2 m apart, a second lane 12 m behind its end (one long link), a third lane elsewhere, 4 duplicate tokens 0.5 m beside
-    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them (`with_tokens_np` adds the loader's `tokens_np`)"""
+    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them"""
     rng = np.random.RandomState(seed)
     f = lambda *s: np.zeros(s, np.float32)  # noqa: E731
     pos, dirv, valid, ytype, y, ylong = f(B, K, 2), f(B, K, 2), np.zeros((B, K), bool), np.zeros((B, K), np.int64), np.zeros((B, K, K), np.uint8), np.zeros((B, K, K), bool)
@@ -408,10 +298,3 @@ def synthetic_batch(B=8, K=48, seed=0):
     return dict(tok=torch.from_numpy(r(B, K, TOK) * valid[..., None]), pos=torch.from_numpy(pos), dirv=torch.from_numpy(dirv), e=torch.from_numpy(e), e_raw=torch.from_numpy(e + 0.3 * r(B, K)),
                 flags=torch.from_numpy(flags), s=torch.from_numpy(r(B, K)), uout=torch.from_numpy(r(B, K)), uin=torch.from_numpy(r(B, K)), valid=torch.from_numpy(valid), ytype=torch.from_numpy(ytype),
                 y=torch.from_numpy(y), ylong=torch.from_numpy(ylong), yscale=torch.from_numpy(yscale))
-
-
-def with_tokens_np(batch):
-    """a synthetic batch + `tokens_np` as the loader makes it (float64 pos / dirv, e_p / flags_p / s_p = the sigmoid of the logits, cell, valid): what `rule_teacher` reads"""
-    sg = lambda k: batch[k].float().sigmoid().double().numpy()  # noqa: E731
-    pos, dirv, valid = batch["pos"].double().numpy(), batch["dirv"].double().numpy(), batch["valid"].numpy()
-    return dict(batch, tokens_np=[dict(pos=pos[b], dirv=dirv[b], e_p=sg("e")[b], flags_p=sg("flags")[b], s_p=sg("s")[b], cell=np.arange(pos.shape[1]), valid=valid[b].copy()) for b in range(len(pos))])
