@@ -3,12 +3,15 @@
     python ledger.py render                                   rewrite the markdown from the csv
     python ledger.py add E240.a --hyp "..." --pred "..." --rule "..." [--status planned]     a row before the run (planned)
     python ledger.py note E240.a --result "Q 0.741" --decision "KEEP" [--notes "..." [--replace-notes]]   the judgement columns after the run; --notes is APPENDED
-                                                              to the notes of the row (hold words, attempts, code change), --replace-notes overwrites them.
-                                                              Once a row has started, its hypothesis / prediction / rule are frozen: changing OR filling one needs
+                                                              to the notes of the row (hold words, attempts, code change; one --notes is cut to 20000 characters, and
+                                                              the command says so), --replace-notes overwrites them.
+                                                              Once a row has started (its started cell, a status other than planned, a run record of its id, or the
+                                                              --status of the same call), its hypothesis / prediction / rule are frozen: changing OR filling one needs
                                                               --force (the old text, or "(empty)", goes into the notes); --status must be one run.py writes and a
                                                               started row does not go back to planned; a decision that begins with a verdict (KEEP / CUT / TIE /
                                                               INCONCLUSIVE) on a row without a rule is refused unless it says "by hand: <reason>" (METHOD hard rule 4)
-    python ledger.py tail [--loop 19] [-n 15]                 the last rows (of one loop) in short form, then the runs in progress, for a wake-up
+    python ledger.py tail [--loop 19] [-n 15]                 the last rows (of one loop) in file order (the file is append-ordered: a row that run.py writes moves to the
+                                                              end, a planned row stays where it was added), short form, then the runs in progress, for a wake-up
     python ledger.py sync [--dry-run]                         add the row of every ended run that has none, also a run whose launcher died (stalled); facts from its run record.
                                                               Also replaces the finished row of an EARLIER attempt of an id by the record of a later one (a re-run whose own
                                                               final write failed); the earlier result and decision are kept as a note of the new row
@@ -27,6 +30,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import project as P  # noqa: E402
 from run import COLS, STATUSES  # noqa: E402
 
+NOTES_CAP = 20000       # characters one `note --notes` adds to a cell: a cell of megabytes is no note
 DECIDE_TOKEN = re.compile(r"decide\.py [\d-]+: (?:KEEP|CUT|TIE|INCONCLUSIVE)\b[^|]*")      # what decide.py writes into the decision cell (decide.TOKEN)
 VERDICT = re.compile(r"^\s*(?:KEEP|CUT|TIE|INCONCLUSIVE)\b")    # a decision in the form of decide.py's verdicts ("KEEP (rule met)", "KEEP: effect +0.01 ...")
 BY_HAND = re.compile(r"by hand", re.I)                           # METHOD hard rule 4: a verdict without a rule is labelled "by hand: <reason>"
@@ -36,7 +40,7 @@ def load():
     p = P.path("ledger")
     if not os.path.exists(p):
         return []
-    with open(p, newline="", encoding="utf-8") as f:
+    with open(p, newline="", encoding="utf-8-sig") as f:     # a file saved by a Windows editor may start with a BOM (it would be the first column name); the write has none
         return list(csv.DictReader(f))
 
 
@@ -53,7 +57,6 @@ def save(rows):
 
 
 def render():
-    rows = load()
     lines = ["# Run ledger", "", "Generated from the csv by `autoresearch/tools/ledger.py render` - edit the csv (or use `ledger.py note`), not this file.", ""]
     try:  # the loop table (ROADMAP P3) at the head: how much each loop ran, decided and predicted; it never stops a render
         import metrics
@@ -63,16 +66,18 @@ def render():
     lines += ["## Loops", "", "From `autoresearch/tools/metrics.py` (columns explained there; `-v` shows how each row was counted).", "",
               loops, "", "## Runs", ""]
     lines += ["| id | status | hypothesis | prediction | rule | basis | seed | result | decision | started | min | commit |", "|---|---|---|---|---|---|---|---|---|---|---|---|"]
-    for r in sorted(rows, key=lambda r: r.get("started") or "~"):
-        try:
-            mins = f"{float(r['duration_s']) / 60:.0f}" if r.get("duration_s") not in ("", None) else ""
-        except ValueError:                                               # a hand-typed 'n/a': the table is still made
-            mins = ""
-        c = lambda s: (s or "").replace("|", "/").replace("\n", " ")  # noqa: E731
-        lines.append(f"| {c(r['id'])} | {c(r.get('status'))} | {c(r.get('hypothesis'))} | {c(r.get('prediction'))} | {c(r.get('rule'))} | {c(r.get('basis'))} | {c(r.get('seed'))} | "
-                     f"{c(r.get('result'))[:120]} | {c(r.get('decision'))} | {c(r.get('started'))[:16]} | {mins} | {c(r.get('commit'))} |")
-    md = P.path("ledger_md")
-    P.atomic_write(md, "\n".join(lines) + "\n")
+    with P.locked(P.path("ledger")):     # the rows are read after the slow part (the loop table takes seconds) and the file is written before the lock is let go: a row added meanwhile is in it
+        rows = load()
+        for r in sorted(rows, key=lambda r: r.get("started") or "~"):
+            try:
+                mins = f"{float(r['duration_s']) / 60:.0f}" if r.get("duration_s") not in ("", None) else ""
+            except ValueError:                                               # a hand-typed 'n/a': the table is still made
+                mins = ""
+            c = lambda s: (s or "").replace("|", "/").replace("\n", " ")  # noqa: E731
+            lines.append(f"| {c(r['id'])} | {c(r.get('status'))} | {c(r.get('hypothesis'))} | {c(r.get('prediction'))} | {c(r.get('rule'))} | {c(r.get('basis'))} | {c(r.get('seed'))} | "
+                         f"{c(r.get('result'))[:120]} | {c(r.get('decision'))} | {c(r.get('started'))[:16]} | {mins} | {c(r.get('commit'))} |")
+        md = P.path("ledger_md")
+        P.atomic_write(md, "\n".join(lines) + "\n")
     print(md, len(rows), "rows")
 
 
@@ -93,7 +98,7 @@ def tail(loop=None, n=15):
             sys.exit(f"loop {loop} is not in project.json 'loops' ({', '.join(loops) or 'none'})")
         lo, hi = loops[loop]
         inside = lambda rid: (k := metrics.number(rid)) is not None and lo <= k and (hi is None or k <= hi)  # noqa: E731
-    rows = sorted([r for r in rows if inside(r["id"])], key=lambda r: r.get("started") or "~")[-n:]
+    rows = [r for r in rows if inside(r["id"])][-n:]       # file order: a started-sorted tail put every undated (planned, blocked) row last and pushed the dated ones out
     for r in rows:
         print(f"{r['id']:12} {r.get('status', ''):8} {(r.get('started') or '')[5:16]:11} | {(r.get('result') or '')[:70]} | {(r.get('decision') or '')[:60]}")
     lost = [rid for rid, d, st in missing(inside)]
@@ -107,6 +112,14 @@ def tail(loop=None, n=15):
             what = "stalled" if st == "stalled" else ("running" if rec.get("status") == "running" else "waiting")
             alone = f" | launcher gone, command pid {rec.get('pid')} still runs" if st == "stalled" and RUN.command_alive(rec) else ""
             print(f"{rid:12} {what:8} {(rec.get('started') or rec.get('created') or '')[5:16]:11} | heartbeat {RUN.heartbeat_age(d):.0f} s{alone} | {(rec.get('command') or '')[:70]}")
+
+
+def run_started(rid):
+    """has a launcher begun the run of this id? Its run record has a status (waiting, running, ok, failed, ...) or a done flag: the card was registered then, also where the
+    ledger row still says planned (a hold marker alone is no start)"""
+    import run as RUN
+    d = os.path.join(P.path("run_records"), rid)
+    return bool(RUN.record(d).get("status")) or os.path.exists(os.path.join(d, "done"))
 
 
 def missing(inside=lambda rid: True):
@@ -174,14 +187,18 @@ def main():
                 print(f"note: {a.id} had no ledger row; a new planned row was made (check the id)", file=sys.stderr)
         new = {col: getattr(a, k) for k, col in (("hyp", "hypothesis"), ("basis", "basis"), ("seed", "seed"), ("result", "result"), ("decision", "decision"),
                                                  ("notes", "notes"), ("status", "status"), ("pred", "prediction"), ("rule", "rule")) if getattr(a, k) is not None}
+        if len(new.get("notes") or "") > NOTES_CAP:
+            print(f"note: --notes was {len(new['notes'])} characters, cut to {NOTES_CAP} (one note adds at most that much to a cell)", file=sys.stderr)
+            new["notes"] = new["notes"][:NOTES_CAP]
         if "notes" in new and row.get("notes") and not a.replace_notes:   # the cell holds the hold words, the attempt counts, the code-change note: a new note is added to them
             new["notes"] = row["notes"] + " | " + new["notes"]
         if "status" in new and new["status"] not in STATUSES:
             sys.exit(f"{a.id}: status {new['status']!r} is not one that run.py writes ({', '.join(STATUSES)})")
-        started = bool(row.get("started")) or (row.get("status") or "planned") != "planned"       # the run began (a final status counts when the started cell is empty): its card is written before the run and stays
+        started = bool(row.get("started")) or (row.get("status") or "planned") != "planned" or run_started(a.id)    # the run began (a final status counts when the started cell is empty, so does its run record): its card is written before the run and stays
         if started and new.get("status") == "planned":
-            sys.exit(f"{a.id}: a row that has started ({row['started']}) does not go back to planned")
-        frozen = [c for c in ("hypothesis", "prediction", "rule") if started and c in new and (row.get(c) or "") != new[c]]    # also a column that is still empty: no rule written after the run
+            sys.exit(f"{a.id}: a row that has started ({row.get('started') or 'its status or run record says so'}) does not go back to planned")
+        freeze = started or new.get("status") not in (None, "planned")     # a call that sets a status the run has and writes the card in the same step: the card was not written before the run
+        frozen = [c for c in ("hypothesis", "prediction", "rule") if freeze and c in new and (row.get(c) or "") != new[c]]    # also a column that is still empty: no rule written after the run
         if frozen and not a.force:    # hard rule 4: the rule is written before the run; a started row keeps it (nothing is saved)
             sys.exit(f"{a.id}: the {', '.join(frozen)} of a row that has started is written before the run and stays (changed or filled afterwards, the number would not come from a rule written before); "
                      "--force changes it (the old text, or its absence, goes into the notes)")
