@@ -6,6 +6,7 @@ was killed, the ledger freeze, id twins, the scratch scripts of a snapshot, note
 Builds its own throw-away problem folder with its own git repository; the real ledger, run folders, queue and GPU are never touched.
 """
 import csv
+import hashlib
 import json
 import os
 import shutil
@@ -454,8 +455,150 @@ def test_pin():
         open(f"{T}/code/a.py", "w").write("x = 1\n")
 
 
+def ref_code_hash(root, cfg):
+    """code_hash as run.py had it before the per-process file cache (git show HEAD:autoresearch/tools/run.py of 2026-11-18, renamed): the reference of the VALUE"""
+    h = hashlib.sha1()
+    for top in cfg["code_dirs"]:
+        for dp, dn, fn in os.walk(os.path.join(root, top)):
+            dn[:] = sorted(x for x in dn if x not in ("__pycache__", ".git"))
+            for f in sorted(fn):
+                if f.endswith((".py", ".sh")):
+                    p = os.path.join(dp, f)
+                    h.update(os.path.relpath(p, root).encode())
+                    try:
+                        with open(p, "rb") as fh:
+                            h.update(fh.read())
+                    except OSError:                                  # a dangling link, a file removed between the walk and the open: its name is in the hash, its content cannot be
+                        h.update(b"<unreadable>")
+    for extra in cfg["fingerprint_extra"]:
+        p = os.path.join(root, extra)
+        if os.path.isfile(p):
+            h.update(open(p, "rb").read())
+    return h.hexdigest()[:12]
+
+
+def ref_drift_hash(root, cfg):
+    """drift_hash of the same text (its code_hash call is the reference above)"""
+    return ref_code_hash(root, dict(cfg, code_dirs=[*cfg["code_dirs"], os.path.relpath(RUN.P.AR, root)]))
+
+
+def age(p, secs=100):
+    """the modification time of a file: secs ago (older than run.py's RACY_NS, so the hashes may trust size + mtime)"""
+    os.utime(p, (time.time() - secs, time.time() - secs))
+
+
+def hash_tree():
+    """a throw-away tree for the code hashes: .py / .sh in a code folder and in a fake research folder ar/ (the test points RUN.P.AR at it), a __pycache__ and a .git folder
+    (not walked), a dangling link, a link to a file and one to a folder, a file over 1 MB, a file that is no code, two fingerprint_extra files (one missing); every file 100 s old. Returns (root, cfg)"""
+    r = tempfile.mkdtemp(prefix="ar_hash_")
+    files = {"code/a.py": "x = 1\n", "code/b.sh": "echo b\n", "code/sub/deeper/c.py": "c = 3\n", "code/with space.py": "s = 4\n", "code/notes.md": "no code\n",
+             "code/__pycache__/skip.py": "skip\n", "code/.git/skip.py": "skip\n", "code/big.py": "#" * 1_100_000 + "\n", "ar/tool.py": "t = 1\n", "ar/run.sh": "echo r\n",
+             "ar/__pycache__/skip.py": "skip\n", "cfg.json": "{}\n"}
+    for rel, text in files.items():
+        os.makedirs(os.path.dirname(f"{r}/{rel}"), exist_ok=True)
+        open(f"{r}/{rel}", "w").write(text)
+        age(f"{r}/{rel}")
+    os.symlink("nowhere.py", f"{r}/code/dangling.py")
+    os.symlink("a.py", f"{r}/code/link_to_a.py")             # a link to a file is hashed under its own name, a link to a folder is not walked into
+    os.symlink("sub", f"{r}/code/linkdir")
+    time.sleep(RUN.RACY_NS / 1e9 + 0.3)                      # the ctime of a file cannot be aged: a file made a moment ago is 'racy' (not cached) until this long has passed
+    return r, dict(code_dirs=["code"], fingerprint_extra=["cfg.json", "missing.json"])
+
+
+def counted(fn):
+    """(fn(), {path: how often run.py opened it})"""
+    seen, real = {}, open
+
+    def counting(p, *a, **k):
+        seen[p] = seen.get(p, 0) + 1
+        return real(p, *a, **k)
+    RUN.open = counting                                      # run.py's own name: its read_code opens through it
+    try:
+        return fn(), seen
+    finally:
+        del RUN.open
+
+
+def test_hash_value():
+    """15: code_hash and drift_hash give the value of the code before the file cache (the reference above) on a tree with a __pycache__, a dangling link, a file over 1 MB and
+    fingerprint_extra, on a cold call, on a call that is served from the cache, and after a file changed with the same size and a new mtime"""
+    r, cfg = hash_tree()
+    real_ar, RUN.P.AR = RUN.P.AR, f"{r}/ar"
+    try:
+        RUN.CODE_CACHE.clear()
+        want, want_drift = ref_code_hash(r, cfg), ref_drift_hash(r, cfg)
+        assert want != want_drift
+        for _ in range(2):
+            assert (RUN.code_hash(r, cfg), RUN.drift_hash(r, cfg)) == (want, want_drift)
+        open(f"{r}/code/a.py", "w").write("x = 2\n")        # same size, new content and mtime: the cache must not serve the old bytes
+        age(f"{r}/code/a.py", 40)
+        assert RUN.code_hash(r, cfg) == ref_code_hash(r, cfg) != want and RUN.drift_hash(r, cfg) == ref_drift_hash(r, cfg) != want_drift
+    finally:
+        RUN.P.AR = real_ar
+        shutil.rmtree(r, ignore_errors=True)
+
+
+def test_hash_cache():
+    """16: a launch reads each code file once for code_hash and drift_hash (a file over 1 MB and a file changed in the last RACY_NS are read by each); the end of the run
+    decides by the signature of the walk, with no read and no hash, while names, sizes and mtimes are as they were; a touched file (same size, new mtime) is hashed again
+    and an unchanged content gives no drift; a changed content gives a different hash and a code_drift that does not return the quick answer"""
+    r, cfg = hash_tree()
+    real_ar, RUN.P.AR = RUN.P.AR, f"{r}/ar"
+    a, b = f"{r}/code/a.py", f"{r}/code/b.sh"
+    try:
+        RUN.CODE_CACHE.clear()
+        RUN.DRIFT_MEMO.clear()
+        (first, before), opens = counted(lambda: (RUN.code_hash(r, cfg), RUN.drift_hash(r, cfg)))
+        small = [f"{r}/{x}" for x in ("code/a.py", "code/b.sh", "code/sub/deeper/c.py", "code/with space.py", "ar/tool.py", "ar/run.sh", "cfg.json")]
+        assert [opens.get(p) for p in small] == [1] * len(small) and opens[f"{r}/code/big.py"] == 2, opens
+        assert not [p for p in opens if "__pycache__" in p or "/.git/" in p or p.endswith("notes.md")], opens
+        assert (r, before) in RUN.DRIFT_MEMO
+        # the end of the run, nothing changed: no read, the hash is not even computed
+        real_dh = RUN.drift_hash
+
+        def no_hash(*args):
+            raise AssertionError("the end check computed the hash")
+        RUN.drift_hash = no_hash
+        try:
+            res, opens = counted(lambda: RUN.code_drift(r, cfg, "x", before, []))
+        finally:
+            RUN.drift_hash = real_dh
+        assert res == ({}, "") and not opens, (res, opens)
+        # touched: same size, same content, new mtime -> hashed again (only that file is read), no drift
+        age(a, 50)
+        res, opens = counted(lambda: RUN.code_drift(r, cfg, "x", before, []))
+        assert res == ({}, "") and [opens.get(p) for p in small] == [1 if p == a else None for p in small], (res, opens)      # (the file over 1 MB and the dangling link are read by every hash)
+        # changed content and size: a different hash and no quick answer (this folder is no repository, so the precise check reports that it cannot run)
+        open(a, "w").write("x = 22\n")
+        assert RUN.drift_hash(r, cfg) != before and RUN.code_drift(r, cfg, "x", before, []) != ({}, "")
+        # critic 2026-11-18: a rewrite with the SAME size and the old mtime restored (touch -r, cp -p, rsync -t, shutil.copy2) still shows a new ctime: not the quick answer, a different hash
+        age(a, 50)
+        time.sleep(RUN.RACY_NS / 1e9 + 0.3)
+        RUN.CODE_CACHE.clear()
+        RUN.DRIFT_MEMO.clear()
+        before2 = RUN.drift_hash(r, cfg)
+        assert (r, before2) in RUN.DRIFT_MEMO
+        st = os.stat(a)
+        data = open(a).read()
+        open(a, "w").write(data.replace("x = ", "y = ", 1) if "x = " in data else "y" * len(data))
+        os.utime(a, ns=(st.st_atime_ns, st.st_mtime_ns))
+        assert os.stat(a).st_size == st.st_size and os.stat(a).st_mtime_ns == st.st_mtime_ns
+        assert RUN.drift_hash(r, cfg) != before2 and RUN.code_drift(r, cfg, "x", before2, []) != ({}, ""), "same size and restored mtime: the ctime gives it away"
+        # a file changed less than RACY_NS ago is not cached and its walk is not remembered (a second edit in the same clock tick would keep size and mtime)
+        age(a)
+        time.sleep(RUN.RACY_NS / 1e9 + 0.3)                  # a's ctime is now old enough to cache; b is touched just now
+        os.utime(b)
+        RUN.CODE_CACHE.clear()
+        RUN.DRIFT_MEMO.clear()
+        (_, _), opens = counted(lambda: (RUN.code_hash(r, cfg), RUN.drift_hash(r, cfg)))
+        assert opens[b] == 2 and opens[a] == 1 and not RUN.DRIFT_MEMO, (opens, RUN.DRIFT_MEMO)
+    finally:
+        RUN.P.AR = real_ar
+        shutil.rmtree(r, ignore_errors=True)
+
+
 TESTS = ("test_gate", "test_command_pid", "test_ledger", "test_twins", "test_snapshot", "test_notes", "test_card_fields", "test_hold_before_start", "test_settle", "test_chain", "test_frozen_card",
-         "test_pin")
+         "test_pin", "test_hash_value", "test_hash_cache")
 try:
     set_cfg()
     for name in sys.argv[1:] or TESTS:                  # one test by name: python selftest_launch.py test_settle
