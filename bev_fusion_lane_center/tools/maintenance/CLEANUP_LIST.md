@@ -78,3 +78,58 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 | modules: `tools/maintenance/purge_and_compact_2026-11-01.ps1`, `wsl_purge_d5_2026-11-01.sh`, `wsl_second_wave_2026-11-01.sh`, `PURGE_2026-10-31.md` (ran on 2026-11-01); `training/data/p14_chain_data.py` (named by `data/rebuild.json`) | ~370 lines | NEEDS-DECISION (records of what was deleted) |
 **Bugs fixed on 2026-11-07:** C1 `qgates._batches` refuses an incomplete VAL store (the gates paired item i with frame i of `val_frames()`); C2 `qgraph_timing.py` wrote to `runs/e273/<run>` without `makedirs` (failed for an E276 run after the timing loop); C3 the card records `node_sparse` (an arm-s model scored without `--sparse` was not recognisable); C4 `run_all_tests.sh` now runs the six E275 / E276 tests it did not know; C5 `qgraph_train.py` asserts one `--steps` value per phase; C6 `z0_P_1` and `z0_node_P` (identically 0) are no longer reported.
 **Open, deliberately not changed during E276 (it would change the numerics of the training path against the stored baseline):** C7 `qgraph._seg_lse`: `math.exp(extra) * torch.exp(-m)` is 0 * inf = NaN for a group without a true candidate (masked by the later `torch.where`, gradient finite): write `torch.exp(extra - m)` after E276; C8 `qlinks.py` trims candidate pairs above 80,000 with the global torch RNG also at inference (unlikely to trigger): warn or raise when `gt is None`; C9 stale comments: qlinks.py:5 (KL = 32, code 64), sections.py:67 (half same-piece, code uniform), qgates.py reference head of seed 0 for every seed, `Frame.lane()` inserts into `sys.path` on every call.
+
+## F. temp/ dry run of `clean_temp.py` (2026-11-18, lane chat; nothing moved): 172 folders, 8.2 GB
+`clean_temp.py <folder>` without `--move` over every folder of `temp/`: **125 folders (1.2 GB) would go** (no live code or document names them); **47 folders (7.0 GB) are BLOCKED** because live code reads them or a file changed in the last 6 hours. The 125 are to be moved only after the landing of 2026-11-18 and the tests of the landed tree, ONE small folder first with `git count-objects -vH` before and after (`clean_temp.py` tags the scratch first: the tag must add the scripts only; skip data-heavy folders such as e291, e330, qual_report_1117*, e309, e280, gt2 if it would add more); no disk gain on C: (a move to `_to_delete/` stays on the same disk). Never: `temp/e343/` (the frozen E343 digest), `temp/e321/` (protected TEST dumps) and the blocked ones. The blocked ones, largest first (references = lines of live code or documents that name the folder; the first one is shown; `python3 ../autoresearch/tools/clean_temp.py <folder>` lists all):
+
+| folder | size | references | first reference |
+|---|---|---|---|
+| `temp/e282/` | 3126 MB | 5 | `training/train/qnode_pilot.py:4` |
+| `temp/e343/` | 1171 MB | 17 | `evaluation/jtest_eval.py:19` |
+| `temp/e276/` | 487 MB | 18 | `evaluation/jdup.py:102` |
+| `temp/e321/` | 476 MB | 11 | `evaluation/jtest_eval.py:46` |
+| `temp/e292/` | 449 MB | 4 | `evaluation/qends_eval.py:407` |
+| `temp/e352/` | 294 MB | 3 | `evaluation/jprune_b.py:7` |
+| `temp/jwire/` | 219 MB | 6 | `evaluation/jwire_data.py:275` |
+| `temp/simplify/` | 200 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/e275/` | 150 MB | 2 | `evaluation/tests/test_qgraph_score_glue.py:79` |
+| `temp/qual_report_1115/` | 80 MB | 4 | `evaluation/README.md:55` |
+| `temp/e345/` | 77 MB | 10 | `evaluation/README.md:38` |
+| `temp/e273/` | 77 MB | 1 | `training/configs/README.md:23` |
+| `temp/jr/` | 51 MB | 2 | `evaluation/README.md:46` |
+| `temp/e365/` | 51 MB | 14 | `evaluation/README.md:55` |
+| `temp/e353/` | 26 MB | 2 | `training/grid/README.md:53` |
+| `temp/e284/` | 12 MB | 2 | `training/grid/README.md:38` |
+| `temp/_session_scratch_d113/` | 3 MB | 2 | `evaluation/jtoken_eval.py:36` |
+| `temp/tmp8atbqy4o/` | 2 MB | 0 | ``` |
+| `temp/_session_scratch_critic_u1/` | 2 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/landing/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/jwiring/` | 1 MB | 3 | `evaluation/jwire_data.py:5` |
+| `temp/jtime/` | 1 MB | 8 | `evaluation/jheat_replay.py:296` |
+| `temp/jdup/` | 1 MB | 2 | `evaluation/jdup.py:161` |
+| `temp/e385/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/e383_tests/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/e383/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/e379/` | 1 MB | 2 | `evaluation/jtoken_eval.py:49` |
+| `temp/e378/` | 1 MB | 3 | `evaluation/jtoken_eval.py:997` |
+| `temp/e377/` | 1 MB | 2 | `evaluation/jtoken_eval.py:38` |
+| `temp/e374/` | 1 MB | 1 | `tools/maintenance/keep_alive.sh:2` |
+| `temp/e372/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/e368/` | 1 MB | 2 | `tools/maintenance/keep_alive.sh:2` |
+| `temp/e367/` | 1 MB | 1 | `tools/maintenance/keep_alive.sh:2` |
+| `temp/e363/` | 1 MB | 7 | `evaluation/README.md:61` |
+| `temp/e359/` | 1 MB | 1 | `training/grid/test_jtok2.py:38` |
+| `temp/e357/` | 1 MB | 3 | `evaluation/jtok_eval.py:49` |
+| `temp/e325/` | 1 MB | 2 | `evaluation/README.md:60` |
+| `temp/e291/` | 1 MB | 1 | `training/grid/README.md:42` |
+| `temp/e290/` | 1 MB | 2 | `evaluation/jtime.py:12` |
+| `temp/day30/` | 1 MB | 1 | `evaluation/README.md:38` |
+| `temp/_session_scratch_speed/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/_session_scratch_prof/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/_session_scratch_lead/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/_session_scratch_critic_train/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/_session_scratch_critic_eval/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/_session_scratch_critic_data/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
+| `temp/compose/` | 0 MB | 1 | `project.json:22` |
+
+How to unblock: point the code at the new place (a script that moved to a code folder) or promote the data into a result file the code reads; `--ignore-refs` only when the mention is history. The big ones: `e282` (3.1 GB, read by `training/train/qnode_pilot.py`), `e343` and `e321` (never, see above), `e276` (the B' prediction dump `predfull_e273_p_s*.pkl` that `jdup` / `jprune_b` / `jtime` / `jwiring` / `jmaneuver` read), `e292` (`qends_eval` asserts its refusal on a path there), `e352` (`jprune_b plan`).
