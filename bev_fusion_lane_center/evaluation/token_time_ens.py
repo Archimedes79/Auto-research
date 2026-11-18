@@ -13,6 +13,8 @@ import copy
 import json
 import os
 import sys
+import time
+import types
 
 import numpy as np
 import torch
@@ -50,6 +52,16 @@ def check_stacked(m1, m2, batch):
     return max(float((g["p"] - w["p"]).abs().max()) for g, w in zip(got, want)), (params, buffers, base)
 
 
+AGE_S = 2.5                                                                                        # s: the same wait as `jtiming.py`'s own protocol (`time.sleep(2.5)` before the after-sample)
+
+
+def after_state(jtg, cpu, sleep=time.sleep):
+    """-> (host load, GPU state) AFTER the timed passes. On the GPU it waits `AGE_S` first: nvidia-smi averages the utilisation over its sampling window, so a sample taken at once reads this process's own last kernels (65 - 70 %) and the run is flagged NOT QUIET on an idle box (seen 2026-11-18: the E379 e2 and E368 S2 timings, `jtoken_eval.py timing` and `jmap_eval.py time` have no wait)"""
+    if not cpu:
+        sleep(AGE_S)
+    return jtg.load1(), (None if cpu else jtg.gpu_state())
+
+
 def selftest():
     torch.manual_seed(0)
     b = JK.synthetic_batch(1, 48, 0)
@@ -66,6 +78,11 @@ def selftest():
     assert float((pr[0]["p"] - pr[1]["p"]).abs().max()) > 1e-3, "the two heads differ (a test of the test)"
     p1, _ = mean_probs([pr[0]])
     assert torch.equal(p1, pr[0]["p"]), "the mean of one head is the head"
+    calls = []
+    fake = types.SimpleNamespace(load1=lambda: 0.5, gpu_state=lambda: dict(util_max=0.0))
+    assert after_state(fake, True, sleep=calls.append) == (0.5, None) and calls == [], "the CPU path waits for nothing and reads no GPU"
+    assert after_state(fake, False, sleep=calls.append) == (0.5, dict(util_max=0.0)) and calls == [AGE_S], "the GPU path waits AGE_S before the after-sample"
+    assert AGE_S >= 2.0, "the wait must exceed nvidia-smi's averaging window"
     print("token_time_ens selftest ok")
 
 
@@ -137,7 +154,7 @@ def main():
         if rep:                                                                              # the first pass is untimed
             for k in ms:
                 ms[k].append(row[k])
-    load1, gpu1 = JTG.load1(), (None if a.cpu else JTG.gpu_state())
+    load1, gpu1 = after_state(JTG, a.cpu)
     quiet, line = JTG.quiet_verdict(load0, load1, dict(util_max=0.0) if a.cpu else gpu0, dict(util_max=0.0) if a.cpu else gpu1)
     res = dict(runs=[ra, rb], device=dev, K=K, frames=a.frames, repeats=a.repeats, params=dict(head=JK.count_params(m1), two_heads=JK.count_params(m1) + JK.count_params(m2)), host=line, quiet=bool(quiet), usable_for_gcost=bool(quiet and cuda), gpu_rule=why, bf16=cuda,
                median_ms={k: float(np.median(v)) for k, v in ms.items()}, p90_ms={k: float(np.percentile(v, 90)) for k, v in ms.items()}, stacked_max_diff=stacked_max_diff, stacked_error=stacked_error)
