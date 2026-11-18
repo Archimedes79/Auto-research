@@ -127,7 +127,12 @@ def api_checks(tmp, ok):
             assert T.plot("r.one", out=os.path.join(tmp, "c.png"))["png"] and os.path.getsize(os.path.join(tmp, "c.png")) > 1000
         except ImportError:
             pass
-        ok("run: started with its kill rules, status (also by folder name) reads state / step / gradient / speed / kill rules, compare puts two runs side by side, a typo in an id is an error")
+        assert api.resolve_after(TQ.context(proj), ["r_one", "r.two", "nobody_yet", "r.one"]) == ["r.one", "r.two", "nobody_yet"], "a folder name becomes the record id, an id stays, what nothing knows stays as typed, a repeat is dropped"
+        r = T.run(job("a.w", after=["r_one"]))                                # a folder name in `after` is the id of the record, else run.py waits for a record `r_one` that never comes
+        assert "--after r.one " in r["command"], r["command"]
+        until(lambda: os.path.exists(rec("a.w", "done")), 60, what="a.w done after r.one")
+        ok("run: started with its kill rules, status (also by folder name) reads state / step / gradient / speed / kill rules, compare puts two runs side by side, a typo in an id is an error, "
+           "`after` names the record ids")
 
         # 4 stop puts the id on hold; list shows it; run refuses it; resume needs the person's words and continues from the checkpoint
         T.run(job("s.one", set={"steps": 600, "sleep": 0.05}))
@@ -143,6 +148,13 @@ def api_checks(tmp, ok):
         lst = T.list()
         assert any(h["id"] == "s.one" for h in lst["holds"]) and next(x for x in lst["runs"] if x["id"] == "s.one")["held"] is True and lst["running"] == [], lst
         raises(T.stop, "nothing is running", None)
+        real_slots, api._slot_ids = api._slot_ids, lambda c: ["r.one", "r.two"]       # two trainings hold slots (their run folders are there): no `i` would pick whichever came first
+        try:
+            raises(T.stop, "r.one, r.two", None)
+            raises(T.status, "r.one, r.two")
+            assert T.status("r.two")["id"] == "r.two" and not os.path.exists(os.path.join(proj, "runs", "r_one", "CONTROL")), "a named one is fine, nothing was asked to stop"
+        finally:
+            api._slot_ids = real_slots
         # the request is written again while the trainer has not stopped: a fake run that never reads CONTROL, the sends are counted
         from . import control
         fake = os.path.join(proj, "runs", "fake_run")
@@ -188,6 +200,9 @@ def api_checks(tmp, ok):
         assert rc == 2 and "no run record" in err and "Traceback" not in err, (rc, err)
         rc, out, err = cli("Training.stop")
         assert rc == 2 and "nothing is running" in err, (rc, err)
+        rc, out, err = cli("Training.stop", "fake.run", "--wait", "1", "--json")          # the fake run never stops: still running after the wait is exit 1 (stopped False, ok False)
+        assert rc == 1 and json.loads(out)["stopped"] is False and json.loads(out)["ok"] is False, (rc, out, err)
+        assert cli("Training.stop", "fake.run", "--wait", "0")[0] == 0, "not waited (stopped None) is no failure"
         try:
             cli("Training.resume", "s_one")                                                 # --words is required
             raise AssertionError("resume without --words must be refused by the command line too")

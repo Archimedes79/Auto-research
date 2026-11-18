@@ -356,6 +356,9 @@ def test_gates(T):
     ok(jr.check({"id": "pl2", "call": "Toy.fire", "args": {"tag": "pl2"}})["ok"], "a launch call (Training.run) has its card in the arguments and a planned row is the normal case")
     ok(any("run_args '--id'" in x for x in probs(dict(job("ra"), run_args=["--id", "other"]))) and any("run_args '--hyp=x'" in x for x in probs(dict(job("ra"), run_args=["--hyp=x"]))), "the job form owns these run.py options")
     ok(any("not a plain run or job id" in x for x in probs(dict(job("af"), after=["--again"]))) and any("no such run and no job" in x for x in probs(dict(job("af"), after=["ghost"]))), "after is checked")
+    record(T, "t23.C_s1", "ok")
+    c = jr.check(dict(job("af2"), after=["t23_C_s1", "t23.C_s1"]))
+    ok(c["ok"] and c["after"] == ["t23.C_s1"] and c["command"][c["command"].index("--after") + 1] == "t23.C_s1", "after names the record id, not the typed folder name (run.py would wait for a record t23_C_s1 that never comes): " + str(c))
     ok(any("gpu is false but gpu_max_used_mb" in x for x in probs(dict(job("ng"), needs={"gpu": False, "gpu_max_used_mb": 100}))))
     ok(any("cannot wait for itself" in x for x in probs(dict(job("selfw"), reads=["run:selfw"]))))
     H = _tool("run").HOLD
@@ -585,6 +588,29 @@ def test_submit(T):
         zom.wait()
 
 
+def test_lock(T):
+    """the submit lock: a file that was just created and is still empty is a lock being written (its owner is between os.open and os.write), not an owner that is gone; an old empty one is stale"""
+    jr = JobRunner(T)
+    os.makedirs(f"{T}/runs/.jobs/lk4", exist_ok=True)
+    lk4 = f"{T}/runs/.jobs/lk4/submit.lock"
+    open(lk4, "w").close()
+    threading.Timer(1.0, lambda: os.remove(lk4)).start()                          # the first owner finishes after a second
+    old, A.LOCK_WAIT_S = A.LOCK_WAIT_S, 10.0
+    t_in = time.time()
+    try:
+        with jr._lock("lk4"):
+            waited = time.time() - t_in
+    finally:
+        A.LOCK_WAIT_S = old
+    ok(waited >= 0.9, f"a second submit waits for a lock that is still empty ({waited:.2f} s), it does not delete it and enter")
+    open(lk4, "w").close()
+    os.utime(lk4, (time.time() - 60, time.time() - 60))
+    t_in = time.time()
+    with jr._lock("lk4"):
+        pass
+    ok(time.time() - t_in < 0.5, "an empty lock that is older than a few seconds is stale and taken over at once")
+
+
 def test_real(T):
     """the whole way: run.py in the background, the child process, the records, the chain by `reads`, a failure, a result that says ok=False, the launch form, the command line"""
     os.environ.update(AR_MACHINE_LOCK=f"{T}/state/machine_lock.json", AR_SETTLE_S="0")
@@ -707,7 +733,7 @@ def main():
     keep = os.environ.get("JOBRUNNER_KEEP")
     try:
         project(T)
-        for fn in (test_catalogue, test_check, test_gates, test_submit, test_real, test_proc):
+        for fn in (test_catalogue, test_check, test_gates, test_submit, test_lock, test_real, test_proc):
             fn(T)
             print(f"  {fn.__name__[5:]:10s} ok")
     finally:
