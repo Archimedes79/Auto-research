@@ -57,7 +57,7 @@ def load(path=None):
     path = path or state_path()
     if not os.path.exists(path):
         sys.exit(f"no {path}: `keep3.py init ...` first")
-    return json.load(open(path, encoding="utf-8"))
+    return json.load(open(path, encoding="utf-8-sig"))      # a record saved by a Windows editor may start with a BOM
 
 
 def write(st, path):
@@ -108,6 +108,11 @@ def ckpt_file(st, root, run, prefer=None):
     return os.path.relpath(max(hits, key=num), root).replace(chr(92), "/") if hits else None
 
 
+def finite(v):
+    """a value the ranking can use: a number (not text, not null), neither NaN nor infinite"""
+    return isinstance(v, (int, float)) and v == v and abs(v) != float("inf")
+
+
 def info_arm(st, root, reg, name):
     """an ARM (all its seed runs): the value is the mean over the seeds of the mean of st['metric_keys'] in each run's metrics.json (a flat card
     {"split", "gt_signature", "metrics": {...}}); every seed must carry every key, the split and the GT signature of the ranking, and a checkpoint"""
@@ -124,7 +129,7 @@ def info_arm(st, root, reg, name):
             return None, f"{r} was evaluated on {c['checkpoint']}, which does not exist (only {os.path.basename(ck)}): the weights must be the evaluated ones"
         files.append(ck)
         m = c.get("metrics", {})
-        miss = [k for k in st["metric_keys"] if not isinstance(m.get(k), (int, float)) or m[k] != m[k] or abs(m[k]) == float("inf")]
+        miss = [k for k in st["metric_keys"] if not finite(m.get(k))]
         if miss:
             return None, f"{r} has no finite value for {len(miss)} of the {len(st['metric_keys'])} ranking keys (e.g. {miss[0]})"
         if c.get("split") != st["split"] or (st.get("gt_signature") and c.get("gt_signature") != st["gt_signature"]):
@@ -154,6 +159,8 @@ def info(st, root, reg, name):
     m = c.get("metrics", {})
     if st["metric"] not in m:
         return None, f"the card has no metric {st['metric']}"
+    if not finite(m[st["metric"]]):        # a NaN would rank first or last by the order of the entries, and never be beaten by the band
+        return None, f"{name} has no finite value for the ranking metric {st['metric']} on its card ({m[st['metric']]!r})"
     if c.get("split") != st["split"] or c.get("subset") or (st.get("frames") and c.get("frames") != st["frames"]):
         return None, f"the card is not the full {st['split']} split of {st.get('frames')} frames ({c.get('split')}, subset {c.get('subset')!r}, {c.get('frames')} frames)"
     return dict(name=name, key=run, runs=[run], value=float(m[st["metric"]]), vert100=m.get("vert100"), card=os.path.relpath(cp, root).replace(chr(92), "/"),
@@ -209,7 +216,7 @@ def evidence(a, cand):
         return "by hand: " + a.by_hand
     if not a.ledger:
         sys.exit("--apply needs the evidence: --ledger ID (a KEEP verdict of decide.py that names the network) or --by-hand \"reason\"")
-    rows = [r for r in csv.DictReader(open(P.path("ledger"), newline="", encoding="utf-8")) if r["id"] == a.ledger or r["id"].startswith(a.ledger + ".")]
+    rows = [r for r in csv.DictReader(open(P.path("ledger"), newline="", encoding="utf-8-sig")) if r["id"] == a.ledger or r["id"].startswith(a.ledger + ".")]
     keep = [r for r in rows if verdict_of(r.get("decision") or "") == "KEEP"]
     if not keep:
         sys.exit(f"ledger id {a.ledger}: no row (or row of {a.ledger}.*) whose decision holds the verdict KEEP ({len(rows)} rows found); run decide.py first, or use --by-hand \"reason\"")
