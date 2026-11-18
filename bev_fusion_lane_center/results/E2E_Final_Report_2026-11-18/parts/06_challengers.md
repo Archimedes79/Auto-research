@@ -24,4 +24,20 @@ Table: Champion and challengers. A cell that says PENDING is not measured at the
 
 **What this ranking does not say.** It is a ranking of heads on the frames of VAL; no TEST number exists (a TEST run needs the owner's recorded word); the junction F1 of the champion (0.25) stays below the plain head's 0.27.
 
-**sources** E373, E375, E376, E377, E378, E379, E368, E374, E372, E383, E384 cards; D115.
+**S2b: the past fused properly (asked 2026-11-18, D121, run the same day; the card and the runs belong to the lane chat).**
+
+What S2 (E368) did, and what it did not do: the block is one cross-attention after self-attention layer 1 (the current tokens attend to the ego-warped token states of the previous keyframe, a none key for the first frame) and a zero-initialised residual projection back into the token stream. It adds the attention output to the token states and nothing else: the only places where the new information is mixed with the old are the feed-forward blocks of layers 2 and 3. The head reads the past (a wrong past costs 0.026 topo F1) and the gain is a TIE (+0.0042 / +0.0023 against the bar +0.010).
+
+S2b adds the fusion that S2 lacks (Mirko's reading, D121: cross-attention followed by an MLP fusion is the natural form). The cross output c is not added; it is fused with the input x by a small MLP over [x, c and the evidence of the attention (the attention mass on real past keys against the none key)], and a per-token gate decides how much of the fused result replaces x, so that a token passes unchanged where the past does not help. The output is zero-initialised, so the start is the head without the block. The constraint D91 / D118 stands: one frame and one radar scan per step, the past only recursively at feature level.
+
+Table: S2b against its control (card, two seeds, VAL 873 frames; the numbers are copied from the card of the lane chat, never typed here).
+
+| arm | topo F1 s0 / s1 | junction F1 s0 / s1 | lanes found | parameters | ms per frame | verdict |
+|---|---|---|---|---|---|---|
+| control z (E368 loader, no block) | PENDING | PENDING | PENDING | PENDING | PENDING | reference |
+| S2 (E368, cross-attention only) | +0.0042 / +0.0023 against z | | | 144,547 (head alone, +17,416) | head alone 7.88 against 6.66 (quiet) | TIE |
+| S2b (cross-attention + MLP + gate) | PENDING | PENDING | PENDING | PENDING | PENDING | PENDING: the rule of the card |
+
+The report states the card's verdict as it is (a win, a TIE, or a labelled negative). If S2b fails its rule its code leaves again behind an archive tag, nothing is lost (D121). Whatever the verdict, the tokens of the past stay a block of the head: they are not in the champion unless S2b passes its rule and the stage 2 (S4) confirms it.
+
+**sources** E373, E375, E376, E377, E378, E379, E368, E374, E372, E383, E384 cards; D115, D121; the S2b card (lane chat).
