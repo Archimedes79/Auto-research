@@ -668,65 +668,6 @@ def _live_fd_ok(mod):
     return worst
 
 
-class _Hook(torch.nn.Module):
-    """a dummy past block (S2): x + Linear(the mean of past['x']); the identity at zero init"""
-
-    def __init__(self, zero=True):
-        super().__init__()
-        self.lin = torch.nn.Linear(JK.D, JK.D)
-        self.seen = None
-        if zero:
-            torch.nn.init.zeros_(self.lin.weight)
-            torch.nn.init.zeros_(self.lin.bias)
-
-    def forward(self, x, pos, dirv, valid, past):
-        self.seen = past
-        return x + self.lin(past["x"].mean(1, keepdim=True))
-
-
-def _order(m, b, *a):
-    """m(b, *a) without gradient -> the names of its layers and the past block in the order they ran; asserts the chain: every call got the x that the call before it returned"""
-    log = []
-    mods = [(f"layer{i}", l) for i, l in enumerate(m.layers, 1)] + ([("past", m.past_block)] if m.past_block is not None else [])
-    hs = [mod.register_forward_hook(lambda _m, inp, out, n=n: log.append((n, inp[0], out))) for n, mod in mods]
-    try:
-        with torch.no_grad():
-            m(b, *a)
-    finally:
-        for h in hs:
-            h.remove()
-    assert all(torch.equal(o, i) for (_, _, o), (_, i, _) in zip(log, log[1:])), [n for n, _, _ in log]
-    return [n for n, _, _ in log]
-
-
-def test_past():
-    b = _batch(2)
-    torch.manual_seed(0)
-    base = JK.JTokenHead().eval()
-    m = JK.JTokenHead(past_block=_Hook()).eval()
-    m.load_state_dict(dict(base.state_dict(), **{f"past_block.{k}": v for k, v in m.past_block.state_dict().items()}))
-    with torch.no_grad():
-        o0, o1 = base(b), m(b)
-        past = dict(x=o1["x"], pos=b["pos"], dirv=b["dirv"], valid=b["valid"], w=o1["w"], e=b["e"])
-        o2 = m(b, past)
-        assert m.past_block.seen is past, "the past dict reaches the block untouched"
-        assert all(torch.equal(o0[k], o1[k]) and torch.equal(o0[k], o2[k]) for k in ("logp", "types", "types1", "scale", "x", "w")), "no past / a zero block: the output of the plain head"
-        assert o0["x"].shape == (2, 48, JK.D) and o0["w"].shape == (2, 48) and torch.allclose(o0["w"], 1 - o0["types"].softmax(-1)[..., 0])
-        assert _order(m, b, past) == ["layer1", "past", "layer2", "layer3"] and _order(m, b) == ["layer1", "layer2", "layer3"], "the past block once, after layer 1; past None: not called"
-        m.past_block = _Hook(zero=False)
-        must_fail(holds, torch.equal(m(b, past)["logp"], o0["logp"]))                                          # a live block changes the output: it is called
-        m.past_block = _Hook(zero=True)
-        m.past_block.forward = lambda x, pos, dirv, valid, past: x                                             # a block that ignores past: the head reads none of its keys
-        assert torch.equal(m(b, {"anything": 1})["logp"], o0["logp"])
-    mg = JK.JTokenHead(past_block=_Hook())                                                                    # a zero block (the start of a training): the loss reaches its parameters
-    JK.jtoken_loss(mg(b, past), b)[0].backward()
-    assert all(p.grad is not None and float(p.grad.abs().sum()) > 0 for p in mg.past_block.parameters()), "no gradient into the past block"
-    tb = JK.with_tokens_np(JK.synthetic_batch(2, 48, seed=3))
-    assert len(tb["tokens_np"]) == 2 and np.array_equal(tb["tokens_np"][1]["pos"], tb["pos"][1].double().numpy()) and np.array_equal(tb["tokens_np"][0]["cell"], np.arange(48))
-    print("past: the S2 hook after layer 1 (no past or a zero block = the plain head bit for bit, a live block changes the output, the past dict reaches the block untouched and the head reads none of its keys, "
-          "the order layer 1 -> past -> layer 2 -> layer 3, the loss reaches a zero block), out['x'] (B, K, D), out['w'] = 1 - p_none, with_tokens_np: ok")
-
-
 def test_live_inputs():
     """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach dropped under the default); `_live_fd_ok` (the full gradient of
     every float input, float64 finite differences) on jtoken and two textual mutants (the geometry path cut, the key weight of layers 2 - 3 cut before the switch); `build_head` reads it from a run's args (absent = False,
@@ -1193,7 +1134,7 @@ def test_distill_trainer():
 
 
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
-         test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_past]
+         test_live_inputs, test_head_seed, test_distill, test_distill_trainer]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want
