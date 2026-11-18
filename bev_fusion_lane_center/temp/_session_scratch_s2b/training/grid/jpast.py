@@ -1,0 +1,596 @@
+"""E368 (stage S2 of the token champion, D113): ONE cross-attention block from the tokens of the current keyframe to the token STATES of the previous keyframe, in the lane frame of the current one. The head of E365 (`jtoken.JTokenHead`) calls it after self-attention layer 1.
+
+    block = PastBlock(d=64, heads=4)                          # 17.4 k parameters; the output projection starts at ZERO: the block is the identity at the start (a trained head can be extended)
+    head.past_block = block                                   # the hook: x = block(x, pos, dirv, valid, past) after layer 1 when forward(batch, past) gets a past (an empty dict = no past)
+    past = make_past(out_prev, frame_prev, frame_cur, rel_R, rel_t, learned)      # the state of step k - 1 as the block reads it; {} (or None) = a first frame: the none key only
+    pos2, dirv2 = warp_tokens(pos, dirv, rel_R, rel_t)       # p_cur = R p_prev + t (the pose of `data/lane_past_data.py`)
+    g = cross_geometry(pos_q, dirv_q, e_q, pos_k, dirv_k, e_k)  # (B, Kq, Kk, 7) relative geometry of every (query, key) pair
+
+PastBlock.forward(x (B, K, D), pos, dirv (B, K, 2) the current tokens, valid (B, K) bool, past) -> x (B, K, D). past = {} / None or dict(x (B, Kp, D) the previous token states, pos / dirv (B, Kp, 2) ALREADY warped into this lane frame, valid (B, Kp) bool,
+e (B, Kp) the existence probability of the previous tokens, e_cur (B, K) that of the current tokens (the head's hook passes no e, so it travels here), w (B, Kp) the key weights or None). Pre-norm: LayerNorm of x for the queries, of the past states for keys and
+values (the state is the head's own residual stream: its scale is the head's). Per head: logit = q.k / sqrt(dh) + bias_h(cross_geometry) + log(w_j + 1e-3) for the past keys (padding keys masked) and ONE learned none key (k_none, v_none and an own bias) per head;
+softmax over {the past keys} + {none}; the heads are concatenated and projected (zero-initialised); residual add; padding queries (valid False) keep x. A first frame / an all-invalid past: the softmax has the none key only (the output is the none value
+through the projection). The 7 features of cross_geometry: cos and sin of the turn from the query heading to the key heading, the offset pos_k - pos_q along / across the QUERY heading (across = its left normal) / 20, the distance / 20, e_q, e_k
+(the card says 8 and names these 7).
+`make_past`: the key weight w of the previous tokens is sigmoid(e) of the cached existence while `learned` is False (the first `jtoken.SWITCH` training steps: the head's own read-out is still untrained) and the previous step's own 1 - p_none (`out_prev['w']`) after
+it; the state x and w are NOT detached (the gradient runs through the steps); only the input keys of the frames are read (pos, dirv, valid, e): nothing of the GT enters the state.
+`PastBlock.use` is the kill measure of the card: u = RMS(block(x, past) - block(x, past of ANOTHER SAMPLE of the batch)) / RMS(x) on the valid tokens (`roll_past`: every tensor of the past dict rolled by one along the batch axis, the current tokens and e_cur unchanged; a batch of one sample
+needs a donor past from outside, `UseMeter.donor`). It is 0 when the block ignores the CONTENT of the past. u_none = RMS(block(x, past) - block(x, none key only)) / RMS(x) is reported next to it and is NOT a test of use: any content-free attention satisfies it, W_o (mean v_past - v_none)
+is a constant. Tests: grid/test_jpast.py (hand-computed values, a loop reference of the block, the invariances, a block that ignores the past content, the mutants)
+"""
+import math
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+D = 64
+NGEO = 7
+NEG = -1e4                                                                  # the fill of a masked logit (as `jtoken.NEG`)
+
+
+def warp_tokens(pos, dirv, rel_R, rel_t):
+    """pos, dirv (B, K, 2), rel_R (B, 2, 2), rel_t (B, 2) -> the tokens of the previous keyframe in the lane frame of the current one: pos' = R pos + t (the row form pos R^T + t), dirv' = R dirv (a unit vector stays a unit vector)"""
+    R = rel_R.to(pos.dtype)
+    return torch.einsum("bij,bkj->bki", R, pos) + rel_t.to(pos.dtype)[:, None], torch.einsum("bij,bkj->bki", R, dirv.to(pos.dtype))
+
+
+def cross_geometry(pos_q, dirv_q, e_q, pos_k, dirv_k, e_k):
+    """pos / dirv (B, Kq, 2) and (B, Kk, 2), e (B, Kq) and (B, Kk) probabilities -> (B, Kq, Kk, NGEO), [b, i, j] = the key j seen from the query i: cos and sin of the turn from the query heading to the key heading (sin = cross(t_q, t_k), the sign of
+    `jtok.pair_geometry`), the offset pos_k - pos_q along and across the query heading (across = the left normal (-t_y, t_x)) / 20, the distance / 20, e_q, e_k"""
+    ch = pos_k[:, None, :, :] - pos_q[:, :, None, :]
+    tq, tk = dirv_q[:, :, None, :].expand_as(ch), dirv_k[:, None, :, :].expand_as(ch)
+    nq = torch.stack([-tq[..., 1], tq[..., 0]], -1)
+    dot = lambda u, v: (u * v).sum(-1)  # noqa: E731
+    cross = tq[..., 0] * tk[..., 1] - tq[..., 1] * tk[..., 0]
+    return torch.stack([dot(tq, tk), cross, dot(ch, tq) / 20.0, dot(ch, nq) / 20.0, (dot(ch, ch) + 1e-12).sqrt() / 20.0, e_q[:, :, None].expand(ch.shape[:3]), e_k[:, None, :].expand(ch.shape[:3])], -1)
+
+
+def _const(t):
+    return t.detach()
+
+
+def make_past(out_prev, frame_prev, frame_cur, rel_R, rel_t, learned, has_prev=None):
+    """the state of step k - 1 for step k: out_prev = the head's output dict of the previous frame (x (B, K, D), w (B, K) = 1 - p_none), frame_prev / frame_cur = their batch dicts (only pos, dirv, valid, e are read), rel_R (B, 2, 2) / rel_t (B, 2) = the pose of
+    the previous frame in the lane frame of the current one, learned = the head's key-weight switch is over, has_prev (B,) bool = the sample has a previous keyframe (None: all do; a sample without one gets an all-invalid past = the none key only) -> the dict
+    `PastBlock` reads. x and w keep their graph (no detach); the cached inputs are constants"""
+    pos, dirv = warp_tokens(_const(frame_prev["pos"]).float(), _const(frame_prev["dirv"]).float(), rel_R.float(), rel_t.float())
+    e = _const(frame_prev["e"]).float().sigmoid()
+    valid = _const(frame_prev["valid"]).bool()
+    if has_prev is not None:
+        valid = valid & has_prev.bool()[:, None]
+    return dict(x=out_prev["x"], pos=pos, dirv=dirv, valid=valid, e=e, e_cur=_const(frame_cur["e"]).float().sigmoid(), w=out_prev["w"] if learned else e)
+
+
+def roll_past(past, shift=1):
+    """the past of ANOTHER SAMPLE of the batch: every tensor of the past dict rolled by `shift` along the batch axis; e_cur (the existence of the CURRENT tokens, whose queries read the past) and a missing w stay"""
+    return {k: (v.roll(shift, 0) if torch.is_tensor(v) and k != "e_cur" else v) for k, v in past.items()}
+
+
+SUMS = ("d2_none", "x2", "n", "d2_other", "x2_other", "n_other")            # what `PastBlock.use` returns and `UseMeter` adds up
+
+
+class UseMeter:
+    """the kill measures of the card as a forward hook on a `PastBlock` (the head calls it as block(x, pos, dirv, valid, past)): every call with a non-empty past adds the sums of `PastBlock.use`; `donor` = None or a past dict that a batch of ONE sample
+    compares with (set by the caller before the forward); `take()` -> dict(u, u_none, n, n_other) of the calls since the last `take` (None without a call; u None without a comparison with another sample's past) and clears (`take_sums`: the sums); `detach()` removes the hook"""
+
+    def __init__(self, block):
+        self.acc, self.donor, self.handle = dict.fromkeys(SUMS, 0), None, block.register_forward_hook(self._hook)
+
+    def _hook(self, block, args, out):
+        x, pos, dirv, valid, past = args
+        if not past:
+            return
+        for k, v in block.use(x.detach(), pos, dirv, valid, (out - x).detach(), past, self.donor).items():
+            self.acc[k] += v
+
+    def take_sums(self):
+        s, self.acc = self.acc, dict.fromkeys(SUMS, 0)
+        return s
+
+    def take(self):
+        s = self.take_sums()
+        if not s["n"]:
+            return None
+        return dict(u=math.sqrt(s["d2_other"] / max(s["x2_other"], 1e-30)) if s["n_other"] else None, u_none=math.sqrt(s["d2_none"] / max(s["x2"], 1e-30)), n=s["n"], n_other=s["n_other"])
+
+    def detach(self):
+        self.handle.remove()
+
+
+class PastBlock(nn.Module):
+    """the cross-attention block of the module docstring"""
+
+    def __init__(self, d=D, heads=4, geo_hidden=32):
+        super().__init__()
+        assert d % heads == 0, f"d {d} is not a multiple of heads {heads}"
+        self.h, self.dh = heads, d // heads
+        self.ln_q, self.ln_k = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.q, self.kv = nn.Linear(d, d), nn.Linear(d, 2 * d)
+        self.k_none, self.v_none = nn.Parameter(torch.randn(heads, self.dh) * 0.1), nn.Parameter(torch.randn(heads, self.dh) * 0.1)
+        self.none_b = nn.Parameter(torch.zeros(heads))
+        self.bias = nn.Sequential(nn.Linear(NGEO, geo_hidden), nn.GELU(), nn.Linear(geo_hidden, heads))
+        self.o = nn.Linear(d, d)
+        nn.init.zeros_(self.o.weight)
+        nn.init.zeros_(self.o.bias)
+
+    def attend_g(self, x, pos, dirv, valid, past):
+        """-> (att, v, g): `attend` and the cross-geometry g (B, K, Kp, NGEO) of every (query, key) pair (None without a past); att (B, h, K, Kp + 1) float32: the softmax over {the past keys} + {none} (the none key LAST; Kp = 0 without a past), v (B, h, Kp, dh) or None). The padding keys have probability exactly 0"""
+        B, K, _ = x.shape
+        q = self.q(self.ln_q(x)).view(B, K, self.h, self.dh).transpose(1, 2)                         # (B, h, K, dh)
+        z_none = (q * self.k_none[None, :, None, :]).sum(-1).float() / math.sqrt(self.dh) + self.none_b[None, :, None]
+        if not past:
+            return z_none[..., None].softmax(-1), None, None
+        Kp = past["x"].shape[1]
+        k, v = self.kv(self.ln_k(past["x"])).view(B, Kp, 2, self.h, self.dh).permute(2, 0, 3, 1, 4)    # (B, h, Kp, dh) each
+        g = cross_geometry(pos, dirv, past["e_cur"], past["pos"], past["dirv"], past["e"])
+        z = (q @ k.transpose(-1, -2)).float() / math.sqrt(self.dh) + self.bias(g).float().permute(0, 3, 1, 2)
+        if past.get("w") is not None:
+            z = z + (past["w"].float() + 1e-3).log()[:, None, None, :]
+        z = z.masked_fill(~past["valid"].bool()[:, None, None, :], NEG)
+        return torch.cat([z, z_none[..., None]], -1).softmax(-1), v, g
+
+    def attend(self, x, pos, dirv, valid, past):
+        """-> (att (B, h, K, Kp + 1) float32, v (B, h, Kp, dh) or None): see `attend_g`"""
+        att, v, _ = self.attend_g(x, pos, dirv, valid, past)
+        return att, v
+
+    def mix(self, att, v, x):
+        """the attended values (B, h, K, dh): the real keys' values by their attention plus the none value by the none attention"""
+        vn = self.v_none[None, :, None, :].to(x.dtype)
+        return att[..., -1:].to(x.dtype) * vn if v is None else att[..., :-1].to(v.dtype) @ v + att[..., -1:].to(v.dtype) * vn
+
+    def delta(self, x, pos, dirv, valid, past):
+        """the residual update (B, K, D): the output projection of the attended values, zero on the padding queries"""
+        B, K, D_ = x.shape
+        att, v = self.attend(x, pos, dirv, valid, past)
+        return self.o(self.mix(att, v, x).transpose(1, 2).reshape(B, K, D_)) * valid.to(x.dtype)[..., None]
+
+    def forward(self, x, pos, dirv, valid, past):
+        return x + self.delta(x, pos, dirv, valid, past)
+
+    @torch.no_grad()
+    def use(self, x, pos, dirv, valid, y, past=None, donor=None):
+        """the kill measures of the card from the block's own update y = block(x, past) - x (as the forward made it) -> dict of sums over the valid tokens and the D channels (`SUMS`): d2_none = sum (y - y_none)^2 with y_none = the update with the none key only,
+        x2 = sum x^2, n = valid tokens; d2_other = sum (y - y_other)^2 with y_other = the update with the past of ANOTHER SAMPLE of the batch (`roll_past(past)`, B >= 2) or with `donor` (a past dict for this batch: a batch of one), x2_other = x2 and n_other = n
+        when it was made (0 without: a batch of one sample and no donor). u = sqrt(d2_other / x2_other), u_none = sqrt(d2_none / x2): RMS of the difference / RMS(x), summed over batches before the ratio"""
+        m = valid.to(x.dtype)[..., None]
+        sq = lambda ref: float((((y - ref) * m) ** 2).sum())  # noqa: E731
+        x2, n = float(((x * m) ** 2).sum()), int(valid.sum())
+        out = dict(d2_none=sq(self.delta(x, pos, dirv, valid, None)), x2=x2, n=n, d2_other=0.0, x2_other=0.0, n_other=0)
+        other = donor if donor is not None else (roll_past(past) if past and x.shape[0] >= 2 else None)
+        if other is not None:
+            out.update(d2_other=sq(self.delta(x, pos, dirv, valid, other)), x2_other=x2, n_other=n)
+        return out
+
+
+class FusedPastBlock(PastBlock):
+    """E387 (S2b, D121): the cross-attention of `PastBlock` followed by a learned FUSION of the cross output c and the input x, where it makes sense. Per valid token: c = o(the attended values) (the output projection at its ORDINARY initialisation: c is a live signal);
+    a (h,) = per head the attention mass on REAL past keys (1 - the none mass: how much the token found in the past at all); gp (7,) = the head-mean attention weight on the real keys times the 7 cross-geometry features of the pair, summed over the keys (is the found past
+    token where the token expects its predecessor?); feat = [LN_x(x), LN_c(c), a, gp] (2 d + h + 7 = 139 at d 64, 4 heads); y = W2 GELU(W1 feat) (139 -> 64 -> 64, W2 ZERO-initialised); g = sigmoid(w_g feat + b_g) (b_g = -2.0: the gate starts at 0.119 and a token passes
+    unchanged where the past does not help); output x + g * y, padding queries keep x. The start is the head without the block (y = 0 exactly), the zero-init sits at the MLP output so that o and the MLP do not both start dead. A first frame / an all-invalid past: the
+    softmax has the none key only, a = 0, gp = 0, c = the none value through o. 30,932 parameters at d 64 (17,416 of the attention part + 2 x 128 + 8,960 + 4,160 + 140). Same hook, same state, same kill measure (`use` through `delta`) as `PastBlock`."""
+
+    def __init__(self, d=D, heads=4, geo_hidden=32, hidden=64, gate_bias=-2.0):
+        super().__init__(d, heads, geo_hidden)
+        self.o.reset_parameters()                                           # c = o(attended values) is a live signal: the zero-init moves to the MLP output
+        nf = 2 * d + heads + NGEO
+        self.ln_x, self.ln_c = nn.LayerNorm(d), nn.LayerNorm(d)
+        self.mlp1, self.mlp2 = nn.Linear(nf, hidden), nn.Linear(hidden, d)
+        self.gate = nn.Linear(nf, 1)
+        nn.init.zeros_(self.mlp2.weight)
+        nn.init.zeros_(self.mlp2.bias)
+        nn.init.normal_(self.gate.weight, std=0.02)
+        nn.init.constant_(self.gate.bias, gate_bias)
+
+    def parts(self, x, pos, dirv, valid, past):
+        """-> (y (B, K, D) the fusion update before the gate, gate (B, K, 1), a (B, K, h) float32 the real-key mass per head, gp (B, K, NGEO) float32 the pooled cross-geometry)"""
+        B, K, D_ = x.shape
+        att, v, g = self.attend_g(x, pos, dirv, valid, past)
+        c = self.o(self.mix(att, v, x).transpose(1, 2).reshape(B, K, D_))
+        a = (1.0 - att[..., -1]).transpose(1, 2)                                                   # (B, K, h)
+        gp = torch.zeros(B, K, NGEO, dtype=a.dtype, device=a.device) if g is None else torch.einsum("bkj,bkjf->bkf", att[..., :-1].mean(1), g.float())
+        feat = torch.cat([self.ln_x(x), self.ln_c(c), a.to(x.dtype), gp.to(x.dtype)], -1)
+        return self.mlp2(F.gelu(self.mlp1(feat))), torch.sigmoid(self.gate(feat)), a, gp
+
+    def delta(self, x, pos, dirv, valid, past):
+        y, gate, _, _ = self.parts(x, pos, dirv, valid, past)
+        return gate * y * valid.to(x.dtype)[..., None]
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ selftest (the mutants of test_jpast.py run it)
+def _frame(B, K, seed, n_invalid=0):
+    g = torch.Generator().manual_seed(seed)
+    r = lambda *s: torch.randn(*s, generator=g)  # noqa: E731
+    th = torch.rand(B, K, generator=g) * 6.28
+    valid = torch.ones(B, K, dtype=torch.bool)
+    if n_invalid:
+        valid[:, -n_invalid:] = False
+    return dict(x=r(B, K, D), pos=r(B, K, 2) * 15, dirv=torch.stack([th.cos(), th.sin()], -1), valid=valid, e=torch.rand(B, K, generator=g), w=torch.rand(B, K, generator=g))
+
+
+def _past_of(f, e_cur):
+    return dict(x=f["x"], pos=f["pos"], dirv=f["dirv"], valid=f["valid"], e=f["e"], w=f["w"], e_cur=e_cur)
+
+
+def _trained(seed=0, **kw):
+    torch.manual_seed(seed)
+    b = PastBlock(**kw)
+    for p in (b.o.weight, b.o.bias):
+        nn.init.normal_(p, std=0.3)
+    nn.init.normal_(b.none_b, std=0.5)
+    return b
+
+
+def reference(b, x, pos, dirv, valid, past):
+    """the block by loops over batch, head, query and key (plain float64 arithmetic of the module docstring): the reference of the selftest"""
+    B, K, D_ = x.shape
+    P = {n: p.detach().double() for n, p in b.named_parameters()}
+    ln = lambda t, n: (t - t.mean(-1, keepdim=True)) / (t.var(-1, unbiased=False, keepdim=True) + 1e-5).sqrt() * P[n + ".weight"] + P[n + ".bias"]  # noqa: E731
+    lin = lambda t, n: t @ P[n + ".weight"].T + P[n + ".bias"]  # noqa: E731
+    out = x.double().clone()
+    q = lin(ln(x.double(), "ln_q"), "q").view(B, K, b.h, b.dh)
+    if past:
+        Kp = past["x"].shape[1]
+        kv = lin(ln(past["x"].double(), "ln_k"), "kv").view(B, Kp, 2, b.h, b.dh)
+    for bi in range(B):
+        for i in range(K):
+            if not bool(valid[bi, i]):
+                continue
+            att_out = torch.zeros(b.h, b.dh, dtype=torch.float64)
+            for h in range(b.h):
+                zs, vs = [], []
+                if past:
+                    for j in range(Kp):
+                        if not bool(past["valid"][bi, j]):
+                            continue
+                        tq, tk = dirv[bi, i].double(), past["dirv"][bi, j].double()
+                        ch = past["pos"][bi, j].double() - pos[bi, i].double()
+                        nq = torch.stack([-tq[1], tq[0]])
+                        geo = torch.stack([tq @ tk, tq[0] * tk[1] - tq[1] * tk[0], ch @ tq / 20, ch @ nq / 20, ch.norm() / 20, past["e_cur"][bi, i].double(), past["e"][bi, j].double()])
+                        bias = lin(torch.nn.functional.gelu(lin(geo, "bias.0")), "bias.2")[h]
+                        z = q[bi, i, h] @ kv[bi, j, 0, h] / math.sqrt(b.dh) + bias
+                        if past.get("w") is not None:
+                            z = z + math.log(float(past["w"][bi, j]) + 1e-3)
+                        zs.append(z)
+                        vs.append(kv[bi, j, 1, h])
+                zs.append(q[bi, i, h] @ P["k_none"][h] / math.sqrt(b.dh) + P["none_b"][h])
+                vs.append(P["v_none"][h])
+                a = torch.softmax(torch.stack(zs), 0)
+                att_out[h] = (a[:, None] * torch.stack(vs)).sum(0)
+            out[bi, i] = out[bi, i] + lin(att_out.reshape(-1), "o")
+    return out
+
+
+def _trained_fused(seed=0, **kw):
+    torch.manual_seed(seed)
+    b = FusedPastBlock(**kw)
+    for p in (b.mlp2.weight, b.mlp2.bias, b.gate.weight):
+        nn.init.normal_(p, std=0.3)
+    nn.init.normal_(b.gate.bias, std=0.5)
+    nn.init.normal_(b.none_b, std=0.5)
+    return b
+
+
+def reference_fused(b, x, pos, dirv, valid, past):
+    """FusedPastBlock by loops over batch, head, query and key (plain float64 arithmetic of its docstring): the reference of the fused selftest"""
+    B, K, D_ = x.shape
+    P = {n: p.detach().double() for n, p in b.named_parameters()}
+    ln = lambda t, n: (t - t.mean(-1, keepdim=True)) / (t.var(-1, unbiased=False, keepdim=True) + 1e-5).sqrt() * P[n + ".weight"] + P[n + ".bias"]  # noqa: E731
+    lin = lambda t, n: t @ P[n + ".weight"].T + P[n + ".bias"]  # noqa: E731
+    out = x.double().clone()
+    q = lin(ln(x.double(), "ln_q"), "q").view(B, K, b.h, b.dh)
+    if past:
+        Kp = past["x"].shape[1]
+        kv = lin(ln(past["x"].double(), "ln_k"), "kv").view(B, Kp, 2, b.h, b.dh)
+    for bi in range(B):
+        for i in range(K):
+            if not bool(valid[bi, i]):
+                continue
+            att_out, mass, gp = torch.zeros(b.h, b.dh, dtype=torch.float64), torch.zeros(b.h, dtype=torch.float64), torch.zeros(NGEO, dtype=torch.float64)
+            for h in range(b.h):
+                zs, vs, geos = [], [], []
+                if past:
+                    for j in range(Kp):
+                        if not bool(past["valid"][bi, j]):
+                            continue
+                        tq, tk = dirv[bi, i].double(), past["dirv"][bi, j].double()
+                        ch = past["pos"][bi, j].double() - pos[bi, i].double()
+                        nq = torch.stack([-tq[1], tq[0]])
+                        geo = torch.stack([tq @ tk, tq[0] * tk[1] - tq[1] * tk[0], ch @ tq / 20, ch @ nq / 20, ch.norm() / 20, past["e_cur"][bi, i].double(), past["e"][bi, j].double()])
+                        z = q[bi, i, h] @ kv[bi, j, 0, h] / math.sqrt(b.dh) + lin(F.gelu(lin(geo, "bias.0")), "bias.2")[h]
+                        if past.get("w") is not None:
+                            z = z + math.log(float(past["w"][bi, j]) + 1e-3)
+                        zs.append(z)
+                        vs.append(kv[bi, j, 1, h])
+                        geos.append(geo)
+                zs.append(q[bi, i, h] @ P["k_none"][h] / math.sqrt(b.dh) + P["none_b"][h])
+                vs.append(P["v_none"][h])
+                a_ = torch.softmax(torch.stack(zs), 0)
+                att_out[h] = (a_[:, None] * torch.stack(vs)).sum(0)
+                mass[h] = 1 - a_[-1]
+                if geos:
+                    gp = gp + (a_[:-1, None] * torch.stack(geos)).sum(0) / b.h
+            c = lin(att_out.reshape(-1), "o")
+            feat = torch.cat([ln(x[bi, i].double(), "ln_x"), ln(c, "ln_c"), mass, gp])
+            y = lin(F.gelu(lin(feat, "mlp1")), "mlp2")
+            out[bi, i] = out[bi, i] + torch.sigmoid(lin(feat, "gate")) * y
+    return out
+
+
+def selftest_fused():
+    torch.manual_seed(0)
+    B, K, Kp = 2, 7, 6
+    f, fp = _frame(B, K, 1, n_invalid=2), _frame(B, Kp, 2, n_invalid=1)
+    past = _past_of(fp, f["e"])
+    x, pos, dirv, valid = f["x"], f["pos"], f["dirv"], f["valid"]
+    # the size (a pinned number: a changed block is a new card) and the init: the MLP output is zero, the gate starts at sigmoid(-2)
+    b0 = FusedPastBlock()
+    assert sum(p.numel() for p in b0.parameters()) == 30932, sum(p.numel() for p in b0.parameters())
+    assert sum(p.numel() for p in b0.parameters()) - sum(p.numel() for p in PastBlock().parameters()) == 13516
+    assert float(b0.gate.bias) == -2.0 and abs(float(torch.sigmoid(b0.gate.bias)) - 0.1192) < 1e-4 and float(b0.mlp2.weight.abs().sum()) == 0.0 and float(b0.mlp2.bias.abs().sum()) == 0.0 and float(b0.o.weight.abs().sum()) > 0
+    gt_ = torch.sigmoid(b0.gate(torch.randn(500, 139))).detach()
+    assert abs(float(gt_.mean()) - 0.119) < 0.02, "the gate starts near 0.119"
+    # the start is the head without the block: exactly the identity, with and without a past
+    for pa in (None, {}, past):
+        assert torch.equal(b0(x, pos, dirv, valid, pa), x), "the zero-initialised fusion is not the identity"
+    # the loop reference of the whole block (trained-like weights; a past with a padding key; key weights; no key weights)
+    b = _trained_fused()
+    for pa in (None, past, dict(past, w=None)):
+        got = b(x, pos, dirv, valid, pa).double()
+        want = reference_fused(b, x, pos, dirv, valid, pa)
+        assert (got - want).abs().max() < 1e-4, ("fused reference", None if pa is None else sorted(pa), float((got - want).abs().max()))
+    assert float((b(x, pos, dirv, valid, past) - x).abs().max()) > 0.05, "the trained-like block changes nothing (a test of the test)"
+    # the evidence by hand: a = 1 - the none mass per head; no past or an all-invalid past: a = 0, gp = 0 and the output is a function of x alone
+    att, _ = b.attend(x, pos, dirv, valid, past)
+    y, gate, a, gp = b.parts(x, pos, dirv, valid, past)
+    assert a.shape == (B, K, 4) and torch.allclose(a, (1 - att[..., -1]).transpose(1, 2)) and (a > 0).all() and (a < 1).all()
+    assert gp.shape == (B, K, NGEO) and gate.shape == (B, K, 1)
+    wk = att[..., :-1].mean(1)
+    _, _, g7 = b.attend_g(x, pos, dirv, valid, past)
+    assert torch.allclose(gp, torch.einsum("bkj,bkjf->bkf", wk, g7), atol=1e-6)
+    for pa in (None, {}, dict(past, valid=torch.zeros_like(past["valid"]))):
+        _, _, a0, gp0 = b.parts(x, pos, dirv, valid, pa)
+        assert float(a0.abs().max()) < 1e-6, "no real key: the evidence is 0"
+        assert float(gp0.abs().max()) < 1e-6
+    first = b(x, pos, dirv, valid, None)
+    assert torch.equal(first, b(x, pos, dirv, valid, {})) and torch.allclose(first, b(x, pos, dirv, valid, dict(past, valid=torch.zeros_like(past["valid"]))), atol=1e-6), "a first frame is the all-invalid past"
+    # padding keys are masked, padding queries keep x, a permutation of the past tokens leaves the output unchanged
+    junk = dict(past, x=past["x"].clone(), pos=past["pos"].clone(), dirv=past["dirv"].clone(), e=past["e"].clone(), w=past["w"].clone())
+    pad = ~past["valid"]
+    junk["x"][pad], junk["pos"][pad], junk["e"][pad], junk["w"][pad] = 9.0, 99.0, 0.77, 5.0
+    assert torch.equal(b(x, pos, dirv, valid, past), b(x, pos, dirv, valid, junk)), "a padding key changed the output"
+    assert torch.equal(b(x, pos, dirv, valid, past)[~valid], x[~valid]), "a padding query was changed"
+    perm = torch.randperm(Kp)
+    assert torch.allclose(b(x, pos, dirv, valid, past), b(x, pos, dirv, valid, {k: v[:, perm] for k, v in past.items() if k != "e_cur"} | {"e_cur": f["e"]}), atol=1e-5), "not permutation invariant"
+    sh = torch.tensor([13.0, -7.0])
+    assert torch.allclose(b(x, pos, dirv, valid, past), b(x, pos + sh, dirv, valid, dict(past, pos=past["pos"] + sh)), atol=1e-4), "a common translation changed the output"
+    # the start learns: at init only the MLP output has a gradient (y = 0 stops the rest); after ONE step on it every parameter has one (no dead start)
+    b1 = FusedPastBlock()
+    b1(x, pos, dirv, valid, past).square().sum().backward()
+    live = {n for n, p in b1.named_parameters() if p.grad is not None and float(p.grad.abs().sum()) > 0}
+    assert live == {"mlp2.weight", "mlp2.bias"}, live
+    with torch.no_grad():
+        for p in (b1.mlp2.weight, b1.mlp2.bias):
+            p -= 0.1 * p.grad
+    b1.zero_grad()
+    xg = x.clone().requires_grad_()
+    pg = dict(past, x=past["x"].clone().requires_grad_())
+    b1(xg, pos, dirv, valid, pg).square().sum().backward()
+    dead = [n for n, p in b1.named_parameters() if p.grad is None or not torch.isfinite(p.grad).all() or float(p.grad.abs().sum()) == 0]
+    assert not dead and float(xg.grad.abs().sum()) > 0 and float(pg["x"].grad.abs().sum()) > 0, f"dead after one step: {dead}"
+    # the kill measure through `delta`: u > 0 for a block that reads the content (trained-like), 0 at init
+    ysub = b(x, pos, dirv, valid, past) - x
+    su = b.use(x, pos, dirv, valid, ysub, past)
+    assert su["d2_other"] > 1e-6 and su["d2_none"] > 1e-6 and su["n_other"] == int(valid.sum()), su
+    s0 = b0.use(x, pos, dirv, valid, b0(x, pos, dirv, valid, past) - x, past)
+    assert s0["d2_other"] == 0.0 and s0["d2_none"] == 0.0
+    # K = 512 and bf16 autocast: finite (the evidence and the pooled geometry stay float32)
+    bb = _trained_fused(3)
+    big, bigp = _frame(2, 512, 4, n_invalid=100), _frame(2, 512, 5, n_invalid=50)
+    xb = big["x"].clone().requires_grad_()
+    ob = bb(xb, big["pos"], big["dirv"], big["valid"], _past_of(bigp, big["e"]))
+    ob.square().mean().backward()
+    assert ob.shape == (2, 512, D) and torch.isfinite(ob).all() and torch.isfinite(xb.grad).all()
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        assert torch.isfinite(bb(big["x"], big["pos"], big["dirv"], big["valid"], _past_of(bigp, big["e"]))).all()
+    print("jpast fused selftest ok")
+
+
+def selftest():
+    torch.manual_seed(0)
+    B, K, Kp = 2, 7, 6
+    f, fp = _frame(B, K, 1, n_invalid=2), _frame(B, Kp, 2, n_invalid=1)
+    e_cur = f["e"]
+    past = _past_of(fp, e_cur)
+    # the size: 17 416 parameters at d 64, 4 heads, 32 hidden (a pinned number: a changed block is a new card)
+    b0 = PastBlock()
+    assert sum(p.numel() for p in b0.parameters()) == 17416, sum(p.numel() for p in b0.parameters())
+    # zero-init = the identity, with and without a past
+    for pa in (None, {}, past):
+        assert torch.equal(b0(f["x"], f["pos"], f["dirv"], f["valid"], pa), f["x"]), "the zero-initialised block is not the identity"
+    # the loop reference of the whole block (a trained-like block, a past with a padding key, key weights): scale, bias, none key, masks, heads, norms
+    b = _trained()
+    for pa in (None, past, dict(past, w=None)):
+        got = b(f["x"], f["pos"], f["dirv"], f["valid"], pa).double()
+        want = reference(b, f["x"], f["pos"], f["dirv"], f["valid"], pa)
+        assert (got - want).abs().max() < 1e-4, ("reference", None if pa is None else sorted(pa), float((got - want).abs().max()))
+    # a first frame = the none key only = an all-invalid past = the none value through the projection (by hand)
+    x, pos, dirv, valid = f["x"], f["pos"], f["dirv"], f["valid"]
+    first = b(x, pos, dirv, valid, None)
+    assert torch.equal(first, b(x, pos, dirv, valid, {})) and torch.equal(first, b(x, pos, dirv, valid, dict(past, valid=torch.zeros_like(past["valid"])))), "a first frame is not the all-invalid past"
+    by_hand = x + torch.nn.functional.linear(b.v_none.reshape(-1), b.o.weight, b.o.bias)[None, None] * valid[..., None]
+    assert torch.allclose(first, by_hand, atol=1e-6), "the none key only: the output is the none value through the projection"
+    att, _ = b.attend(x, pos, dirv, valid, past)
+    assert att.shape == (B, 4, K, Kp + 1) and torch.allclose(att.sum(-1), torch.ones(B, 4, K), atol=1e-6) and (att[:, :, :, :-1][:, :, :, ~past["valid"][0]] == 0).all(), "softmax over the keys + none; a padding key has probability 0"
+    assert (att[..., -1] > 0).all()
+    # padding keys are masked (changing a padded past token changes nothing), padding queries keep x, the padding values of the current frame do not leak either
+    junk = dict(past, x=past["x"].clone(), pos=past["pos"].clone(), dirv=past["dirv"].clone(), e=past["e"].clone(), w=past["w"].clone())
+    pad = ~past["valid"]
+    junk["x"][pad], junk["pos"][pad], junk["e"][pad], junk["w"][pad] = 9.0, 99.0, 0.77, 5.0
+    assert torch.equal(b(x, pos, dirv, valid, past), b(x, pos, dirv, valid, junk)), "a padding key changed the output"
+    assert torch.equal(b(x, pos, dirv, valid, past)[~valid], x[~valid]), "a padding query was changed"
+    # a permutation of the past tokens (all fields together) leaves the output unchanged
+    perm = torch.randperm(Kp)
+    assert torch.allclose(b(x, pos, dirv, valid, past), b(x, pos, dirv, valid, {k: v[:, perm] for k, v in past.items() if k != "e_cur"} | {"e_cur": e_cur}), atol=1e-5), "not permutation invariant"
+    # invariances of the geometry: a common translation and a common rotation of the current and the past tokens (the features live in the query frame)
+    sh = torch.tensor([13.0, -7.0])
+    assert torch.allclose(b(x, pos, dirv, valid, past), b(x, pos + sh, dirv, valid, dict(past, pos=past["pos"] + sh)), atol=1e-4), "a common translation changed the output"
+    th = torch.tensor(0.9)
+    Rm = torch.stack([torch.stack([th.cos(), -th.sin()]), torch.stack([th.sin(), th.cos()])])
+    rot = lambda t: t @ Rm.T  # noqa: E731
+    assert torch.allclose(b(x, pos, dirv, valid, past), b(x, rot(pos), rot(dirv), valid, dict(past, pos=rot(past["pos"]), dirv=rot(past["dirv"]))), atol=1e-4), "a common rotation changed the output"
+    # the key weight: log(w + 1e-3) is a bias of the logit: two identical keys with w 1 and 0.5 (the geometry bias zeroed) have the attention ratio (1.001) / (0.501); w -> 0 takes a key away
+    b2 = _trained(1)
+    nn.init.zeros_(b2.bias[2].weight)
+    nn.init.zeros_(b2.bias[2].bias)
+    one = dict(x=torch.randn(1, 1, D).repeat(1, 2, 1), pos=torch.zeros(1, 2, 2), dirv=torch.tensor([[[0.0, 1.0]] * 2]), valid=torch.ones(1, 2, dtype=torch.bool), e=torch.full((1, 2), 0.5), e_cur=torch.full((1, 3), 0.5))
+    cur = (torch.randn(1, 3, D), torch.zeros(1, 3, 2), torch.tensor([[[0.0, 1.0]] * 3]), torch.ones(1, 3, dtype=torch.bool))
+    for w, ratio in ((torch.tensor([[1.0, 0.5]]), 1.001 / 0.501), (torch.tensor([[1.0, 0.0]]), 1.001 / 0.001)):
+        a, _ = b2.attend(*cur, dict(one, w=w))
+        assert torch.allclose(a[0, :, 0, 0] / a[0, :, 0, 1], torch.full((4,), ratio), rtol=1e-4), ("the key weight is log(w + 1e-3)", a[0, :, 0, :2], ratio)
+    a, _ = b2.attend(*cur, dict(one, w=None))
+    assert torch.allclose(a[0, :, 0, 0], a[0, :, 0, 1]), "w None: no key weight"
+    # gradient: at zero init only the projection has one; with a non-zero projection every parameter has one, the past state's only when it is not detached
+    for p in b0.parameters():
+        p.grad = None
+    xg = f["x"].clone().requires_grad_()
+    pg = dict(past, x=past["x"].clone().requires_grad_())
+    b0(xg, pos, dirv, valid, pg).square().sum().backward()
+    assert b0.o.weight.grad.abs().sum() > 0 and all(p.grad is None or p.grad.abs().sum() == 0 for n, p in b0.named_parameters() if not n.startswith("o.")), "at zero init only the projection learns"
+    bg = _trained(2)
+    xg = f["x"].clone().requires_grad_()
+    pg = dict(past, x=past["x"].clone().requires_grad_())
+    bg(xg, pos, dirv, valid, pg).square().sum().backward()
+    dead = [n for n, p in bg.named_parameters() if p.grad is None or not torch.isfinite(p.grad).all() or p.grad.abs().sum() == 0]
+    assert not dead and xg.grad.abs().sum() > 0 and pg["x"].grad.abs().sum() > 0, f"no gradient: {dead}"
+    pd = dict(past, x=past["x"].clone().requires_grad_())
+    pd2 = dict(pd, x=pd["x"].detach())
+    xg = f["x"].clone().requires_grad_()
+    bg.zero_grad()
+    bg(xg, pos, dirv, valid, pd2).square().sum().backward()
+    assert pd["x"].grad is None and bg.kv.weight.grad.abs().sum() > 0, "a detached past state got a gradient"
+    # warp by hand: a 90 degree rotation and a translation; the unit headings stay unit, a heading is not translated; the pose of lane_past_data (p_cur = R p_prev + t)
+    R90 = torch.tensor([[[0.0, -1.0], [1.0, 0.0]]])
+    p2, d2 = warp_tokens(torch.tensor([[[1.0, 0.0], [0.0, 2.0]]]), torch.tensor([[[1.0, 0.0], [0.0, 1.0]]]), R90, torch.tensor([[2.0, 3.0]]))
+    assert torch.allclose(p2, torch.tensor([[[2.0, 4.0], [0.0, 3.0]]])) and torch.allclose(d2, torch.tensor([[[0.0, 1.0], [-1.0, 0.0]]])), (p2, d2)
+    assert torch.allclose(warp_tokens(f["pos"], f["dirv"], torch.eye(2)[None].repeat(B, 1, 1), torch.zeros(B, 2))[0], f["pos"]) and torch.allclose(warp_tokens(pos, dirv, R90.repeat(B, 1, 1), torch.zeros(B, 2))[1].norm(dim=-1), torch.ones(B, K), atol=1e-6)
+    pw = pos.clone().requires_grad_()
+    warp_tokens(pw, dirv, R90.repeat(B, 1, 1), torch.ones(B, 2))[0].sum().backward()
+    assert torch.allclose(pw.grad, torch.tensor([1.0, -1.0]).expand_as(pw)), "the warp is differentiable: d sum(R p + t) / dp = the column sums of R"
+    # cross_geometry by hand: the query at the origin heading north, the key at (3, 4) heading east; a second query heading east
+    g = cross_geometry(torch.tensor([[[0.0, 0.0], [0.0, 0.0]]]), torch.tensor([[[0.0, 1.0], [1.0, 0.0]]]), torch.tensor([[0.2, 0.3]]), torch.tensor([[[3.0, 4.0]]]), torch.tensor([[[1.0, 0.0]]]), torch.tensor([[0.9]]))
+    want = torch.tensor([[[[0.0, -1.0, 4 / 20, -3 / 20, 5 / 20, 0.2, 0.9]], [[1.0, 0.0, 3 / 20, 4 / 20, 5 / 20, 0.3, 0.9]]]])
+    assert g.shape == (1, 2, 1, NGEO) and torch.allclose(g, want, atol=1e-6), (g, want)
+    # make_past: the key weight is sigmoid(e) before the switch and the previous step's own w after it; no GT key; no detach; the pose moves the tokens
+    out_prev = dict(x=torch.randn(B, K, D, requires_grad=True), w=torch.rand(B, K))
+    fr = dict(pos=pos, dirv=dirv, valid=valid, e=torch.randn(B, K))
+    gt = dict(y=torch.ones(B, K, K), ylong=torch.ones(B, K, K), yscale=torch.ones(B, K, K, 2), ytype=torch.ones(B, K, dtype=torch.long))
+    Rb, tb = R90.repeat(B, 1, 1), torch.tensor([[2.0, 3.0]]).repeat(B, 1)
+    m0, m1 = make_past(out_prev, fr, dict(fr, e=fr["e"] + 1), Rb, tb, False), make_past(out_prev, dict(fr, **gt), fr, Rb, tb, True)
+    assert torch.equal(m0["w"], fr["e"].sigmoid()) and torch.equal(m1["w"], out_prev["w"]) and m0["x"] is out_prev["x"] and torch.equal(m0["e"], fr["e"].sigmoid()) and torch.equal(m0["e_cur"], (fr["e"] + 1).sigmoid())
+    assert torch.allclose(m0["pos"], warp_tokens(pos, dirv, Rb, tb)[0]) and torch.equal(m0["valid"], valid) and sorted(m0) == ["dirv", "e", "e_cur", "pos", "valid", "w", "x"]
+    assert all(torch.equal(m0[k], make_past(out_prev, dict(fr, **gt), fr, Rb, tb, False)[k]) for k in ("pos", "dirv", "e", "w")), "a GT key changed the state"
+    m0["x"].sum().backward()
+    assert out_prev["x"].grad is not None, "make_past detached the state"
+    mh = make_past(out_prev, fr, fr, Rb, tb, False, torch.tensor([True, False]))                         # a sample without a previous keyframe gets the all-invalid past = the none key only
+    assert torch.equal(mh["valid"][0], valid[0]) and not mh["valid"][1].any() and torch.equal(b(x, pos, dirv, valid, mh)[1], b(x, pos, dirv, valid, None)[1]) and not torch.equal(b(x, pos, dirv, valid, mh)[0], b(x, pos, dirv, valid, None)[0])
+    assert torch.equal(make_past(out_prev, fr, fr, Rb, tb, False)["valid"], valid) and torch.equal(m0["valid"], valid), "has_prev None: every sample has a past"
+    # u, the kill measures (module docstring): u_none (the none key only) is 0 without a past and at zero init; u (the past of ANOTHER SAMPLE) needs B >= 2 or a donor
+    ysub = lambda blk, xx, pp, pa: blk(xx, pp[0], pp[1], pp[2], pa) - xx  # noqa: E731
+    xs = (x, pos, dirv, valid)
+    u0 = b0.use(x, pos, dirv, valid, ysub(b0, x, xs[1:], past), past)
+    assert u0["d2_none"] == 0.0 and u0["d2_other"] == 0.0 and u0["n_other"] == int(valid.sum()) and u0["n"] == int(valid.sum()), "at zero init the block changes nothing"
+    nopast = dict(past, valid=torch.zeros_like(past["valid"]))
+    assert b.use(x, pos, dirv, valid, ysub(b, x, xs[1:], None), None)["d2_none"] < 1e-9 and b.use(x, pos, dirv, valid, ysub(b, x, xs[1:], nopast), nopast)["d2_none"] < 1e-9 and b.use(x, pos, dirv, valid, ysub(b, x, xs[1:], None), None)["n_other"] == 0
+    y = ysub(b, x, xs[1:], past)
+    su = b.use(x, pos, dirv, valid, y, past)
+    y0, y1 = ysub(b, x, xs[1:], None), ysub(b, x, xs[1:], roll_past(past))                              # the references by hand: none key only, the other sample's past
+    mm = valid[..., None].double()
+    d2n, d2o = (float((((y - r_).double() * mm) ** 2).sum()) for r_ in (y0, y1))
+    assert abs(su["d2_none"] - d2n) < 1e-6 * max(d2n, 1) and abs(su["d2_other"] - d2o) < 1e-6 * max(d2o, 1) and abs(su["x2"] - float(((x.double() * mm) ** 2).sum())) < 1e-6 * su["x2"] and su["x2_other"] == su["x2"] and su["n"] == su["n_other"] == int(valid.sum()) and d2n > 0 and d2o > 0
+    rp = roll_past(past)                                                                                    # the other sample's past: every tensor rolled by one along the batch axis, e_cur stays, a missing w stays
+    assert all(torch.equal(rp[k][0], past[k][1]) and torch.equal(rp[k][1], past[k][0]) for k in ("x", "pos", "dirv", "valid", "e", "w")) and torch.equal(rp["e_cur"], past["e_cur"]) and roll_past(dict(past, w=None))["w"] is None and not torch.equal(rp["x"], past["x"])
+    one = {k: (v[:1] if torch.is_tensor(v) else v) for k, v in past.items()}                                 # a batch of ONE sample: no other sample, n_other 0; with a donor (sample 1's past) = what the batch gave sample 0
+    y_one = b(x[:1], pos[:1], dirv[:1], valid[:1], one) - x[:1]
+    s1 = b.use(x[:1], pos[:1], dirv[:1], valid[:1], y_one, one)
+    assert s1["n_other"] == 0 and s1["d2_other"] == 0.0 and s1["x2_other"] == 0.0 and s1["d2_none"] > 0 and s1["n"] == int(valid[0].sum())
+    donor = dict({k: (v[1:2] if torch.is_tensor(v) else v) for k, v in past.items()}, e_cur=one["e_cur"])
+    s2 = b.use(x[:1], pos[:1], dirv[:1], valid[:1], y_one, one, donor)
+    assert s2["n_other"] == int(valid[0].sum()) and abs(s2["d2_other"] - float((((y - y1)[:1].double() * mm[:1]) ** 2).sum())) < 1e-6 * max(d2o, 1), "a donor is the other sample"
+    # the critic's case by hand: a block that ignores the CONTENT of the past. q = 0, geometry bias 0, key weights 1, v = the constant 1 for every key, v_none = 0, o = identity: with n valid past keys every valid query token gets
+    # y = t on all D channels, t = 1.001 n / (1 + 1.001 n): u_none = t / RMS(x) > 0, u = 0. A block that READS the content (v = LayerNorm of the past state): y = a S, S = sum of the valid keys' LN(x), a = 1.001 / (1 + 1.001 n)
+    def plain(content):
+        blk = PastBlock()
+        with torch.no_grad():
+            for p_ in (blk.q.weight, blk.q.bias, blk.bias[2].weight, blk.bias[2].bias, blk.v_none, blk.kv.weight):
+                p_.zero_()
+            blk.kv.bias.zero_()
+            blk.o.weight.copy_(torch.eye(D))
+            if content:
+                blk.kv.weight[D:].copy_(torch.eye(D))
+            else:
+                blk.kv.bias[D:] = 1.0
+        return blk
+    fq, fk = _frame(2, 7, 11, n_invalid=2), _frame(2, 6, 12, n_invalid=2)                                  # 5 valid query tokens per sample, 4 valid past keys per sample (n = 4), different contents
+    pk = dict(_past_of(fk, fq["e"]), w=torch.ones(2, 6))
+    qa = (fq["x"], fq["pos"], fq["dirv"], fq["valid"])
+    n_, a_ = 4, 1.001 / (1 + 1.001 * 4)
+    x2q = float((fq["x"].double()[fq["valid"]] ** 2).sum())
+    blind = plain(False)
+    sb = blind.use(*qa, blind(*qa, pk) - fq["x"], pk)
+    t_ = n_ * a_
+    assert abs(sb["d2_none"] - 10 * D * t_ ** 2) < 1e-5 * 10 * D * t_ ** 2 and sb["d2_other"] < 1e-9 and sb["n"] == sb["n_other"] == 10 and abs(math.sqrt(sb["d2_none"] / sb["x2"]) - t_ / math.sqrt(x2q / (10 * D))) < 1e-5, f"a block that ignores the past content: {sb}"
+    reader = plain(True)
+    ln = lambda t: (t - t.mean(-1, keepdim=True)) / (t.var(-1, unbiased=False, keepdim=True) + 1e-5).sqrt()  # noqa: E731
+    S = [ln(fk["x"].double()[i][:4]).sum(0) for i in range(2)]
+    sr = reader.use(*qa, reader(*qa, pk) - fq["x"], pk)
+    w_none, w_other = 5 * a_ ** 2 * float((S[0] ** 2).sum() + (S[1] ** 2).sum()), 5 * a_ ** 2 * 2 * float(((S[0] - S[1]) ** 2).sum())
+    assert abs(sr["d2_none"] - w_none) < 1e-5 * w_none and abs(sr["d2_other"] - w_other) < 1e-5 * w_other and sr["d2_other"] > 1.0, f"a block that reads the past content: {sr}"
+    um = UseMeter(blind)                                                                                    # the hook on these blocks: u = 0 and u_none > 0 for the blind one, a batch of one + a donor
+    blind(*qa, pk)
+    tk = um.take()
+    assert tk["u"] < 1e-6 and abs(tk["u_none"] - math.sqrt(sb["d2_none"] / sb["x2"])) < 1e-9 and tk["n"] == tk["n_other"] == 10 and um.take() is None
+    pk1 = {k: (v[:1] if torch.is_tensor(v) else v) for k, v in pk.items()}
+    blind(*(t[:1] for t in qa), pk1)
+    tk = um.take()
+    assert tk["u"] is None and tk["u_none"] > 0 and tk["n_other"] == 0 and tk["n"] == 5, "a batch of one sample without a donor has no u"
+    um.detach()
+    um = UseMeter(reader)
+    um.donor = dict({k: (v[1:2] if torch.is_tensor(v) else v) for k, v in pk.items()}, e_cur=pk1["e_cur"])
+    reader(*(t[:1] for t in qa), pk1)
+    tk = um.take()
+    x2_0 = float((fq["x"].double()[0][fq["valid"][0]] ** 2).sum())
+    assert abs(tk["u"] - math.sqrt(5 * a_ ** 2 * float(((S[0] - S[1]) ** 2).sum()) / x2_0)) < 1e-5 and tk["n_other"] == 5, "a donor for a batch of one"
+    um.detach()
+    um = UseMeter(b)                                                                                       # the hook: calls without a past are not counted, the sums are those of `use`, `take` clears, two calls add up
+    b(x, pos, dirv, valid, None), b(x, pos, dirv, valid, {})
+    assert um.take() is None
+    yh = b(x, pos, dirv, valid, past)
+    s3 = um.take_sums()
+    assert s3 == b.use(x, pos, dirv, valid, yh - x, past) and um.take() is None and set(s3) == set(SUMS)
+    b(x, pos, dirv, valid, past), b(x, pos, dirv, valid, past)
+    tk = um.take()
+    assert abs(tk["u"] - math.sqrt(s3["d2_other"] / s3["x2_other"])) < 1e-9 and abs(tk["u_none"] - math.sqrt(s3["d2_none"] / s3["x2"])) < 1e-9 and tk["n"] == 2 * s3["n"] and tk["n_other"] == 2 * s3["n_other"], "u over two calls"
+    um.detach()
+    b(x, pos, dirv, valid, past)
+    assert um.take() is None, "a detached meter still counts"
+    # a padding-only batch row and K = 512 (memory below 2 GB on the CPU, bf16 autocast finite)
+    bb = _trained(3)
+    big, bigp = _frame(2, 512, 4, n_invalid=100), _frame(2, 512, 5, n_invalid=50)
+    xb = big["x"].clone().requires_grad_()
+    ob = bb(xb, big["pos"], big["dirv"], big["valid"], _past_of(bigp, big["e"]))
+    ob.square().mean().backward()
+    assert ob.shape == (2, 512, D) and torch.isfinite(ob).all() and torch.isfinite(xb.grad).all()
+    import resource
+    assert resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 < 2048, "K = 512, batch 2, forward and backward: more than 2 GB"
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        assert torch.isfinite(bb(big["x"], big["pos"], big["dirv"], big["valid"], _past_of(bigp, big["e"]))).all()
+    selftest_fused()
+    print("jpast selftest ok")
+
+
+if __name__ == "__main__":
+    import sys
+    assert len(sys.argv) > 1 and sys.argv[1] == "selftest", "usage: jpast.py selftest"
+    selftest()
