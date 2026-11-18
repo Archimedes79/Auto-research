@@ -1,0 +1,18 @@
+R = "bev_fusion_lane_center/results/E2E_Final_Report_2026-11-18/parts/"
+def sub(f, pairs):
+    s = open(R + f, encoding="utf-8").read()
+    for a, b in pairs:
+        assert s.count(a) == 1, (f, a[:50], s.count(a))
+        s = s.replace(a, b)
+    open(R + f, "w", encoding="utf-8", newline="\n").write(s)
+sub("06_challengers.md", [(
+ "| E379 | PENDING: ensemble distillation (the KL of the teachers' mean successor distribution) | PENDING | PENDING | PENDING | E379 |",
+ "| E379 | distillation of a two-head ensemble into one head (the KL to the teachers' mean successor distribution) and the plain two-head ensemble e2 | topo F1 at least +0.005 with the interval above 0 on both heads at the recipe cell, guards on junction F1, F1@1.0, lanes found, duplicates; e2 also the cost gate of 19.7 ms | d at the recipe cell: topo F1 +0.0038 / +0.0008, lanes found -0.0120 / -0.0171; d at D115: +0.0074 / +0.0027 (recovers 65 % / 42 % of the ensemble gain); e2 topo F1 +0.0113 / +0.0065 at 21.84 ms in sequence, 25.19 ms stacked | d: NO by the letter, TIE in substance (the champion keeps one head, no teacher); e2: MISS on cost; the controls l, ds not run | E379, E2E cost table |")])
+sub("07_speed.md", [(
+ "| token champion after the speed path and the simplification | PENDING: measured in the quiet gap | PENDING | PENDING | PENDING | PENDING | E383 |",
+ "| token champion, the quiet measurement of the night of 2026-11-18 (before the landing of the clean-up and the speed path) | 16.21 (p90 19.89) | 11.20 | 5.94 | 2.323 M (B' 2.196 M + head 0.127 M) | quiet (load 1.1, GPU idle) | E2E cost table (E379 timing run) |\n| token champion after the speed path and the simplification | PENDING: re-measured after the landing | PENDING | PENDING | PENDING | PENDING | E383 |"),
+ ("**Training step (the speed path, card E383).**",
+ "Table: What the pieces cost at inference (the same protocol: batch 1, bf16, RTX 3060, 24 frames x 5 repeats, the median of the timed frames, the host read QUIET before and after; `experiments/E2E_cost_table.md`, every row carries its quiet verdict).\n\n| piece | median ms | parameters | against the champion path |\n|---|---|---|---|\n| champion path (B' + one head) | 16.21 | 2.323 M | - |\n| e2: two heads in sequence | 21.84 | 2.450 M | +5.63 ms (+35 %); above the 19.7 ms cost gate of E379 |\n| e2: two heads stacked (`vmap`) | 25.19 | 2.450 M | +8.98 ms; slower than the sequence, because the head is latency-bound at batch 1 |\n| S2 block (cross-attention to the past), head alone | 7.88 | 144,547 (+17,416) | +1.23 ms over the head without it (6.66) |\n| S3 block (cross-attention to the SD map), head alone | 7.95 | 147,395 (+20,264) | +1.70 ms over the head without it (6.26) |\n| S4 (the node head trained in the loop) | not timed | the same modules as the champion path | the same network with other weights; expected equal, not measured |\n\nThe first timings of the same night were flagged not quiet because the tool took the GPU after-sample without the 2.5 s wait that the timing protocol needs (nvidia-smi averages its utilisation over a window); the repeat with the wait reads quiet and agrees within 0.2 ms; the quiet rows are the ones above.\n\n**Training step (the speed path, card E383).**")])
+sub("08_simplification.md", [(
+ "| ms per frame of the whole path | 16.83 / 16.57 | PENDING: measured in the quiet gap | E365 `timing`, chapter 7 |",
+ "| ms per frame of the whole path | 16.83 / 16.57 (E365, s0 / s1); 16.21 (quiet re-measurement of the night, before the landing) | PENDING: re-measured after the landing | E365 `timing`, E2E cost table, chapter 7 |")])
