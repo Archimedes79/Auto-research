@@ -1,0 +1,30 @@
+import re
+
+p_txt = "/mnt/c/ML-Experiment/bev_fusion_lane_center/reports/source/text/_e78_text.md"
+t = open(p_txt, encoding="utf-8").read()
+
+study = """**What the study shows (one factor at a time; the seed noise is 0.0011, so differences above about 0.004 are real).**
+
+1. *The map-trust head is the main cost.* Without it the reference recipe scores @@S:e78_sd_notrust:score@@ at 1,500 steps against @@S:e78_sd_a:score@@ with it: lane F1 with a wrong map +0.015, without a map +0.009, route success under corruption 0.476 -> 0.572. With the trust head the SD head needs 3,000 steps to reach the same level (@@S:e78_sd_steps3000:score@@); without it 3,000 steps add only 0.004 (@@S:e78_sd_nt3k:score@@ / @@S:e78_sd_nt3k_s1:score@@). The auxiliary task of loop 6 asks whether the map is within 1 m of its true pose; that fits a lane map, which can be exact, but not a navigation map whose centre line lies metres from every lane even when it is perfectly placed (a hypothesis, not tested). The label-free agreement score does the gating job instead (AUROC exact vs wrong map @@T:e78_test_nt:clean:_agree_auc_exact_vs_wrong@@ on TEST).
+2. *Training length matters only together with the trust head:* 3,000 instead of 1,500 steps lift the trust-head recipe by 0.022 (exact-map route success 0.731 -> 0.777), 6,000 steps are not better (@@S:e78_sd_steps6000:score@@). The optimiser is irrelevant (learning rate 1e-3: @@SD:e78_sd_lr1e3|e78_sd_a:score@@).
+3. *Initialisation:* starting from the corruption- and trust-trained lane-map head v2 is better than starting from the clean-trained E60 (@@SD:e78_sd_init_e60|e78_sd_a:score@@ for E60; route success under corruption 0.418 against 0.476).
+4. *The lane count* is the only ADASIS attribute beyond the geometry; switching the channel off costs @@SD:e78_sd_nocnt|e78_sd_a:score@@ (exact-map route success 0.706 against 0.731): small, but above three seed SDs.
+5. *Noise schedule:* 50 % exact maps in training instead of 30 % gains @@SD:e78_sd_pex05|e78_sd_a:score@@ (the exact cells benefit, the 1 m cell does not move); training on poor navigation maps (shape tolerance 1-4 m, 25 % lane-count errors) costs @@SD:e78_sd_qpoor|e78_sd_a:score@@ on the DEV maps of ADASIS quality - the clean / robust trade-off that TopoSD reports for its noise-trained model.
+6. *Weight averaging:* two equal runs of the trust-head recipe do not gain (@@S:soup2:score@@ against 0.767 for the members); the average of the two 3,000-step runs without trust head gains 0.004 over its members (@@S:soup_nt:score@@).
+
+**Final model** (rule fixed before the TEST run: the highest DEV score among the weight averages, provided no corruption type loses more than 0.10 route success against the other candidate): the uniform average of the two 3,000-step runs without trust head (DEV score @@S:soup_nt:score@@; the guard holds: the largest loss per type against the trust-head average is 0.03, and three types improve, night and three forward cameras off by 0.02 and 0.09). The trust-head average of three runs (DEV @@S:soup3:score@@) stays in the TEST tables as the ablation column."""
+
+test_txt = """The head resolves the lane choice from the camera and radar features where the geometric assignment could not: with the exact SD map the route success is @@T:e78_test_nt:clean:exact:route_success@@ (geometric assignment 0.46, no map @@T:e78_test_nt:clean:none:route_success@@, lane map 0.920), and registering the map to the extracted lane graph first makes it nearly flat in the map error (@@T:e78_test_nt:clean:s1r:route_success@@ / @@T:e78_test_nt:clean:s2r:route_success@@ / @@T:e78_test_nt:clean:s3r:route_success@@ at 1 / 2 / 3 m, against @@T:e78_test_nt:clean:s1:route_success@@ / @@T:e78_test_nt:clean:s2:route_success@@ / @@T:e78_test_nt:clean:s3:route_success@@ without registration); in the ADASIS-like cell (2.5 m error, 5 % of the side roads missing) it is @@T:e78_test_nt:clean:a25:route_success@@. The lane F1 rises with the SD map from @@T:e78_test_nt:clean:none:lane_F1@@ (no map) to @@T:e78_test_nt:clean:exact:lane_F1@@, and a wrong map costs almost nothing (@@T:e78_test_nt:clean:wrong:lane_F1@@): the head has learned to distrust a map that disagrees with what it sees. The price against a lane map is the lane choice inside the road: route success 0.74 against 0.92. The trust head variant is worse at the same cells, as the DEV study predicted. Following a changed goal (counterfactual route at the first split, 256 TEST rows, the SD route rebuilt from the alternative branch): success against the given route @@A:e78_alt_nt:clean:given_alt:rs_alt@@ for the alternative and @@A:e78_alt_nt:clean:given_drv:rs_drv@@ for the driven route (lane-map head v2: 0.828 / 0.887; geometric transfer from the lane map 0.805 / 0.887)."""
+
+pert_txt = """With a navigation map the lane F1 under a sensor failure is carried by the map: in the night the SD head with the exact map reaches @@T:e78_test_nt:dark:exact:lane_F1@@ against @@T:e78_test_nt:dark:none:lane_F1@@ without a map, with blur @@T:e78_test_nt:blur:exact:lane_F1@@ against @@T:e78_test_nt:blur:none:lane_F1@@; the route success under failure is weak (night @@T:e78_test_nt:dark:exact:route_success@@, three forward cameras off @@T:e78_test_nt:cam_front3_off:exact:route_success@@) because a road-level route says nothing about the lane and the sensors that would tell it are the ones that failed. The agreement score between the head's own map-free prediction and the SD roads tells an exact from a wrong map on clean features and under most corruptions (table); in the night and with blur it is weaker, as in E76.
+
+[[table: tab_e78_agree]]"""
+
+t = t.replace("@@E78_STUDY_TEXT@@", study).replace("@@E78_TEST_TEXT@@", test_txt).replace("@@E78_PERT_TEXT@@", pert_txt)
+p04 = "/mnt/c/ML-Experiment/bev_fusion_lane_center/reports/source/text/04b_loop7.md"
+s = open(p04, encoding="utf-8").read()
+assert "### 6.3" not in s
+i = s.index("### 6.4 E79")
+s = s[:i] + t.lstrip("\n") + "\n\n" + s[i:]
+open(p04, "w", encoding="utf-8").write(s)
+print("inserted", len(t))
