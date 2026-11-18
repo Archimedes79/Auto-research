@@ -24,15 +24,15 @@ Table: Champion and challengers. A cell that says PENDING is not measured at the
 
 **What this ranking does not say.** It is a ranking of heads on the frames of VAL; no TEST number exists (a TEST run needs the owner's recorded word); the junction F1 of the champion (0.25) stays below the plain head's 0.27.
 
-**S2b: the past fused properly (asked 2026-11-18, D121, run the same day; the card and the runs belong to the lane chat).**
+**S2b: the past fused properly (asked 2026-11-18, D121, run the same day; card E387, `experiments/E387_fused-cross-attention-block-s2b`; the card and the runs belong to the lane chat).**
 
 What S2 (E368) did, and what it did not do: the block is one cross-attention after self-attention layer 1 (the current tokens attend to the ego-warped token states of the previous keyframe, a none key for the first frame) and a zero-initialised residual projection back into the token stream. It adds the attention output to the token states and nothing else: the only places where the new information is mixed with the old are the feed-forward blocks of layers 2 and 3. The head reads the past (a wrong past costs 0.026 topo F1) and the gain is a TIE (+0.0042 / +0.0023 against the bar +0.010).
 
 S2b adds the fusion that S2 lacks (Mirko's reading, D121: cross-attention followed by an MLP fusion is the natural form). The cross output c is not added; it is fused with the input x by a small MLP over [x, c and the evidence of the attention (the attention mass on real past keys against the none key)], and a per-token gate decides how much of the fused result replaces x, so that a token passes unchanged where the past does not help. The output is zero-initialised, so the start is the head without the block. The constraint D91 / D118 stands: one frame and one radar scan per step, the past only recursively at feature level.
 
-How it relates to E384: S2b is the token-level form of what E384 asked at the feature level (a recursive state inside the node head of B'). E384 stays closed by the oracle ceiling of its step 0 (chapter 4); S2b asks the same question one level up, where the head already reads the past. If S2b wins its rule, the end-to-end confirmation is the S4 stage 2 over it (the loss reaching the node head with the past block in the head); a win at stage 1 alone is not the champion.
+How it relates to E384: S2b is the token-level form of what E384 asked at the feature level (a recursive state inside the node head of B'). E384 stays closed by the oracle ceiling of its step 0 (chapter 4); S2b asks the same question one level up, where the head already reads the past. S2b is tested on the cached B' tokens (stage 1, card E387). The end-to-end confirmation, the S4 stage 2 with the past block in the head, is open and not part of this report: a stateful head needs sequences of three frames through B' in the live path, which is new code. A win at stage 1 alone is therefore labelled as such and is not the champion.
 
-Table: S2b against its control (card, two seeds, VAL 873 frames; the numbers are copied from the card of the lane chat, never typed here).
+Table: S2b against its control (card E387, two seeds, VAL 873 frames; the numbers come from the card only, never typed here).
 
 | arm | topo F1 s0 / s1 | junction F1 s0 / s1 | lanes found | parameters | ms per frame | verdict |
 |---|---|---|---|---|---|---|
@@ -42,4 +42,4 @@ Table: S2b against its control (card, two seeds, VAL 873 frames; the numbers are
 
 The report states the card's verdict as it is (a win, a TIE, or a labelled negative). If S2b fails its rule its code leaves again behind an archive tag, nothing is lost (D121). Whatever the verdict, the tokens of the past stay a block of the head: they are not in the champion unless S2b passes its rule and the stage 2 (S4) confirms it.
 
-**sources** E373, E375, E376, E377, E378, E379, E368, E374, E372, E383, E384 cards; D115, D121; the S2b card (lane chat).
+**sources** E373, E375, E376, E377, E378, E379, E368, E374, E372, E383, E384 cards; D115, D121; E387 (the S2b card, lane chat).
