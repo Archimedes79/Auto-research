@@ -1,6 +1,6 @@
 """jarm.py - one arm of a token-head experiment in ONE command (train -> dumps -> TRAIN sweep -> pinned cell -> scores), and the table of arms. Replaces the per-experiment bash chains (sup / read / texts / choose scripts).
 
-    wsl python3 tools/jarm.py run E383 f_s0 --seed 0 --head-seed 2 [--ref e373_cb_s0] [--trainer jtoken_fast_train.py] [--curve [STEP:DIFF,...]] [--window] [--dry] -- --none-weight 0.25 [more trainer args]
+    wsl python3 tools/jarm.py run E383 f_s0 --seed 0 --head-seed 2 [--ref e373_cb_s0] [--trainer SCRIPT] [--curve [STEP:DIFF,...]] [--window] [--dry] -- --none-weight 0.25 [more trainer args]
     wsl python3 tools/jarm.py ids E383 f_s0 f_s1 [--ref e373_cb_s0]                                                  # the run ids the arms launch, marked when the card's run_ids lack them (add them to the card)
     wsl python3 tools/jarm.py table e373_cb_s0 e383_f_s0 e383_k_s0 [--cell 0.3,0.2,0.6,off | --cell pinned]      # pooled VAL numbers per head, differences to the FIRST (the reference)
     wsl python3 tools/jarm.py curve e383_f_s0 e373_cb_s0 [--band 100:0.3,600:0.05]                                  # a speed-change arm vs its reference: the data-order fingerprint (gt_links / pos_pairs / gt_outside equal at every logged step) + the loss band

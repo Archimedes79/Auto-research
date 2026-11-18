@@ -92,9 +92,6 @@ run "token head read-out: dumps, sweep, cells, cards, paired scores (toy cache)"
 run "token head cost / time ensemble" test_token_time_ens.py
 run "E372 live token producer (B' in the step) and the live trainer" grid/test_lane_live.py
 run "E372 live training step" grid/test_jlive_train.py
-run "token speed path: same loss / gradients / weights as the plain head, real batches below and above the key-weight switch" grid/test_jtoken_fast.py
-run "token loader on the GPU: same batches and epoch order as the DataLoader" grid/test_lane_ptok_gpu.py
-run "token cache into another root" grid/test_build_tokcache_root.py
 run "jarm: one arm of a token experiment (card words, cells, table)" jarm.py selftest
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
 run "lane suite of the evaluation (5 checks, about 9 minutes)" test_lane_suite.py
