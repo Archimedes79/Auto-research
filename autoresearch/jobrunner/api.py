@@ -40,6 +40,7 @@ RESERVED_RUN_ARGS = ("--", "--id", "--after", "--gpu", "--gpu-max-mb", "--ram-mb
 RUN_NAMES = ("state_of", "record", "command_alive", "pid_alive", "twin_refusal", "is_holdout", "run_folder", "HOLD", "ledger_row", "test_log_refusal")   # what jobrunner uses of run.py
 SPLIT_PARAMS = ("split", "frames", "set", "sets", "subset")                # the arguments scanned for the holdout split unless the catalogue entry names its own (`splits`)
 LOCK_WAIT_S = float(os.environ.get("JOBRUNNER_LOCK_WAIT_S", "10"))
+LOCK_WRITING_S = 5.0                                                        # a lock file that is still empty is being written for this long; an older one is a stale lock
 DRY_TIMEOUT_S = float(os.environ.get("JOBRUNNER_DRY_TIMEOUT_S", "600"))      # the suite's own dry run (check --deep)
 _MODULES: Dict[str, Any] = {}
 
@@ -298,24 +299,26 @@ class JobRunner:
             else:
                 writes = [r for r in given or [] if ":" in r]
         after = []
-        for x in (d.get("after", []) if isinstance(d.get("after", []), list) else []):
+        for x in (d.get("after", []) if isinstance(d.get("after", []), list) else []):                          # the record id is what run.py waits for: `t23_C_s1` is the record `t23.C_s1`
+            found = self._find_run(x) if isinstance(x, str) and ID_RE.match(x) else None
             if not isinstance(x, str) or not ID_RE.match(x):
                 problems.append(f"after {x!r} is not a plain run or job id")
             elif x == jid:
                 problems.append("after names the job itself")
-            elif self._find_run(x) is None:
+            elif found is None:
                 problems.append(f"after {x}: no such run and no job with that id (run.py would wait for it and then block)")
-            else:
-                after.append(x)
+            elif found not in after:
+                after.append(found)
         for x in (C.ids_from(entry["after_from"], args) if entry and entry.get("after_from") else []):          # the run ids a `launch` call's own run.py start will wait for
+            found = self._find_run(x) if ID_RE.match(x) else None
             if not ID_RE.match(x):
                 problems.append(f"{entry['after_from']} {x!r} is not a plain run or job id")
             elif x == jid:
                 problems.append(f"{entry['after_from']} names the job itself")
-            elif self._find_run(x) is None:
+            elif found is None:
                 problems.append(f"{entry['after_from']} {x}: no such run and no job with that id (submit the job it waits for first)")
-            elif x not in after:
-                after.append(x)
+            elif found not in after:
+                after.append(found)
         after += [x for x in ref_after if x not in after and x != jid]
         live = self._live_writes(exclude=jid)
         inferred, more = self._inputs(jid, reads, live)
@@ -329,7 +332,7 @@ class JobRunner:
         problems += [f"writes {w}: job {live[w]} is writing that now" for w in writes if w in live]
         split = d.get("split", "") if isinstance(d.get("split", ""), str) else ""
         problems += self._gates(jid, args, split, card, launch, entry or {})
-        existing = _read(self._jd(jid, "job.json")) if jid else None
+        existing = _read(self._jd(jid, "job.json")) if jid and self._has_job(jid) else None
         same = bool(existing) and existing["spec"].get("call") == call and existing["spec"].get("args") == args
         if existing and not same:
             st = self._state(jid)[0]
@@ -376,6 +379,13 @@ class JobRunner:
         if twin:
             out.append(twin)
         return out
+
+    def _has_job(self, jid: str) -> bool:
+        """a job folder of exactly this name: on /mnt/c (case-insensitive) a read of `casey/job.json` finds the job `Casey`, which is another id (`_collisions` names it)"""
+        try:
+            return jid in os.listdir(self.jobs)
+        except OSError:
+            return False
 
     def _collisions(self, jid: str) -> List[str]:
         """a run that this runner did not make, or a name that differs only in upper / lower case (/mnt/c does not tell them apart)"""
@@ -677,9 +687,13 @@ class JobRunner:
                     owner = int(pid or 0)
                 except (OSError, ValueError):
                     owner, start, tid = 0, "", ""
-                if owner and not (owner == os.getpid() and tid == str(me)) and _alive(owner, start or None):          # a live owner (another process or thread): wait for it, then look again
+                try:
+                    writing = not owner and 0 <= time.time() - os.path.getmtime(path) < LOCK_WRITING_S           # empty or unreadable and just made: its owner is between os.open and os.write
+                except OSError:
+                    writing = False
+                if writing or (owner and not (owner == os.getpid() and tid == str(me)) and _alive(owner, start or None)):          # a live owner (another process or thread): wait for it, then look again
                     if time.time() - t0 >= LOCK_WAIT_S:
-                        raise JobError(f"job {jid}: another submit or start of this id is running (pid {owner}) and did not finish in {LOCK_WAIT_S:g} s") from None
+                        raise JobError(f"job {jid}: another submit or start of this id is running (pid {owner or 'not written yet'}) and did not finish in {LOCK_WAIT_S:g} s") from None
                     time.sleep(0.1)
                     continue
                 try:
