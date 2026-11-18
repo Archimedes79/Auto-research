@@ -80,3 +80,12 @@ Card of 2026-11-18 (system clock). **Version 2 at 02:40, after the first critic 
 
 ## 3. Read-out log
 (the max-head ensemble check, the composition at 10:30, the launch check, the cells: written here before the runs they govern)
+
+**2026-11-18 02:30, the max-head ensemble check, seed 0 (CPU, `temp/e385/maxens.sh` + `maxens_train.sh`; cards in `temp/e385/*_vs_*.json`).** `jtoken_eval.py ensemble --runs e376_mx_s0,e378_x_s0` at D115 (link 0.3 / long 0.2 / keep 0.6 / no none gate), paired scene bootstrap against each head (`--ref-run`):
+
+| sample | ensemble topo F1 | - e376_mx_s0 | - e378_x_s0 | junction F1 - mx / - x | lanes found - mx / - x |
+|---|---|---|---|---|---|
+| TRAIN 291 (every 3; DECIDES) | 0.7206 | +0.0078 [+0.0039, +0.0116] | +0.0109 [+0.0070, +0.0147] | +0.0143 / +0.0075 [-0.0015, +0.0159] | +0.0061 / +0.0087 |
+| VAL 873 (reported only) | 0.6829 | +0.0095 [+0.0068, +0.0126] | +0.0083 [+0.0052, +0.0109] | +0.0144 / +0.0083 [-0.0003, +0.0176] | +0.0088 / +0.0077 |
+
+Seed 0 passes the teacher clause (TRAIN: >= +0.003 against both heads). Seed 1 waits for E378.x_s1's dumps (the lane chat trains x_s1 after E379.d); until both seeds are read the teachers are not fixed, and the check matters only if MP and KD are both adopted at 10:30.
