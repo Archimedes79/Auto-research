@@ -1,6 +1,6 @@
 # 10. Details of the results (the stage-1 chapters, kept for the numbers)
 
-Every number comes from a stored card section or a ledger row. VAL = 873 frames, 22 scenes; seeds are written "s0 / s1"; TEST is untouched. Cells marked PENDING are not measured yet (the split by crowded junctions).
+Every number comes from a stored card section or a ledger row. VAL = 873 frames, 22 scenes; seeds are written "s0 / s1"; TEST is untouched. One table is not computed: the split by crowded junctions (see the junction paragraph of this chapter).
 
 **Metrics** (as in the earlier report): **topo F1** = directed reachability from seeds every 5 m on the GT (30 m reach, match within 1 m); **lanes found** = GT lanes with at least 80 % of their points within 1 m; **F1@1.0** = point F1 within 1 m; **junction F1** = fork / merge points within 3 m; **dup_frac** = delivered length running parallel within 0.75 m of a non-neighbour piece.
 
@@ -240,7 +240,7 @@ Table: Compute of the reference and of the champion and its parts (24 frames, ba
 Timing protocols are never mixed: only paired differences inside one protocol are compared.
 
 ## E. Still difficult situations
-The junction links are the weak part: the junction F1 of the champion (0.25 after the per-class decode of E375, 0.20 before) is below the plain head's 0.27 because the written gate has no junction condition; the duplicates are low (0.055 - 0.063) but above the record decode's 0.004; precision is 0.68. PENDING: the split by crowded junctions, far range and own lane, as in the earlier report (not computed for the token head yet). 
+The junction links are the weak part: the junction F1 of the champion (0.25 after the per-class decode of E375, 0.20 before) is below the plain head's 0.27 because the written gate has no junction condition; the duplicates are low (0.055 - 0.063) but above the record decode's 0.004; precision is 0.68. Not computed: the split by crowded junctions, far range and own lane, as in the earlier report (not computed for the token head yet). 
 
 ## Sources
 Cards (`experiments/E<id>_*/experiment.md`): E365 (sections 1 - 3), E368 (section 3), E374 (section 3), E376 (section 3), E377 (section 3), E357, E359, E361, E362 (oracle-node stage), E324, E358, E363 (the ladder), E275 (plain B); ledger rows `E365.*`; decisions D113.
