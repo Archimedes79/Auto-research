@@ -8,7 +8,7 @@ A winner folder: the source of the system, small enough to hand over; **no weigh
 
 ## Numbers to reproduce
 
-VAL 873 frames, topo F1 seed 0 / seed 1: end-to-end read-out with --attached-ends 0.6912 / 0.6948 (rule wiring); the default read-out (snapped, with a rule step) 0.6981 / 0.7010. The learned wiring head (E358, 0.6931 / 0.6964) is not in this package.
+VAL 873 frames, topo F1 seed 0 / seed 1: end-to-end read-out with --attached-ends 0.6912 / 0.6948 (rule wiring); the default read-out (snapped, with a rule step) 0.6981 / 0.7010. The learned wiring head (E358, 0.6931 / 0.6964) is not in this package: see `winners/e358_learned_wiring/`.
 
 ## How to run
 

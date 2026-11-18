@@ -1,0 +1,95 @@
+--- a/evaluation/qends_eval.py
++++ b/stage/qends_eval.py
+@@ -27,6 +27,7 @@
+ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ for sub in ("evaluation", "training", "training/grid", "training/data", ".."):
+     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))                                       # E358 STAGED COPY: the staged qends_eval / jends_eval / jwire_head come before the files of the tree (E343's code digest stays untouched)
+ import jwire as JW  # noqa: E402
+ import qends as QEND  # noqa: E402
+ 
+@@ -216,11 +217,13 @@
+ 
+ 
+ def check_wire(a):
+-    """-> (wire, wire_run) after the option checks of `--wire` / `--wire-run` (E325): twin / head need --snap and none of --attach, --attach-r, --snap-all, --snap-guard (the head was not trained on attached ends, the others
+-    override a choice); `--wire head` needs `--wire-run` and only it takes it"""
++    """-> (wire, wire_run) after the option checks of `--wire` / `--wire-run` (E325): twin / head need --snap and none of --attach-r, --snap-all, --snap-guard (they override a choice); E358 staged copy: --attach is allowed
++    but only WITH --snap-nogeom (the primary read-out of E324 s: a card named `..._snap_attach_...` is not the card the verdict reads, and the head must have been trained on the attached ends: `jwire_head.check_head`);
++    `--wire head` needs `--wire-run` and only it takes it"""
+     wire, wire_run = getattr(a, "wire", None), getattr(a, "wire_run", None)
+     assert wire in (None, "twin", "head"), f"--wire {wire!r}: twin or head"
+-    assert wire is None or (bool(getattr(a, "snap", False)) and not any(getattr(a, k, False) for k in ("snap_all", "snap_guard", "attach")) and getattr(a, "attach_r", None) is None), "--wire twin / head needs --snap and none of --attach, --attach-r, --snap-all, --snap-guard"
++    assert wire is None or (bool(getattr(a, "snap", False)) and not any(getattr(a, k, False) for k in ("snap_all", "snap_guard")) and getattr(a, "attach_r", None) is None), "--wire twin / head needs --snap and none of --attach-r, --snap-all, --snap-guard (E358 staged copy: --attach is allowed, the head must have been trained on the attached ends)"
++    assert wire is None or not getattr(a, "attach", False) or getattr(a, "snap_nogeom", False), "--wire twin / head with --attach needs --snap-nogeom (E358 staged copy: the primary read-out; without it the card has another name and is not read by the verdict)"
+     assert (wire == "head") == bool(wire_run), "--wire head needs --wire-run <run of the head> (and --wire-run only goes with --wire head)"
+     return wire, wire_run
+ 
+@@ -235,6 +238,7 @@
+     if wire == "head":
+         import jwire_head as JH                                                                                         # E325: the learned head `runs/<run>/model.pt`, or `<run>:<file>` for another checkpoint of the run (model_h1.pt: a second head seed)
+         head = JH.load_wire(*wire_run.partition(":")[::2])
++        JH.check_head(head, a.run, a.seed, bool(getattr(a, "attach", False)))                                              # E358 staged: the head's ends kind, pair run and seed must be the read-out's
+     base_pt = a.base or os.path.join(ROOT, "runs", f"e273_p_s{a.seed}", "model.pt")
+     mine = torch.load(os.path.join(run_dir, "model.pt"), map_location="cpu")["state"]
+     base = torch.load(base_pt, map_location="cpu")["state"]
+@@ -417,9 +421,9 @@
+         assert not refused(NS(thr=0.1, snap=True)), "the untagged re-scoring of the run's own graph keeps overwriting its card (as before E292)"
+     # E325: the option checks of --wire / --wire-run
+     from types import SimpleNamespace as NS2
+-    for ok_opt in (NS2(), NS2(wire="twin", snap=True), NS2(wire="head", snap=True, wire_run="e325_w_s0")):
++    for ok_opt in (NS2(), NS2(wire="twin", snap=True), NS2(wire="head", snap=True, wire_run="e325_w_s0"), NS2(wire="twin", snap=True, attach=True, snap_nogeom=True), NS2(wire="head", snap=True, wire_run="e358_w_s0", attach=True, snap_nogeom=True)):     # E358 staged: --attach is allowed
+         check_wire(ok_opt)
+-    for bad_opt in (NS2(wire="twin"), NS2(wire="head", snap=True), NS2(wire="twin", snap=True, wire_run="x"), NS2(wire="head", snap=True, wire_run="x", attach=True), NS2(wire="head", snap=True, wire_run="x", attach_r=1.5),
++    for bad_opt in (NS2(wire="twin"), NS2(wire="head", snap=True), NS2(wire="twin", snap=True, wire_run="x"), NS2(wire="twin", attach=True), NS2(wire="twin", snap=True, attach=True), NS2(wire="head", snap=True, attach=True, wire_run="x"), NS2(wire="head", wire_run="x", attach=True), NS2(wire="head", snap=True, wire_run="x", attach_r=1.5), NS2(wire="head", snap=True, wire_run="x", attach=True, attach_r=1.5),
+                     NS2(wire="twin", snap=True, snap_all=True), NS2(wire="twin", snap=True, snap_guard=True), NS2(wire="soft", snap=True), NS2(snap=True, wire_run="x")):
+         try:
+             check_wire(bad_opt)
+--- a/evaluation/jends_eval.py
++++ b/stage/jends_eval.py
+@@ -19,6 +19,7 @@
+ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+ for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
++sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))                                       # E358 STAGED COPY: see qends_eval.py
+ 
+ 
+ def load_model(run, dev):
+--- a/training/grid/jwire_head.py
++++ b/stage/jwire_head.py
+@@ -14,6 +14,7 @@
+ no GT end or finds no piece at it gets the rule's choice at the keypoint (label 0); an end whose oracle place is not among the keypoint's places has NO label (-1: no gradient). The head is trained on labelled ends only.
+ Run the self-test: python jwire_head.py
+ """
++import os
+ import numpy as np
+ import torch
+ import torch.nn as nn
+@@ -141,9 +142,27 @@
+     ck = torch.load(os.path.join(root, "runs", run, name or "model.pt"), map_location="cpu")
+     w = Wire()
+     w.load_state_dict(ck["state"])
++    w.meta = dict(ck.get("args") or {})                                                               # E358 staged: the provenance of the head (seed, pair_run, ends); E325's heads carry no pair_run / ends
+     return w.eval()
+ 
+ 
++def check_head(head, run, seed, attach):
++    """E358 staged: a head is read out only on the kind of ends it was trained on (`ends`: 'kp' for E325 / E350, 'att' for E358; no field = 'kp'), on the pair run and the seed it was trained for (no `pair_run` field = E312's `e312_p_s<seed>`)"""
++    m = getattr(head, "meta", None) or {}
++    ends = m.get("ends", "kp")
++    want = "att" if attach else "kp"
++    assert ends == want, f"the head was trained on {ends!r} ends, the read-out uses {want!r} ends: refused"
++    hs = m.get("seed", seed)
++    assert hs == seed, f"the head was trained for seed {hs}, the read-out is seed {seed}: refused"
++    hp = m.get("pair_run") or f"e312_p_s{hs}"
++    if hp != run:                                                                                          # E363: a run folder DERIVED from the head's pair run (its provenance.json names it as `source_pair_run`: the pair run with the node head of B') is a legitimate read-out of the head (transfer to another graph)
++        import json
++        root = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
++        pv = os.path.join(root, "runs", run, "provenance.json")
++        src = json.load(open(pv)).get("source_pair_run") if os.path.exists(pv) else None
++        assert src == hp, f"the head belongs to the pair run {hp!r}, the read-out is on {run!r}" + ("" if src is None else f" (derived from {src!r})") + ": refused"
++
++
+ @torch.no_grad()
+ def wire_choice_head(wire, ends, attrs, pairs, kp_p, wire_pos=REACH):
+     """the read-out: one (entry piece index or None, exit piece index or None) per pair = the first candidate of the place with the largest logit (an index into the KEPT pieces); an end with nothing in reach is None"""
