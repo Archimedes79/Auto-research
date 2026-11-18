@@ -45,7 +45,7 @@ import lane_live_tok as LLT  # noqa: E402
 import qgraph as QG  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "none_weight_near", "pos_loss", "head_seed", "bs", "steps", "lr")
+RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "pos_loss", "head_seed", "bs", "steps", "lr")
 K = 512                     # tokens per frame, as the cache
 CLIP = 3.0                  # the clip of each group (the head, the node head)
 LOG_EVERY = 100             # fit's logged steps
@@ -69,7 +69,7 @@ def parse_args(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("--name", required=True)
     ap.add_argument("--seed", type=int, default=0, help="B''s seed: the default --b-run, the frame order of its E365 cache; the head run must be of this seed")
-    ap.add_argument("--head-run", required=True, dest="head_run", help="the champion head under runs/ (e.g. e373_cb_s0): the start weights, the architecture and the loss options")
+    ap.add_argument("--head-run", required=True, dest="head_run", help="the champion head under runs/ (e.g. e373_cb_s0): the start weights and the loss options")
     ap.add_argument("--b-run", default=None, dest="b_run", help="B''s run folder relative to the problem folder (default runs/<the head run's ident>_s<seed>)")
     ap.add_argument("--train-nodes", type=int, choices=(0, 1), required=True, dest="train_nodes", help="1: B''s node head trains (arms s4, b); 0: B' frozen (arm z)")
     ap.add_argument("--live-inputs", type=int, choices=(0, 1), default=1, dest="live_inputs", help="1: the head keeps its inputs' graph (s4); 0: it cuts them (arm b with --train-nodes 1)")
@@ -91,14 +91,14 @@ def _abs(p):
 
 
 def resolve(a, runs):
-    """the run's args: the CLI + the head run's architecture and loss options (`jtoken_train.build_head` rebuilds the head from them) + the paths and sha256 of both start checkpoints"""
+    """the run's args: the CLI + the head run's loss options (its removed options checked: `jtoken_train.check_removed`; `build_head` builds the champion architecture) + the paths and sha256 of both start checkpoints"""
     h = torch.load(os.path.join(runs, a.head_run, "model.pt"), map_location="cpu", weights_only=False)["args"]
     g = lambda k: h[k] if h.get(k) is not None else JKT.ARCH_DEFAULTS.get(k)  # noqa: E731   (a key stored as None means the default, as `jtoken_train.arch` reads it)
     assert h.get("seed") == a.seed, f"--seed {a.seed}: the head run {a.head_run} learned on the tokens of B' seed {h.get('seed')}"
-    assert g("teacher") == "none", f"the head run {a.head_run} was trained on a teacher's targets ({g('teacher')}): not this loss"
+    JKT.check_removed(h, f"the head run {a.head_run}")
     assert h.get("K") in (None, K) and not h.get("cache"), f"the head run {a.head_run} was trained on K {h.get('K')} / cache root {h.get('cache')}: this trainer builds the tokens of the default cache at K {K}"
     b_run = a.b_run or f"runs/{h.get('ident') or 'e292_a'}_s{a.seed}"
-    return dict(vars(a), **{k: g(k) for k in ("d", "layers", "heads", "ffn", "prior", "none_weight_near")}, ident=h.get("ident") or "e292_a", cache=h.get("cache"), K=K, token_drop=0.0, teacher="none",
+    return dict(vars(a), ident=h.get("ident") or "e292_a", cache=h.get("cache"), K=K,
                 none_weight=g("none_weight") if a.none_weight is None else a.none_weight, pos_loss=g("pos_loss") if a.pos_loss is None else a.pos_loss,
                 head_seed=a.head_seed if a.head_seed is not None else (h["seed"] if h.get("head_seed") is None else h["head_seed"]),
                 b_run=b_run, head_sha256=JKT.file_sha256(os.path.join(runs, a.head_run, "model.pt")), b_sha256=JKT.file_sha256(os.path.join(_abs(b_run), "model.pt")))
@@ -272,7 +272,7 @@ def flag(run, key, step, text):
 
 def make_loss(run, joint, args, hook):
     """the loss of one step (module docstring) with the kill rules and the log; the head's loss and its log lines (first loss, clock, peak memory) are `jtoken_train.make_loss`'s"""
-    base = JKT.make_loss(run, none_weight=args["none_weight"], pos_loss=args["pos_loss"], none_weight_near=args["none_weight_near"])
+    base = JKT.make_loss(run, none_weight=args["none_weight"], pos_loss=args["pos_loss"])
     tn, live, w, steps = bool(args["train_nodes"]), bool(args["live_inputs"]), args["b_weight"], args["steps"]
     nodes, win, st = joint.src.trainable(), collections.deque(maxlen=LOG_EVERY), dict(last=None, checked=False)      # win: the label numbers of the last 100 steps of the process
 
@@ -384,7 +384,7 @@ def train(a, runs=T.RUNS, ckpt_every=500):
     tn, live = bool(a.train_nodes), bool(a.live_inputs)
     run.log(f"jlive arm {arm(tn, live)}: head {a.head_run} (sha256 {args['head_sha256'][:12]}, head step {joint.head._step_py}), B' {args['b_run']} (sha256 {args['b_sha256'][:12]}), live_inputs {joint.head.live_inputs}, train_nodes {a.train_nodes}; "
             f"trained: the head ({sum(p.numel() for p in joint.head.parameters())} parameters)" + (f" + B''s node head ({sum(p.numel() for p in joint.src.trainable())} parameters, {len(joint.src.trainable())} tensors)" if tn else ", B' frozen")
-            + f"; loss: the head's (none weight {args['none_weight']}, pos loss {args['pos_loss']}, none weight near {args['none_weight_near']})" + (f" + {a.b_weight} x B''s node loss" if tn else ", B''s node loss logged only")
+            + f"; loss: the head's (none weight {args['none_weight']}, pos loss {args['pos_loss']})" + (f" + {a.b_weight} x B''s node loss" if tn else ", B''s node loss logged only")
             + f"; {a.steps} steps, bs {a.bs}, lr {a.lr} (cosine, 5 % warm-up, both groups), clip {CLIP} per group (fit's joint clip off), head seed {args['head_seed']} (data order), B' seed {a.seed}, K {K}, token drop 0, label gate off")
     hook = StepHook(run, joint)
     handle = register_optimizer_step_pre_hook(hook)

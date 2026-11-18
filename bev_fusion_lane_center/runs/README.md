@@ -12,6 +12,7 @@ Formerly `out/loop2`. What the live code reads and writes: checkpoints (`model.p
 | `e17/` | loop 17 workspace: `e130_champion` ... `e144_*` (internal names; catalogue ids E193-E212, see `../experiments/`), `results_master.json`, `results_extra.json`, `logs/`, `latency/`, `consumer/`, `tables/` |
 | `p16_*`, `p16chain_*`, `timing`, `diag_*` | loop 16b: route heads (`p16_<cfg>_route_s<seed>`), chain data and consumers, timing |
 | `_loop1_crn/` | loop-1 CRN results (formerly `out/crn`) |
+| `e365_planb/` | `planb_s<S>.pkl`: plain B's scored VAL records (E324 s base read-out), the reference of the paired interval `paired_vs_plain_b` in every `../evaluation/jtoken_eval.py score` card (the champion's included); written only by `jtoken_eval.py check-layer1` on a PASS, an existing file kept unless `--overwrite`; copied from `temp/e365/` on 2026-11-17 (D117), sha256 unchanged |
 | `LOOP*_INDEX.md`, `EXPERIMENT_TABLE.*` | moved to `experiment_execution/history/indexes/` and `experiments/` |
 
 **2026-11-01 archive:** the files >= 1 MiB of 92 old run folders (19.4 GB: loop 1 - 15 runs, failure sweeps, loop-17 intermediate arrays, ladder runs off the champion lineage) were moved to `D:\Auto-research\lane_archive_2026-11-01` because C: was full; their small files (metrics, status, logs) stay here. What stayed and what moved, the manifest and the restore command: `../experiment_execution/history/lane_archive_2026-11-01/README.md`. The condensed account of the experiments that matter: `../reports/source/Condensed_Record_2026-11-01.md`.

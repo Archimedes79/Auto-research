@@ -132,10 +132,10 @@ def world(tmp):
         m.nodes.head1.bias[0] = 3.0                                                         # many valid tokens (as the selftest of lane_live_tok)
     os.makedirs(os.path.join(tmp, "b"))
     torch.save(dict(state=m.state_dict(), args=dict(width=16, soft_nms=SOFT)), os.path.join(tmp, "b", "model.pt"))
-    head = JK.JTokenHead(d=32, heads=4, layers=2, ffn=64)
+    head = JK.JTokenHead()
     head.set_step(12000)
     os.makedirs(os.path.join(tmp, "h"))
-    torch.save(dict(state=head.state_dict(), args=dict(seed=0, ident="e292_a", d=32, layers=2, heads=4, ffn=64, none_weight=0.25, head_seed=2, teacher="none"), steps=12000), os.path.join(tmp, "h", "model.pt"))
+    torch.save(dict(state=head.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, teacher="none"), steps=12000), os.path.join(tmp, "h", "model.pt"))
     g = torch.Generator().manual_seed(1)
     xs = [torch.randn(39, 200, 200, generator=g).half() for _ in range(4)]
     with torch.no_grad():
@@ -269,9 +269,14 @@ def steps_by_hand(T, w, tmp):
     # a head-run option stored as None means the default (as `jtoken_train.arch` reads it)
     ck = torch.load(os.path.join(tmp, "h", "model.pt"), weights_only=False)
     os.makedirs(os.path.join(tmp, "hn"))
-    torch.save(dict(ck, args=dict(ck["args"], none_weight=None, pos_loss=None, layers=None)), os.path.join(tmp, "hn", "model.pt"))
+    torch.save(dict(ck, args=dict(ck["args"], none_weight=None, pos_loss=None)), os.path.join(tmp, "hn", "model.pt"))
     an = T.resolve(T.parse_args(["--name", "x", "--seed", "0", "--head-run", "hn", "--b-run", w["b_dir"], "--train-nodes", "1"]), tmp)
-    assert an["none_weight"] == 1.0 and an["pos_loss"] == "sum" and an["layers"] == 3, an
+    assert an["none_weight"] == 1.0 and an["pos_loss"] == "sum", an
+    # a head run of an option removed in D117 (E377's near weight, the c-rule teacher) is refused, not trained without it (`check_removed`)
+    for n_, extra in (("hr1", dict(none_weight_near=0.73)), ("hr2", dict(teacher="rule"))):
+        os.makedirs(os.path.join(tmp, n_))
+        torch.save(dict(ck, args=dict(ck["args"], **extra)), os.path.join(tmp, n_, "model.pt"))
+        refuses(lambda: T.resolve(T.parse_args(["--name", "x", "--seed", "0", "--head-run", n_, "--b-run", w["b_dir"], "--train-nodes", "1"]), tmp), "options removed in D117")
     # the live check every step: s4 with a head that cuts its inputs, b with a live head
     joint, lf, *_ = direct(T, w, tmp, 1, 1)
     joint.head.live_inputs = False
@@ -485,7 +490,7 @@ def runs(T, w, tmp):
     cfg, folder = json.load(open(os.path.join(tmp, "st", "config.json")))["args"], os.path.join(tmp, "st")
     T.check_start(cfg, folder)
     ch = dict(seed=lambda v: v + 1, head_run=lambda v: v + "x", head_sha256=lambda v: "0" * 64, b_run=lambda v: v + "x", b_sha256=lambda v: "0" * 64, train_nodes=lambda v: 1 - v, live_inputs=lambda v: 1 - v, b_weight=lambda v: v * 2,
-              none_weight=lambda v: v * 2, none_weight_near=lambda v: 0.5, pos_loss=lambda v: "max", head_seed=lambda v: v + 1, bs=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2)
+              none_weight=lambda v: v * 2, pos_loss=lambda v: "max", head_seed=lambda v: v + 1, bs=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2)
     assert set(ch) == set(T.RECIPE), f"a recipe key without a refusal test: {set(ch) ^ set(T.RECIPE)}"
     for k in ch:
         refuses(lambda: T.check_start(dict(cfg, **{k: ch[k](cfg[k])}), folder), "of another run")
