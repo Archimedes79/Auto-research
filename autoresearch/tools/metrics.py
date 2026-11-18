@@ -11,14 +11,15 @@ Columns
   runs / failed   ledger rows that ran / of them failed, timed out, stalled, blocked or refused (gpu_busy); a run stopped on request ("stopped", exit 75) is a run, no failure
   GPU h           sum of the durations in hours (the launcher measures from the start of the command; the rows of October 2026, written before it did, include the wait of a chained run: an upper bound)
   exps            distinct experiment numbers with a run
-  decisions       decide.py verdicts (one per decision*.json file) and the written decisions of the other rows: KEEP / CUT / TIE /
+  decisions       decide.py verdicts (one per experiment, variant and control: decision.json, decision_b.json, ...) and the written decisions of the other rows: KEEP / CUT / TIE /
                   INC(onclusive) / other; a written "rule met" counts as KEEP, "rule not met" as CUT, everything else written ("confirmed",
                   "fixed", ...) as other; "reference" rows are controls and not counted; a row whose decision carries "decide.py" is counted
                   through its decision file only (its token stands before or behind the prose; the prose is read without it)
   pred hit        written predictions met / judged ("prediction ... met"; any "missed" or "not met" after the word counts as missed): the
                   person or lead who wrote it knew the prediction's own tolerance, the decision files do not, so they give only the error
   mean err        mean absolute prediction error of the decision files, in the metric most of them are about (its name in brackets)
-  TEST            rows of the TEST log that name the loop and used TEST
+  TEST            rows of the TEST log that name the loop and used TEST; a row that names a loop project.json does not define is counted in a last row `other`
+                  and named under the table (the total of the log stays visible)
 Written decisions are read with simple patterns; `-v` lists every row with its class, so a person can check the count.
 """
 import argparse
@@ -66,27 +67,31 @@ def written(text):
     return v, p
 
 
+def blank(name):
+    return dict(loop=name, runs=0, failed=0, gpu_s=0.0, exps=set(), KEEP=0, CUT=0, TIE=0, INCONCLUSIVE=0, other=0, keep2=0,
+                pred_met=0, pred_n=0, errs=[], errs_by={}, test=0, detail=[], undefined={})
+
+
 def collect(root=None, cfg=None):
     root, cfg = root or P.root(), cfg or P.cfg()
     loops = {k: tuple(v) for k, v in cfg.get("loops", {}).items()}
     rows = []
     p = os.path.join(root, cfg["ledger"])
     if os.path.exists(p):
-        with open(p, newline="", encoding="utf-8") as f:
+        with open(p, newline="", encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
     decisions = {}
-    for d in [f for base in cfg.get("experiment_dirs", ["experiments"]) for f in glob.glob(os.path.join(root, base, "*", "decision*.json"))]:
+    for d in [f for base in cfg.get("experiment_dirs", ["experiments"]) for f in sorted(glob.glob(os.path.join(root, base, "*", "decision*.json")))]:
         try:
             d = json.load(open(d, encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if isinstance(d, dict):
-            decisions.setdefault(d["id"] if d.get("id") is not None else len(decisions), d)       # one per experiment id, also when a copy sits in two card folders (the open one first)
+        if isinstance(d, dict):     # one per experiment id AND arm pair (decision.json, decision_b.json, ... are the variants of one experiment), also when a copy sits in two card folders (the open one first)
+            decisions.setdefault((d["id"], d.get("variant"), d.get("control")) if d.get("id") is not None else len(decisions), d)
     decisions = list(decisions.values())
     test_log = os.path.join(root, cfg.get("test_log", ""))
     test_rows = open(test_log, encoding="utf-8").read().splitlines() if os.path.isfile(test_log) else []
-    out = {name: dict(loop=name, runs=0, failed=0, gpu_s=0.0, exps=set(), KEEP=0, CUT=0, TIE=0, INCONCLUSIVE=0, other=0, keep2=0,
-                      pred_met=0, pred_n=0, errs=[], errs_by={}, test=0, detail=[]) for name in loops}
+    out = {name: blank(name) for name in loops}
     with_file = {number(str(d.get("id"))) for d in decisions}
     for d in decisions:
         L = out.get(loop_of(number(str(d.get("id"))), loops))
@@ -128,9 +133,20 @@ def collect(root=None, cfg=None):
         L["detail"].append(f"  {r['id']:12} {r.get('status', ''):8} {v or '-':9} pred {pr or '-':6} | {dec[:90]}")
     for line in test_rows:
         m = re.match(r"\|\s*[\d/-]+\s*\|\s*(\d+)[a-z]?\s*\|(.*)", line)
-        if m and m.group(1) in out and "not used" not in m.group(2).lower():
-            out[m.group(1)]["test"] += 1
+        if m and "not used" not in m.group(2).lower():
+            if m.group(1) in out:
+                out[m.group(1)]["test"] += 1
+            else:       # a TEST use of a loop that project.json does not define is still a TEST use: counted in `other`, named under the table
+                rest = out.setdefault("other", blank("other"))
+                rest["test"] += 1
+                rest["undefined"][m.group(1)] = rest["undefined"].get(m.group(1), 0) + 1
+    if "other" in out:
+        out["other"]["detail"].append("  TEST log rows of loops not defined in project.json: " + _undefined(out["other"]["undefined"]))
     return out
+
+
+def _undefined(counts):
+    return ", ".join(f"{k} ({n} row{'s' if n > 1 else ''})" for k, n in counts.items())
 
 
 def table(out, md=False):
@@ -146,10 +162,11 @@ def table(out, md=False):
             err = f"{sum(L['errs_by'][m]) / len(L['errs_by'][m]):.4f}" + (f" ({m})" if m else "")
         lines.append([name, L["runs"], L["failed"], f"{L['gpu_s'] / 3600:.1f}", len(L["exps"]), L["KEEP"], L["CUT"], L["TIE"], L["INCONCLUSIVE"],
                       L["other"], L["keep2"], hit, err, L["test"]])
+    warn = ["", "TEST log rows of loops not defined in project.json: " + _undefined(out["other"]["undefined"])] if out.get("other", {}).get("undefined") else []
     if md:
-        return "\n".join(["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(str(x) for x in r) + " |" for r in lines])
+        return "\n".join(["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(str(x) for x in r) + " |" for r in lines] + warn)
     w = [max(len(str(x)) for x in col) for col in zip(head, *lines)] if lines else [len(h) for h in head]
-    return "\n".join("  ".join(str(x).rjust(n) for x, n in zip(r, w)) for r in [head] + lines)
+    return "\n".join(["  ".join(str(x).rjust(n) for x, n in zip(r, w)) for r in [head] + lines] + warn)
 
 
 def selftest():

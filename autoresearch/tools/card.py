@@ -115,7 +115,7 @@ def validate(card, headline=(), legacy_ok=True):
 
 
 def load(path):
-    return json.load(open(path, encoding="utf-8"))
+    return json.load(open(path, encoding="utf-8-sig"))      # a card written by PowerShell 5.1 starts with a BOM (keep3.py reads it the same way)
 
 
 def main():
@@ -150,9 +150,10 @@ def main():
             rc = 1
             continue
         if a.cmd == "show":
-            m = card.get("metrics", {})
+            m = card.get("metrics") if isinstance(card.get("metrics"), dict) else {}
+            num = lambda v: f"{v:.4f}" if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)      # noqa: E731  (`show` prints a card that `check` calls BAD: a null or a text as it is)
             print(f"{card.get('name')} on {card.get('split')}{' ' + card['subset'] if card.get('subset') else ''}, n {card.get('frames', card.get('n'))}, commit {card.get('commit')}, {card.get('date')}: "
-                  + "  ".join(f"{k} {m[k]:.4f}" for k in (headline or list(m)[:8]) if k in m))
+                  + "  ".join(f"{k} {num(m[k])}" for k in (headline or list(m)[:8]) if k in m))
             pv = card.get("provenance") if isinstance(card.get("provenance"), dict) else None
             if pv:                                           # one more line: what it needs to reproduce the card
                 g, e, d = (pv.get(x) if isinstance(pv.get(x), dict) else {} for x in ("gt", "evaluator", "data"))
