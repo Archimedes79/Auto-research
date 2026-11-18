@@ -14,7 +14,7 @@ What it checks
      not send tags, and a tag is where a run's code and scratch scripts are kept); a forbidden-type or over-1-MB file that a tag's own commits add is an error
   2. pending changes: the staged files (measured on the STAGED content) and the untracked files that no rule ignores (`git add -A` takes them), and, with
      --paths, the named ones, must be fit for git; deletions are never an error. Scratch = a file inside a `temp/` or `_to_delete/` folder (any case; except
-     its README.md): it is not committed by hand, a run's tag keeps what ran. Forbidden = data, checkpoints, caches, binaries, logs and anything over 1 MB; a
+     its README.md): it is not committed by hand, a run's tag keeps what ran. Forbidden = data, checkpoints, caches, binaries, logs and anything over 1 MB (3 MB for the run ledgers LEDGER.csv / LEDGER.md); a
      forbidden TYPE is refused even where no .gitignore rule ignores it, unless an explicit `!` rule names the file (the architecture drawings). Untracked
      scratch is only counted: `git add -A` would sweep it in; an untracked forbidden file is an error.
   3. scratch that is used: a file in a `temp/` folder named by a living file (code, launcher, run record, experiment card) or a folder of scratch put on
@@ -35,6 +35,8 @@ import tempfile
 import time
 
 MAX_BYTES = 1_000_000
+RECORD_NAMES = {"LEDGER.csv", "LEDGER.md"}                                              # the run ledgers are one complete text record each (CLAUDE.md: do not split or roll them)
+RECORD_MAX_BYTES = 3_000_000                                                            # ... and grow with every run: their limit is 3 MB (D120 follow-up, 2026-11-18: LEDGER.csv passed 1 MB)
 SCRATCH_DIRS = ("temp", "_to_delete")
 FORBIDDEN_EXT = {".pt", ".pth", ".ckpt", ".npy", ".npz", ".pkl", ".pickle", ".h5", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".gif", ".pdf", ".pptx", ".docx", ".xlsx",
                  ".html", ".zip", ".tgz", ".gz", ".tar", ".7z", ".log", ".tmp", ".lock", ".done", ".bin", ".onnx", ".safetensors", ".parquet",
@@ -61,6 +63,11 @@ def toplevel(start="."):
     return top
 
 
+def size_limit(path):
+    """the size limit of a repository-relative path: 1 MB, 3 MB for the run ledgers (RECORD_NAMES)"""
+    return RECORD_MAX_BYTES if os.path.basename(path.replace("\\", "/")) in RECORD_NAMES else MAX_BYTES
+
+
 def classify(path, size=None):
     """'scratch' | 'forbidden' | 'ok' for a repository-relative path (size in bytes when known)"""
     parts = path.replace("\\", "/").split("/")
@@ -70,7 +77,7 @@ def classify(path, size=None):
         return "scratch"
     if "__pycache__" in parts or (os.path.splitext(name)[1].lower() in FORBIDDEN_EXT and name not in ALLOWED_NAMES):
         return "forbidden"
-    return "forbidden" if size is not None and size > MAX_BYTES else "ok"
+    return "forbidden" if size is not None and size > size_limit(path) else "ok"
 
 
 def reincluded(top, path):
@@ -85,7 +92,7 @@ def verdict(top, path, size=None):
     (`!/autoresearch/architecture.svg`): a type that no rule ignores is not fit for git either, git would only take it silently. The size limit,
     __pycache__ and scratch folders have no exception"""
     kind = classify(path, size)
-    if kind == "forbidden" and not (size or 0) > MAX_BYTES and "__pycache__" not in path and reincluded(top, path):
+    if kind == "forbidden" and not (size or 0) > size_limit(path) and "__pycache__" not in path and reincluded(top, path):
         return "ok"
     return kind
 
@@ -142,11 +149,11 @@ def commit_errors(top, rng, lead, allow_scratch=False):
     sizes = blob_sizes(top, [e[1] for e in entries])
     errors = []
     for status, blob, path, c in entries:
-        kind = verdict(top, path, sizes.get(blob)) if status == "A" else ("forbidden" if sizes.get(blob, 0) > MAX_BYTES else "ok")      # a change of an old scratch file is legacy
+        kind = verdict(top, path, sizes.get(blob)) if status == "A" else ("forbidden" if sizes.get(blob, 0) > size_limit(path) else "ok")      # a change of an old scratch file is legacy
         if kind == "scratch" and allow_scratch:                   # the scripts of a scratch folder: .py / .sh up to 1 MB, as run.py adds them; anything else is not
             kind = "ok" if path.endswith((".py", ".sh")) and sizes.get(blob, 0) <= MAX_BYTES else "forbidden"
         if kind != "ok":
-            why = f" ({sizes[blob] // 1000} kB)" if sizes.get(blob, 0) > MAX_BYTES else ""
+            why = f" ({sizes[blob] // 1000} kB)" if sizes.get(blob, 0) > size_limit(path) else ""
             errors.append(f"{lead} {kind} file {path}{why} (commit {c})")
     return errors
 
@@ -330,6 +337,8 @@ def _selftest():
     assert classify("bev_fusion/runs/a/model.pt") == "forbidden" and classify("a/b.png") == "forbidden" and classify("a/architecture.svg") == "ok"
     assert classify("a/x.pkl") == "forbidden" and classify("a/w.safetensors") == "forbidden" and classify("a/f.lock") == "forbidden"
     assert classify("a/big.json", 2_000_000) == "forbidden" and classify("a/small.json", 10) == "ok" and classify("a/__pycache__/x.py") == "forbidden"
+    assert classify("p/experiment_execution/LEDGER.csv", 1_052_009) == "ok" and classify("p/LEDGER.md", 2_900_000) == "ok"                  # the run ledgers: 3 MB, not 1 MB
+    assert classify("p/LEDGER.csv", 3_000_001) == "forbidden" and classify("p/LEDGER.csv.bak", 1_100_000) == "forbidden" and classify("p/other.csv", 1_052_009) == "forbidden"
     assert REF.findall("see temp/x.py. And $REPO/temp/y.sh, ${BFLC}/temp/a/b.json; ../bev_fusion/temp/z.md") == ["temp/x.py", "$REPO/temp/y.sh", "${BFLC}/temp/a/b.json", "../bev_fusion/temp/z.md"]
     assert REF.findall("temp/x.pyc temp/data.json.gz temp/ok.jsonl") == ["temp/ok.jsonl"], REF.findall("temp/x.pyc temp/data.json.gz temp/ok.jsonl")
     with tempfile.TemporaryDirectory() as top:
