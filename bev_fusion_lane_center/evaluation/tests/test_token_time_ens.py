@@ -17,6 +17,11 @@ MUTANTS = [
     ("the second head of the stack is the first", "torch.func.stack_module_state([m1, m2])", "torch.func.stack_module_state([m1, m1])"),
     ("the heads axis not sliced", "v[i] if torch.is_tensor(v) else v) for k, v in out.items()}) for i in range(n)]", "v[0] if torch.is_tensor(v) else v) for k, v in out.items()}) for i in range(n)]"),
     ("the heads are not different", "for seed in (1, 2):", "for seed in (1, 1):"),
+    ("no wait before the after-sample", "        sleep(AGE_S)", "        pass"),
+    ("the wait is too short", "AGE_S = 2.5 ", "AGE_S = 0.5 "),
+    ("the CPU path waits too", "    if not cpu:
+        sleep(AGE_S)", "    if True:
+        sleep(AGE_S)"),
 ]
 
 
