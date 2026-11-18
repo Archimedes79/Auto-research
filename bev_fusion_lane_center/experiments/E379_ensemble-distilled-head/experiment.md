@@ -67,3 +67,15 @@
 | read | dumps, TRAIN sweep, the pinned cell logged BEFORE the VAL score, VAL read, anatomy | `jtoken_eval.py`, `token_readout.py` | cards in `runs/e379_d_s<S>/`, section 3 |
 | controls | l_s0 (only if d passes (i) on both seeds), ds_s0, d4_s0 (exploratory) | as train d | labelled in section 3 |
 | decide | the verdict by hand (section 0), e2 and its cost reported separately | section 3 | the lead decides e2 / d / champion |
+
+## 3. Read-out log (written as the results come; cells are written BEFORE their VAL scores; no verdict yet: it needs both seeds)
+**Seed 0 (2026-11-18).** Run `E379.d_s0` (head seed 2, the E373 initialisation and batch order), 23:51:17 - 01:02:30, 12000 steps, no resume, no kill: the start check passed (the teachers' 20-batch means 0.3702 / 0.3734 in 0.30 - 0.50, step counters [12000, 12000], sha256 afac6285ac0e / 86cf8dc367c0), the twin's first loss 4.5516 = E373's 4.5516, KD 5.78 at step 1 -> 0.058 at step 2700 -> kd_mean 0.022 over steps 11901 - 12000 (inside the card's 0.005 - 0.10), GT loss at the end 0.393 against the teachers' 0.37 - 0.39; 0.24 - 0.34 s/step (the S4 chain ran next to it). Dumps `E379.dump_d_s0` (234 s), TRAIN per-class sweep `E379.sweep_d_s0` (2225 s, CPU), **the pinned cell computed from its TRAIN table by `jtoken_eval.py choose-cell` and logged at 01:56:21 BEFORE any VAL score: the D115 cell 0.3 / 0.2 / 0.6 / off** (the champion's own cell; no second cell is needed), then `E379.read_d_s0` (VAL 873, `--ref-run e373_cb_s0 --ref-run-cell D115`, cross-run paired scene bootstrap):
+| VAL, D115 | d_s0 | champion (e373_cb_s0) | d - ref (paired 95 %) |
+|---|---|---|---|
+| topo F1 | 0.6753 | 0.6679 | **+0.0074 [+0.0035, +0.0114]** (bar +0.005, lower end above 0: clause met) |
+| junction F1 (P / R) | 0.2644 (0.166 / 0.649) | 0.2517 (0.157 / 0.636) | +0.0127 [+0.0036, +0.0263] |
+| F1@1.0 | 0.8465 | 0.8459 | +0.0006 [-0.0023, +0.0034] |
+| lanes found | 0.7195 | 0.7191 | +0.0003 [-0.0076, +0.0068] |
+| dup_frac | 0.0499 | 0.0607 | -0.0108 (guard +0.010 above: held) |
+| Q | 0.6841 | 0.6806 | +0.0036 [-0.0005, +0.0092] |
+The ensemble ceiling on this seed was +0.0113 (E - A, mean of the two teachers 0.6792): **d recovers about two thirds of it (0.0074 / 0.0113 = 65 %) with one head at inference**; d - B (teacher B, `E379.b25_d_s0`) and d - e2 follow. **The wiring anatomy moves as the mechanism says (`anatomy`, delivered long links, ltl 0.2 / kt 0.6, d against the champion):** delivered 11,926 against 12,509; true links 2,167 (18.2 %) against 2,141 (17.1 %); duplicates of true links 13.5 % against 13.0 %; wrong pairings 33.1 % against 33.9 %; false ends 35.2 % against 36.0 %; tp / GT long links 0.280 against 0.276; **long-link AP 0.283 against 0.269**; existence AP 0.943 against 0.940; recall ceiling of the candidates 0.451 against 0.431. Seed 0 alone is not the verdict (a TRUE gain of +0.005 clears the bar on one seed about half the time); seed 1 is training (`E379.d_s1`), then the exploratory d4 (weight 4); l / ds only if d passes clause (i) on both seeds.
