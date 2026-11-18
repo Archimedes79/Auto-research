@@ -47,6 +47,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -119,11 +120,16 @@ class Ctx:
         self.rr = P.path("run_records")
         self.cards = P.path("cards") if "cards" in self.cfg else os.path.join(self.root, "runs")
         self.recs = {}
-        if os.path.isdir(self.rr):
-            for i in sorted(os.listdir(self.rr)):
-                r = read(os.path.join(self.rr, i, "run.json"))
+        if os.path.isdir(self.rr):                 # read at once, not on demand: an unreadable record fails the whole run (report), and every network scans all commands
+            ids = sorted(os.listdir(self.rr))
+            with ThreadPoolExecutor(8) as pool:    # 700 small files over the 9p mount of WSL: the time is latency, the threads overlap it
+                got = list(pool.map(lambda i: jread(os.path.join(self.rr, i, "run.json")), ids))
+            for i, (r, err) in zip(ids, got):
+                if err:
+                    self.problems.append(err)
                 if r:
                     self.recs[i] = r
+        self.commits = {}                          # name -> does it resolve to a commit (commits_exist)
         self.versions = {}
         try:
             with open(os.path.join(self.repo, "GtGenerator", "versions.csv"), newline="", encoding="utf-8") as f:
@@ -138,6 +144,18 @@ class Ctx:
     def git(self, *a):
         out = PV.git(self.repo, *a)
         return None if out is None else out.strip()
+
+    def commits_exist(self, names):
+        """{name: True when it resolves to a commit} (what `git cat-file -e <name>^{commit}` says): ONE `cat-file --batch-check` for the names not asked before, kept.
+        A name git cannot be asked for (empty, a line break in it) or a failed git call reads as no commit"""
+        names = list(names)
+        new = sorted({n for n in names if n not in self.commits})
+        ask = [n for n in new if n and "\n" not in n and "\r" not in n]
+        out = (PV.git(self.repo, "cat-file", "--batch-check", inp="".join(f"{n}^{{commit}}\n" for n in ask)) if ask else "") or ""
+        lines = out.splitlines() if len(out.splitlines()) == len(ask) else [""] * len(ask)          # one answer per name
+        self.commits.update({n: False for n in new})
+        self.commits.update({n: bool(re.fullmatch(r"[0-9a-f]{40,64} commit \d+", ln)) for n, ln in zip(ask, lines)})
+        return {n: self.commits[n] for n in names}
 
 
 # ---------------------------------------------------------------- finding the network
@@ -215,6 +233,9 @@ def check_ckpt(c, net, lin, cards):
         if nbytes is not None and nbytes != size:
             out.append((MISMATCH, "checkpoint hash", f"size {size} != {nbytes} recorded in {label} (not hashed)"))
             continue
+        if not rec:                                # an entry without a hash (older keep3.json): nothing to compare, nothing recorded is contradicted
+            out.append((MISSING, "checkpoint hash", f"no hash recorded in {label}; current provenance.file_hash {PV.file_hash(f)}"))
+            continue
         h, kind = hash_as(f, rec)
         out.append((OK if h == rec else MISMATCH, "checkpoint hash", f"{'equals' if h == rec else 'DIFFERS from'} {label} ({kind}): {h[:16]} vs {str(rec)[:16]}"))
     return out
@@ -280,7 +301,7 @@ def check_code(c, rid, rec, strict, label="run record"):
                 out.append((OK, "resume code", f"{rid}: both attempts ran the same code (code folders identical)"))
     else:
         out.append((MISMATCH, label, f"{rid}: tag {tag} -> {tc[:10]} but the record says commit {commit}"))
-    if c.git("cat-file", "-e", f"{commit}^{{commit}}") is None:
+    if not c.commits_exist([commit])[commit]:
         out.append((MISSING, "code", f"{rid}: commit {commit} is not in this repository"))
     elif c.git("merge-base", "--is-ancestor", commit, "HEAD") is not None:
         out.append((OK, "code", f"{rid}: commit {commit} is an ancestor of HEAD"))
@@ -423,11 +444,12 @@ def check_rank_card(c, net):
 def check_cards(c, cards, net):
     """one line per card with a provenance block, one line per group of cards that read alike without one (the lane project has 100+ per network)"""
     out, with_prov, groups = [], [], {}
+    known = c.commits_exist(str(d.get("commit") or "").split("+")[0] for _, d in cards)          # one git call for all the cards
     for f, d in cards:
         dn = os.path.dirname(f)
         name = f"{os.path.basename(os.path.dirname(dn)) if os.path.basename(dn) == 'eval' else os.path.basename(dn)}/{os.path.basename(f)}"
         cm, prov = str(d.get("commit") or "").split("+")[0], d.get("provenance")
-        commit = (OK if cm and c.git("cat-file", "-e", f"{cm}^{{commit}}") is not None else MISSING, str(d.get("commit") or "no commit"))
+        commit = (OK if cm and known[cm] else MISSING, str(d.get("commit") or "no commit"))
         if isinstance(prov, dict) and not prov.get("error"):
             with_prov.append((name, d))
             parts = [commit, tie(net, f, d), (OK, "provenance"), (lambda r: (r[0], r[1].split(": ", 1)[1]))(check_manifest(c, prov, "manifest"))]
@@ -672,6 +694,32 @@ def selftest():
         assert line(txt, "evaluation", "card.json") == OK and "not shown comparable" not in txt and "evaluator.code_hash: e1 != e2" in txt, txt
         assert "held by tag t/orph" in txt, "the evaluation record's snapshot commit is held by its tag only"
         assert run(strict=True)[0] == 1, "--strict: drift is a MISMATCH"
+        # commits_exist: the answers of `cat-file -e <name>^{commit}` from ONE `cat-file --batch-check` call, kept for the names asked before
+        calls, real_git = [], PV.git
+        PV.git = lambda *a, **k: (calls.append(a), real_git(*a, **k))[1]
+        try:
+            cx = Ctx()
+            names = [c1, c2[:10], "t/netrun", lost, "deadbeef00", "", "has space", "a\nb", c1, git("rev-parse", "HEAD^{tree}"), "commit missing"]
+            got = cx.commits_exist(iter(names))
+            assert got == {c1: True, c2[:10]: True, "t/netrun": True, lost: True, "deadbeef00": False, "": False, "has space": False, "a\nb": False,
+                           git("rev-parse", "HEAD^{tree}"): False, "commit missing": False}, got
+            assert [a[2] for a in calls if a[1] == "cat-file"] == ["--batch-check"], calls
+            cx.commits_exist([c1, "t/orph"])
+            assert sum(a[1] == "cat-file" for a in calls) == 2 and cx.commits_exist([c1, "t/orph"]) == {c1: True, "t/orph": True} and sum(a[1] == "cat-file" for a in calls) == 2
+            for i in range(6):                                                         # more cards of the network: no more git calls
+                card(f"proj/runs/netrun/eval/cardx{i}.json", provenance=prov())
+            n0 = len(calls)
+            run()
+            n1 = sum(a[1] == "cat-file" for a in calls[n0:])
+            for i in range(6, 12):
+                card(f"proj/runs/netrun/eval/cardx{i}.json", provenance=prov())
+            n2 = len(calls)
+            run()
+            assert n1 and sum(a[1] == "cat-file" for a in calls[n2:]) == n1, "the cat-file calls of a run do not grow with the number of cards"
+            for i in range(12):
+                os.remove(os.path.join(T, f"proj/runs/netrun/eval/cardx{i}.json"))
+        finally:
+            PV.git = real_git
         # lostnet: the commit exists but no ref holds it, and no hash is recorded: MISSING both, not a MISMATCH
         rc, txt = show("lostnet")
         assert rc == 0 and line(txt, "code", "no branch or tag holds it") == MISSING and line(txt, "checkpoint hash") == MISSING, txt
@@ -696,6 +744,14 @@ def selftest():
         rc, txt = run()
         assert rc == 0 and line(txt, "checkpoint", "oldnet/model.pt does not exist") == MISSING, txt
         os.rename(os.path.join(T, "proj/runs/oldnet/model.moved"), os.path.join(T, "proj/runs/oldnet/model.pt"))
+        # a keep3 record without a hash (an older entry, "sha256": null): nothing to compare, so MISSING with the reason, not "DIFFERS from ... vs None" and no exit 1 by itself; a wrong size still is a MISMATCH
+        write("proj/runs/nohash/model.pt", "w" * 100)
+        net0 = {"ckpt": "proj/runs/nohash/model.pt", "key": "nohash", "names": ["n"], "slot": None, "rec_id": None}
+        for rec in ({"path": net0["ckpt"], "bytes": 100}, {"path": net0["ckpt"], "sha256": None, "bytes": None}, {"path": net0["ckpt"], "sha256": "", "bytes": 100}):
+            got = [x for x in check_ckpt(argparse.Namespace(root=T, keep={"entries": [{"name": "n", "checkpoints": [rec]}]}), net0, None, []) if x[1] == "checkpoint hash"]
+            assert [st for st, _, _ in got] == [MISSING] and "no hash recorded in keep3.json" in got[0][2], got
+        got = check_ckpt(argparse.Namespace(root=T, keep={"entries": [{"name": "n", "checkpoints": [{"path": net0["ckpt"], "sha256": None, "bytes": 99}]}]}), net0, None, [])
+        assert got[-1][0] == MISMATCH and "size 100 != 99" in got[-1][2], got
         # the state of the run: failed / killed / stale 'running' must not read OK
         rj0 = json.load(open(os.path.join(T, "proj/records/runs/netrun/run.json")))
         for status, ex, done, want, code in (("failed", 75, False, MISMATCH, 1), ("running", None, True, MISMATCH, 1), ("running", None, False, MISSING, 0), ("ok", 1, False, MISMATCH, 1)):
