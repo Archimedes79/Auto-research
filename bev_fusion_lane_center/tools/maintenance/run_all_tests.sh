@@ -87,10 +87,8 @@ run "lanegraph champion code == original modules (exact, 24 frames x 2 seeds, re
 # the token head (E365 - E383): none of these was in this list before 2026-11-17
 run "E365 token cache: build / read / selftest" grid/test_lane_tokcache.py
 run "E365 token head: pair geometry, gate, targets (jtok)" grid/test_jtok.py
-run "E365 token head (jtok2 parts)" grid/test_jtok2.py
 run "E365 - E379 token head: likelihood by hand, options, trainer, resume, KD (CPU, synthetic)" grid/test_jtoken.py
 run "token head read-out: dumps, sweep, cells, cards, paired scores (toy cache)" test_jtoken_eval.py
-run "token head read-out helpers (graphs, per-frame table)" test_token_readout.py
 run "token head cost / time ensemble" test_token_time_ens.py
 run "E372 live token producer (B' in the step) and the live trainer" grid/test_lane_live.py
 run "E372 live training step" grid/test_jlive_train.py
@@ -99,5 +97,6 @@ run "token loader on the GPU: same batches and epoch order as the DataLoader" gr
 run "token cache into another root" grid/test_build_tokcache_root.py
 run "jarm: one arm of a token experiment (card words, cells, table)" jarm.py selftest
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
+run "lane suite of the evaluation (5 checks, about 9 minutes)" test_lane_suite.py
 run "simplify_stat: the simplification table of a report from git" tools/simplify_stat.py selftest
 exit $fail

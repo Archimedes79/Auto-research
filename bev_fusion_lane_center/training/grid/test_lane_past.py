@@ -1,11 +1,11 @@
 """Tests of the data of the cross-attention to the past keyframe (`data/lane_past_data.py`, E368).
 
-    wsl bash tools/env/_py14.sh test_lane_past.py            # the selftest, `check` on the built cache directories, the fixture on 40 real VAL pairs, the loader fixture, the pinned numbers of the fixture (20 pairs) and of `potential` (60 frames); then the hand mutants
+    wsl bash tools/env/_py14.sh test_lane_past.py            # the selftest, `check` on the built cache directories, the fixture on 40 real VAL pairs, the pinned numbers of the fixture (20 pairs) and of `potential` (60 frames); then the hand mutants
     wsl bash tools/env/_py14.sh test_lane_past.py selftests  # the same without the mutants (about 5 minutes)
 
 A mutant = one textual change of the source (the pose of the wrong pair, the row looked up by the cache index, the TEST guard removed, a chain across a scene start, the wrong warp, a tolerance loosened, a role of the weak tokens mixed up, ...); the mutated copy runs in a
 temporary folder with BFLC_ROOT pointing at this project, four at a time, and every mutant must make ITS COMMAND fail: the selftest (default), or a real-data command named in the mutant's 4th field: `fixture` (20 pairs: exit code and the pinned numbers), `potential` (60 frames, the pinned
-numbers), `loader` (the loader fixture). The pins are numbers of the VAL cache of B' seed 0 (GT signature 9ad1d4ce30); a rebuilt cache needs new pins.
+numbers). The pins are numbers of the VAL cache of B' seed 0 (GT signature 9ad1d4ce30); a rebuilt cache needs new pins.
 """
 import concurrent.futures as cf
 import os
@@ -69,9 +69,6 @@ MUTANTS = [
     ("the fixture reads the pose of the previous frame", "R, t = pose_of(ext, ic)\n            (P0, T0), (P1, T1) = gt(ip), gt(ic)", "R, t = pose_of(ext, ip)\n            (P0, T0), (P1, T1) = gt(ip), gt(ic)", "fixture"),
     ("potential reads the pose of the previous frame", "R, tv = (a_.astype(float) for a_ in pose_of(ext, i))", "R, tv = (a_.astype(float) for a_ in pose_of(ext, ip))", "potential"),
     ("potential's random null reads the frame itself", "j = int(rng.integers(len(c)))", "j = int(i)", "potential"),
-    ("the loader fixture gets the pose entry of the previous item", 'R, t = bc["rel_R"][:, 0], bc["rel_t"][:, 0]', 'R, t = bp["rel_R"][:, 0], bp["rel_t"][:, 0]', "loader"),
-    ("the loader fixture moves the current frame's tokens", "JP.make_past(dict(x=torch.zeros(1, K, JP.D), w=torch.zeros(1, K)), fp, fc, R, t,", "JP.make_past(dict(x=torch.zeros(1, K, JP.D), w=torch.zeros(1, K)), fc, fp, R, t,", "loader"),
-    ("the loader fixture does not check the pose entry", "perr[how] = max(perr[how], float(np.abs(R[0].numpy() - Rf).max()), float(np.abs(t[0].numpy() - tf).max()))", "perr[how] = 0.0", "loader"),
 ]
 
 
@@ -105,8 +102,7 @@ def check_pins(kind, path):
 def command(kind, path, tmp):
     """the real-data command of a mutant on the module at `path` -> (returncode, text); fixture / potential also check the pinned numbers"""
     out = os.path.join(tmp, f"{kind}.json")
-    args = dict(selftest=["selftest"], check=["check"], fixture=["fixture", "--split", "val", "--n-pairs", "20", "--out", out], potential=["potential", "--split", "val", "--seed", "0", "--n", "60", "--out", out],
-                loader=["loader-fixture", "--split", "val", "--n-pairs", "20"])[kind]
+    args = dict(selftest=["selftest"], check=["check"], fixture=["fixture", "--split", "val", "--n-pairs", "20", "--out", out], potential=["potential", "--split", "val", "--seed", "0", "--n", "60", "--out", out])[kind]
     r = subprocess.run([sys.executable, path] + args, capture_output=True, text=True, env=ENV)
     if r.returncode == 0 and kind in ("fixture", "potential"):
         try:
@@ -143,7 +139,7 @@ def run_mutants(workers=4):
 
 
 if __name__ == "__main__":
-    run([["selftest"], ["check"], ["fixture", "--split", "val", "--n-pairs", "40"], ["loader-fixture", "--split", "val", "--n-pairs", "40"]])
+    run([["selftest"], ["check"], ["fixture", "--split", "val", "--n-pairs", "40"]])
     with tempfile.TemporaryDirectory() as tmp_:                                                              # the unmutated code passes the pinned commands
         for kind_ in ("fixture", "potential"):
             rc_, txt_ = command(kind_, os.path.join(DATA, MOD), tmp_)

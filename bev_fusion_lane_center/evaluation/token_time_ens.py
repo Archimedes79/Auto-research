@@ -87,7 +87,6 @@ def selftest():
 
 
 def main():
-    import jrecur_time as JRT
     import jtiming as JTG
     import jtoken_eval as JE
     import jtoken_train as JKT
@@ -146,11 +145,11 @@ def main():
             with torch.no_grad(), ac():
                 for k, f in names.items():
                     if k == "bprime":
-                        row[k].append(JRT.timed(lambda: JE.live_tokens(mb, xs[i], K), cuda)[1])
+                        row[k].append(JTG.timed(lambda: JE.live_tokens(mb, xs[i], K), cuda)[1])
                     elif k.startswith("whole_"):
-                        row[k].append(JRT.timed(lambda: f(JE.live_tokens(mb, xs[i], K)), cuda)[1])
+                        row[k].append(JTG.timed(lambda: f(JE.live_tokens(mb, xs[i], K)), cuda)[1])
                     else:
-                        row[k].append(JRT.timed(lambda: f(b), cuda)[1])
+                        row[k].append(JTG.timed(lambda: f(b), cuda)[1])
         if rep:                                                                              # the first pass is untimed
             for k in ms:
                 ms[k].append(row[k])

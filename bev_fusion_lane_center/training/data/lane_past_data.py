@@ -4,7 +4,6 @@ Derived data (not in git): the extension files next to the arrays of the E365 ca
     wsl bash tools/env/_py14.sh lane_past_data.py build   [--cache <split dir> | --all]                       # prev.npy, rel_R.npy, rel_t.npy, past.json next to the arrays of one cache directory / of all eight (idempotent, atomic)
     wsl bash tools/env/_py14.sh lane_past_data.py check                                                        # every built directory: extension current, frames / scene starts of the data, VAL = the rows of data/splits.json
     wsl bash tools/env/_py14.sh lane_past_data.py fixture --split val [--n-pairs 200] [--seed 0] [--ident e292_a] [--out FILE]   # the pose against the GT lane points and the B' tokens: PASS / FAIL + numbers; the wrong conventions must FAIL
-    wsl bash tools/env/_py14.sh lane_past_data.py loader-fixture --split val [--n-pairs 40] [--seed 0] [--out FILE]               # the TRAINING path: the loader's items through `jpast.make_past` against the delivered B' tokens; wrong pose / shifted entry must FAIL
     wsl bash tools/env/_py14.sh lane_past_data.py potential --split val --seed 0 [--n N] [--out FILE]        # step 0 of the E368 card: what the past could give (JSON)
     wsl bash tools/env/_py14.sh lane_past_data.py selftest                                                   # no cache needed; tests: grid/test_lane_past.py (the hand mutants)
     ds, dl = loader("train", seed=0, bs=4, workers=4, K_seq=3)      # TRAIN: chains of K_seq consecutive keyframes, shuffled; "val": the STREAM (one frame per item, scene order, shuffle False, bs 1: the state is carried by the caller)
@@ -18,7 +17,7 @@ only the rows of the cache's frames.json (and the previous rows they name, which
 counts of frames with / without a past and the sha256 of frames.json (a changed cache is refused by the loader).
 The fixture (before any training): the GT lane points of t-1 (`lane_gt.load(token)['pieces'][i]['pts']`) warped by the stored pose land on those of t (points inside the 45 m box, within 6 m of a point of t: p90 <= 0.10 m, p99 <= 0.25 m, the tangents p90 <= 5 degrees),
 the warped delivered B' tokens (valid, p >= 0.5) of t-1 have a delivered token of t within p90 <= 1.5 m; the identity pose, the inverse pose, the transposed rotation and a previous frame shifted by one must FAIL the point test.
-The loader fixture repeats the token test through the TRAINING path (`PastData` items, `collate`, `jpast.make_past`); the identity pose, the pose entry of the previous item and a shifted previous frame must FAIL it.
+(The loader fixture through `jpast.make_past` left with the S2 block: archive tag archive/s2-s3-blocks-2026-11-18.)
 """
 import argparse
 import glob
@@ -356,62 +355,6 @@ def fixture(split="val", n_pairs=200, seed=0, ident="e292_a", cache=LC.CACHE, di
     return res
 
 
-LOADER_HOWS = ("loader", "identity", "entry_shifted", "frame_shifted")           # the pose as the loader gives it, and the wrong ones the loader fixture must reject
-
-
-POSE_TOL = 1e-4                                                                  # the loader's pose entry equals a fresh `rel_pose` of the pair from the poses file within this (float32 storage: about 1e-6)
-
-
-def loader_fixture_checks(tokens, pose_err, hows=LOADER_HOWS, tol=TOL):
-    """the rule of the loader fixture on the token stats per variant (dicts of `stats`) and the largest deviation of the pose entry from a fresh `rel_pose` of the pair (`pose_err`: variant -> number) -> name -> bool: the loader's variant has
-    p90 <= 1.5 m AND the right pose entry; every other variant (identity pose, the entry of the previous item, a shifted previous frame) FAILS at least one of the two (consecutive ego steps are alike: the entry of the neighbour alone passes the token test)"""
-    good = lambda h: tokens[h]["n"] > 0 and tokens[h]["p90"] <= tol["tok_p90"] and pose_err[h] <= POSE_TOL  # noqa: E731
-    ok = {"loader path within tolerance": good("loader")}
-    for how in hows:
-        if how != "loader":
-            ok[f"{how} fails"] = not good(how)
-    return ok
-
-
-def loader_fixture(split="val", n_pairs=40, seed=0, ident="e292_a", cache=LC.CACHE, dir=None, hows=LOADER_HOWS, log=print):
-    """the TRAINING path of the pose on real frames: the items and the batches of `PastData` / `collate` (what `loader` gives), the delivered tokens (p >= 0.5) of the previous frame moved into the lane frame of frame k by `jpast.make_past` (the warp the
-    block reads) against the delivered tokens of frame k, n_pairs pairs drawn as in `fixture`: p90 <= 1.5 m. The identity pose, the pose entry of the previous item and a previous frame shifted by one must FAIL -> dict(tokens: stats per variant, checks, passed)"""
-    import jpast as JP
-    ds = PastData(split, seed, ident, None, 1, 0.0, cache, dir, True)
-    K = ds.tok.K
-    item = lambda i: collate([ds[i]])  # noqa: E731
-    deliv = lambda f: np.asarray(f["tokens_np"][0]["pos"], float)[np.asarray(f["tokens_np"][0]["valid"], bool) & (np.asarray(f["tokens_np"][0]["e_p"], float) >= 0.5)]  # noqa: E731
-    import lane_seq_data as LS
-    pose = dict(np.load(pose_path(split)))
-    rows = ds.tok.rows                                                                  # only the rows of the cache are read from the poses file (the VAL file also holds TEST rows)
-    err, perr = {h: [] for h in hows}, {h: 0.0 for h in hows}
-    for how in hows:
-        for ip, ic in pairs(ds.prev, n_pairs, seed, shift=int(how == "frame_shifted")):
-            bc, bp = item(ic), item(ip)
-            fc, fp = bc["frames"][0], bp["frames"][0]
-            R, t = bc["rel_R"][:, 0], bc["rel_t"][:, 0]
-            if how == "identity":
-                R, t = torch.eye(2)[None], torch.zeros(1, 2)
-            elif how == "entry_shifted":
-                R, t = bp["rel_R"][:, 0], bp["rel_t"][:, 0]
-            Rf, tf = LS.rel_pose(pose["R"][rows[ic]], pose["t"][rows[ic]], pose["R"][rows[ip]], pose["t"][rows[ip]])      # the pose of THIS pair, fresh from the poses file
-            perr[how] = max(perr[how], float(np.abs(R[0].numpy() - Rf).max()), float(np.abs(t[0].numpy() - tf).max()))
-            past = JP.make_past(dict(x=torch.zeros(1, K, JP.D), w=torch.zeros(1, K)), fp, fc, R, t, False, bc["has_prev"][:, 0])
-            m = np.asarray(fp["tokens_np"][0]["valid"], bool) & (np.asarray(fp["tokens_np"][0]["e_p"], float) >= 0.5)
-            err[how].append(token_errors(past["pos"][0].numpy().astype(float)[m], deliv(fc), np.eye(2), np.zeros(2), "identity"))
-    res = dict(split=split, n_pairs=n_pairs, seed=seed, cache=os.path.relpath(ds.dir, ROOT), tolerances=TOL, tokens={h: stats(np.concatenate(e) if e else np.zeros(0)) for h, e in err.items()}, pose_err=perr)
-    ok = res["checks"] = loader_fixture_checks(res["tokens"], perr, hows)
-    res["passed"] = all(ok.values())
-    log(f"loader fixture {split} {len(ds)} frames, {n_pairs} pairs: the delivered B' tokens of the previous frame through make_past against those of the frame")
-    for how in hows:
-        k = res["tokens"][how]
-        log(f"  {how:<14} n {k['n']:5d} median {k['median']:.2f} p90 {k['p90']:.2f} m | pose entry deviation from the pair's fresh pose {perr[how]:.2g}")
-    for k, v in ok.items():
-        log(f"  {'ok  ' if v else 'FAIL'} {k}")
-    log("PASS" if res["passed"] else "FAIL")
-    return res
-
-
 # ------------------------------------------------------------------------------------------------------------------------------ step 0: what the past could give
 def near_of(P, D, gpos, gdir):
     """(n, M) bool: the tokens P / D within RAD of a GT node with a heading cosine >= COS"""
@@ -624,12 +567,6 @@ def selftest():
     ext_ = dict(rel_R=np.stack([np.eye(2) * (i + 1) for i in range(4)]), rel_t=np.arange(8.0).reshape(4, 2))                  # distinct entries: frame i has ITS entry (not its previous frame's)
     R_, t_ = pose_of(ext_, 2)
     assert np.array_equal(R_, np.eye(2) * 3) and np.array_equal(t_, [4.0, 5.0]), "pose_of reads the entry of the frame itself"
-    gd, bd = dict(n=30, median=0.5, p90=1.5, p99=3.0), dict(n=30, median=1.0, p90=2.5, p99=5.0)
-    lt, pe = dict(loader=gd, identity=bd, entry_shifted=gd, frame_shifted=bd), dict(loader=1e-6, identity=0.5, entry_shifted=0.2, frame_shifted=0.3)       # the neighbour's pose entry passes the token test, not the pose check
-    assert all(loader_fixture_checks(lt, pe).values()) and len(loader_fixture_checks(lt, pe)) == 4
-    for name_, (t2, p2) in dict(loader=(dict(lt, loader=dict(gd, p90=1.6)), pe), pose=(lt, dict(pe, loader=2e-4)), identity=(dict(lt, identity=gd), dict(pe, identity=1e-6)), entry=(lt, dict(pe, entry_shifted=1e-5)), frame=(dict(lt, frame_shifted=gd), dict(pe, frame_shifted=0.0)),
-                                empty=(dict(lt, loader=dict(gd, n=0)), pe)).items():
-        assert not all(loader_fixture_checks(t2, p2).values()), f"the loader fixture accepted bad {name_}"
     names = []
     _atomic(os.path.join(tempfile.gettempdir(), "past.json"), lambda tmp: (names.append(os.path.basename(tmp)), open(tmp, "w").close()))
     _atomic(os.path.join(tempfile.gettempdir(), "prev.npy"), lambda tmp: (names.append(os.path.basename(tmp)), np.save(tmp, np.zeros(1))))
@@ -743,7 +680,7 @@ def main(argv=None):
     s = sub.add_parser("build")
     s.add_argument("--cache", help="one cache directory <run>/<split> (default: all eight under runs/e365_cache)")
     s.add_argument("--all", action="store_true")
-    for name, n_default in (("fixture", 200), ("loader-fixture", 40)):
+    for name, n_default in (("fixture", 200),):
         s = sub.add_parser(name)
         s.add_argument("--split", default="val", choices=("val", "train"))
         s.add_argument("--n-pairs", type=int, default=n_default)
@@ -767,8 +704,8 @@ def main(argv=None):
         for d in ([os.path.normpath(a.cache if os.path.isabs(a.cache) else os.path.join(ROOT, a.cache))] if a.cache else cache_dirs()):
             info = build(d)
             print(f"{os.path.relpath(d, ROOT)}: {info['frames']} frames, {info['with_past']} with a past, {info['without_past']} without; poses {info['poses']} ({info['poses_sha']})")
-    elif a.cmd in ("fixture", "loader-fixture"):
-        res = (fixture if a.cmd == "fixture" else loader_fixture)(a.split, a.n_pairs, a.seed, a.ident)
+    elif a.cmd == "fixture":
+        res = fixture(a.split, a.n_pairs, a.seed, a.ident)
         if a.out:
             _save_json(a.out if os.path.isabs(a.out) else os.path.join(ROOT, a.out), res)
         assert res["passed"], f"the {a.cmd} FAILED"

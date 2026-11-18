@@ -118,6 +118,21 @@ MIN_EFFECT = 0.15                                                               
 QUIET_LOAD = 3.0                                                                                           # E351: the 1-minute load average (12 cores) below which the host is quiet
 
 
+def timed(fn, cuda):
+    """-> (fn(), ms): two CUDA events with a sync in front and behind (the protocol of this module), or `perf_counter` on the CPU (moved here from `jrecur_time.py`, archive tag archive/jtok2-jrecur-2026-11-18)"""
+    if not cuda:
+        t = time.perf_counter()
+        r = fn()
+        return r, (time.perf_counter() - t) * 1000.0
+    e0, e1 = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    torch.cuda.synchronize()
+    e0.record()
+    r = fn()
+    e1.record()
+    torch.cuda.synchronize()
+    return r, e0.elapsed_time(e1)
+
+
 def load1():
     """the 1-minute load average of the host (/proc/loadavg), None when it cannot be read"""
     try:
