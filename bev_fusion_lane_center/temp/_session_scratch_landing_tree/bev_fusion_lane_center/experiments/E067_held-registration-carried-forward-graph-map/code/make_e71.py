@@ -1,0 +1,175 @@
+"""Bericht E71 (Schleife 5): die empfohlene Regel unter kombinierten Ereignissen (Sensorausfall + Sprung der Lokalisierung).  Liest out/loop2/e71_<ort>_j<J>/metrics.json (combo_eval.py); Text loop2/loop5_text_e71.py (TEXT71).  Aufruf (gcar): make_e71.py [figs|report]"""
+import json
+import os
+import sys
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import arch_figs5 as AF5  # noqa: E402
+from report2 import f3, make_report2  # noqa: E402
+
+OUT = "/mnt/c/ML-Experiment/bev_fusion_lane_center/runs"
+FIG = f"{OUT}/figs"
+os.makedirs(FIG, exist_ok=True)
+_ns = {}
+if os.path.exists("/mnt/c/ML-Experiment/bev_fusion_lane_center/temp/archive/reports_build/loop5_text_e71.py"):
+    exec(open("/mnt/c/ML-Experiment/bev_fusion_lane_center/temp/archive/reports_build/loop5_text_e71.py", encoding="utf-8").read(), _ns)
+TEXT = _ns.get("TEXT71", {})
+RUNS = [("e71v_none_j3", "no jump (E67 transient failure)"), ("e71v_before_j3", "3 m jump BEFORE the failure (15 % of the scene)"), ("e71v_during_j3", "3 m jump DURING the failure (50 %)"), ("e71v_during_j6", "6 m jump DURING the failure (50 %)")]
+LAB = {"dark": "night", "cam_front3_off": "3 forward cameras off", "blur": "blur", "cam_front_off": "front camera off"}
+PL = {"perframe": "per-frame registration", "track": "tracked, every frame (E61)", "hold": "tracked + monitor-gated hold (E67)", "holdrestart": "hold + restart when healthy and the score is low (E70)", "holdverify": "hold + restart + VERIFY with the wide search when the sensors return after a hold", "holdstrict": "hold + restart + STRICT verify (replace only if the wide search scores better)", "trackrestart": "restart on a low score WITHOUT the monitor gate", "gt": "true registration (floor)"}
+PS = {"perframe": "per-frame registration", "track": "tracked (E61)", "hold": "tracked + hold (E67)", "holdrestart": "hold + restart (E70)", "holdverify": "hold + restart + verify (recommended)", "holdstrict": "hold + restart + strict verify", "trackrestart": "restart without monitor gate", "gt": "true registration (floor)"}
+ES = {"e71v_none_j3": "no jump", "e71v_before_j3": "3 m before", "e71v_during_j3": "3 m during", "e71v_during_j6": "6 m during"}
+COL = {"perframe": "#1f77b4", "track": "#ff7f0e", "hold": "#d62728", "holdrestart": "#2ca02c", "holdverify": "#17becf", "holdstrict": "#8c564b", "trackrestart": "#9467bd", "gt": "#7f7f7f"}
+PH = ["before the failure", "during the failure", "after: 0-1.5 s", "after: 1.5-3 s", "after: 3-5 s", "after: 5 s or more"]
+
+
+def jl(p):
+    return json.load(open(p)) if os.path.exists(p) else None
+
+
+def tables():
+    runs = [(k, lab, jl(f"{OUT}/{k}/metrics.json")) for k, lab in RUNS]
+    runs = [(k, lab, m) for k, lab, m in runs if m and "mean" in m]
+    if not runs:
+        return []
+    h1 = ["event", "method"] + [f"lateral error (m): {p}" for p in PH[:4]]
+    PH2 = ["before", "during", "after 0-1.5 s", "after 1.5-3 s", "after 3-5 s", "after 5 s or more"]
+    r1, r2 = [], []
+    for k, lab, m in runs:
+        for p in m["pols"]:
+            r1.append([ES[k], PS[p]] + [f3(x, 2) for x in m["mean"]["lata"][p][:4]])
+            r2.append([ES[k], PS[p]] + [f3(x, 2) for x in m["mean"]["err"][p]])
+    h2 = ["event", "method"] + [f"offset error (m): {p}" for p in PH2]
+    # je Bedingung (Sprung im Ausfall)
+    k, lab, m = [x for x in runs if x[0] == "e71v_during_j3"][0] if any(x[0] == "e71v_during_j3" for x in runs) else runs[-1]
+    h3 = ["condition", "method"] + [f"lateral error (m): {p}" for p in PH[:4]]
+    r3 = []
+    for c in m["conds"]:
+        for p in ("perframe", "track", "hold", "holdrestart", "holdverify", "holdstrict", "trackrestart"):
+            r3.append([LAB.get(c, c), PS[p]] + [f3(x, 2) for x in m["conds"][c]["lata"][p][:4]])
+    h4 = ["event", "restarts of 'hold + restart' (before / during / after the failure)", "restarts and verifications of 'hold + restart + verify'", "restarts of the ungated restart (before / during / after)"]
+    r4 = []
+    for k, lab, m in runs:
+        a = {"fail": 0, "before": 0, "after": 0}
+        b = {"fail": 0, "before": 0, "after": 0}
+        v = {"fail": 0, "before": 0, "after": 0}
+        for c in m["conds"]:
+            for ph in a:
+                a[ph] += m["conds"][c]["restarts"]["holdrestart"][ph]
+                b[ph] += m["conds"][c]["restarts"]["trackrestart"][ph]
+                v[ph] += m["conds"][c]["restarts"].get("holdverify", {}).get(ph, 0)
+        r4.append([ES[k], f"{a['before']} / {a['fail']} / {a['after']}", f"{v['before']} / {v['fail']} / {v['after']}", f"{b['before']} / {b['fail']} / {b['after']}"])
+    return (h1, r1), (h2, r2), (h3, r3), (h4, r4)
+
+
+def line_fig():
+    runs = [(k, lab, jl(f"{OUT}/{k}/metrics.json")) for k, lab in RUNS]
+    runs = [(k, lab, m) for k, lab, m in runs if m and "mean" in m]
+    if not runs:
+        return None
+    fig, axs = plt.subplots(2, 2, figsize=(10, 7.2), sharey=True)
+    axs = np.atleast_1d(axs).ravel()
+    for ax, (k, lab, m) in zip(axs, runs):
+        for p in m["pols"]:
+            ax.plot(range(4), m["mean"]["lata"][p][:4], "o-", color=COL[p], label=PL[p], lw=1.8)
+        ax.set_xticks(range(4))
+        ax.set_xticklabels(["before", "during", "after\n0-1.5 s", "after\n1.5-3 s"], fontsize=9)
+        ax.set_title(lab, fontsize=10)
+        ax.grid(alpha=0.3)
+    axs[0].set_ylabel("mean lateral error (m)")
+    axs[2].set_ylabel("mean lateral error (m)")
+    h, l = axs[0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=2, fontsize=9)
+    fig.tight_layout(rect=[0, 0.12, 1, 1])
+    p = f"{FIG}/e71_lines.png"
+    fig.savefig(p, dpi=100)
+    plt.close(fig)
+    return p
+
+
+def trace_fig(run="e71v_during_j3", cond="dark"):
+    """Zeitverlauf des Registrierungsfehlers in zwei Szenen (3 m Sprung mitten im Ausfall, Nacht): die Szene mit dem mittleren und die mit dem groessten Fehler 'holdverify' in den ersten 1.5 s nach der Rueckkehr der Sensoren (feste Regel, keine Handauswahl)"""
+    import pickle
+    fp = f"{OUT}/{run}/frames_{cond}.pkl"
+    if not os.path.exists(fp):
+        return None
+    scenes = [sc for sc in pickle.load(open(fp, "rb")) if sc]
+    def after_err(sc):
+        v = [r["err"]["holdverify"] for r in sc if r["phase"] == "after" and r["since_end"] < 3]
+        return float(np.mean(v)) if v else float("nan")
+    ae = np.array([after_err(sc) for sc in scenes])
+    ok = np.where(np.isfinite(ae))[0]
+    order = ok[np.argsort(ae[ok])]
+    picks = [(order[len(order) // 2], "typical scene (median error after the return)"), (order[-1], "worst scene (largest error after the return)")]
+    fig, axs = plt.subplots(2, 2, figsize=(11, 5.6), sharex="col", gridspec_kw=dict(height_ratios=[3, 1]))
+    for j, (idx, ttl) in enumerate(picks):
+        sc = scenes[idx]
+        n = len(sc)
+        fa, fb, fj = int(n * 0.30), int(n * 0.70), int(n * 0.50)
+        t = np.arange(n) * 0.5
+        ax, ax2 = axs[0, j], axs[1, j]
+        ax.axvspan(fa * 0.5, fb * 0.5, color="#f2d0d0", alpha=0.6, lw=0)
+        ax.axvline(fj * 0.5, color="k", ls="--", lw=1)
+        for p in ("hold", "holdrestart", "holdverify", "trackrestart", "gt"):
+            ax.plot(t, [r["err"][p] for r in sc], "-", color=COL[p], lw=1.6, label=PL[p])
+            rs = [i for i, r in enumerate(sc) if p in r["restart"]]
+            if rs and p != "gt":
+                ax.plot(t[rs], [sc[i]["err"][p] for i in rs], "v", color=COL[p], ms=5)
+        ax.set_title(f"{ttl} - TEST scene #{idx + 1} of {len(scenes)} ({n} frames)", fontsize=8)
+        ax.set_ylabel("registration offset error (m)")
+        ax.grid(alpha=0.3)
+        ax2.axvspan(fa * 0.5, fb * 0.5, color="#f2d0d0", alpha=0.6, lw=0)
+        ax2.axvline(fj * 0.5, color="k", ls="--", lw=1)
+        ax2.plot(t, [r["pf"] for r in sc], color="#555555", lw=1.2)
+        ax2.axhline(0.5, color="#999999", ls=":", lw=1)
+        ax2.set_ylim(-0.05, 1.05)
+        ax2.set_ylabel("monitor p(fail)")
+        ax2.set_xlabel("time in the scene (s)")
+        ax2.grid(alpha=0.3)
+    h, l = axs[0, 0].get_legend_handles_labels()
+    fig.legend(h, l, loc="lower center", ncol=3, fontsize=8)
+    fig.tight_layout(rect=[0, 0.11, 1, 1])
+    p = f"{FIG}/e71_trace.png"
+    fig.savefig(p, dpi=100)
+    plt.close(fig)
+    return p
+
+
+def main(mode):
+    tabs_ = tables()
+    if mode == "figs":
+        for t in tabs_:
+            for r in t[1]:
+                print(r)
+        return
+    images = []
+    try:
+        p = line_fig()
+        if p:
+            images.append((p, "Lateral error of the registered map route before, during and after a sensor failure (30-70 % of every scene; mean of night, three forward cameras off, blur and front camera off) for four event sequences."))
+    except Exception as ex:  # noqa: BLE001
+        print("line_fig Fehler:", ex)
+    try:
+        p = trace_fig()
+        if p:
+            images.append((p, "Registration offset error over time in two TEST scenes under the night failure (red band) with a 3 m jump in the middle of the failure (dashed line); triangles mark restarts / verifications. Left: the scene with the median, right: the scene with the largest error of 'hold + restart + verify' in the first 1.5 s after the sensors return (fixed rule, not hand-picked). Below: the monitor p(fail); in the right scene it stays above 0.5 for several seconds on clean frames (false alarms), so the held registration is not corrected until it drops."))
+    except Exception as ex:  # noqa: BLE001
+        print("trace_fig Fehler:", ex)
+    t = TEXT
+    caps = ["Lateral error (m, anchored) of the registered map route by phase (mean over four failure types, the 1.5-3 s column over three because the blur scenes have no frames there; 21 TEST scenes). Event: no jump / a 3 m jump BEFORE the failure (at 15 % of the scene) / a 3 m or 6 m jump DURING the failure (at 50 %, the sensors are blind)",
+            "Registration offset error (m) at the vehicle by phase (mean over four failure types; events as above)",
+            "Per failure type (3 m jump during the failure)",
+            "Restart events (all four failure types together; events as above)"]
+    tabs = [(cap, tb[0], tb[1]) for cap, tb in zip(caps, tabs_)]
+    make_report2("E71", t.get("title", "E71"), t.get("question", ""), t.get("setup", []), tabs, images, t.get("findings", ["(to be written)"]), t.get("limits", []), arch=AF5.combo_arch, arch_height=3.0)
+    print("E71 written")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1] if len(sys.argv) > 1 else "figs")
