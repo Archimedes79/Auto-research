@@ -29,7 +29,8 @@ What it does (paths from the problem's project.json, see project.py):
                 fixed by the metric card, which names the registry entry and the commit). Guaranteed: the commit names the code at LAUNCH. That the
                 command ran it is the command's job (it runs `git archive $AR_COMMIT`); every other command runs from the working tree. So when the
                 run ends the code files on disk (.py / .sh of the code folders and of autoresearch/, fingerprint_extra) are looked at again: a
-                hash like the launch one (about a second) says whether anything changed; only then are they compared with the snapshot (the paths
+                hash like the launch one says whether anything changed (the launch reads each file once, the end only walks and stats them: same names,
+                sizes and modification times as at the launch hash = unchanged, like git's index); only then are they compared with the snapshot (the paths
                 of the launch, a temporary index): a difference is written into the run record (code_drift: n, paths = the first 10) and as a note
                 into the ledger row (the paths of the code folders first, with their count: code_drift n, n_code, paths); no difference leaves no key, a check that
                 itself fails leaves code_drift_check = "failed: <reason>" and never
@@ -100,6 +101,7 @@ import sys
 import tempfile
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import hold as HOLD  # noqa: E402
@@ -123,32 +125,82 @@ SCRATCH_MAX_FILES = 2000        # at most this many scratch scripts per tag (abo
 SCRATCH_SKIPPED = [0]           # how many scripts the last scratch_scripts() call left out
 EXIT_STOPPED = 75   # Training/control.py EXIT_STOPPED: a trainer that was asked to stop (CONTROL file) saved a checkpoint and ended on purpose: status "stopped", never retried
 POSIX = os.name == "posix"
+CODE_CACHE_BYTES = 1_000_000    # a code file up to this size is read once per process by the hashes of a launch (read_code); a larger one is read each time
+RACY_NS = 2_000_000_000         # a file changed less than this long before it is looked at is not trusted by size + mtime alone (git's "racily clean"): not cached, not remembered
+CODE_IO_THREADS = 16            # the stat and the read of the code files run in this many threads: a call on the WSL view of C: costs its latency (2-4 ms), the calls overlap
+CODE_CACHE = {}                 # absolute path -> ((size, mtime_ns, ctime_ns), bytes): what read_code saw last
+DRIFT_MEMO = {}                 # (root, drift_hash) -> the signature of the walk that gave it: the end of the run compares the signature, not the content (code_drift)
 
 
 def now():
     return dt.datetime.now().isoformat(timespec="seconds")
 
 
-def code_hash(root, cfg):
-    """12-hex fingerprint of all .py / .sh of the code folders plus the extra files (works without git too)"""
-    h = hashlib.sha1()
+def stat_key(p):
+    """(size, mtime_ns, ctime_ns) of a file, (None, None, None) when it cannot be looked at (a dangling link). The ctime is what `touch -r`, `cp -p`, `rsync -t` and
+    `shutil.copy2` cannot restore: a file rewritten with the same size and a restored mtime still shows a new ctime"""
+    try:
+        st = os.stat(p)
+    except OSError:
+        return None, None, None
+    return st.st_size, st.st_mtime_ns, st.st_ctime_ns
+
+
+def io_map(fn, items):
+    """[fn(x) for x in items], in CODE_IO_THREADS threads (a stat or a read of a file is a call that waits)"""
+    with ThreadPoolExecutor(CODE_IO_THREADS) as ex:
+        return list(ex.map(fn, items))
+
+
+def code_files(root, cfg):
+    """[(name, path, stat key)] of every file code_hash covers, in its order: the .py / .sh of the code folders (name = path relative to root), then each existing
+    fingerprint_extra file (name None: the hash has no name for it). One walk and one stat per file, no read"""
+    found = []
     for top in cfg["code_dirs"]:
         for dp, dn, fn in os.walk(os.path.join(root, top)):
             dn[:] = sorted(x for x in dn if x not in ("__pycache__", ".git"))
-            for f in sorted(fn):
-                if f.endswith((".py", ".sh")):
-                    p = os.path.join(dp, f)
-                    h.update(os.path.relpath(p, root).encode())
-                    try:
-                        with open(p, "rb") as fh:
-                            h.update(fh.read())
-                    except OSError:                                  # a dangling link, a file removed between the walk and the open: its name is in the hash, its content cannot be
-                        h.update(b"<unreadable>")
-    for extra in cfg["fingerprint_extra"]:
-        p = os.path.join(root, extra)
-        if os.path.isfile(p):
-            h.update(open(p, "rb").read())
-    return h.hexdigest()[:12]
+            found += [(os.path.relpath(os.path.join(dp, f), root), os.path.join(dp, f)) for f in sorted(fn) if f.endswith((".py", ".sh"))]
+    found += [(None, os.path.join(root, extra)) for extra in cfg["fingerprint_extra"] if os.path.isfile(os.path.join(root, extra))]
+    return [(name, p, key) for (name, p), key in zip(found, io_map(stat_key, [p for _, p in found]))]
+
+
+def read_code(p, key):
+    """the bytes of a code file; a file of at most CODE_CACHE_BYTES is read once per process: the next call with the same key (size, mtime_ns, ctime_ns) gets the bytes from
+    the cache. A file that changed less than RACY_NS ago is not cached (a second edit in the same clock tick would keep size and mtime), a larger file is read each time"""
+    hit = CODE_CACHE.get(p)
+    if hit and hit[0] == key:
+        return hit[1]
+    with open(p, "rb") as fh:
+        data = fh.read()
+    if key[0] is not None and key[0] <= CODE_CACHE_BYTES and max(key[1], key[2]) < time.time_ns() - RACY_NS:
+        CODE_CACHE[p] = (key, data)
+    return data
+
+
+def hash_code(root, cfg):
+    """(the 12-hex hash of code_hash, the signature of the walk: (name, size, mtime_ns, ctime_ns) per file)"""
+    def read(item):
+        try:
+            return read_code(item[1], item[2])
+        except OSError as e:
+            return e
+    files = code_files(root, cfg)
+    h = hashlib.sha1()
+    for (name, _, _), data in zip(files, io_map(read, files)):       # the reads in threads, the hash in the order of the walk
+        if name is not None:
+            h.update(name.encode())
+        if isinstance(data, OSError):
+            if name is None:                                         # an extra file that cannot be read stops the launch (the caller's OSError handling)
+                raise data
+            data = b"<unreadable>"                                   # a dangling link, a file removed between the walk and the open: its name is in the hash, its content cannot be
+        h.update(data)
+    return h.hexdigest()[:12], tuple((name, *key) for name, _, key in files)
+
+
+def code_hash(root, cfg):
+    """12-hex fingerprint of all .py / .sh of the code folders plus the extra files (works without git too); a file is read once per process while its size and
+    mtime stay (read_code), so the second hash of a launch costs a stat per file"""
+    return hash_code(root, cfg)[0]
 
 
 def git(root, *args, env=None):
@@ -339,20 +391,35 @@ def pin_refusal(root, cfg, prev, ch, ref):
             f"({first} -> {ch}): resume without --pin to run today's code, or restore the code of attempt 1 first")
 
 
+def drift_cfg(root, cfg):
+    """cfg of the drift check: the code folders AND the research system's own folder"""
+    return dict(cfg, code_dirs=[*cfg["code_dirs"], os.path.relpath(P.AR, root)])
+
+
 def drift_hash(root, cfg):
-    """code_hash over the code folders AND the research system's own .py / .sh: the cheap first look of the drift check"""
-    return code_hash(root, dict(cfg, code_dirs=[*cfg["code_dirs"], os.path.relpath(P.AR, root)]))
+    """code_hash over the code folders AND the research system's own .py / .sh: the cheap first look of the drift check. Remembers the signature of its walk
+    (DRIFT_MEMO: name, size, mtime_ns, ctime_ns per file) for code_drift, unless a file changed less than RACY_NS ago"""
+    h, sig = hash_code(root, drift_cfg(root, cfg))
+    if all(m is None or max(m, c) < time.time_ns() - RACY_NS for _, _, m, c in sig):
+        DRIFT_MEMO[(root, h)] = sig
+    return h
 
 
 def code_drift(root, cfg, commit, before, spec, cmd=()):
     """did the code files on disk change while the run went? before = drift_hash and spec = the snapshot's paths, both taken at launch; commit = the
-    snapshot; cmd = the run's command line (the same scratch scripts as in the snapshot). The same hash now -> ({}, '') at once. Else the working tree (temporary
-    index) is compared with the snapshot over the LAUNCH paths (HEAD may have moved on, a folder may be gone), keeping the code files (.py / .sh,
+    snapshot; cmd = the run's command line (the same scratch scripts as in the snapshot). The same hash now -> ({}, '') at once: when drift_hash remembered the
+    signature of its walk, a walk and a stat per file (no read) that give the same signature (same names, sizes, mtime_ns and ctime_ns) mean the same hash. Like git's own index
+    this does not see a file rewritten within the clock tick of its last change (RACY_NS guards that); a different signature falls back to the hash (read_code serves the files that did not change
+    from its cache), and a different hash to the precise check: the working tree (temporary index)
+    is compared with the snapshot over the LAUNCH paths (HEAD may have moved on, a folder may be gone), keeping the code files (.py / .sh,
     fingerprint_extra): ({'n': differing files, 'paths': the first 10, the files of the project's code folders (code_dirs) before the others, 'n_other': how many
     are not in a code folder (only when there are any)}, '') or ({}, '') without one; a check that fails gives ({}, 'failed: <reason>'), it never raises"""
     try:
         if spec is None or before is None:
             return {}, "failed: no launch state (snapshot paths or hash)"
+        sig = DRIFT_MEMO.get((root, before))
+        if sig is not None and tuple((n, *k) for n, _, k in code_files(root, drift_cfg(root, cfg))) == sig:
+            return {}, ""
         if drift_hash(root, cfg) == before:
             return {}, ""
         top, spec_now, head = snapshot_spec(root, cfg)

@@ -22,7 +22,8 @@ Derived = rebuilt by evaluating the checkpoint again with the code of the tag: f
 .webp and everything under eval/suite, but only in the run folder's top level, eval/, report/ and prototype/. Not derived (never touched): checkpoints,
 run.json, config.json, gt.json, logs, metrics / latency / card json, text files, code/, bundle/, GtGenerator/ (the pinned sources of a resume), folders of
 other evaluators (eval_2026-10-31_first, eval_legacy_*) and files with legacy, _ctl_ or partial in their path (a superseded evaluator made them:
-evaluating again does not reproduce them), symbolic links.
+evaluating again does not reproduce them), symbolic links, the outputs of the TEST split (a path part that is the word test: ids_test.npy, test_pred.npy, eval/suite/test/;
+making them again needs a recorded OK, hard rule 1) and the training state (ema, opt, optim*, state as a part of the file name: an EMA of the weights, optimizer state).
 clean refuses a run (and says why) when: the best three are unknown (no keep3.json, or no entry), it is in the best three (by run id, run folder
 or the folder named in an entry's checkpoints and card), its record or the record of any run that belongs to it (<id>.eval, a second id for the same
 folder) is not final or has a fresh heartbeat, its code tag does not exist, it has no checkpoint (the files could not be rebuilt), or a derived file is
@@ -39,7 +40,8 @@ one: they share a folder) and every store that is still needed. A run records th
 goes through provenance.canonical_sig first. data/autogt is shared by all problem folders, so the run records of EVERY <repo>/*/project.json are read. Needed = named in the gt.json
 (also the `earlier` ones; a resume needs them) of a run that is not final; or of a network of the best three (keep3.json); or of a FINAL run that has no result package yet
 (the clean-up writes the package first: `package.py package <id>`). An older store is deleted only when its tag autogt/vN exists (it can be regenerated from the tag and the options in
-its index.json) and it is a real folder inside data/autogt. A network trained on an older GT cannot be evaluated again against its own GT
+its index.json) and it is a real folder inside data/autogt. A store goes index.json (and manifest.json) first, then its frames, so a delete that stops halfway leaves no store that
+claims to be complete. A network trained on an older GT cannot be evaluated again against its own GT
 after that store is gone: it is regenerated first. Deletions are appended to <records folder>/CLEAN_LOG.md.
 """
 import argparse
@@ -127,11 +129,19 @@ def top3_runs():
     return out or None
 
 
+TEST_NAME = re.compile(r"(?:^|[._-])test\d*(?:[._-]|$)", re.I)      # ids_test.npy, test_pred.npy, graphs_test.pkl, eval/suite/test/: outputs of the TEST split
+NOT_DERIVED_TOKEN = re.compile(r"(?:^|[._-])(?:ema|opt|state|optim\w*)(?:[._-]|$)", re.I)      # ema.npz, optimizer_state.pkl: weights and training state, not a re-computable output
+
+
 def is_derived(rel):
+    """derived = re-made by evaluating the checkpoint again (see the module text). Never: a TEST output (a path part that is the word test: making it again needs a recorded
+    OK, hard rule 1) and the state of the training (an EMA of the weights, optimizer state: an evaluation does not rebuild them)"""
     rel = rel.replace("\\", "/")
     parts = rel.split("/")
     top = parts[0] if len(parts) > 1 else ""
     if top in NEVER_DIRS or top not in ALLOWED_TOP or any(s in rel.lower() for s in SUPERSEDED):
+        return False
+    if any(TEST_NAME.search(x) for x in parts) or NOT_DERIVED_TOKEN.search(parts[-1]):
         return False
     return rel.lower().endswith(DERIVED_SUFFIX) or any(rel == d or rel.startswith(d + "/") for d in DERIVED_DIRS)
 
@@ -162,10 +172,11 @@ def inside(path, root):
         return False
 
 
-def numbers(path, cap=80):
-    """the numbers of a json file (bool excluded), at most cap keys, sorted; {} when it is not readable. Top-level numbers, and the numbers of the dicts `metrics` and
+def numbers(path, cap=80, headline=None):
+    """the numbers of a json file (bool excluded), at most cap keys; {} when it is not readable. Top-level numbers, and the numbers of the dicts `metrics` and
     `latency` as 'metrics.<key>' / 'latency.<key>' (that is where bev_suite writes them: eval/metrics.json holds {"metrics": {...}, "better": {...}} and eval/latency.json
-    {"latency": {...}})"""
+    {"latency": {...}}). A file with more keys than the cap keeps the headline metrics first (project.json "headline_metrics", matched by the name or its last path part:
+    'metrics.det/all/Q' by 'Q'), then the keys with the fewest path segments ('/'), then alphabetically: a cut by the alphabet alone dropped the headline of a run with thousands of keys"""
     try:
         d = json.load(open(path, encoding="utf-8"))
     except (OSError, ValueError):
@@ -177,7 +188,9 @@ def numbers(path, cap=80):
     for key in ("metrics", "latency"):
         if isinstance(d.get(key), dict):
             flat.update({f"{key}.{k}": v for k, v in d[key].items() if num(v)})
-    return dict(sorted(flat.items())[:cap])
+    names = P.cfg().get("headline_metrics", []) if headline is None else headline
+    named = lambda k: any(k == h or k.endswith(("/" + h, "." + h)) for h in names)  # noqa: E731
+    return dict(sorted(flat.items(), key=lambda kv: (not named(kv[0]), kv[0].count("/"), kv[0]))[:cap])
 
 
 def build(run_id, run_dir=None):
@@ -513,6 +526,19 @@ def lane_versions():
         return list(csv.DictReader(f))
 
 
+def remove_store(path):
+    """delete a GT store folder: index.json (and manifest.json) go first, as `clean` removes frames.jsonl first: readers (gt_stores, the loaders) take a store with an index.json for
+    a complete one, and a delete that stops halfway (a locked file, a killed process) must leave a store without it, never one with frames missing"""
+    if os.path.islink(path):
+        raise OSError(f"{path} is a link: not deleted")
+    for name in ("index.json", "manifest.json"):
+        try:
+            os.remove(os.path.join(path, name))
+        except FileNotFoundError:
+            pass
+    shutil.rmtree(path)
+
+
 def lane_stores(root):
     return sorted(d for d in os.listdir(root) if os.path.isfile(os.path.join(root, d, "index.json"))) if os.path.isdir(root) else []
 
@@ -586,7 +612,7 @@ def lane_clean(apply=False, root=None, problems=None, planned=None, drop=(), dec
                 log_line(f"lane GT store {sig} (a draft: in no lane_versions.csv row, no tag; {len(os.listdir(os.path.join(root, sig)))} files) is being deleted at the word of the person ({decision or 'no decision given'}); it cannot be regenerated")
             else:
                 log_line(f"lane GT store {sig} ({text.split(':')[1].split(',')[0].strip()}) is being deleted; regenerate from its tag autogt/lane-lN with `python -m autogt generate-lane` in a worktree of it (GtGenerator/ since 2026-11-10)")
-            shutil.rmtree(os.path.join(root, sig))
+            remove_store(os.path.join(root, sig))
             done.append(sig)
     return latest, plan, done
 
@@ -638,7 +664,7 @@ def gt_clean(apply=False, root=None, problems=None, planned=None):
     for sig, text in plan:
         if text.startswith("delete") and apply:
             log_line(f"GT store {sig} ({text.split(':')[1].split(',')[0].strip()}) is being deleted; regenerate from the tag and the options of its index.json (git show autogt/<version>)")
-            shutil.rmtree(os.path.join(root, sig))
+            remove_store(os.path.join(root, sig))
             done.append(sig)
     return latest, plan, done
 
@@ -746,8 +772,23 @@ def selftest():
         want = ["eval/pic.png", "eval/scene_records.pkl", "eval/suite/frames.jsonl", "eval/suite/sub/a.json"]
         assert [x["path"] for x in pk["deep"]["files"]] == want and pk["deep"]["bytes"] == 400, pk["deep"]
         for rel, yes in (("x/y.MP4", False), ("eval/y.MP4", True), ("code/a.png", False), ("bundle/a.png", False), ("GtGenerator/e/a.png", False), ("log.jsonl", False), ("ckpt_1.pt", False),
-                         ("eval_2026/a.png", False), ("eval/a_legacy_b.pkl", False), ("eval/c_ctl_d.npz", False), ("eval/suite_x/a.png", True), ("eval/suite/a.json", True), ("a.png", True)):
+                         ("eval_2026/a.png", False), ("eval/a_legacy_b.pkl", False), ("eval/c_ctl_d.npz", False), ("eval/suite_x/a.png", True), ("eval/suite/a.json", True), ("a.png", True),
+                         # TEST outputs need a recorded OK to make again, the EMA and the optimizer state are no evaluation output: never derived; a name that only contains the letters is
+                         ("ids_test.npy", False), ("test_pred.npy", False), ("graphs_test.pkl", False), ("eval/test_scene_records.pkl", False), ("eval/suite/test/frames.jsonl", False),
+                         ("eval/Test-pred.PNG", False), ("eval/test21_pred.npy", False), ("eval/suite/test21/a.json", False), ("ema.npz", False), ("model_ema.npz", False), ("optimizer_state.pkl", False), ("eval/optim.npz", False), ("opt_state.npy", False),
+                         ("latest.pkl", True), ("contest_pred.npy", True), ("eval/suite/attest/a.json", True), ("token_train.pkl", True), ("eval/emails.png", True), ("statement.pkl", True)):
             assert is_derived(rel) is yes, rel
+        mj = os.path.join(tmp, "many.json")                        # a run with thousands of metric keys: the cap must not cut the headline metric (the alphabet put it last)
+        json.dump({"n": 3, "metrics": {**{f"a/b/c/d/k{i:03d}": float(i) for i in range(500)}, "x/y/z/w/v/u/Q": 0.7, "top": 1.0, "deep/er/lat": 2.0}}, open(mj, "w"))
+        got = numbers(mj, headline=["Q"])
+        assert len(got) == 80 and list(got)[0] == "metrics.x/y/z/w/v/u/Q" and "n" in got and "metrics.top" in got, list(got)[:5]
+        got = numbers(mj, headline=[])                             # no headline named: the shortest paths first, then the alphabet
+        assert len(got) == 80 and list(got)[:4] == ["metrics.top", "n", "metrics.deep/er/lat", "metrics.a/b/c/d/k000"] and "metrics.x/y/z/w/v/u/Q" not in got, list(got)[:5]
+        assert "metrics.a/b/c/d/k076" in got and "metrics.a/b/c/d/k077" not in got and len(numbers(mj, cap=600, headline=[])) == 504
+        pj_h = open(os.path.join(proj, "project.json"), encoding="utf-8").read()                # the default: the headline names of project.json
+        json.dump(dict(json.loads(pj_h), headline_metrics=["Q"]), open(os.path.join(proj, "project.json"), "w"))
+        assert list(numbers(mj))[0] == "metrics.x/y/z/w/v/u/Q"
+        open(os.path.join(proj, "project.json"), "w", encoding="utf-8").write(pj_h)
         json.dump({"provenance": {"evaluator": {"commit": "c1", "code_hash": "h1", "dirty": ["a.py"]}, "data": {"split": "val", "n": 7, "frame_hash": "fh", "manifest_hash": "mh"},
                                   "gt": {"version": "v5", "signature": "sg"}}}, open(os.path.join(a, "eval", "card.json"), "w"))
         os.makedirs(os.path.join(proj, "experiments", "E1_demo"))
@@ -894,6 +935,30 @@ def selftest():
         _, _, done = gt_clean(True, gtroot)
         assert sorted(done) == ["new", "old1"] and not os.path.exists(os.path.join(gtroot, "old1")) and os.path.isdir(os.path.join(gtroot, "old2")), done
         assert "GT store old1" in open(os.path.join(proj, "records", "CLEAN_LOG.md"), encoding="utf-8").read(), "logged"
+        # a delete that stops halfway (a locked file, a killed process) must not leave a store that still claims to be complete: index.json and manifest.json go before the frames
+        real_rmtree = shutil.rmtree
+        for clean_fn, text in ((gt_clean, "delete: v0, regenerated from the tag tg/ok"), (lane_clean, "delete: lane l1, regenerated from the tag tg/ok")):
+            half = os.path.join(gtroot, "half")
+            os.makedirs(os.path.join(half, "frames"))
+            for fn in ("index.json", "manifest.json", *(f"frames/f{i}.npz" for i in range(6))):
+                open(os.path.join(half, fn), "w").write("{}")
+            assert "half" in gt_stores(gtroot)
+
+            def half_rmtree(path, *a, **k):                      # removes three of the six frames, then stops
+                for fn in sorted(os.listdir(os.path.join(path, "frames")))[:3]:
+                    os.remove(os.path.join(path, "frames", fn))
+                raise PermissionError("locked")
+            shutil.rmtree = half_rmtree
+            try:
+                clean_fn(True, gtroot, planned=({"version": "v0"}, [("half", text)]))
+                raise AssertionError("the injected failure must surface")
+            except PermissionError:
+                pass
+            finally:
+                shutil.rmtree = real_rmtree
+            assert len(os.listdir(os.path.join(half, "frames"))) == 3 and not os.path.exists(os.path.join(half, "index.json")) and not os.path.exists(os.path.join(half, "manifest.json")), clean_fn
+            assert "half" not in gt_stores(gtroot) and "half" not in lane_stores(gtroot), "the partly deleted store is no store any more"
+            real_rmtree(half)
         pjk = open(os.path.join(proj, "project.json"), encoding="utf-8").read()        # the run folder of the best three follows project.json "runs", not a hard-coded `runs`
         json.dump(dict(json.loads(pjk), runs="outputs"), open(os.path.join(proj, "project.json"), "w"))
         assert entry_names({"checkpoints": [{"path": "outputs/r1/ckpt.pt"}, {"path": "runs/r2/ckpt.pt"}]}) == {"r1"}, entry_names({"checkpoints": [{"path": "outputs/r1/ckpt.pt"}]})

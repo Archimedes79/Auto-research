@@ -4,6 +4,7 @@ The problem folder comes from the environment variable AR_PROJECT, else from aut
 autoresearch/). Paths in project.json are relative to the problem folder; P.path("ledger") returns an absolute path.
 """
 import contextlib
+import csv
 import json
 import os
 import socket
@@ -14,6 +15,11 @@ import uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 AR = os.path.dirname(HERE)
+
+try:        # the csv module stops at 131072 characters per field: two long `ledger.py note --notes` made every later read of the ledger fail. Every tool imports this module
+    csv.field_size_limit(sys.maxsize)
+except OverflowError:   # a C long of 32 bit
+    csv.field_size_limit(2 ** 31 - 1)
 
 DEFAULTS = {
     "tag_prefix": "exp",
@@ -105,13 +111,72 @@ def _holds(lock, token):
         return False
 
 
+EMPTY_S = 10    # a lock file is empty only for the milliseconds between its creation and its write: an empty or unreadable one this old has no holder
+GUARD_S = 5     # the takeover guard <lock>.takeover exists for microseconds: older than this (a taker killed inside it) it is removed, not waited for stale_s
+
+
+def _has_text(lock):
+    """does the lock file hold readable text? (empty: its creator died before the write; unreadable: nobody can say who holds it)"""
+    try:
+        with open(lock, encoding="utf-8") as f:
+            return bool(f.read().split())
+    except (OSError, ValueError):
+        return False
+
+
+def _stale(lock, stale_s):
+    """is the lock file there and one that nobody holds any more: not renewed for stale_s, its holder (of this machine and system) dead, or no readable text in it
+    for EMPTY_S. A file that is gone is not stale (there is nothing to remove, and whoever removes a lock that appears meanwhile removes a live holder's)"""
+    try:
+        age = time.time() - os.path.getmtime(lock)
+    except OSError:
+        return False
+    return age > stale_s or _holder_dead(lock) or (age > EMPTY_S and not _has_text(lock))
+
+
+def _take_over(lock, stale_s):
+    """remove the lock of a holder that is gone; True when the lock is gone (removed here or vanished: create it now), False when it is alive or another waiter is
+    taking it over. The taker holds a guard file <lock>.takeover (created with O_EXCL), judges the lock AGAIN under it and drops the guard at once: a waiter that judged
+    the old lock stale a moment ago can no longer remove the fresh lock of the waiter that took over before it; a lock that vanished meanwhile is never removed. A guard
+    older than GUARD_S is itself stale (its taker died)"""
+    if not os.path.exists(lock):
+        return True
+    if not _stale(lock, stale_s):
+        return False
+    guard = lock + ".takeover"
+    try:
+        os.close(os.open(guard, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except FileExistsError:
+        try:
+            if time.time() - os.path.getmtime(guard) > GUARD_S:        # the guard is held for microseconds: one this old belongs to a taker that died
+                os.remove(guard)
+        except OSError:
+            pass
+        return False
+    try:
+        if not os.path.exists(lock):
+            return True
+        if not _stale(lock, stale_s):
+            return False
+        os.remove(lock)
+        return True
+    except OSError:
+        return False
+    finally:
+        try:
+            os.remove(guard)
+        except OSError:
+            pass
+
+
 @contextlib.contextmanager
 def locked(path, wait_s=None, stale_s=120):
     """exclusive lock on a shared state file (ledger, schedule): <path>.lock is created atomically with '<pid> <time> <who> <token>' and its mtime is renewed every
-    stale_s / 4 s while the holder is inside the block, so only a dead or frozen holder ages out: a lock not renewed for stale_s is taken over. The holder
-    removes the lock only when the file still carries its token. Known residual: two waiters that take over the same stale lock at the same
-    instant can, very rarely, both enter (the put-back of a lock that was not stale after all is not atomic)"""
-    lock = path + ".lock"
+    stale_s / 4 s while the holder is inside the block, so only a dead or frozen holder ages out: a lock not renewed for stale_s, one of a dead holder of this machine,
+    or an empty one older than EMPTY_S is taken over (_take_over: one waiter at a time, under a guard file). The holder removes the lock only when the file still
+    carries its token. Known residual: a frozen holder (not renewed for stale_s) that wakes up exactly while a waiter removes its lock. The folder of the lock is made"""
+    lock = os.path.abspath(path) + ".lock"
+    os.makedirs(os.path.dirname(lock), exist_ok=True)         # a first `ledger.py add` / `schedule.py add` in a problem without its records folder
     wait_s = float(os.environ.get("AR_LOCK_WAIT_S", "60")) if wait_s is None else wait_s
     token = uuid.uuid4().hex
     t0 = time.time()
@@ -122,17 +187,8 @@ def locked(path, wait_s=None, stale_s=120):
             os.close(fd)
             break
         except FileExistsError:
-            try:
-                if time.time() - os.path.getmtime(lock) > stale_s or _holder_dead(lock):
-                    gone = f"{lock}.stale.{os.getpid()}"
-                    os.rename(lock, gone)  # only one waiter wins the rename; the others see FileNotFoundError and retry
-                    if time.time() - os.path.getmtime(gone) <= stale_s and not _holder_dead(gone) and not os.path.exists(lock):
-                        os.rename(gone, lock)  # not stale after all (another waiter's takeover came first, and this is its fresh lock): put it back and wait
-                    else:
-                        os.remove(gone)
-                        continue
-            except OSError:
-                continue
+            if _take_over(lock, stale_s):
+                continue                                       # removed: try to create it at once
             if time.time() - t0 > wait_s:
                 raise TimeoutError(f"{lock} held for more than {wait_s} s")
             time.sleep(0.2)

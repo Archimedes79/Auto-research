@@ -4,7 +4,8 @@
 
 One section per rule, each with a known answer: the rule fixed before the run (rule_sha, card_for_run, the gate of decide.py: ledger status ok, card_sha, --by-hand),
 the decision cell (token first, both orders read by keep3 / metrics / plan, a 600-character prose), the card checks (at_least, subsets, min_effect / max_loss, a card file
-listed twice, sources), the order and the failures of --write (ledger first, atomic files, a warning instead of an abort), the typed form, and the research notes of `sources`.
+listed twice, sources), the order and the failures of --write (ledger first, atomic files, a warning instead of an abort), the typed form, and the research notes of `sources`. The last sections (t_rec_*) pin the record layer that the verdict path reads: project.locked, the csv field limit, ledger.py
+(freeze, tail, render), metrics.py, keep3.py, schedule.py, card.py show.
 """
 import contextlib
 import csv
@@ -589,7 +590,209 @@ def t_arms_lock():
     fresh()
 
 
-SECTIONS = [t_verdict_review, t_arms_lock, t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources]
+# ------------------------------------------------------------------ 7. the record layer: lock, csv limit, ledger, metrics, keep3, schedule, card
+
+
+def ledcli(*args):
+    r = subprocess.run([sys.executable, f"{HERE}/ledger.py", *args], capture_output=True, text=True, env=ENV, cwd=T)
+    return r.returncode, r.stdout + r.stderr
+
+
+LOCK_WORKER = ("import sys, time\nsys.path.insert(0, sys.argv[1])\nimport project as P\nf = sys.argv[2]\n"
+               "for _ in range(int(sys.argv[3])):\n    with P.locked(f):\n        n = int(open(f).read() or 0)\n        time.sleep(0.002)\n        P.atomic_write(f, str(n + 1))\n")
+
+
+def t_rec_lock():
+    """project.locked: the lock of a dead holder is taken over by ONE waiter (8 processes x 5 increments lose none; on /mnt/c, a slow file system, the old code lost updates in
+    6 of 10 trials, on a Linux folder it rarely does: the second part pins the rule itself); a takeover under way (its guard file) is waited for, the guard of a dead taker ages
+    out, the lock is judged again under the guard; an empty or unreadable lock file is judged stale after EMPTY_S, a fresh empty one is waited for; the folder of the lock is made"""
+    fresh()
+    open(f"{T}/lockworker.py", "w").write(LOCK_WORKER)
+    f = f"{T}/counter.txt"
+    for trial in range(3):
+        open(f, "w").write("0")
+        gone = subprocess.Popen([sys.executable, "-c", "pass"])
+        gone.wait()
+        open(f + ".lock", "w").write(f"{gone.pid} {time.time()} {P._WHO} tok")       # a holder of this machine that is certainly dead
+        ps = [subprocess.Popen([sys.executable, f"{T}/lockworker.py", HERE, f, "5"]) for _ in range(8)]
+        for p in ps:
+            p.wait()
+        assert open(f).read() == "40" and not os.path.exists(f + ".lock") and not os.path.exists(f + ".lock.takeover"), (trial, open(f).read())
+    g = f"{T}/guard.txt"
+
+    def waits(text, age=0, guard_age=None, raw=None):
+        """True when P.locked had to wait (TimeoutError after 1 s) for a lock file with this text / bytes, `age` seconds old, and a takeover guard `guard_age` seconds old"""
+        for x in (g + ".lock", g + ".lock.takeover"):
+            if os.path.exists(x):
+                os.remove(x)
+        open(g + ".lock", "wb").write(raw if raw is not None else text.encode())
+        os.utime(g + ".lock", (time.time() - age, time.time() - age))
+        if guard_age is not None:
+            open(g + ".lock.takeover", "w").close()
+            os.utime(g + ".lock.takeover", (time.time() - guard_age, time.time() - guard_age))
+        try:
+            with P.locked(g, wait_s=1, stale_s=60):
+                pass
+            return False
+        except TimeoutError:
+            return True
+    dead = f"{gone.pid} {time.time()} {P._WHO} tok"
+    assert not waits(dead) and not os.path.exists(g + ".lock"), "a dead holder's lock is taken over at once"
+    assert waits(dead, guard_age=0), "another waiter is taking the lock over (its guard file): wait, do not take over a second time"
+    assert not waits(dead, guard_age=300) and not os.path.exists(g + ".lock.takeover"), "the guard of a taker that died is itself stale"
+    assert not waits(dead, guard_age=30), "... after GUARD_S (a guard lives for microseconds), not after stale_s: 60 s of waiting would outlast the default wait"
+    assert waits(dead, guard_age=1), "a guard of one second is a taker at work"
+    assert waits(f"{os.getpid()} {time.time()} {P._WHO} tok"), "a live holder is waited for"
+    assert waits("", age=0), "an empty lock file that is new may be one that is being written"
+    assert not waits("", age=30) and not waits("", raw=b"\xff\xfe\xfd", age=30), "an empty or unreadable lock file older than EMPTY_S has no holder (before: it timed out first, stale_s is 120)"
+    real, seen = P._stale, []
+
+    def stale_once(lock, stale_s):       # the judgement a waiter made BEFORE another waiter took the lock over: stale. By now the lock is a live holder's
+        seen.append(1)
+        return True if len(seen) == 1 else real(lock, stale_s)
+    for x in (g + ".lock", g + ".lock.takeover"):
+        if os.path.exists(x):
+            os.remove(x)
+    open(g + ".lock", "w").write(f"{os.getpid()} {time.time()} {P._WHO} tok")
+    P._stale = stale_once
+    try:
+        assert P._take_over(g + ".lock", 60) is False, "the takeover judges the lock again under its guard: a fresh live lock stays"
+    finally:
+        P._stale = real
+    assert os.path.exists(g + ".lock") and not os.path.exists(g + ".lock.takeover") and P._take_over(g + ".gone.lock", 60) is True, "a lock that vanished is not removed, only retried"
+    with P.locked(f"{T}/no/such/folder/x.csv"):
+        pass
+    assert os.path.isdir(f"{T}/no/such/folder") and not os.path.exists(f"{T}/no/such/folder/x.csv.lock")
+    json.dump(dict(tag_prefix="v", ledger="records/LEDGER.csv", ledger_md="records/LEDGER.md", run_records="runs"), open(f"{T}/project.json", "w"))
+    rc, out = ledcli("add", "V.first", "--hyp", "h")                      # the records folder does not exist yet
+    assert rc == 0 and os.path.exists(f"{T}/records/LEDGER.csv"), out
+
+
+def t_rec_csv_limit():
+    """a field of more than 131072 characters is read (importing project lifts the csv limit); one `ledger.py note --notes` above 20000 characters is refused (nothing is cut silently)"""
+    fresh()
+    prog = f"import sys, csv; sys.path.insert(0, {HERE!r}); import project; print(len(list(csv.DictReader(sys.stdin))[0]['notes']))"
+    r = subprocess.run([sys.executable, "-c", prog], input="id,notes\nE1.a," + "x" * 200000 + "\n", capture_output=True, text=True)
+    assert r.stdout.strip() == "200000", r.stdout + r.stderr
+    before = rows()["V.a0"]["notes"]
+    rc, out = ledcli("note", "V.a0", "--notes", "y" * 70000)
+    assert rc != 0 and "at most 20000" in out and rows()["V.a0"]["notes"] == before, (rc, out[:300])
+    for k in "yz":                                               # two notes at the cap: the cell grows past 131072 over the calls, every read must go on
+        for _ in range(4):
+            rc, out = ledcli("note", "V.a0", "--notes", k * 20000)
+            assert rc == 0, (rc, out[:300])
+    assert 131072 < len(rows()["V.a0"]["notes"]) and ledcli("tail")[0] == 0 and subprocess.run([sys.executable, f"{HERE}/metrics.py"], env=ENV, cwd=T).returncode == 0
+
+
+def t_rec_ledger():
+    """ledger.py: a BOM in the file does not break reading (the next write has none); a row whose run record says it started is frozen, a hold marker alone is no start; one call
+    that sets the final status AND writes the rule is frozen like a later one; tail lists the last rows in file order; a render that was slow does not drop a row added meanwhile"""
+    import schedule as SC
+    fresh()
+    bom = b"\xef\xbb\xbf"
+    raw = open(f"{T}/LEDGER.csv", "rb").read()
+    open(f"{T}/LEDGER.csv", "wb").write(bom + raw)
+    rc, out = ledcli("tail")
+    assert rc == 0 and "V.a0" in out, out
+    rc, out = ledcli("note", "V.a0", "--result", "r")
+    assert rc == 0 and rows()["V.a0"]["result"] == "r" and not open(f"{T}/LEDGER.csv", "rb").read().startswith(bom), out
+    ledger([dict(id="E1.a", status="ok", duration_s="60")])
+    raw = open(f"{T}/LEDGER.csv", "rb").read()
+    open(f"{T}/LEDGER.csv", "wb").write(bom + raw)
+    assert metrics.collect(T, dict(P.DEFAULTS, ledger="LEDGER.csv", loops={"1": [1, 99]}))["1"]["runs"] == 1
+    open(f"{T}/s.csv", "wb").write(bom + b"item,state\nX.a,planned\n")
+    assert SC.load(f"{T}/s.csv")[0]["item"] == "X.a"
+    # a run record freezes the card, also where the row still says planned; a hold marker alone does not
+    fresh()
+    assert ledcli("add", "V.p", "--hyp", "h", "--pred", "p", "--rule", "keep if x")[0] == 0 and ledcli("add", "V.h", "--hyp", "h")[0] == 0
+    os.makedirs(f"{T}/runs/V.p")
+    json.dump(dict(id="V.p", status="running", launcher_pid=1), open(f"{T}/runs/V.p/run.json", "w"))
+    rc, out = ledcli("note", "V.p", "--rule", "keep if x > 5")
+    assert rc != 0 and "written before the run" in out and rows()["V.p"]["rule"] == "keep if x", out
+    assert ledcli("note", "V.p", "--rule", "keep if x > 5", "--force")[0] == 0 and "rule before the change" in rows()["V.p"]["notes"]
+    os.makedirs(f"{T}/runs/V.h")
+    open(f"{T}/runs/V.h/HOLD", "w").write('{"who": "x"}')
+    assert ledcli("note", "V.h", "--rule", "r1")[0] == 0 and rows()["V.h"]["rule"] == "r1"
+    # the status of the same call counts: the rule is not written before the run
+    assert ledcli("add", "V.s", "--hyp", "h")[0] == 0
+    rc, out = ledcli("note", "V.s", "--status", "ok", "--rule", "keep if y", "--decision", "KEEP (y 3)")
+    assert rc != 0 and "written before the run" in out and rows()["V.s"]["status"] == "planned" and rows()["V.s"]["rule"] == "", out
+    assert ledcli("note", "V.s", "--status", "ok")[0] == 0 and rows()["V.s"]["status"] == "ok"
+    # tail: file order, so the undated rows (planned, blocked) do not push the dated ones out
+    ledger([dict(id=i, started=s, status=st) for i, s, st in (("E1.d1", "2026-11-01T10:00:00", "ok"), ("E1.u1", "", "planned"), ("E1.u2", "", "planned"), ("E1.u3", "", "blocked"),
+                                                             ("E1.d2", "2026-11-02T10:00:00", "ok"), ("E1.d3", "2026-11-03T10:00:00", "ok"))])
+    rc, out = ledcli("tail", "-n", "3")
+    assert [ln.split()[0] for ln in out.splitlines() if ln.startswith("E1.")] == ["E1.u3", "E1.d2", "E1.d3"], out
+    # render: the rows are read after the slow loop table, under the lock
+    fresh()
+    slow = ("import sys, time\nsys.path.insert(0, sys.argv[1])\nimport metrics, ledger\nreal = metrics.collect\n"
+            "metrics.collect = lambda *a, **k: (time.sleep(3), real(*a, **k))[1]\nledger.render()\n")
+    p = subprocess.Popen([sys.executable, "-c", slow, HERE], env=ENV, cwd=T, stdout=subprocess.DEVNULL)
+    time.sleep(1)
+    assert ledcli("add", "V.new", "--hyp", "added while a render runs")[0] == 0
+    p.wait()
+    assert "| V.new |" in open(f"{T}/LEDGER.md", encoding="utf-8").read(), "the slow render wrote the md from the rows it read before"
+    # ... and under the ledger lock: a render waits for a writer that holds it (critic 2026-11-18: without the lock this test passed too)
+    hold = "import sys, time\nsys.path.insert(0, sys.argv[1])\nimport project as P\nwith P.locked(sys.argv[2]):\n    print('held', flush=True)\n    time.sleep(2.5)\n"
+    h = subprocess.Popen([sys.executable, "-c", hold, HERE, f"{T}/LEDGER.csv"], env=ENV, cwd=T, stdout=subprocess.PIPE, text=True)
+    assert h.stdout.readline().strip() == "held"
+    t0 = time.time()
+    subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import ledger; ledger.render()", HERE], env=ENV, cwd=T, stdout=subprocess.DEVNULL, check=True)
+    assert time.time() - t0 >= 1.5, "render must wait for the holder of the ledger lock"
+    h.wait()
+
+
+def t_rec_metrics():
+    """metrics: decision.json (variant a, KEEP) and decision_b.json (variant b, CUT) of one experiment are two verdicts, the copy of one in the other card folder is not a third;
+    a TEST log row of a loop that project.json does not define is counted in `other` and named under the table"""
+    fresh()
+    ledger([dict(id="E2.a", status="ok", duration_s="60")])
+    for folder, name, v, var in (("experiments", "decision.json", "KEEP", "a"), ("experiments", "decision_b.json", "CUT", "b"), ("results/experiments", "decision.json", "KEEP", "a")):
+        os.makedirs(f"{T}/{folder}/E2_x", exist_ok=True)
+        json.dump(dict(id="E2", verdict=v, variant=var, control="c"), open(f"{T}/{folder}/E2_x/{name}", "w"))
+    open(f"{T}/TEST.md", "w").write("| 2026-10-25 | 1 | champion | E2 | S 0.7 | once |\n| 2026-11-18 | 23 | champion | E9 | S 0.7 | once |\n| 2026-11-18 | 24 | not used | - | - | - |\n")
+    out = metrics.collect(T, dict(P.DEFAULTS, ledger="LEDGER.csv", test_log="TEST.md", loops={"1": [1, 99]}, experiment_dirs=["experiments", "results/experiments"]))
+    L = out["1"]
+    assert (L["KEEP"], L["CUT"], L["test"]) == (1, 1, 1) and out["other"]["test"] == 1, (L, out.get("other"))
+    warn = "TEST log rows of loops not defined in project.json: 23 (1 row)"
+    assert warn in metrics.table(out) and warn in metrics.table(out, md=True) and any(ln.split()[:1] == ["other"] for ln in metrics.table(out).splitlines()), metrics.table(out)
+
+
+def t_rec_small():
+    """keep3: a card whose ranking value is NaN / infinite / text / null is no candidate; schedule: `--depends "A; B"` waits for A and B and is ready when both are done;
+    card.py show prints a null or text value as it is and reads a card with a BOM"""
+    import schedule as SC
+    fresh()
+    os.makedirs(f"{T}/runs/ck")
+    os.makedirs(f"{T}/cards/n")
+    open(f"{T}/runs/ck/rn.pt", "wb").write(b"x")
+    st = dict(metric="Q", split="val", frames=100, slots=3, band=0.01, ckpt="runs/ck/{run}.pt", card="cards/{name}/{split}.json", entries=[], left=[])
+    reg = dict(n=dict(run="rn"))
+    for q in (0.7, float("nan"), float("inf"), "0.7", None):
+        json.dump(dict(name="n", split="val", frames=100, commit="c", metrics=dict(Q=q)), open(f"{T}/cards/n/val.json", "w"))
+        cand, why = keep3.info(st, T, reg, "n")
+        assert (cand["value"] == 0.7) if q == 0.7 else (cand is None and "no finite value" in why), (q, cand, why)
+    with open(f"{T}/cards/n/val.json", "wb") as fh:             # a card saved by a Windows editor starts with a BOM
+        fh.write(b"\xef\xbb\xbf" + json.dumps(dict(name="n", split="val", frames=100, commit="c", metrics=dict(Q=0.7))).encode())
+    cand, why = keep3.info(st, T, reg, "n")
+    assert cand and cand["value"] == 0.7, (cand, why)
+    sched = [dict(item="A.one", state="done"), dict(item="A.two", state="done"), dict(item="B.x", state="planned", depends_on="A.one; A.two"),
+             dict(item="B.y", state="planned", depends_on="A.one;A.two"), dict(item="B.z", state="planned", depends_on="A.one; A.nope")]
+    assert [r["item"] for r in SC.ready(sched)] == ["B.x", "B.y"], SC.ready(sched)
+    good = dict(schema=1, name="v", split="val", frames=10, metrics=dict(Q=0.7), commit="c", date="d")
+
+    def show(text=None, raw=None):
+        open(f"{T}/c.json", "wb").write(raw if raw is not None else json.dumps(text).encode())
+        r = subprocess.run([sys.executable, f"{HERE}/card.py", "show", f"{T}/c.json"], capture_output=True, text=True, env=ENV, cwd=T)
+        return r.returncode, r.stdout + r.stderr
+    for label, c, want in (("null", dict(good, metrics=dict(Q=None)), "Q None"), ("text", dict(good, metrics=dict(Q="abc")), "Q abc"), ("number", good, "Q 0.7000")):
+        rc, out = show(c)
+        assert rc == 0 and want in out, (label, out)
+    rc, out = show(raw=b"\xef\xbb\xbf" + json.dumps(good).encode())
+    assert rc == 0 and "Q 0.7000" in out, out
+
+
+SECTIONS = [t_verdict_review, t_arms_lock, t_rule_sha, t_card_for_run, t_gate, t_previous, t_decision_cell, t_check, t_write_failures, t_gate_more, t_ledger_comment, t_typed_counted, t_no_cards, t_typed, t_sources, t_rec_lock, t_rec_csv_limit, t_rec_ledger, t_rec_metrics, t_rec_small]
 
 
 def main():
