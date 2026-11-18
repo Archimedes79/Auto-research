@@ -15,6 +15,7 @@ recorded for taps that are not armed, so the hooks cost nothing in a normal forw
 """
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
@@ -47,7 +48,8 @@ class TapRecorder:
         self.model, self.hooks = model, hooks
         self.armed: set = set()
         self.data: Dict[str, List[Any]] = {}
-        self.errors: Dict[str, int] = {}
+        self.errors: Dict[str, int] = {}                # taps that could not be read, all passes together
+        self.failed: Dict[str, int] = {}                # the same for the current pass (since arm / reset): `read` says so, a missing tap is no silent gap
         self._handles = []
         for name, h in hooks.items():
             mod = resolve(model, h.path)
@@ -71,6 +73,7 @@ class TapRecorder:
                 v = v.clone()                                                       # this one (ReLU(inplace=True)) would change the record
         except Exception:                                                           # noqa: BLE001
             self.errors[name] = self.errors.get(name, 0) + 1
+            self.failed[name] = self.failed.get(name, 0) + 1
             return
         lst = self.data.setdefault(name, [])
         if h.select == "last":
@@ -92,13 +95,16 @@ class TapRecorder:
         if unknown:
             raise KeyError(f"unknown taps {unknown}")
         self.armed = set(names)
-        self.data = {}
+        self.data, self.failed = {}, {}
 
     def reset(self) -> None:
-        self.data = {}
+        self.data, self.failed = {}, {}
 
     def read(self, batch_index: Optional[int] = 0) -> Dict[str, np.ndarray]:
-        """name -> numpy array; batch_index selects one sample along axis 0 of every recorded tensor (None keeps the batch)"""
+        """name -> numpy array; batch_index selects one sample along axis 0 of every recorded tensor (None keeps the batch). A tap whose hook could not read this pass's tensor is not in
+        the result: a RuntimeWarning names it and its count (`failed`)"""
+        if self.failed:
+            warnings.warn(f"taps not recorded in this pass (the hook could not read the network's tensor): {self.failed}", RuntimeWarning, stacklevel=2)
         out = {}
         for name, lst in self.data.items():
             if not lst:
