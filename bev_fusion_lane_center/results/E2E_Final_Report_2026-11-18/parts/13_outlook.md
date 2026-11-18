@@ -29,3 +29,5 @@
 - (4) **B in the loop** (S4 is done for the node head: E372; the pyramid stays frozen), and a second wiring round that feeds the link distribution back into the node states (width alone brought little, E367).
 
 **Decisions that wait for the owner.** The "okayish" gate was written by the lane lead (D113 point 4) because no number was given: it can be changed. A TEST run needs the owner's recorded word. D110 (the yardstick): rules 1 and 2 are answered by D113, rule 3 (adopt a tie) stays proposed.
+
+**Note for the next session (added 2026-11-19, after the report was sent; the sent html is not rebuilt).** `winners/` holds learned systems only (the solution set of D87 / D109 / D113): the folder of E324 s (rule steps) was removed from main and is kept in the git tag `archive/winner-e324s-lanegraph-2026-11-19`; no folder was made for the learned wiring head of E358 (it sits on the E324 s read-out, which keeps rule steps). Chapter 12 above still names `winners/e324s_lanegraph/` as the history of the report.
