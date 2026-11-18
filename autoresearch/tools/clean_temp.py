@@ -14,6 +14,7 @@ the scratch (promote it first), when a file there (and the project's project.jso
 config, a test, a README: change the reference; a mention of a script that already left is history and does not block, nor does a bare folder in a document or a
 comment; --ignore-refs lets the rest go), or when a file changed in the last 6 hours (a job may still use it; --force overrides that only).
 """
+import ast
 import os
 import posixpath
 import re
@@ -27,8 +28,23 @@ import project as P  # noqa: E402
 IMP = re.compile(r"^\s*(?:import|from)\s+([A-Za-z_][A-Za-z0-9_]*)", re.M)
 
 
+def plain_name(name):
+    """a loop name is one folder name: no path separator, not empty, not `.` or `..` (`..` / `../data` named the project's own data folder)"""
+    return bool(name) and name not in (".", "..") and not any(x in name for x in "/\\")
+
+
 def find(name, temp):
-    return [p for p in (os.path.join(temp, name), os.path.join(temp, "analysis", name), os.path.join(temp, "launchers", name)) if os.path.isdir(p)]
+    """the scratch folders of a loop: <scratch>/<name>, <scratch>/analysis/<name>, <scratch>/launchers/<name>; only real folders that lie inside the scratch (a link to
+    elsewhere is none), and none for a name that is no plain folder name"""
+    if not plain_name(name):
+        return []
+    top = os.path.normcase(os.path.realpath(temp))
+    out = []
+    for p in (os.path.join(temp, name), os.path.join(temp, "analysis", name), os.path.join(temp, "launchers", name)):
+        real = os.path.normcase(os.path.realpath(p))
+        if os.path.isdir(p) and real != top and real.startswith(top + os.sep):
+            out.append(p)
+    return out
 
 
 def kept_by_snapshot(cfg):
@@ -116,12 +132,38 @@ def tool_modules():
     return {x[:-3] for x in os.listdir(d) if x.endswith(".py")} if os.path.isdir(d) else set()
 
 
+def imported_modules(text):
+    """the top-level module names a python source imports, found with ast at any depth (`import os, helper`, `try: import helper`, `if x: import helper`, `a; import helper`, a
+    function body) plus the first string argument of importlib.import_module / __import__ calls, as provenance.import_closure reads them; None when the source does not parse
+    (the caller then falls back to the line pattern IMP). A relative import is no scratch module"""
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError):
+        return None
+    out = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Import):
+            out.update(a.name.split(".")[0] for a in n.names)
+        elif isinstance(n, ast.ImportFrom) and not n.level and n.module:
+            out.add(n.module.split(".")[0])
+        elif isinstance(n, ast.Call) and n.args and isinstance(n.args[0], ast.Constant) and isinstance(n.args[0].value, str) and n.args[0].value and not n.args[0].value.startswith("."):
+            f = n.func
+            if (isinstance(f, ast.Name) and f.id in ("__import__", "import_module")) or (isinstance(f, ast.Attribute) and f.attr in ("__import__", "import_module")):
+                out.add(n.args[0].value.split(".")[0])
+    return out
+
+
 def live_imports(mods, root, live, also=()):
     pyfiles = [os.path.join(dp, x) for d in live for dp, dn, fn in os.walk(os.path.join(root, d)) for x in fn if x.endswith(".py") and "__pycache__" not in dp]
     other = {os.path.basename(p)[:-3] for p in pyfiles} | set(also)
     hits = {}
     for p in pyfiles:
-        for m in set(IMP.findall(open(p, encoding="utf-8", errors="ignore").read())):
+        text = open(p, encoding="utf-8-sig", errors="ignore").read()
+        names = imported_modules(text)
+        if names is None:
+            print(f"  note: {os.path.relpath(p, root)} does not parse; its imports are read with a line pattern (an import in a try / if / `a; b` line may be missed)")
+            names = set(IMP.findall(text))
+        for m in names:
             if m in mods and m not in other:
                 hits.setdefault(m, []).append(os.path.relpath(p, root))
     return hits
@@ -203,6 +245,9 @@ def newest(folders):
 def run(name, move=False, delete=False, force=False, root=None, cfg=None, git=True, ignore_refs=False):
     root, cfg = root or P.root(), cfg or P.cfg()
     temp = os.path.join(root, cfg["scratch"])
+    if not plain_name(name):
+        print(f"  REFUSED: {name!r} is no loop name (one folder name under {cfg['scratch']}/: a path or `..` would reach outside it)")
+        return 1
     folders = find(name, temp)
     if not folders:
         print(f"nothing named {name} under {cfg['scratch']}/")
@@ -309,7 +354,42 @@ def selftest():
     assert set(live_imports({"card": "x", "helper": "y"}, imp, ["training"])) == {"card", "helper"}
     assert set(live_imports({"card": "x", "helper": "y"}, imp, ["training"], {"card"})) == {"helper"}
     assert {"card", "decide", "run"} <= tool_modules(), "the tools of autoresearch are found"
+    # imports are read with ast (the line pattern missed all of these), an unparsable file falls back to the pattern and says so
+    for src in ("import os, helper\n", "import os,helper\n", "try: import helper\nexcept ImportError: pass\n", "if 1: import helper\n", "import numpy as np; import helper\n",
+                "import importlib\nm = importlib.import_module('helper')\n", "from importlib import import_module\nimport_module('helper.sub')\n", "x = __import__('helper')\n",
+                "def f():\n    from helper import x\n", "import helper.sub as h\n"):
+        open(os.path.join(imp, "training/u.py"), "w").write(src)
+        assert set(live_imports({"helper": "y"}, imp, ["training"])) == {"helper"}, src
+    for src in ("import os\nx = 'helper'\n", "from . import helper\n", "import_module('.helper', __package__)\n", "# import helper\n", 's = """\nimport helper\n"""\n'):       # none of these imports it
+        open(os.path.join(imp, "training/u.py"), "w").write(src)
+        assert live_imports({"helper": "y"}, imp, ["training"]) == {}, src
+    open(os.path.join(imp, "training/u.py"), "w").write("import os\ndef broken(:\nimport helper\n")
+    import contextlib
+    import io
+    note = io.StringIO()
+    with contextlib.redirect_stdout(note):
+        assert set(live_imports({"helper": "y"}, imp, ["training"])) == {"helper"}, "a file that does not parse is read with the line pattern"
+    assert "u.py does not parse" in note.getvalue(), note.getvalue()
     shutil.rmtree(imp)
+    # a loop name is one folder name inside the scratch: `..` and `../data` once moved the project's data/ into the trash
+    nm = tempfile.mkdtemp()
+    cfgn = dict(P.DEFAULTS, live_code=["training"], code_dirs=["training"], scratch="temp", trash="_to_delete")
+    for d in ("temp/loop1", "_to_delete", "training", "data"):
+        os.makedirs(os.path.join(nm, d))
+    for fn in ("data/precious.txt", "temp/loop1/s.py"):
+        open(os.path.join(nm, fn), "w").write("x = 1\n")
+        os.utime(os.path.join(nm, fn), (old, old))
+    assert find("loop1", os.path.join(nm, "temp")) == [os.path.join(nm, "temp", "loop1")]
+    for bad in ("..", ".", "", "../data", "temp/loop1", "loop1/", "loop1\\x", "analysis/.."):
+        assert not plain_name(bad) and find(bad, os.path.join(nm, "temp")) == [], bad
+        assert run(bad, move=True, root=nm, cfg=cfgn, git=False) == 1, bad
+    try:
+        os.symlink(os.path.join(nm, "data"), os.path.join(nm, "temp", "loop2"))                   # a link out of the scratch is no scratch folder either
+        assert find("loop2", os.path.join(nm, "temp")) == [] and run("loop2", move=True, root=nm, cfg=cfgn, git=False) == 0
+    except OSError:
+        pass
+    assert os.path.isfile(os.path.join(nm, "data", "precious.txt")) and os.listdir(os.path.join(nm, "_to_delete")) == [] and os.path.isdir(os.path.join(nm, "temp", "loop1"))
+    shutil.rmtree(nm)
 
     def case(where, text, blocks, **kw):
         path = os.path.join(ref, where)
@@ -446,4 +526,4 @@ if __name__ == "__main__":
     elif not a or a[0].startswith("-"):
         print(__doc__)
     else:
-        sys.exit(run(a[0], "--move" in a, "--delete" in a, "--force" in a, ignore_refs="--ignore-refs" in a))
+        sys.exit(run(a[0].rstrip("/\\"), "--move" in a, "--delete" in a, "--force" in a, ignore_refs="--ignore-refs" in a))      # `loop19/` from tab completion is `loop19`
