@@ -22,7 +22,7 @@ Table: What the removal did to the system (parameters and time come from the car
 | quantity | before | after | source |
 |---|---|---|---|
 | parameters of the delivered path | 2.32 M (B' 2.196 M + head 0.127 M) | PENDING (unchanged expected: the blocks were not in the champion) | token cards, `head_params` |
-| ms per frame of the whole path | 16.83 / 16.57 | PENDING: measured in the quiet gap | E365 `timing`, chapter 7 |
+| ms per frame of the whole path | 16.83 / 16.57 (E365, s0 / s1); 16.21 (quiet re-measurement of the night, before the landing) | PENDING: re-measured after the landing | E365 `timing`, E2E cost table, chapter 7 |
 | the champion's numbers (topo F1 s0 / s1) | 0.6679 / 0.6762 | PENDING: the same frames, the same weights, re-read on the landed tree | the card of the re-check |
 
 **How to rebuild this table.** `python3 tools/simplify_stat.py --before <archive tag> --after HEAD --group token=<pathspecs> ... --out parts/figures/simplification.json`; the report's `values` point into that file. The tool counts what git tracks, never the working tree.
