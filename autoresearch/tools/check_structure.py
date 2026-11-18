@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gitfast as GF  # noqa: E402  (read-only git through git.exe on a Windows drive)
 import project as P  # noqa: E402
 
 GENERIC = {"log.txt", "status.json", "metrics.json", "model.pt", "run.json", "run.log", "card.md", "results", "figures", "eval.json", "README.md", "card.json",
@@ -71,8 +72,8 @@ def scratch_tag_files(root, prefix):
     """(paths relative to the problem folder, base names) of the files that the scratch tags of the problem hold (<tag_prefix>/loopNN-scratch ..., made by clean_temp.py):
     a card cites `temp/loop20/x.py` and the script left the tree after its loop was filed, but the tag keeps it. Empty without git or tags"""
     def git(where, *a):
-        r = subprocess.run(["git", "-C", where, *a], capture_output=True, text=True, encoding="utf-8", errors="replace")
-        return r.stdout if r.returncode == 0 else ""
+        r = GF.run(where, *a)
+        return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else ""
     paths, names = set(), set()
     top = git(root, "rev-parse", "--show-toplevel").strip()
     if not top or not prefix:
