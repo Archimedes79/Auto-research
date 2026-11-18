@@ -9,6 +9,8 @@
 Input keys (B frames, K tokens): tok (B,K,64), pos (B,K,2) m, dirv (B,K,2) unit, e / e_raw (B,K) logits, flags (B,K,8) logits, s / uout / uin (B,K) logits, valid (B,K) bool. All of them are constants (the cached B' is
 frozen: the forward cuts the graph at them, no gradient reaches B' and none goes through the hard top-K). S4 (E372) `JTokenHead(live_inputs=True)`: the forward keeps their graph (a live B' in the training step gets the gradient
 of the head's loss); the values, and so every output, are the same.
+S2 hook (D121, S2b): `JTokenHead(past_block=m)`, `forward(batch, past)`: after self-attention layer 1, x = m(x, pos, dirv, valid, past); `past` is passed UNTOUCHED (this file reads none of its keys);
+out['x'] (B, K, D) = the final token states, out['w'] (B, K) = 1 - p_none of the last reading (the state a recurrent past carries on). No block, or past None: the plain head bit for bit.
 Embedding: x0 = LN(Linear(tok) + MLP[Fourier(pos), dirv, e, e_raw, flags, s, uout, uin]). 3 pre-norm self-attention layers (4 heads, FFN 128): the logit of head h = q.k / 4 + bias_h(g_ij) + log(w_j + 1e-3), bias = an MLP
 13 -> 32 -> H of the 13 `jtok.pair_geometry` features (the existence enters them as sigmoid(e)), padding tokens masked as keys.
 Soft pruning: the key weight w_j is sigmoid(e_j) (input) in layer 1 and for the first SWITCH training steps in every layer; afterwards w_j = 1 - p_none(j) of the head's OWN type softmax (7 types, type 0 = none), read by
@@ -96,9 +98,10 @@ def wiring_logp(z, zn, cand):
 
 
 class JTokenHead(nn.Module):
-    """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4)"""
+    """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4); past_block: None or a module called after layer 1 as past_block(x, pos, dirv, valid, past) when
+    `forward` gets a `past` (the S2 hook)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, past_block=None):
         super().__init__()
         self.dq = dq
         self.proj = nn.Linear(TOK, d)
@@ -114,6 +117,7 @@ class JTokenHead(nn.Module):
         self.register_buffer("step", torch.zeros((), dtype=torch.long))
         self._step_py = 0                                                   # the Python mirror of `step` (no device sync per forward); kept by forward, set_step and load_state_dict
         self.live_inputs = live_inputs
+        self.past_block = past_block
 
     def set_step(self, n):
         self.step.fill_(n)
@@ -128,7 +132,7 @@ class JTokenHead(nn.Module):
         t = self.types(self.tnorm(x)).float()
         return t, 1.0 - t.softmax(-1)[..., 0]                               # logits, 1 - p_none
 
-    def forward(self, batch):
+    def forward(self, batch, past=None):
         b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
@@ -138,6 +142,8 @@ class JTokenHead(nn.Module):
         feat = torch.cat([pos / JT.HALF, fourier(pos), dirv, b["e"][..., None], b["e_raw"][..., None], b["flags"], b["s"][..., None], b["uout"][..., None], b["uin"][..., None]], -1).float()
         x = self.ln0(self.proj(b["tok"].float()) + self.mlp(feat))
         x = self.layers[0](x, g, lw(w_in), valid)
+        if self.past_block is not None and past is not None:
+            x = self.past_block(x, pos, dirv, valid, past)
         types1, w1 = self.read_types(x)
         for layer in self.layers[1:]:
             x = layer(x, g, lw(w1 if learned else w_in), valid)
@@ -154,7 +160,7 @@ class JTokenHead(nn.Module):
         if self.training:
             self.step += 1
             self._step_py += 1
-        return dict(logp=wiring_logp(z, zn, cand), cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
+        return dict(logp=wiring_logp(z, zn, cand), cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord, x=x, w=w3)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ probabilities and decodes
@@ -266,7 +272,7 @@ def count_params(model):
 # ------------------------------------------------------------------------------------------------------------------------------ a synthetic batch
 def synthetic_batch(B=8, K=48, seed=0):
     """random frames that follow the batch dict of the card (2a): per frame a lane of 10 tokens 2 m apart, a second lane 12 m behind its end (one long link), a third lane elsewhere, 4 duplicate tokens 0.5 m beside
-    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them"""
+    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them (`with_tokens_np` adds the loader's `tokens_np`)"""
     rng = np.random.RandomState(seed)
     f = lambda *s: np.zeros(s, np.float32)  # noqa: E731
     pos, dirv, valid, ytype, y, ylong = f(B, K, 2), f(B, K, 2), np.zeros((B, K), bool), np.zeros((B, K), np.int64), np.zeros((B, K, K), np.uint8), np.zeros((B, K, K), bool)
@@ -298,3 +304,10 @@ def synthetic_batch(B=8, K=48, seed=0):
     return dict(tok=torch.from_numpy(r(B, K, TOK) * valid[..., None]), pos=torch.from_numpy(pos), dirv=torch.from_numpy(dirv), e=torch.from_numpy(e), e_raw=torch.from_numpy(e + 0.3 * r(B, K)),
                 flags=torch.from_numpy(flags), s=torch.from_numpy(r(B, K)), uout=torch.from_numpy(r(B, K)), uin=torch.from_numpy(r(B, K)), valid=torch.from_numpy(valid), ytype=torch.from_numpy(ytype),
                 y=torch.from_numpy(y), ylong=torch.from_numpy(ylong), yscale=torch.from_numpy(yscale))
+
+
+def with_tokens_np(batch):
+    """a synthetic batch + `tokens_np` as the loader makes it (float64 pos / dirv, e_p / flags_p / s_p = the sigmoid of the logits, cell, valid)"""
+    sg = lambda k: batch[k].float().sigmoid().double().numpy()  # noqa: E731
+    pos, dirv, valid = batch["pos"].double().numpy(), batch["dirv"].double().numpy(), batch["valid"].numpy()
+    return dict(batch, tokens_np=[dict(pos=pos[b], dirv=dirv[b], e_p=sg("e")[b], flags_p=sg("flags")[b], s_p=sg("s")[b], cell=np.arange(pos.shape[1]), valid=valid[b].copy()) for b in range(len(pos))])
