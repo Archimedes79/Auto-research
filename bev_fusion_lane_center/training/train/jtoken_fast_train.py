@@ -6,7 +6,7 @@ same `model.pt` / `ckpt.pt` and recipe (a run of this script resumes a plain run
 `--cache <root>` may be relative to the problem folder (`lane_ptok_data.cache_dir` resolves it; a second K lives in its own root: data/build_tokcache_root.py).
 Own flags (removed before `jtoken_train` parses the line): `--cpu-loader` keeps the CPU DataLoader of `lane_ptok_data` (the dense batches; the loss still runs on the fast path), `--compile-pairs` wraps the pair-bias
 stack in torch.compile (the first step compiles, about a minute; the numbers agree with the eager stack to bf16 rounding). `--workers N` selects the data ORDER of a DataLoader with (N > 0, persistent) or without
-workers, exactly as before, but no worker runs with the GPU loader. Refused with the GPU loader: `--token-drop` > 0, `--teacher rule`, `--distill-from` (they read keys the GPU batches do not carry; use `--cpu-loader`).
+workers, exactly as before, but no worker runs with the GPU loader. Refused with the GPU loader: `--distill-from` (it reads keys the GPU batches do not carry; use `--cpu-loader`).
 The script patches the names `jtoken_train` resolves at call time (`build_head`, `JK.jtoken_loss`, `lane_ptok_data.loader`) in this process only; nothing in `jtoken_train.py` / `jtoken.py` is edited. The run folder gets
 `fast_path.json` (which parts ran). The speed path is the same function: parity tests `grid/test_jtoken_fast.py`, `grid/test_lane_ptok_gpu.py`; the paired loss-trajectory check against the plain trainer is `grid/test_jtoken_fast.py`'s
 and the card's (a speed change reproduces the reference numbers)."""
@@ -27,8 +27,8 @@ OWN = ("--cpu-loader", "--compile-pairs")
 
 def fast_build_head(args):
     """`jtoken_train.build_head` with the fast head class (the same arguments and weights)"""
-    d, heads, layers, ffn, prior = JT.arch(args)
-    head = JF.FastJTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, live_inputs=bool(args.get("live_inputs", JT.ARCH_DEFAULTS["live_inputs"])), **({"prior": prior} if prior != "none" else {}))
+    d, heads, layers, ffn = JT.arch(args)
+    head = JF.FastJTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, live_inputs=bool(args.get("live_inputs", JT.ARCH_DEFAULTS["live_inputs"])))
     return head.compile_pairs() if _OPT["compile"] else head
 
 
@@ -61,8 +61,7 @@ def main(argv=None):
     argv = [x for x in argv if x not in OWN]
     a = JT.parse_args(argv)
     if not own["--cpu-loader"] and not a.smoke:
-        assert a.token_drop == 0 and a.teacher == "none" and not a.distill_from, "the GPU loader does not carry what --token-drop / --teacher rule / --distill-from read: add --cpu-loader"
-    assert a.prior == "none" and not getattr(a, "live_inputs", False), "the speed path is the plain head: --prior rule runs the parent's forward, which has no scale_at for the fast loss"
+        assert not a.distill_from, "the GPU loader does not carry what --distill-from reads: add --cpu-loader"
     import torch
     assert a.smoke or torch.cuda.is_available(), "no GPU visible: a run of the card trains on the GPU (bf16); only --smoke may run on the CPU"
     install(cpu_loader=own["--cpu-loader"] or a.smoke, compile_pairs=own["--compile-pairs"])

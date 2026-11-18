@@ -96,12 +96,12 @@ def main():
 
     keep = JK.jtoken_loss
     if mode == "gate":
-        lf = JT.make_loss(NoRun(), 0.0, 0, 0.25, "none", "sum", None, (), 1.0)
+        lf = JT.make_loss(NoRun(), 0.25, "sum", (), 1.0)
         ds, dl = LP.loader("train", 0, 8, 2, ident="e292_a")
         run("plain_cpu_loader_w2", make_step(JT.build_head(dict(JT.ARCH_DEFAULTS)), lambda m, b: lf(m, b)), endless(dl))
         del dl
         JK.jtoken_loss = JF.fast_loss
-        lf2 = JT.make_loss(NoRun(), 0.0, 0, 0.25, "none", "sum", None, (), 1.0)
+        lf2 = JT.make_loss(NoRun(), 0.25, "sum", (), 1.0)
         ds, dl = LP.loader("train", 0, 8, 2, ident="e292_a")
         run("fast_head_cpu_loader_w2", make_step(JF.FastJTokenHead(), lambda m, b: lf2(m, b)), endless(dl))
         del dl
@@ -137,7 +137,7 @@ def main():
         res["gpu_loader_ms_per_batch"] = round((time.time() - t) / 100 * 1e3, 2)
     else:
         JK.jtoken_loss = JF.fast_loss
-        lf2 = JT.make_loss(NoRun(), 0.0, 0, 0.25, "none", "sum", None, (), 1.0)
+        lf2 = JT.make_loss(NoRun(), 0.25, "sum", (), 1.0)
         arms = {}
         for K, root in ((512, None), (384, "runs/e383_cache")):
             ds, dl = LG.loader("train", 0, 8, 0, ident="e292_a", K=K, dev=dev, **({"cache": root} if root else {}))

@@ -10,7 +10,7 @@ What changes against the plain head (nothing in the function):
   2. the four pair MLPs 13 -> 32 -> out (three attention biases, the wiring bias) share their first Linear as ONE matmul over g and read g once (`pair_biases`); `compile_pairs()` wraps that stack in torch.compile;
   3. the loss has no `.any()`, boolean-mask indexing or `float(...)`: `_frame_mean` is a masked sum, the info values stay tensors, the scale term takes a fixed-shape pair list when the batch carries one
      (`sp_b`, `sp_i`, `sp_j`, `sp_y` (n, 2), `sp_ok`; the GPU loader makes it) and a `nonzero` of the dense mask otherwise (the one sync left, CPU-loader batches only).
-Not covered (the plain head runs instead, `forward` delegates): prior="rule", a past or map block, live_inputs. Eval mode computes the dense handle scales as the plain head does, unless `scale_in_eval = False` (frozen teachers). Tests: test_jtoken_fast.py (parity with `JTokenHead` on a synthetic and, when the cache exists, a real batch).
+Not covered (the plain head runs instead, `forward` delegates): live_inputs. Eval mode computes the dense handle scales as the plain head does, unless `scale_in_eval = False` (frozen teachers). Tests: test_jtoken_fast.py (parity with `JTokenHead` on a synthetic and, when the cache exists, a real batch).
 """
 import math
 import os
@@ -64,9 +64,9 @@ class FastJTokenHead(JK.JTokenHead):
         b1 = torch.cat([m[0].bias for m in mlps], 0)
         return w1, b1, [m[2].weight for m in mlps], [m[2].bias for m in mlps]
 
-    def forward(self, batch, past=None, maps=None):
-        if self.prior or self.past_block is not None or self.map_block is not None or self.live_inputs or past is not None or maps is not None:
-            return super().forward(batch, past, maps)
+    def forward(self, batch):
+        if self.live_inputs:
+            return super().forward(batch)
         b = {k: JK._const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
@@ -78,10 +78,10 @@ class FastJTokenHead(JK.JTokenHead):
         biases = (self._pairs_fn or pair_biases)(g, w1, b1, w2s, b2s)
         x = self.ln0(self.proj(b["tok"].float()) + self.mlp(feat))
         x = _layer(self.layers[0], x, biases[0], lw(w_in), valid)
-        types1, w1k = self.read_types(x, None)
+        types1, w1k = self.read_types(x)
         for n, layer in enumerate(self.layers[1:], 2):
             x = _layer(layer, x, biases[n - 1], lw(w1k if learned else w_in), valid)
-        types3, w3 = self.read_types(x, None)
+        types3, w3 = self.read_types(x)
         B, K, _ = x.shape
         xn = self.lnw(x)
         q, k = (m(xn).view(B, K, 2, self.dq) for m in (self.wq, self.wk))
@@ -102,7 +102,7 @@ class FastJTokenHead(JK.JTokenHead):
             scale = 0.05 + 1.2 * self.sc_o(F.gelu(self.sc_i(xn)[:, :, None] + self.sc_j(xn)[:, None] + self.sc_g(g))).float().sigmoid()
         else:
             scale = None                                                    # a frozen teacher (E379) does not read the scales: no dense scale MLP
-        return dict(logp=JK.wiring_logp(z, zn, cand), cand=cand, scale=scale, scale_at=scale_at, types=types3, types1=types1, valid=valid, chord=chord, x=x, w=w3)
+        return dict(logp=JK.wiring_logp(z, zn, cand), cand=cand, scale=scale, scale_at=scale_at, types=types3, types1=types1, valid=valid, chord=chord)
 
 
 def _source_rows(out):
@@ -117,30 +117,21 @@ def _frame_mean_free(x, m, w=None):
     return (per * has).sum() / has.sum().clamp_min(1.0)
 
 
-def fast_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum", none_weight_near=None):
+def fast_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum"):
     """`jtoken.jtoken_loss` (same arguments, same loss and gradients) without a host sync; info = device tensors (floats of the plain info under `float(...)`); see the module docstring for the scale term"""
     dev, cand, lp, valid = out["logp"].device, out["cand"], out["logp"], out["valid"]
     y, yl = batch["y"].to(dev) > 0, batch["ylong"].to(dev).bool()
     G = y[:, None] & cand
     yt = batch["ytype"].to(dev).long()
-    wn = none_weight
-    if none_weight_near is not None:
-        near = JK.near_none(batch["pos"].to(dev).float(), batch["dirv"].to(dev).float(), valid, yt)
-        if none_weight_near != none_weight:
-            wn = torch.where(near, none_weight_near, none_weight)
-    nll = JK._source_nll(lp, G, wn, pos_loss)
+    nll = JK._source_nll(lp, G, none_weight, pos_loss)
     rows = _source_rows(out)
-    if "yskip" in batch:
-        rows = rows & ~batch["yskip"].to(dev)
     nll_s, nll_l = (_frame_mean_free(nll[:, c], rows[:, c]) for c in range(2))
-    wt = torch.where(yt == 0, wn, 1.0) if torch.is_tensor(wn) or none_weight != 1.0 else None
+    wt = torch.where(yt == 0, none_weight, 1.0) if none_weight != 1.0 else None
     ce1, ce3 = (_frame_mean_free(F.cross_entropy(t.float().flatten(0, 1), yt.flatten(), reduction="none").view_as(yt) * (1.0 if wt is None else wt), valid, wt) for t in (out["types1"], out["types"]))
     loss = nll_s + nll_l + type_w * (ce1 + ce3)
     f32 = lambda t: t.detach().float()  # noqa: E731
     info = dict(nll_s=f32(nll_s), nll_l=f32(nll_l), ce1=f32(ce1), ce3=f32(ce3), gt_links=f32(y.sum()), pos_pairs=f32(G.sum()), gt_outside=f32((y & ~cand.any(1)).sum()),
                 gt_class=f32((y & cand.any(1) & (yl != (out["chord"] > SHORT))).sum()))
-    if none_weight_near is not None:
-        info["n_near"] = f32(near.sum(1).float().mean())
     if not scale_w:
         return loss, info
     scale_at = out.get("scale_at")

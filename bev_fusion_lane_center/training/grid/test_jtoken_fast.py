@@ -4,8 +4,8 @@ visible and the environment variable JTF_GPU=1 is set (a short run, < 1 GB).
     wsl bash tools/env/_py14.sh training/grid/test_jtoken_fast.py [name ...]
 
 head (eval mode: every output of the plain head to 1e-5 on the same weights; training mode: the same step counter, `scale` None, `scale_at` equal to the plain scales at chosen pairs), loss (value, info and the gradient of
-every parameter against `jtoken_loss` for the default, none_weight 0.25, pos_loss max, none_weight_near, scale_w 0), sparse (the fixed-shape pair list gives the dense mask's loss; an empty list gives no scale term),
-frame_mean (= `jtoken._frame_mean`, also with no valid entry in a frame and in all frames), delegation (prior / past / maps / live_inputs run the parent's forward), state (a state_dict goes both ways, no new key),
+every parameter against `jtoken_loss` for the default, none_weight 0.25, pos_loss max, scale_w 0), sparse (the fixed-shape pair list gives the dense mask's loss; an empty list gives no scale term),
+frame_mean (= `jtoken._frame_mean`, also with no valid entry in a frame and in all frames), delegation (live_inputs runs the parent's forward), state (a state_dict goes both ways, no new key),
 mutants (a wrong pair index, the stacked first Linear with a swapped slice: each makes a test fail), options_and_mirror, loader_loss (real frames: gate mask and win mask of the pair list), gpu (JTF_GPU=1: no host sync in the sparse loss, bf16 autocast loss within 2e-2 of the plain one, compile_pairs equal)."""
 import json
 import os
@@ -53,7 +53,7 @@ def test_head():
     plain.eval(), fast.eval()
     with torch.no_grad():
         o1, o2 = plain(b), fast(b)
-    for k in ("logp", "scale", "types", "types1", "chord", "x", "w"):
+    for k in ("logp", "scale", "types", "types1", "chord"):
         _close(o1[k], o2[k], 1e-5, f"eval {k}")
     assert torch.equal(o1["cand"], o2["cand"]) and torch.equal(o1["valid"], o2["valid"])
     plain.train(), fast.train()
@@ -67,7 +67,7 @@ def test_head():
 
 
 def test_loss():
-    for kw in (dict(), dict(none_weight=0.25), dict(pos_loss="max"), dict(none_weight=0.25, none_weight_near=0.73), dict(scale_w=0.0), dict(type_w=0.0)):
+    for kw in (dict(), dict(none_weight=0.25), dict(pos_loss="max"), dict(scale_w=0.0), dict(type_w=0.0)):
         plain, fast, b = _pair(1)
         l1, i1 = JK.jtoken_loss(plain(b), b, **kw)
         l1.backward()
@@ -157,7 +157,7 @@ def test_scale_in_eval():
 
 def test_delegation():
     plain, fast, b = _pair(3)
-    for kw in (dict(prior="rule"), dict(live_inputs=True)):
+    for kw in (dict(live_inputs=True),):
         a, f = JK.JTokenHead(**kw), JF.FastJTokenHead(**kw)
         f.load_state_dict(a.state_dict())
         a.eval(), f.eval()
@@ -220,7 +220,7 @@ def test_real():
         print(f"real skipped ({str(e)[:60]})")
         return
     for step in (JK.SWITCH - 100, JK.SWITCH + 100):
-        for kw in (dict(none_weight=0.25), dict(none_weight=0.25, pos_loss="max"), dict(none_weight=0.25, none_weight_near=0.73), dict()):
+        for kw in (dict(none_weight=0.25), dict(none_weight=0.25, pos_loss="max"), dict()):
             torch.manual_seed(3)
             plain = JK.JTokenHead()
             for p in plain.parameters():
@@ -255,13 +255,13 @@ def test_real():
 
 
 def test_options_and_mirror():
-    """none_weight 1.0 with a near weight (the type-CE weight must be a tensor then), a `yskip` batch (the E370 rule teacher's key), and the step mirror after load_state_dict: all against the plain loss"""
+    """none_weight 1.0 and 0.25, and the step mirror after load_state_dict: all against the plain loss"""
     plain, fast, b = _pair(7)
     assert fast._step_py == JK.SWITCH + 5
     fresh = JF.FastJTokenHead()
     fresh.load_state_dict(plain.state_dict())
     assert fresh._step_py == int(plain.step), "load_state_dict sets the mirror from the step buffer"
-    for kw, extra in ((dict(none_weight=1.0, none_weight_near=0.73), {}), (dict(none_weight=0.25), dict(yskip=torch.rand(3, 2, 48) > 0.5))):
+    for kw, extra in ((dict(none_weight=1.0), {}), (dict(none_weight=0.25), {})):
         plain, fast, b = _pair(7)
         b = dict(b, **extra)
         l1, i1 = JK.jtoken_loss(plain(b), b, **kw)
