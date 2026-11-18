@@ -1,0 +1,91 @@
+{
+ "name": "e372_s4_champion",
+ "title": "E2E token champion, two stages (D120): one token head on the predicted nodes of the frozen lane head B', then trained together with B's node head (S4, E372); source + tests, no weights",
+ "date": "2026-11-18",
+ "source_commit": "78713c4bd7a89aa282b9951b0032ce2d7fbd95f1",
+ "sources_uncommitted": [],
+ "files": [
+  {
+   "file": "code/evaluation/jtoken_eval.py",
+   "bytes": 116873,
+   "sha256": "29ffe6530980c5c776a4f382785506e6714453b3d0bdfc02c61190ec1a6b48e3",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/evaluation/jtoken_eval.py"
+  },
+  {
+   "file": "code/evaluation/tests/test_jtoken_eval.py",
+   "bytes": 133657,
+   "sha256": "c329a8ac3b24ce8c859fcceecc7a678df876f1a48d2d28017b868dd031f6952a",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/evaluation/tests/test_jtoken_eval.py"
+  },
+  {
+   "file": "code/training/data/lane_live_tok.py",
+   "bytes": 75375,
+   "sha256": "fd911aa659a57f4332b13006b369e3dcfd1351eea7bbb3ceb932b9f0656db3c0",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_live_tok.py"
+  },
+  {
+   "file": "code/training/data/lane_past_data.py",
+   "bytes": 53980,
+   "sha256": "2b2fb887b4b3727f06dad7c2f6e278298538b29a75b2cd67201380f3ca722764",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_past_data.py"
+  },
+  {
+   "file": "code/training/data/lane_ptok_data.py",
+   "bytes": 17264,
+   "sha256": "d352819dc513d9ca7cac2de9981ea939cdef509ae966f9fc10a64104824d9824",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_ptok_data.py"
+  },
+  {
+   "file": "code/training/data/lane_tokcache.py",
+   "bytes": 56852,
+   "sha256": "8f4402d9d7f4810974489390a9842f097466ec2ca2397b444fbd0032dcc6647f",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_tokcache.py"
+  },
+  {
+   "file": "code/training/grid/jtoken.py",
+   "bytes": 23070,
+   "sha256": "fd956a7a408aaf2239d4eb97c0d1c853a13f697094441252b786c6a4fe7fc270",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/grid/jtoken.py"
+  },
+  {
+   "file": "code/training/grid/test_jlive_train.py",
+   "bytes": 39241,
+   "sha256": "568a103ebdf33b7d7d3ef7fcdd97d018918f36905341042732dc11dca16e6ad6",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/grid/test_jlive_train.py"
+  },
+  {
+   "file": "code/training/grid/test_jtoken.py",
+   "bytes": 95606,
+   "sha256": "0ab2b63cca1f0fa48394f92c1d3fae4bef33824559346afab5e5197183274f3a",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/grid/test_jtoken.py"
+  },
+  {
+   "file": "code/training/grid/test_lane_live.py",
+   "bytes": 14910,
+   "sha256": "fb453517ee8ec8a293472f442e67a0a26aa7aa5411ee623ff9c2b4fb22320f98",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/grid/test_lane_live.py"
+  },
+  {
+   "file": "code/training/grid/test_lane_tokcache.py",
+   "bytes": 9413,
+   "sha256": "fb8d1e72930141ed50f924e9489d54076970382642fbd53a2508c86498b16935",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/grid/test_lane_tokcache.py"
+  },
+  {
+   "file": "code/training/train/jlive_train.py",
+   "bytes": 31164,
+   "sha256": "aa9ed76c7d9085f9860b8a9f548368373ae42d0dc51b8ed3219aa307f5f2dca4",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/train/jlive_train.py"
+  },
+  {
+   "file": "code/training/train/jtoken_train.py",
+   "bytes": 22311,
+   "sha256": "46ae13746a669d4e2879f34882a8fb4b7f8d66639050887b05bae44bf7237205",
+   "source": "/mnt/c/Auto-research/bev_fusion_lane_center/training/train/jtoken_train.py"
+  }
+ ],
+ "total_bytes": 689716,
+ "numbers": "CHAMPION since D120 (E372 S4-HOLDS): VAL 873 frames, topo F1 0.6682 / 0.6813 (s0 / s1) at the D115 cell (short links 0.3 / long links 0.2 / keep 0.6 / gate off); against the same head with B' frozen -0.0003 / +0.0049, against the staged champion (stage 1 alone, 0.6679 / 0.6762) +0.0002 / +0.0051; junction F1 s0 0.2538. Inference path 16.21 ms quiet (batch 1, bf16, RTX 3060), 2.323 M parameters (B' 2.196 M + head 0.127 M), unchanged by stage 2. The landed-tree re-read of seed 0 is bit for bit. No TEST number.",
+ "command": "NEEDS the repository (it imports qgraph, qpredict, qtargets, qgraph_eval, trainer, jtok): copy code/ over bev_fusion_lane_center/ and run from there. Stage 1: bash tools/env/_py14.sh jtoken_train.py --name e373_cb_s<S> --seed S --ident e292_a --none-weight 0.25 --steps 12000 --bs 8 --lr 1e-3 --workers 4. Stage 2: bash tools/env/_py14.sh jlive_train.py --head-run e373_cb_s<S> --train-nodes 1 --live-inputs 1 --steps 3000 --bs 8 --lr 1e-4 (name the run e372_s4_s<S>). Read out LIVE: jtoken_eval.py dump --live --run e372_s4_s<S> --seed S; jtoken_eval.py score --live --run e372_s4_s<S> --seed S --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.6 --no-none-gate. Tests: bash tools/env/_py14.sh training/grid/test_jtoken.py, test_lane_tokcache.py, test_lane_live.py, test_jlive_train.py, evaluation/tests/test_jtoken_eval.py.",
+ "weights": "runs/e372_s4_s0 / s1 (head + node head of B', b_state); stage 1: runs/e373_cb_s0 / s1; frozen lane head B': runs/e292_a_s0 / s1; token cache runs/e365_cache (derived). All in the repository runs, not in git."
+}

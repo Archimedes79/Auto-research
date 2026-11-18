@@ -5,7 +5,8 @@ Small, self-describing folders with the **source code of winning systems**, one 
 | folder | what | numbers (VAL, seed 0 / seed 1) |
 |---|---|---|
 | `e324s_lanegraph/` | E324 s, the end-to-end lane graph from camera + radar features (inference package; the previous winner, five hard steps) | topo F1 0.6912 / 0.6948 at the end-to-end read-out |
-| `e365_token_champion/` | the end-to-end token champion (D113 / D114, E373): one token head on the predicted nodes of the frozen lane head B', trained with the none weight 0.25 (the runner-up, none weight 1.0, is the same code; source + tests; it needs the repository, see its README) | topo F1 0.6698 / 0.6769 on two fresh head seeds (runner-up 0.6617 / 0.6767, 0.6618 / 0.6733), whole path 16.6 - 16.8 ms; staged, B' frozen |
+| `e365_token_champion/` | stage 1 of the token champion, kept as the history of before D120 (D113 / D114, E373): one token head on the predicted nodes of the frozen lane head B', trained with the none weight 0.25 (the runner-up, none weight 1.0, is the same code; source + tests; it needs the repository, see its README) | topo F1 0.6698 / 0.6769 on two fresh head seeds (runner-up 0.6617 / 0.6767, 0.6618 / 0.6733), whole path 16.6 - 16.8 ms; staged, B' frozen |
+| `e372_s4_champion/` | the end-to-end token champion since D120 (E372 S4-HOLDS): the stage-1 head of E373 on the frozen lane head B', then the head and B's node head trained together through the token loss (two stages; same inference network, 2.323 M parameters, 16.21 ms quiet) | topo F1 0.6682 / 0.6813 at the D115 decode |
 
 ## One winner folder
 `code/` (the files, relative to their source folder), `README.md` (what it is, the exact command, the numbers to reproduce, where the weights are, the source commit), `MANIFEST.json` (every file with its sha256 and source path, the git commit, whether the sources had uncommitted changes).
