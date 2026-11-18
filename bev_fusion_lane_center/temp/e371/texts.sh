@@ -1,0 +1,3 @@
+HYP="E371: the E366 recipe frozen (the E365 S1 training recipe + the decode link 0.1 / keep 0.6 / none gate off) passes the okayish gate again with two fresh head seeds (2 on the B-prime cache 0, 3 on cache 1)."
+PRED="VAL topo F1 cache 0 about 0.655 (0.63 - 0.68), cache 1 about 0.670 (0.645 - 0.695); the tightest condition F1@1.0 on cache 0; CONFIRMED about 75 %"
+RULE="E371 card section 0 (by hand): CONFIRMED = the okayish gate of E365 (G-topo >= 0.6359 / 0.6349, F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937) holds on BOTH fresh heads at the frozen decode; NOT CONFIRMED otherwise (no third head, no pooled rule); VAL 873, no TEST"
