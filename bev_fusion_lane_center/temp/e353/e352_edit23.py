@@ -1,0 +1,10 @@
+p = "evaluation/README.md"
+lines = open(p, encoding="utf-8").read().split("\n")
+i = next(k for k, l in enumerate(lines) if l.startswith("| `jprune_b.py`"))
+lines[i] = ("| `jprune_b.py` | E352 step 0 (no training): the E345 hook edits of B's pyramid trunk applied to B's OWN QGraph (`runs/e273_p_s<S>`: nodes / links / assignment) and to the junction system in one pass over the 873 VAL frames. Two variants: `--groups` = WHOLE GroupNorm groups (the JUDGED set; "
+            "a single channel inside a GroupNorm(8) group cannot be built physically) and E345's per-channel ranking (the anchor); random controls = 3 draws of the same count per set with an independent CRC32 seed per (variant, draw, unit). `plan` (the 9 point sets, channel counts, saved GMACs by `jprune_cost`, the point-set file), "
+            "`dump` (`runs/e352_null_s<S>` / `e352g_<pt>_s<S>` / `e352c_<pt>_s<S>`: link to the unmodified E324 s checkpoint, `ends_val.pkl` of the junction system on the edited pyramid, `predfull_<tag>_s<S>.pkl` = B' in the format of `temp/e276/predfull_e273_p_s<S>.pkl`, `point.json` last; a partial `--max` dump needs `--out` outside `runs/`; "
+            "`--threads`), `check` (the empty set against the stored B dump and the stored E345 null, as sets), `gate` (the NULL gate: the null's cards against the stored E324 s cards, topo F1 within 2e-4, every other number within max(2e-3, 2e-3 x stored), exit 1 on a miss), `table` (the step-0 table from the cards of all point folders as markdown, with the hit windows "
+            "and the kill line), `commands` (the `jends_eval.py score --full --base --tag` lines, `$R` = the problem folder), `selftest`. B's section stage needs a single-threaded `torch.linalg.solve` on this box's CPU (`cpu_solve_fix`). The chain is `temp/day30/day30.sh`. No digested file is edited | "
+            "new (imports `jprune_probe`, `jprune_cost`) | `jprune_b.py selftest`, `tests/test_jprune_b.py` (needs the scratch inputs `temp/e276/predfull_e273_p_s0.pkl`, `temp/e345/e324_s_s0/calib.pt`, `temp/e345/e324_s_s1/calib.pt`) |")
+open(p, "w", encoding="utf-8").write("\n".join(lines))
