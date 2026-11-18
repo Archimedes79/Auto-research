@@ -53,7 +53,7 @@ The suites in one picture ([each box with the code it stands for](suites.md)): f
 | `architecture.json` / `.svg` / `.md` | the drawing of the method (two loops through four layers) and why it looks like this: the spec (boxes, arrows, the code each box stands for), the generated picture and the generated file map; `python3 tools/archdraw.py check architecture.json` keeps picture and code together |
 | `suites.json` / `.svg` / `.md` | the drawing of the four suites (command line, class, engine, files, launcher and gates), generated and checked the same way |
 | `system.json` / `.svg` / `.md` | the drawing of the whole system at work, generated and checked the same way |
-| `state/` | run-time state, git-ignored: the machine lock (`machine_lock.json`, `tools/machine_lock.py`) |
+| `state/` | run-time state, git-ignored: the machine lock (`machine_lock.json`, `tools/machine_lock.py`) and the crash log of the gate hook (`guard_hook_crash.log`) |
 | `config.json` | the default problem folder |
 
 ## Plug in a problem
@@ -128,12 +128,12 @@ All tools in `tools/` are standard-library Python 3 (any interpreter: the WSL, W
 ### Tests: one command per part (the full list with results is in `history/deep_review_2026-11-10.md`)
 ```
 PY=$HOME/miniconda3/envs/gcar/bin/python                                 # in WSL: the interpreter of the numpy / torch parts (the tools need only python3)
-python3 autoresearch/tools/selftest.py                                   # the tools (about 10 minutes; sections can be run alone: selftest_launch.py test_gate)
+python3 autoresearch/tools/selftest.py                                   # the tools (about 5 minutes; sections can be run alone: selftest_launch.py test_gate)
 cd autoresearch && python3 suitecli.py --selftest                        # the command-line generator
 cd autoresearch && python3 -m Training selftest                       # the training suite (several minutes)
 cd autoresearch && "$PY" -m trainkit.selftest                          # the engine under it (seconds, CPU)
 cd autoresearch && "$PY" -m Evaluation selftest                         # the evaluation suite (53 checks, about 2 minutes)
-cd autoresearch && for s in architecture.json overview.json suites.json; do python3 tools/archdraw.py check $s; done     # the drawings of this folder
+cd autoresearch && for s in architecture.json overview.json suites.json system.json; do python3 tools/archdraw.py check $s; done     # the drawings of this folder
 "$PY" -m GtGenerator selftest                                         # the ground truth, from the repository root (5 - 10 minutes)
 ```
 The problems have their own: `bev_fusion/tests/run_gates.sh`, `bev_fusion_lane_center/tools/maintenance/run_all_tests.sh`.

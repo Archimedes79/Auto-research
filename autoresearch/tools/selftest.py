@@ -1137,7 +1137,7 @@ try:
                   open(f"{T}/runs/{name}/run.json", "w"))
         if status == "ok":
             open(f"{T}/runs/{name}/done", "w").write("x")
-    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.fin_b", "--hyp", "planned card", "--pred", "p", "--rule", "r"], check=True, env=env, capture_output=True)
+    subprocess.run([sys.executable, f"{HERE}/ledger.py", "add", "S.fin_b", "--hyp", "planned card", "--pred", "p", "--rule", "r", "--force"], check=True, env=env, capture_output=True)    # the run record exists already: a card written now needs --force
     RUN.ledger_write(f"{T}/LEDGER.csv", dict(id="S.fin_c", status="stopped", started="2026-10-25T10:00:00", notes="stopped by hand"))
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env, check=True)
     assert rows()["S.fin_a"]["status"] == "ok" and rows()["S.fin_a"]["duration_s"] == "42", rows()["S.fin_a"]
@@ -1385,8 +1385,11 @@ try:
                 raise AssertionError("a lock of a live holder was taken over")
         except TimeoutError:
             pass
-        real_getmtime = os.path.getmtime         # a waiter that read an old mtime of a lock that was renewed since must put the lock back
-        os.path.getmtime = lambda p: time.time() - 99 if p == lk + ".lock" else real_getmtime(p)
+        real_getmtime, lies = os.path.getmtime, [1]       # a waiter that read an old mtime of a lock that was renewed since (one old reading, then the true ones) must leave the lock alone
+
+        def old_reading(p):
+            return time.time() - 99 if p == lk + ".lock" and lies and lies.pop() else real_getmtime(p)
+        os.path.getmtime = old_reading
         try:
             with PJ.locked(lk, wait_s=0.5, stale_s=1):
                 raise AssertionError("a lock of a live holder was taken over from an old reading")
@@ -1541,7 +1544,7 @@ try:
             pass
         os.remove(lk + ".lock")
     # the selftests of the other tools and of the parts that live in their own files (the deep review of 2026-11-10: a tool change is gated by this file, so it runs them too)
-    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"], ["testgate.py", "--selftest"]):
+    for extra in (["topic_table.py", "--selftest"], ["install_agents.py", "--selftest"], ["guard_hook.py", "--selftest"], ["check_structure.py", "--selftest"], ["check_git.py", "--selftest"], ["gitfast.py", "--selftest"], ["commit_paths.py", "--selftest"], ["check_numbers.py", "--selftest"], ["selftest_verdict.py"], ["selftest_launch.py"], ["testgate.py", "--selftest"]):
         if not os.path.exists(f"{HERE}/{extra[0]}"):
             continue
         ex = subprocess.run([sys.executable, f"{HERE}/{extra[0]}", *extra[1:]], capture_output=True, text=True)  # the real environment: these selftests build their own throw-away folders

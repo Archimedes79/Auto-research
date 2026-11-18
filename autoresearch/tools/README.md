@@ -19,13 +19,14 @@ Standard-library Python (any interpreter: WSL, Windows, a Linux server). Most to
 | `keep3.py` | the best three networks of a problem and their checkpoints |
 | `provenance.py`, `lineage.py`, `package.py` | what a result card records, the verified chain network -> run -> code -> data, the result package and the clean-up of derived data |
 | `commit_paths.py`, `check_git.py` | commit exactly the named paths in the shared checkout; what may go into git and be pushed |
+| `gitfast.py` | read-only git calls through git.exe when this runs in WSL on a Windows drive (40-100x faster than the WSL git on 9p); imported by `check_git.py`, `provenance.py`, `check_structure.py`; `AR_GIT=wsl` forces the WSL git |
 | `check_numbers.py`, `check_structure.py` | numbers of a report against their sources; folder structure and dead paths of the living documents |
 | `archdraw.py` | architecture drawings from a JSON spec, checked against the code |
 | `topic_table.py` | the table of a research topic, made from its notes |
 | `run_report.py` | one page per training run for a person |
 | `install_agents.py` | lints `../agents/` and copies them to the workspace's `.claude/agents/` |
 | `clean_temp.py` | tags the scratch of a finished loop, then moves or deletes it |
-| `project.py` | finds the problem folder and reads its `project.json` (imported by most tools) |
+| `project.py` | finds the problem folder, reads its `project.json` and holds the one lock of the record files (`locked`, `atomic_write`); imported by most tools |
 | `selftest.py`, `selftest_launch.py`, `selftest_verdict.py` | the tests: all tools; the launcher and ledger; the verdict path |
 
 The commands in one line each are in `../README.md` ("Tools in one line each").

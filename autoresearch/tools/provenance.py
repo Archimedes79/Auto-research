@@ -36,6 +36,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
+import gitfast as GF  # noqa: E402  (read-only git through git.exe on a Windows drive: the one place of the rule)
 import project as P  # noqa: E402
 
 SCHEMA = 1
@@ -46,13 +47,13 @@ BUNDLE_ROOTS = ("model.py", "losses.py")   # the network and its losses; the bun
 BUNDLE_EXCLUDE = ("train.py", "nuscenes_dataset.py", "feature_cache.py")   # the training loop and the data loaders are not part of the network: not followed, but reported when the bundle imports them
 
 
-def git(repo, *args, timeout=60):
+def git(repo, *args, timeout=60, inp=None):
     """stdout of a git call, None when git fails (missing, timeout, not a repository, a path outside it): a failure never reads as clean"""
     try:
-        r = subprocess.run(["git", "--no-optional-locks", "-C", repo, *args], capture_output=True, text=True, timeout=timeout)
+        r = GF.run(repo, "--no-optional-locks", *args, timeout=timeout, inp=inp)
     except (OSError, subprocess.SubprocessError):
         return None
-    return r.stdout if r.returncode == 0 else None
+    return r.stdout.decode("utf-8", errors="replace") if r.returncode == 0 else None
 
 
 def repo_root(start=None):
@@ -483,7 +484,7 @@ def _hash_files(items):
 def git_bytes(repo, ref, rel):
     """the content of <ref>:<rel> as bytes, None when the tag has no such file"""
     try:
-        r = subprocess.run(["git", "--no-optional-locks", "-C", repo, "show", f"{ref}:{rel}"], capture_output=True, timeout=60)
+        r = GF.run(repo, "--no-optional-locks", "show", f"{ref}:{rel}", timeout=60)
     except (OSError, subprocess.SubprocessError):
         return None
     return r.stdout if r.returncode == 0 else None
@@ -497,7 +498,7 @@ def tree_names(repo, ref):
     key = (repo, ref)
     if key not in _TREES:
         try:
-            r = subprocess.run(["git", "--no-optional-locks", "-C", repo, "ls-tree", "-r", "--name-only", "-z", ref], capture_output=True, timeout=120)
+            r = GF.run(repo, "--no-optional-locks", "ls-tree", "-r", "--name-only", "-z", ref, timeout=120)
             _TREES[key] = {x.decode("utf-8", "replace") for x in r.stdout.split(b"\0") if x} if r.returncode == 0 else set()
         except (OSError, subprocess.SubprocessError):
             _TREES[key] = set()
