@@ -33,7 +33,7 @@ S2b adds the fusion that S2 lacks (Mirko's reading, D121: cross-attention follow
 
 How it relates to E384: S2b is the token-level form of what E384 asked at the feature level (a recursive state inside the node head of B'). E384 stays closed by the oracle ceiling of its step 0 (chapter 4); S2b asks the same question one level up, where the head already reads the past. S2b is tested on the cached B' tokens (stage 1, card E387). The end-to-end confirmation, the S4 stage 2 with the past block in the head, is open and not part of this report: a stateful head needs sequences of three frames through B' in the live path, which is new code. The result is a TIE at stage 1 (below), so the stage 2 over S2b is not needed.
 
-Table: S2b against its control (card E387, two seeds, VAL 873 frames; the numbers come from the card only, never typed here).
+Table: S2b against its control (card E387, two seeds, VAL 873 frames; the numbers are copied from section 3 of the card).
 
 | arm | topo F1 s0 / s1 | junction F1 s0 / s1 | lanes found | parameters | ms per frame | verdict |
 |---|---|---|---|---|---|---|
