@@ -1,7 +1,8 @@
 #!/bin/bash
-# The tests of the token champion (E357 - E379: the heads, the caches, the S2 / S3 / S4 blocks, the read-out and timing tools), which `run_all_tests.sh` does not list. Three at a time, niced, 2 threads each; one PASS / FAIL line per file, the last 30 lines of every output in the log folder.
-# About 100 minutes on a shared box (the slow ones: test_jpast_train, test_jlive_train, test_jmap_train ~50 min each under load, test_lane_map / test_lane_past ~30 min, test_jtoken_eval ~16 min, test_lane_live ~12 min; CPU only, no GPU job needed).
-# usage (from the problem folder): wsl bash tools/maintenance/run_token_tests.sh [LOGDIR]      LOGDIR default temp/token_tests (scratch, ignored by git); exit 1 when any test failed. Last run: 2026-11-17 / 18, 17 of 18 PASS (the failure was a not yet committed file of another chat).
+# The LEGACY token tests that `run_all_tests.sh` does not list on purpose (since 2026-11-18 its last section lists the tests of the live champion path): the closed S2 / S3 blocks (E368 past, E374 map: both TIE by their written rules), the E354 recursive state, and the lane-suite selftest.
+# Three at a time, niced, 2 threads each; one PASS / FAIL line per file, the last 30 lines of every output in the log folder. About 80 minutes on a shared box (test_jpast_train ~50 min under load, test_jmap_train ~44, test_lane_map ~37, test_lane_past ~27, test_jpast / test_jmap ~15 / 12,
+# test_lane_suite ~9, test_jrecur ~2; CPU only, no GPU job needed). Last run 2026-11-17 / 18: all 8 PASS.
+# usage (from the problem folder): wsl bash tools/maintenance/run_token_tests.sh [LOGDIR]      LOGDIR default temp/token_tests (scratch, ignored by git); exit 1 when any test failed.
 cd "$(dirname "$0")/../.."
 LOG=${1:-temp/token_tests}
 mkdir -p "$LOG/logs"
@@ -14,6 +15,6 @@ run1() {
   echo "$out" | tail -30 > "$LOG/logs/$f.log"
 }
 export -f run1
-printf '%s\n' test_jtoken_eval.py test_jtoken.py test_jmap_train.py test_jpast_train.py test_jlive_train.py test_lane_live.py test_lane_map.py test_jtok.py test_jtok2.py test_jrecur.py test_lane_past.py test_lane_tokcache.py test_jpast.py test_jmap.py test_build_tokcache_root.py test_lane_suite.py test_token_readout.py test_token_time_ens.py test_jtoken_fast.py test_lane_ptok_gpu.py | xargs -P 3 -I{} bash -c 'run1 {}'
+printf '%s\n' test_jpast_train.py test_jmap_train.py test_lane_map.py test_lane_past.py test_jpast.py test_jmap.py test_lane_suite.py test_jrecur.py | xargs -P 3 -I{} bash -c 'run1 {}'
 cat "$LOG/results.txt"
 ! grep -q "^FAIL" "$LOG/results.txt"
