@@ -215,6 +215,9 @@ def check_ckpt(c, net, lin, cards):
         if nbytes is not None and nbytes != size:
             out.append((MISMATCH, "checkpoint hash", f"size {size} != {nbytes} recorded in {label} (not hashed)"))
             continue
+        if not rec:                                # an entry without a hash (older keep3.json): nothing to compare, nothing recorded is contradicted
+            out.append((MISSING, "checkpoint hash", f"no hash recorded in {label}; current provenance.file_hash {PV.file_hash(f)}"))
+            continue
         h, kind = hash_as(f, rec)
         out.append((OK if h == rec else MISMATCH, "checkpoint hash", f"{'equals' if h == rec else 'DIFFERS from'} {label} ({kind}): {h[:16]} vs {str(rec)[:16]}"))
     return out
@@ -696,6 +699,14 @@ def selftest():
         rc, txt = run()
         assert rc == 0 and line(txt, "checkpoint", "oldnet/model.pt does not exist") == MISSING, txt
         os.rename(os.path.join(T, "proj/runs/oldnet/model.moved"), os.path.join(T, "proj/runs/oldnet/model.pt"))
+        # a keep3 record without a hash (an older entry, "sha256": null): nothing to compare, so MISSING with the reason, not "DIFFERS from ... vs None" and no exit 1 by itself; a wrong size still is a MISMATCH
+        write("proj/runs/nohash/model.pt", "w" * 100)
+        net0 = {"ckpt": "proj/runs/nohash/model.pt", "key": "nohash", "names": ["n"], "slot": None, "rec_id": None}
+        for rec in ({"path": net0["ckpt"], "bytes": 100}, {"path": net0["ckpt"], "sha256": None, "bytes": None}, {"path": net0["ckpt"], "sha256": "", "bytes": 100}):
+            got = [x for x in check_ckpt(argparse.Namespace(root=T, keep={"entries": [{"name": "n", "checkpoints": [rec]}]}), net0, None, []) if x[1] == "checkpoint hash"]
+            assert [st for st, _, _ in got] == [MISSING] and "no hash recorded in keep3.json" in got[0][2], got
+        got = check_ckpt(argparse.Namespace(root=T, keep={"entries": [{"name": "n", "checkpoints": [{"path": net0["ckpt"], "sha256": None, "bytes": 99}]}]}), net0, None, [])
+        assert got[-1][0] == MISMATCH and "size 100 != 99" in got[-1][2], got
         # the state of the run: failed / killed / stale 'running' must not read OK
         rj0 = json.load(open(os.path.join(T, "proj/records/runs/netrun/run.json")))
         for status, ex, done, want, code in (("failed", 75, False, MISMATCH, 1), ("running", None, True, MISMATCH, 1), ("running", None, False, MISSING, 0), ("ok", 1, False, MISMATCH, 1)):

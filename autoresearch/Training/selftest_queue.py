@@ -127,6 +127,22 @@ def add(proj, rid, steps, *extra):
     return out
 
 
+def exit_checks(proj, ok):
+    """the exit code tells what happened: a run that is still running after `hold` (not stopped) or a resume that does not start is exit 1, not 0 (the outcome texts are those of TQ)"""
+    real_hold, real_resume = TQ.hold, TQ.resume
+    try:
+        for text, want in (("RUNNING and NOT stopped: no stop check in its code", 1), ("stop requested, still running after 0 s (the trainer stops at its next step boundary)", 1),
+                           ("stopped at step 10 of 300 (checkpoint saved, on hold)", 0), ("was waiting for a slot: on hold", 0)):
+            TQ.hold = lambda *a, text=text, **k: {"x": text}
+            assert cli(proj, "hold", "x", "--words", "w")[0] == want, (text, want)
+        for text, want in (("starts again from its last checkpoint (step 10 of 300), on the code of now", 0), ("starts from the beginning (no checkpoint)", 0), ("cannot start: nothing to continue", 1)):
+            TQ.resume = lambda *a, text=text, **k: {"x": text}
+            assert cli(proj, "resume", "x", "--words", "w")[0] == want, (text, want)
+    finally:
+        TQ.hold, TQ.resume = real_hold, real_resume
+    ok("queue hold exits 1 for a run that is RUNNING and NOT stopped or still running after the wait, queue resume for an outcome that is not 'starts ...'; the others exit 0")
+
+
 def queue_checks(tmp, ok):
     env = {"TS_QUEUE_EVERY": "0.5", "TS_QUEUE_IDLE": "3", "AR_HEARTBEAT_S": "0.5", "AR_STALE_S": "4", "AR_RAM_CHECKS": "1", "AR_SETTLE_S": "0",
            "AR_MACHINE_LOCK": os.path.join(tmp, "machine_lock.json")}        # never the real machine lock: a chat's exclusive lock (a timing run) would hold every launcher of this test for hours
@@ -339,6 +355,8 @@ def queue_checks(tmp, ok):
         rc, out, err = cli(proj, "hold", "--all", "--words", "w")
         assert rc == 2 and "could not be read" in err and any(".bad." in n for n in os.listdir(c.slots)), (rc, err)
         ok("an unreadable queue file is moved aside (.bad.<time>) and the command refuses: the holds in it are not silently dropped")
+
+        exit_checks(proj, ok)
     finally:
         for r in os.listdir(os.path.join(proj, "records", "runs")):                    # nothing of the test may stay alive
             rc_ = rec(proj, r)
