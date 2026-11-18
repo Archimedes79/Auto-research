@@ -31,7 +31,7 @@ def load(path=None):
     path = path or P.path("schedule")
     if not os.path.exists(path):
         return []
-    with open(path, newline="", encoding="utf-8") as f:
+    with open(path, newline="", encoding="utf-8-sig") as f:      # a BOM (a Windows editor) would be part of the first column name
         return list(csv.DictReader(f))
 
 
@@ -85,10 +85,15 @@ def _priority(r):
     return int(p) if re.fullmatch(r"[+-]?[0-9]+", p) else 9
 
 
+def depends(r):
+    """the items an item waits for: depends_on is ';'-separated, and a space after the ';' ("A; B") does not make "B" another name"""
+    return [d.strip() for d in (r.get("depends_on") or "").split(";") if d.strip()]
+
+
 def ready(rows, resource=None):
     """ready items of derived rows, by priority"""
     done = {r["item"] for r in rows if r["state"] == "done"}
-    out = [r for r in rows if r["state"] in ("planned", "ready") and all(d in done for d in (r.get("depends_on") or "").split(";") if d)
+    out = [r for r in rows if r["state"] in ("planned", "ready") and all(d in done for d in depends(r))
            and (resource is None or r.get("resource") == resource)]
     return sorted(out, key=lambda r: (_priority(r), rows.index(r)))
 
