@@ -72,14 +72,14 @@ class Run:
     def __init__(self, path, loss="total"):
         self.dir = os.path.abspath(path)
         self.name = os.path.basename(self.dir.rstrip("/\\"))
-        opt = self.json("Training.json")
-        self.cfg = self.json("config.json")
+        self.config_problems = []                               # findings about the run's own files (cli.summary lists them): one bad folder must not kill the table of all
+        opt = self.json("Training.json", self.config_problems)
+        self.cfg = self.json("config.json", self.config_problems)
         self.log_name = opt.get("log", "log.jsonl")
         self.text_name = opt.get("text_log", "train.log")
         self.loss_key = opt.get("loss", loss)
         self.progress = str(opt.get("progress", "step "))      # how a progress line of the text log starts (crash detection)
         raw = opt.get("steps") or self.cfg.get("steps") or 0
-        self.config_problems = []                               # findings about the run's own files (cli.summary lists them): one bad folder must not kill the table of all
         try:
             self.total = int(raw)
         except (ValueError, TypeError, OverflowError):          # 'abc', [5], {}, NaN / Infinity (json.loads reads both): no total, not a crash of every status
@@ -92,13 +92,21 @@ class Run:
     def p(self, *a):
         return os.path.join(self.dir, *a)
 
-    def json(self, name):
+    def json(self, name, problems=None):
+        """the json object of a file of the run, {} when there is none; a file that is there but torn (a crash in the middle of a write) or no object is {} too, and a text goes
+        to the list `problems` when one is given"""
         try:
             with open(self.p(name), encoding="utf-8") as f:
                 d = json.load(f)
-            return d if isinstance(d, dict) else {}
-        except (OSError, ValueError):
+        except OSError:
             return {}
+        except ValueError:
+            d = None
+        if not isinstance(d, dict):
+            if problems is not None:
+                problems.append(f"{name} is torn or not a json object: it is not used (the step total and the log names may be wrong)")
+            return {}
+        return d
 
     def mtime(self, name):
         try:

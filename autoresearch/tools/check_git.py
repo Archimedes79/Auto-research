@@ -11,7 +11,8 @@ What it checks
   1. push check: no commit that is not yet on the upstream branch (without one: on any remote branch) may ADD a scratch or forbidden file, in any
      of its commits (a file added and deleted again is still published by a push), or add / change a file over 1 MB
      and the run tags: those that exist here but not on the remote are listed with the push command (`git push origin --tags`; `git push origin main` does
-     not send tags, and a tag is where a run's code and scratch scripts are kept); a forbidden-type or over-1-MB file that a tag's own commits add is an error
+     not send tags, and a tag is where a run's code and scratch scripts are kept); a forbidden-type or over-1-MB file that a tag's own commits add is an error, and every tag
+     whose push would send such a commit (also one it only sits on: a tag on a child of the tagged commit) is held back, with the commit named
   2. pending changes: the staged files (measured on the STAGED content) and the untracked files that no rule ignores (`git add -A` takes them), and, with
      --paths, the named ones, must be fit for git; deletions are never an error. Scratch = a file inside a `temp/` or `_to_delete/` folder (any case; except
      its README.md): it is not committed by hand, a run's tag keeps what ran. Forbidden = data, checkpoints, caches, binaries, logs and anything over 1 MB; a
@@ -38,7 +39,8 @@ MAX_BYTES = 1_000_000
 SCRATCH_DIRS = ("temp", "_to_delete")
 FORBIDDEN_EXT = {".pt", ".pth", ".ckpt", ".npy", ".npz", ".pkl", ".pickle", ".h5", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".gif", ".pdf", ".pptx", ".docx", ".xlsx",
                  ".html", ".zip", ".tgz", ".gz", ".tar", ".7z", ".log", ".tmp", ".lock", ".done", ".bin", ".onnx", ".safetensors", ".parquet",
-                 ".sqlite", ".so", ".exe", ".tif", ".tiff", ".webp", ".avi", ".zst", ".mat"}   # the "never" block of .gitignore (keep the two in step)
+                 ".sqlite", ".so", ".exe", ".tif", ".tiff", ".webp", ".avi", ".zst", ".mat",
+                 ".pyc", ".pyd", ".db", ".dll", ".xz", ".tflite", ".mdb"}   # the "never" block of .gitignore (keep the two in step); no tracked file of HEAD has these types
 ALLOWED_NAMES = {"architecture.svg"}                                                    # the generated architecture drawings are text
 TEXT_EXT = {".md", ".py", ".sh", ".json", ".csv", ".txt", ".ps1", ".yml", ".yaml"}
 # a path through a temp/ folder with a file extension, optionally after $VAR/ or ${VAR}/; not followed by more name (temp/x.pyc, temp/a.json.gz), a sentence dot is fine
@@ -132,23 +134,27 @@ def push_check(top):
     return commit_errors(top, rng, "a push would publish"), info
 
 
-def commit_errors(top, rng, lead, allow_scratch=False):
-    """errors for the files the commits of a rev-list range ADD (scratch / forbidden type, also when a later commit deletes them) and the files they add or change
-    over 1 MB; allow_scratch: scratch files are no error (the commit of a run tag holds the scratch scripts on purpose)"""
+def commit_findings(top, rng, allow_scratch=False):
+    """[(kind, path, size note, commit)] for the files the commits of a rev-list range ADD (scratch / forbidden type, also when a later commit deletes them) and the files they add
+    or change over 1 MB; allow_scratch: scratch files are no finding (the commit of a run tag holds the scratch scripts on purpose)"""
     entries = []                                              # (status, blob, path, commit)
     for c in git(top, "rev-list", "--no-merges", *rng).split():
         tok = git(top, "diff-tree", "--root", "--no-commit-id", "-r", "-z", "--raw", "--no-abbrev", "--no-renames", "--diff-filter=AM", c).split("\0")
         entries += [(tok[i].split()[-1], tok[i].split()[3], tok[i + 1], c[:8]) for i in range(0, len(tok) - 1, 2)]
     sizes = blob_sizes(top, [e[1] for e in entries])
-    errors = []
+    found = []
     for status, blob, path, c in entries:
         kind = verdict(top, path, sizes.get(blob)) if status == "A" else ("forbidden" if sizes.get(blob, 0) > MAX_BYTES else "ok")      # a change of an old scratch file is legacy
         if kind == "scratch" and allow_scratch:                   # the scripts of a scratch folder: .py / .sh up to 1 MB, as run.py adds them; anything else is not
             kind = "ok" if path.endswith((".py", ".sh")) and sizes.get(blob, 0) <= MAX_BYTES else "forbidden"
         if kind != "ok":
-            why = f" ({sizes[blob] // 1000} kB)" if sizes.get(blob, 0) > MAX_BYTES else ""
-            errors.append(f"{lead} {kind} file {path}{why} (commit {c})")
-    return errors
+            found.append((kind, path, f" ({sizes[blob] // 1000} kB)" if sizes.get(blob, 0) > MAX_BYTES else "", c))
+    return found
+
+
+def commit_errors(top, rng, lead, allow_scratch=False):
+    """errors for the findings of commit_findings, one line each"""
+    return [f"{lead} {kind} file {path}{why} (commit {c})" for kind, path, why, c in commit_findings(top, rng, allow_scratch)]
 
 
 def windows_git(top):
@@ -209,12 +215,18 @@ def tag_check(top, remote_on=True, timeout=15):
     errors = commit_errors(top, [*missing, "--not", "--remotes", "HEAD", "--"], "pushing the tags would publish", allow_scratch=True)      # `--`: a tag named like a folder
     if errors:                                                      # some tag holds a forbidden file: not `--tags`, the clean tags one by one
         info[0] = info[0].replace(f"`git push {name} --tags` ", f"NOT `git push {name} --tags` (see the errors: some tags hold forbidden files); push the clean ones one by one, `git push {name} refs/tags/<tag>` ")
-        bad_commits = set(re.findall(r"\(commit ([0-9a-f]{7,40})\)", "\n".join(errors)))
+        bad = {}                                                    # commit -> its first forbidden file: a push of a tag sends every commit it reaches that no remote has, not its own commit only
+        for kind, path, _, c in commit_findings(top, [*missing, "--not", "--remotes", "--"], allow_scratch=True):
+            bad.setdefault(c, f"{kind} file {path}")
         clean, held = [], []
         for t in missing:
-            sha = git(top, "rev-parse", "--short=8", f"refs/tags/{t}^{{commit}}").strip()
-            (held if any(sha.startswith(b[:8]) or b.startswith(sha) for b in bad_commits) else clean).append(t)
-        info.append(f"tags without a forbidden file ({len(clean)}): " + (" ".join(clean) or "-") + f" | held back ({len(held)}): " + (" ".join(held) or "-"))
+            sent = git(top, "rev-list", f"refs/tags/{t}", "--not", "--remotes", "--").split()          # `git push origin refs/tags/<t>` publishes these commits
+            hit = next((c[:8] for c in sent if c[:8] in bad), None)
+            if hit:
+                held.append(f"{t} (publishes commit {hit}: {bad[hit]})")
+            else:
+                clean.append(t)
+        info.append(f"tags without a forbidden file ({len(clean)}): " + (" ".join(clean) or "-") + f" | held back ({len(held)}): " + ("; ".join(held) or "-"))
     return errors, info
 
 
@@ -424,6 +436,15 @@ def _selftest():
         sh("commit", "-qm", "base")
         for ext in (".safetensors", ".onnx", ".bin", ".parquet", ".tar", ".7z", ".sqlite", ".so", ".exe", ".tif", ".webp", ".avi", ".zst", ".mat"):      # no rule here ignores them
             assert verdict(top, "m/w" + ext, 10) == "forbidden", ext
+        late = (".pyc", ".pyd", ".db", ".dll", ".xz", ".tflite", ".mdb")                       # types that were missing: compiled code, databases, a model format, an archive
+        for ext in late:
+            put("m" + ext, n=10)
+            sh("add", "m" + ext)
+        errors, _ = report(top, remote_on=False)
+        assert sorted(e.split(" - ")[0] for e in errors) == sorted(f"forbidden: m{ext}" for ext in late), errors
+        sh("reset", "-q")
+        for ext in late:
+            os.remove(os.path.join(top, "m" + ext))
         put("keep.svg", text="<svg/>")
         put("other.svg", text="<svg/>")
         assert verdict(top, "keep.svg", 10) == "ok" and verdict(top, "other.svg", 10) == "forbidden" and verdict(top, "keep.svg", 2_000_000) == "forbidden"      # `!` names it; the size rule has no exception
@@ -513,6 +534,35 @@ def _selftest():
                 os.environ.pop("GIT_SSH_COMMAND")
             else:
                 os.environ["GIT_SSH_COMMAND"] = old_ssh
+    with tempfile.TemporaryDirectory() as base:                  # a tag on a child of a tagged commit that added a forbidden file: pushing the child publishes that commit, so it is held back too
+        bare, work = os.path.join(base, "remote.git"), os.path.join(base, "work")
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", bare], check=True)
+        subprocess.run(["git", "init", "-q", "-b", "main", work], check=True)
+
+        def g(*a):
+            return subprocess.run(["git", "-C", work, "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True, text=True).stdout.strip()
+        open(os.path.join(work, ".gitignore"), "w").write("*.npz\n")
+        open(os.path.join(work, "a.py"), "w").write("x = 1\n")
+        g("add", "-A")
+        g("commit", "-qm", "base")
+        g("remote", "add", "origin", bare)
+        g("push", "-q", "-u", "origin", "main")
+        open(os.path.join(work, "w.npz"), "wb").write(b"0" * 10)
+        g("add", "-f", "w.npz")
+        first = g("commit-tree", g("write-tree"), "-p", "HEAD", "-m", "first")                  # tagA: its own commit adds w.npz
+        g("tag", "-a", "tagA", "-m", "A", first)
+        g("reset", "-q")
+        os.makedirs(os.path.join(work, "temp"))
+        open(os.path.join(work, "temp", "s.py"), "w").write("print(1)\n")
+        g("add", "-f", "temp/s.py")
+        second = g("commit-tree", g("write-tree"), "-p", first, "-m", "second")                 # tagB: a script only, but it sits on `first`
+        g("tag", "-a", "tagB", "-m", "B", second)
+        g("reset", "-q")
+        g("tag", "tagC")                                                                        # HEAD is on the remote: nothing to publish
+        errors, info = tag_check(work)
+        assert len(errors) == 1 and "forbidden file w.npz" in errors[0] and first[:8] in errors[0], errors
+        assert info[1].startswith("tags without a forbidden file (1): tagC | held back (2): "), info
+        assert f"tagA (publishes commit {first[:8]}: forbidden file w.npz)" in info[1] and f"tagB (publishes commit {first[:8]}: forbidden file w.npz)" in info[1], info
     print("check_git selftest ok: classes (separators, case, substrings, extensions, size), the reference regex, references resolved ($VAR, project folder, missing target, "
           "history/), sys.path folders, staged scratch refused and a staged deletion not, pushes that add scratch / big / deleted-again files refused, no remote / no upstream, exit codes, run tags not on the remote listed (scratch in a tag fine, a forbidden file not), "
           "forbidden types refused without an ignore rule (only a `!` rule lets one in), untracked forbidden files an error, staged files measured on the index")
