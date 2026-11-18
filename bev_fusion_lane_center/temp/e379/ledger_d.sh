@@ -1,0 +1,6 @@
+#!/bin/bash
+cd "$(dirname "$0")/../.."
+L="python3 ../autoresearch/tools/ledger.py"
+DEC="CUT by hand: the card's prose verdict rule (decide.py is not the verdict), applied 2026-11-18 ~04:30: NO by the letter at the recipe cell (lanes-found guard broken on both seeds), TIE in substance at D115 (clause (i) met on seed 0 only); the champion stays, d is not adopted; section 3 of the card"
+$L note E379.d_s0 --result "VAL 873 vs the champion head e373_cb_s0 (paired): at D115 topo F1 +0.0074 [+0.0035, +0.0114], junction F1 +0.0127, lanes found +0.0003, dup_frac -0.0108; at the recipe cell 0.3/0.2/0.5/off topo F1 +0.0038 [-0.0002, +0.0078], lanes found -0.0120 (guard broken); recovery of the ensemble gain 65 %" --decision "$DEC"
+$L note E379.d_s1 --result "VAL 873 vs the champion head e373_cb_s1 (paired): at D115 topo F1 +0.0027 [-0.0020, +0.0072], junction F1 +0.0081, lanes found -0.0045, dup_frac -0.0065; at its own pinned cell and the recipe cell 0.3/0.2/0.5/off topo F1 +0.0008 [-0.0044, +0.0055], lanes found -0.0171 (guard broken); recovery 42 %" --decision "$DEC" --notes "sweep_d_s1 failed once with OSError 12 (WSL page cache), re-run after dropping the caches: same command, same data"
