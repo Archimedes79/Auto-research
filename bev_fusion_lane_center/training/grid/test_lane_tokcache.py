@@ -63,8 +63,10 @@ MUTANTS = [
     (PT, "the token drop does not touch valid", "valid = np.array(f[\"valid\"][i]) & keep", "valid = np.array(f[\"valid\"][i])"),
     (PT, "a dropped token keeps its type", "ytype=np.where(keep, np.array(f[\"gt_type\"][i]), 0).astype(np.int64)", "ytype=np.array(f[\"gt_type\"][i]).astype(np.int64)"),
     (PT, "the fitted scale goes to the wrong pair", "y[i, j], yl[i, j], ys[i, j] = 1, ylong[ok_idx], yscale[ok_idx]", "y[i, j], yl[i, j], ys[i, j] = 1, ylong[ok_idx[::-1]], yscale[ok_idx[::-1]]"),
-    (PT, "ylong marks every pair", "yl = (y > 0) & (np.linalg.norm(pos[None, :, :] - pos[:, None, :], axis=-1) > QT.SHORT)", "yl = (y > 0)"),
-    (PT, "ylong from the wrong token distance", "> QT.SHORT)", "> 2 * QT.SHORT)"),
+    (PT, "ylong marks every pair", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > QT.SHORT)", "yl[i, j] = True"),
+    (PT, "ylong from the wrong token distance", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > QT.SHORT)", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > 2 * QT.SHORT)"),
+    (PT, "a chord of exactly 8 m is long", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > QT.SHORT)", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) >= QT.SHORT)"),
+    (PT, "ylong uses the chord of the wrong pair", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > QT.SHORT)", "yl[i, j] = (np.linalg.norm(pos[i] - pos[0], axis=-1) > QT.SHORT)"),
     (PT, "a GT field in the read-out input", "tokens_np=dict(pos=", "tokens_np=dict(gt_id=np.array(f[\"gt_id\"][i]), pos="),
     (PT, "the link direction is swapped in the prediction", "lk = dict(src=new[src[ok]], dst=new[dst[ok]],", "lk = dict(src=new[dst[ok]], dst=new[src[ok]],"),
 ]

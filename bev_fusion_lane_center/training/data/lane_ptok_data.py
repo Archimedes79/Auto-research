@@ -71,7 +71,7 @@ class PTokData(torch.utils.data.Dataset):
         valid = np.array(f["valid"][i]) & keep
         y, _, ys = densify(np.array(f["ypair"][i]), np.array(f["ypair_long"][i]), np.array(f["ypair_scale"][i]), self.K, keep if self.drop > 0 else None)
         pos = np.array(f["pos"][i], np.float64)
-        yl = (y > 0) & (np.linalg.norm(pos[None, :, :] - pos[:, None, :], axis=-1) > QT.SHORT)                  # the class of a pair = the chord of its TOKENS (> 8 m); the class of the GT link is in the cache (`ypair_long`)
+        yl = chord_long(y, pos)                  # the class of a pair = the chord of its TOKENS (> 8 m); the class of the GT link is in the cache (`ypair_long`)
         out = {n: np.array(f[n][i]) for n in TOKEN_FIELDS if n in f}
         out.update(valid=valid, ytype=np.where(keep, np.array(f["gt_type"][i]), 0).astype(np.int64), y=y, ylong=yl, yscale=ys, gt_out=int(f["gt_out"][i]), token=self.tokens[i], row=int(self.rows[i]),
                    tokens_np=dict(pos=np.array(f["pos"][i], np.float64), dirv=np.array(f["dirv"][i], np.float64), e_p=np.array(f["e_p"][i], np.float64), flags_p=np.array(f["flags_p"][i], np.float64),
@@ -153,6 +153,15 @@ def toy_cache_test():
         assert PTokData("val", token_drop=0.0, dir=d)[0]["valid"].all()
 
 
+def chord_long(y, pos):
+    """the long class of the positive pairs of `y` (K, K): the chord of the two TOKENS above QT.SHORT (8 m; the class of the pair, not of the GT link) -> (K, K) bool. The same values as the dense `(y > 0) & (norm(pos[None] - pos[:, None]) > SHORT)` from the pair list only
+    (the dense K x K chord was 92 % of a `PTokData` item and 43 % of the S4 label step; measured identical on 125 VAL frames)"""
+    yl = np.zeros(y.shape, bool)
+    i, j = np.nonzero(y > 0)
+    yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > QT.SHORT)
+    return yl
+
+
 def selftest():
     K = 6
     ypair = -np.ones((8, 2), np.int16)
@@ -182,6 +191,15 @@ def selftest():
     # the removed SOURCE of a pair goes too (not only a removed target)
     y, yl, sc = densify(ypair, ylong, ys, K, keep=np.array([True, True, True, True, False, True]))
     assert y.sum() == 2 and y[4, 1] == 0 and y[0, 2] == 1
+    pos6 = np.array([[0.0, 0.0], [8.0, 0.0], [8.0001, 0.0], [20.0, 0.0], [3.0, 4.0], [0.0, 9.0]])
+    y6 = np.zeros((6, 6), np.uint8)
+    y6[0, 1] = y6[0, 2] = y6[0, 3] = y6[0, 4] = y6[5, 0] = y6[1, 3] = 1
+    want = np.zeros((6, 6), bool)
+    want[0, 2] = want[0, 3] = want[5, 0] = want[1, 3] = True                       # a chord of exactly 8 m is short, 8.0001 m long, 5 m short; the pair (1, 3) is 12 m; a pair that is no positive is never long
+    assert np.array_equal(chord_long(y6, pos6), want), chord_long(y6, pos6)
+    assert not chord_long(np.zeros((6, 6), np.uint8), pos6).any()
+    dense = (y6 > 0) & (np.linalg.norm(pos6[None, :, :] - pos6[:, None, :], axis=-1) > QT.SHORT)
+    assert np.array_equal(chord_long(y6, pos6), dense), "the pair-list form equals the dense form"
     toy_cache_test()
     print("lane_ptok_data selftest ok")
 

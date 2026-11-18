@@ -63,7 +63,7 @@
 |---|---|---|---|
 | gate | time the plain ensemble: head alone, 2 in sequence, 2 stacked, whole path, parameters | `evaluation/token_time_ens.py` (committed 420a003f), job `E379.time_e2` via `temp/e379/time_e2_waiter.sh`, the last GPU job of the night, quiet host | json stored; the lead decides e2 against d |
 | code | `kd_loss`, `--distill-from`, `--distill-weight`, the protections of section 1, `ensemble` command | Fable's `jtoken.py` / `jtoken_train.py` / `jtoken_eval.py` | tests by hand + textual mutants; code critic (mode code) accepts; unset = champion bit for bit |
-| train d | `E379.d_s0`, `E379.d_s1` via `run.py --require-card --gpu --timeout 130`, a supervisor with resume (`tools/maintenance/keep_alive.sh`) | slot per the lead's GPU plan | done flags; kill checks logged |
+| train d | `E379.d_s0`, `E379.d_s1` via `run.py --require-card --gpu --timeout 130`, a supervisor with resume (the old keep_alive script, removed 2026-11-18: `jarm.py` absorbs it, tag archive/jtok2-jrecur-2026-11-18) | slot per the lead's GPU plan | done flags; kill checks logged |
 | read | dumps, TRAIN sweep, the pinned cell logged BEFORE the VAL score, VAL read, anatomy | `jtoken_eval.py`, `token_readout.py` | cards in `runs/e379_d_s<S>/`, section 3 |
 | controls | l_s0 (only if d passes (i) on both seeds), ds_s0, d4_s0 (exploratory) | as train d | labelled in section 3 |
 | decide | the verdict by hand (section 0), e2 and its cost reported separately | section 3 | the lead decides e2 / d / champion |
