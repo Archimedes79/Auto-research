@@ -10,7 +10,7 @@ Table: Was wo liegt.
 | Trainer (Arme m / z, `--inputs full|geo`, `--smoke`) | `training/train/jroute_train.py` | ja (derselbe Commit) |
 | Datenschicht: Routen-GT, Routen-Token, Kartenmodi, Gabelungs-Frames, Daten-Prüfung | `training/data/lane_route_data.py`, `training/grid/test_lane_route.py` | ja (Commit `9f774c54fa`) |
 | Auswertungsschicht: Dump, Score, Referenzregeln, gepaarter Bootstrap | `evaluation/jroute_eval.py`, `evaluation/tests/test_jroute_eval.py` | {{E389_GIT_EVAL}} |
-| Karten: E389, E388, E381; Entscheidungen D127, D128 | `experiments/E389_*`, `E388_*`, `E381_*`, `experiment_execution/decisions/` | ja |
+| Karten: E389 (Version 3b, Commit `103b295c42`), E388, E381; Entscheidungen D127, D128 | `experiments/E389_*`, `E388_*`, `E381_*`, `experiment_execution/decisions/` | ja |
 | Ledger-Zeilen der Läufe | `experiment_execution/LEDGER.csv` | {{E389_GIT_LEDGER}} |
 | Dieser Bericht: Quellen (Kapitel, Zeichnung, Zeichenskript, `report.json`) | `results/E2E_Report_E389_2026-11-20/` | ja (Text und Skript); **nicht** das erzeugte HTML und das Code-Paket (Binärdateien, gesendet) |
 | Daten-Caches (Routen-GT, Token-Caches, abgeleitete Daten) | `runs/e389_route/{val,train}`, `runs/e365_cache/` | **nein** (abgeleitet, wiederherstellbar) |
