@@ -76,3 +76,24 @@ The noise turns the chord between two tokens 2 m apart by about 7.4 / 7.3 degree
 | decide | the verdict above | by hand | section 3, ledger, commit, line to the lead |
 
 ## 3. Read-out log
+- 01:49 - 02:08 calibration and gate check (section 1, frozen). 02:14 chain `temp/e381/chain381.sh` started (code 9497a8f8cc: flags, tests, card v2.1). **E381.n_s0 / n_s1** trained in parallel 02:15 - 02:58 (12000 steps each, no resume, 0.20 s/step with two jobs). **Kill checks** (`temp/e381/kill_s<S>.out`, before any read-out): no kill on either seed (learning ratio 0.334 / 0.341; noise displacement 0.2304 / 0.2267 m against 0.2306 / 0.2268, |noise e| 0.4956 / 0.4796 against 0.4955 / 0.4795; gate-lost share 0.0097 / 0.0109 against the bars 0.0255 / 0.0294; the clean first-batch loss 4.5516 / 4.3306 = E373's: the twins hold at the start; 0 skipped steps, 0 roll-backs). Dumps 02:59 - 03:06, TRAIN sweeps to 03:30.
+- **Pinned cells (logged 03:31 / 03:32 in the chain log and as ledger notes, BEFORE any VAL score):** n_s0 0.3 / 0.2 / 0.5 / off, n_s1 0.2 / 0.2 / 0.5 / off: the heads differ, so the **recipe cell** (the same rule on the mean of both TRAIN tables, 03:33) **0.3 / 0.2 / 0.5 / off** is the verdict cell. VAL reads 03:33 - 04:13 (`E381.read_n_s<S>` at the verdict cell, `E381.d115_n_s<S>` at D115, `E381.own_n_s1` at its own cell), all against the E373 head of the same cache at D115.
+
+The table (VAL 873, cache tokens, n minus ref e373_cb_s<S> at D115, cross-run paired scene bootstrap; written by `temp/e381/verdict381.py` from the cards `runs/e381_n_s<S>/token_card_rec_..._vs_e373_cb_s<S>[_rc0.3_0.2_0.6_off].json`, `paired_vs_ref_run`):
+
+| read | seed | n topo F1 | ref topo F1 (D115) | topo F1 n - ref [95 %] | junction F1 | F1@1.0 | lanes found | dup_frac | J | seed clauses |
+|---|---|---|---|---|---|---|---|---|---|---|
+| verdict | 0 | 0.6683 | 0.6679 | +0.0004 [-0.0058, +0.0080] | +0.0061 | -0.0008 | -0.0116 | -0.0042 | +0.0037 | a guard broken; floors hold |
+| verdict | 1 | 0.6803 | 0.6762 | +0.0041 [-0.0020, +0.0097] | +0.0125 | -0.0010 | -0.0072 | -0.0020 | +0.0051 | neither (TIE-side); floors hold |
+| d115 | 0 | 0.6707 | 0.6679 | +0.0028 [-0.0033, +0.0099] | -0.0040 | +0.0012 | +0.0000 | -0.0023 | -0.0125 | neither (TIE-side); floors hold |
+| d115 | 1 | 0.6818 | 0.6762 | +0.0056 [+0.0000, +0.0109] | -0.0005 | +0.0007 | +0.0036 | -0.0005 | -0.0111 | ADOPT clauses hold; floors hold |
+| own s1 0.2/0.2/0.5 | 1 | 0.6804 | 0.6762 | +0.0043 [-0.0009, +0.0095] | -0.0413 | -0.0020 | +0.0000 | -0.0044 | -0.0682 | a guard broken; floors hold |
+
+The head's existence AP on VAL (`anatomy` at D115, the mechanism's own number): n 0.9409 / 0.9389 against ref 0.9401 / 0.9391 (unchanged); the long-link AP 0.2648 / 0.2736 against 0.2688 / 0.2893.
+
+## Result (2026-11-19 04:20, by the card v2.1 rule written before the run)
+**TIE.** At the verdict (recipe) cell 0.3 / 0.2 / 0.5 / off: seed 0 topo F1 +0.0004 [-0.0058, +0.0080] with lanes found -0.0116 (a guard just broken: the bound is -0.010); seed 1 topo F1 +0.0041 [-0.0020, +0.0097] (below the +0.005 bar, the interval includes 0), all guards hold. Not ADOPT (neither seed passes), not NO (no seed at topo <= -0.005, and the guard is broken on one seed only). No kill, no INVALID. Action (the card): **the stage-1 recipe stays without noise** (D106: the plain recipe is the cheaper one); no S4 re-run; the champion (S4, D120) untouched. Prediction +0.003 (window -0.005 to +0.010): a HIT (the two seeds +0.0004 / +0.0041, mean +0.002); odds were TIE 65 %.
+
+**Reported beside the verdict (not deciding):** at D115 the noisy heads read +0.0028 [-0.0033, +0.0099] / +0.0056 [+0.00004, +0.0109] topo F1 with junction F1 -0.004 / -0.001, F1@1.0 and lanes found unchanged: a small positive lean on both seeds, inside the head-seed spread (about 0.003) on seed 0. Seed 1 at its own cell 0.2 / 0.2 / 0.5: topo +0.0043 but junction F1 -0.041 (why the recipe cell, not the per-head cell, is the read).
+
+**What it says (honest negative, by hand).** Input noise calibrated to B''s TRAIN-to-VAL token gap neither helps nor hurts the head beyond noise: the existence AP of the head on VAL is unchanged (+0.0008 / -0.0001), so the mechanism (over-trust in the clean TRAIN positions and existence logits) does not show at the head's output. Consistent with the card's prediction that the head's TRAIN-to-VAL gap is mostly B''s worse VAL tokens, which input noise cannot repair, plus the limit named in section 1 (the clean tok / flags / dirv let the head route around noisy pos / e). The lever for the gap is upstream (S4 trains B' with the head; an out-of-fold B'), not head-side augmentation. Cost: 1.4 GPU h (two heads in parallel, 43 min) + dumps 0.1 h + about 1 h CPU.
