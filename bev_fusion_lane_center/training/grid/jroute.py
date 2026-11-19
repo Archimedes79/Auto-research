@@ -442,14 +442,14 @@ def selftest():
         route_loss(mz(_no_map(big)), big)[0].backward()
         live = {n.split(".")[0] for n, p in mz.named_parameters() if p.grad is not None and float(p.grad.abs().sum()) > 0}
         assert live == ({"tok", "geo", "out", "v_none"} if inputs == "full" else {"geo", "out", "v_none"}), f"{inputs}: arm z gradient (a softmax over the none key alone has no gradient into q, k_none, none_b): {sorted(live)}"
-    # K = 512, M = 64, batch 8: finite, bf16 autocast finite, the evidence stays float32, memory below 2 GB on the CPU
+    # K = 512, M = 160, batch 8: finite, bf16 autocast finite, the evidence stays float32, memory below 2 GB on the CPU
     bb = _trained(4)
-    xb = synthetic_batch(8, 512, 64, seed=6)
+    xb = synthetic_batch(8, 512, 160, seed=6)
     ob = bb(xb)
     route_loss(ob, xb)[0].backward()
     assert ob["road"].shape == (8, 512) and torch.isfinite(ob["road"]).all() and all(torch.isfinite(p.grad).all() for p in bb.parameters())
     import resource
-    assert resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 < 2048, "K = 512, M = 64, batch 8, forward and backward: more than 2 GB"
+    assert resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024 < 2048, "K = 512, M = 160, batch 8, forward and backward: more than 2 GB"
     with torch.autocast("cpu", dtype=torch.bfloat16):
         ab, pb_ = bb(xb), bb.parts(xb)
         assert torch.isfinite(ab["road"]).all() and torch.isfinite(ab["lane"]).all() and ab["road"].dtype == torch.float32 and all(pb_[k].dtype == torch.float32 for k in ("mass", "pm_a", "pm_b", "att_b", "att")), "bf16 autocast"

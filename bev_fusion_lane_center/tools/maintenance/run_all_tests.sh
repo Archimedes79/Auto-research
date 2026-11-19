@@ -93,7 +93,8 @@ run "token head cost / time ensemble" test_token_time_ens.py
 run "E372 live token producer (B' in the step) and the live trainer" grid/test_lane_live.py
 run "E372 live training step" grid/test_jlive_train.py
 run "jarm: one arm of a token experiment (card words, cells, table)" jarm.py selftest
-run "E389 route-association head + trainer (CPU, synthetic, 64 mutants)" grid/test_jroute.py
+run "E389 route-association head + trainer (CPU, synthetic, 67 mutants)" grid/test_jroute.py
+run "E389 route-association read-out: hand frames, cost, dump / score / rules on 24 real VAL frames (CPU; the full run with the textual mutants is test_jroute_eval.py without argument, about 30 min)" test_jroute_eval.py selftests
 run "E389 route data: tier-1 route, band labels, forks, map-error modes (needs the VAL cache; mutants: run the file without the argument)" grid/test_lane_route.py selftests
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
 run "jthresh: learned decode thresholds (E388): soft F1 by hand, a known optimum, mutants" jthresh.py selftest

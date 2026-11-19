@@ -29,7 +29,7 @@ import jroute as JR  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs")
-SMOKE_K, SMOKE_M = 512, 64                                                  # tokens / route keys per synthetic frame of the smoke run: the real K and M
+SMOKE_K, SMOKE_M = 512, 160                                                 # tokens / route keys per synthetic frame of the smoke run: the real K and M
 FREQ_BATCHES = 50                                                           # the batches whose labels give the positive weights
 WINDOW = 100                                                                # the logged accuracies are the means of the last 100 steps
 
@@ -140,7 +140,10 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
         first = [batch_fn(s) for s in range(FREQ_BATCHES)]
     else:
         import lane_route_data as LRD  # the route loader (the cached B' tokens + the route tokens + the labels); lazily, so that the tests and --smoke need no cache
-        _, loader = LRD.loader("train", a.seed, a.bs, a.workers, init_seed=init, mode="train", ident=a.ident, K=a.K, **({"cache": a.cache} if a.cache else {}))
+        ds, loader = LRD.loader("train", a.seed, a.bs, a.workers, init_seed=init, mode="train", ident=a.ident, K=a.K, **({"cache": a.cache} if a.cache else {}))
+        man = ds.rc.manifest                                                                                        # the identity of the TRAIN route cache this head trains on: a read-out refuses a head on a cache of another version / lane GT / route cap
+        args["route_cache"] = dict(split="train", version=man["version"], lane_gt=man.get("lane_gt"), max_samples=man["params"]["max_samples"], tokens_sha=man["tokens_sha"])
+        assert not held or held.get("route_cache") in (None, args["route_cache"]), f"{a.name}: a resume on another route cache ({held.get('route_cache')} -> {args['route_cache']}): use another --name"
         batch_fn, first = None, itertools.islice(loader, FREQ_BATCHES)
     pw = held["pos_weight"] if held and held.get("pos_weight") else estimate_pos_weight(first)
     args["pos_weight"] = [float(w) for w in pw]

@@ -41,9 +41,9 @@ PINS = json.loads("""{
  "delivered_on_decision_frames.on_road": 0.38432288192128083,
  "delivered_on_decision_frames.on_lane": 0.2823215476984656,
  "delivered_on_decision_frames.on_road_id": 0.5253168779186124,
- "route_tokens_mean": 57.815578465063,
- "route_tokens_max": 64,
- "frames_truncated": 315
+ "route_tokens_mean": 65.57273768613975,
+ "route_tokens_max": 136,
+ "frames_truncated": 0
 }""")
 
 MUTANTS = [
@@ -77,7 +77,9 @@ MUTANTS = [
     ("the ego is the first route vertex", "s_ego = off[int(np.argmin(np.linalg.norm(V, axis=1)))]", "s_ego = off[0]"),
     ("the ahead bound is 50 m", "AHEAD = 40.0 ", "AHEAD = 50.0 "),
     ("the samples are 1 m apart", "STEP = 2.0 ", "STEP = 1.0 "),
-    ("the cap is 32", "MAX_SAMPLES = 64 ", "MAX_SAMPLES = 32 "),
+    ("the cap is 32", "MAX_SAMPLES = 160 ", "MAX_SAMPLES = 32 "),
+    ("the cap is the old 64", "MAX_SAMPLES = 160 ", "MAX_SAMPLES = 64 "),
+    ("the cap is 128", "MAX_SAMPLES = 160 ", "MAX_SAMPLES = 128 "),
     ("the pose error is applied with the transposed rotation", "poly = poly @ rot(yaw).T + shift", "poly = poly @ rot(yaw) + shift"),
     ("the shift is added before the rotation", "poly = poly @ rot(yaw).T + shift", "poly = (poly + shift) @ rot(yaw).T"),
     ("the yaw is not applied", "poly = poly @ rot(yaw).T + shift", "poly = poly + shift"),
@@ -118,10 +120,19 @@ MUTANTS = [
     ("the TEST guard accepts a foreign row", "assert set(int(r) for r in rows) <= set(int(r) for r in sp) and len(rows) == len(sp),", "assert len(rows) == len(sp),"),
     ("the TEST guard accepts a missing row", "assert set(int(r) for r in rows) <= set(int(r) for r in sp) and len(rows) == len(sp),", "assert set(int(r) for r in rows) <= set(int(r) for r in sp),"),
     ("the cache reader accepts another version", 'assert self.manifest["version"] == VERSION,', "assert True or self.manifest[\"version\"] == VERSION,"),
+    ("the cache reader accepts another lane GT", 'assert lane_gt is None or self.manifest["lane_gt"] == lane_gt,', 'assert True or self.manifest["lane_gt"] == lane_gt,'),
+    ("the cache reader accepts other constants", 'assert self.manifest["params"] == cache_params(),', 'assert True or self.manifest["params"] == cache_params(),'),
+    ("the dataset does not hand the lane GT to the reader", "TokenRoute(rdir or route_dir(split), token_lane_gt(tok))", "TokenRoute(rdir or route_dir(split))"),
     ("the cache reader accepts another frame list", 'assert tokens_sha(self.tokens) == self.manifest["tokens_sha"] and', "assert True and"),
     ("the dataset accepts another frame list", 'assert list(self.tok.tokens) == self.rc.tokens,', "assert True or list(self.tok.tokens) == self.rc.tokens,"),
     ("the duplicate cut tolerance is 3 m", "DUP_D, DUP_COS = 1.0, 0.9 ", "DUP_D, DUP_COS = 3.0, 0.9 "),
     ("the duplicate cut ignores the heading", "DUP_D, DUP_COS = 1.0, 0.9 ", "DUP_D, DUP_COS = 1.0, -1.0 "),
+    # the defaults of the loader on the real caches (`loadercheck`)
+    ("TRAIN is not shuffled", 'shuffle = split == "train" if shuffle is None else shuffle', 'shuffle = False if shuffle is None else shuffle', "loadercheck"),
+    ("VAL is shuffled", 'shuffle = split == "train" if shuffle is None else shuffle', 'shuffle = True if shuffle is None else shuffle', "loadercheck"),
+    ("TRAIN keeps the last short batch", "drop_last=shuffle", "drop_last=False", "loadercheck"),
+    ("the auto mode map is swapped", '("train" if split == "train" else "error") if mode == "auto"', '("error" if split == "train" else "train") if mode == "auto"', "loadercheck"),
+    ("the auto mode of VAL is the exact route", '("train" if split == "train" else "error") if mode == "auto"', '("train" if split == "train" else "exact") if mode == "auto"', "loadercheck"),
     # the GT side on real frames: `check` recomputes frames and compares them with the cache
     ("real frames: the route is tier 2", '(np.asarray(p["tier"]) == 1).any()])', '(np.asarray(p["tier"]) == 2).any()])', "check"),
     ("real frames: the band base is 1 m", "BAND_LANE, BAND_BASE, BAND_COS = 1.75, 0.5, 0.7 ", "BAND_LANE, BAND_BASE, BAND_COS = 1.75, 1.0, 0.7 ", "check"),
@@ -157,7 +168,7 @@ def check_pins(path):
 def command(kind, path, tmp):
     """the command of a mutant on the module at `path` -> (returncode, text)"""
     out = os.path.join(tmp, f"{kind}.json")
-    args = dict(selftest=["selftest"], check=["check", "--n", "20", "--out", out])[kind]
+    args = dict(selftest=["selftest"], loadercheck=["loadercheck"], check=["check", "--n", "20", "--out", out])[kind]
     r = subprocess.run([sys.executable, path] + args, capture_output=True, text=True, env=ENV)
     return r.returncode, r.stdout[-800:] + r.stderr[-1500:]
 
@@ -195,7 +206,7 @@ if __name__ == "__main__":
         left = run_mutants(only=sys.argv[2:])
         assert not left, f"mutants survived: {left}"
         sys.exit(0)
-    run([["selftest"], ["check", "--n", "20"]])
+    run([["selftest"], ["check", "--n", "20"], ["loadercheck"]])
     with tempfile.TemporaryDirectory() as tmp_:                                                              # the unmutated code passes the pinned numbers
         out_ = os.path.join(tmp_, "stats.json")
         run([["stats", "--split", "val", "--out", out_]])

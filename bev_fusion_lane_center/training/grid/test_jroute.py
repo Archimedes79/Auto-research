@@ -6,7 +6,7 @@
 
 jroute.py selftest: pinned parameter counts (full, geometry-only), `pair_features` by hand (metre scale, clipping, both heading frames), a float64 loop reference of the head (maps, padding route keys, samples without a map, both input sets), the attention and the
 pooled features by hand (A: one third each; B: the nearest key), a token 1 m and one 6 m from a route polyline, the none key = the no-map arm, the invariances (route-key order, token order, padding tokens), no GT key read, a fifth route key refused, the loss by hand
-(label -1, the weights), the label frequencies, a gradient into every parameter (and none into the route side without a map), K = 512 / M = 64 memory and bf16, the data contract, and the LEARNABILITY tests (the exact-map rule > 0.95 with the route and not without it,
+(label -1, the weights), the label frequencies, a gradient into every parameter (and none into the route side without a map), K = 512 / M = 160 memory and bf16, the data contract, and the LEARNABILITY tests (the exact-map rule > 0.95 with the route and not without it,
 the straight corridor prior without a map > 0.95, the geometry-only head fits the rule). Trainer tests: options, the keys that reach the device, arm z = the route stripped (the loss is that of the explicit no-map batch and does not see the route content), the log
 windows by a scripted loss, the first-batch contract check, the positive weights by hand, the smoke run with files / arms / inputs / init seed, kill + resume = the straight run, the weights of the held config reused, every recipe key refused at a resume, the loader call
 (the cache seed, the mode, the same call for both arms, the first 50 batches for the weights, the data order follows the init seed), a lazy loader import. A mutant = one textual change of the source; the mutated copy runs in a temporary folder, two at a time.
@@ -91,6 +91,9 @@ MUTANTS = [
     (T0, "everything of the batch goes to the device", "{k: move(b[k], dev) for k in JR.needed(inputs)}", "{k: move(v, dev) for k, v in b.items() if not isinstance(v, list)}"),
     (T0, "the log window is 10", "WINDOW = 100 ", "WINDOW = 10 "),
     (T0, "the first batch is not checked", "        if n[0] == 1:\n            JR.check_batch(b)\n", "        if n[0] == 99:\n            JR.check_batch(b)\n"),
+    (T0, "the route cache identity is not stored", 'args["route_cache"] = dict(split="train"', 'args["_route_cache"] = dict(split="train"'),
+    (T0, "a resume on another route cache is accepted", 'assert not held or held.get("route_cache") in (None, args["route_cache"])', 'assert True or held.get("route_cache") in (None, args["route_cache"])'),
+    (T0, "the route cap is not in the identity", 'max_samples=man["params"]["max_samples"], tokens_sha', 'max_samples=0, tokens_sha'),
     (T0, "the loader gets the head seed", 'LRD.loader("train", a.seed, a.bs', 'LRD.loader("train", init, a.bs'),
     (T0, "the loader gets another mode", 'init_seed=init, mode="train", ident=a.ident', 'init_seed=init, mode="error", ident=a.ident'),
     (T0, "the loader gets the cache seed as init seed", "a.workers, init_seed=init, mode", "a.workers, init_seed=a.seed, mode"),
@@ -297,8 +300,9 @@ def trainer_tests(T):
 
     def loader(split, seed, bs, workers, init_seed=None, mode=None, ident=None, K=None, cache=None):
         seen.append((split, seed, bs, workers, init_seed, mode, ident, K, cache))
-        return None, torch.utils.data.DataLoader(ds, batch_size=None, shuffle=getattr(fake, "shuffle", False))
+        return types.SimpleNamespace(rc=types.SimpleNamespace(manifest=dict(fake.manifest))), torch.utils.data.DataLoader(ds, batch_size=None, shuffle=getattr(fake, "shuffle", False))
     fake.loader = loader
+    fake.manifest = dict(version="v4", lane_gt="g1", tokens_sha="sha", params=dict(max_samples=160))
     sys.modules["lane_route_data"] = fake
     real_make = T.make_loss
 
@@ -316,6 +320,16 @@ def trainer_tests(T):
                 fake.shuffle = False
                 T.train(T.parse_args(["--name", arm, "--arm", arm, "--seed", "1", "--init-seed", "0", "--bs", "2", "--steps", "3", "--workers", "0", "--ident", "e273_p", "--K", "384", "--cache", "rr"]), runs=tmp)
                 assert os.path.exists(os.path.join(tmp, arm, ".done")) and json.load(open(os.path.join(tmp, arm, "config.json")))["args"]["pos_weight"] == [float(w) for w in want_pw], f"arm {arm}: the weights are those of the first 50 batches"
+                assert json.load(open(os.path.join(tmp, arm, "config.json")))["args"]["route_cache"] == dict(split="train", version="v4", lane_gt="g1", max_samples=160, tokens_sha="sha"), f"arm {arm}: the identity of the TRAIN route cache is stored"
+            fake.manifest = dict(fake.manifest, params=dict(max_samples=64))                                       # a resume of the run on a cache with another route cap is refused
+            n_seen = len(seen)
+            try:
+                T.train(T.parse_args(["--name", "m", "--arm", "m", "--seed", "1", "--init-seed", "0", "--bs", "2", "--steps", "3", "--workers", "0", "--ident", "e273_p", "--K", "384", "--cache", "rr"]), runs=tmp)
+                raise SystemExit("a resume on another route cache was accepted")
+            except AssertionError as e:
+                assert "route cache" in str(e), e
+            fake.manifest = dict(version="v4", lane_gt="g1", tokens_sha="sha", params=dict(max_samples=160))
+            del seen[n_seen:]                                                                                      # the refused call's loader entry is not one of the loader-call assertions below
             T.train(T.parse_args(["--name", "nc", "--steps", "2", "--workers", "0"]), runs=tmp)
             assert seen[:2] == [("train", 1, 2, 0, 0, "train", "e273_p", 384, "rr")] * 2 and seen[2] == ("train", 0, 8, 0, 0, "train", "e292_a", None, None), seen
             fake.shuffle = True

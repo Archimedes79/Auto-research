@@ -3,7 +3,8 @@ protocol's map errors, a derived cache of all that, and the loader on top of `la
 no piece id, road id, lane index or node label ever enters a route token.
 
     wsl bash tools/env/_py14.sh lane_route_data.py build   --split val|train [--limit N]       # runs/e389_route/<split>/ (derived data, not in git; atomic, idempotent: a finished cache is left as it is)
-    wsl bash tools/env/_py14.sh lane_route_data.py check   [--n N]                             # the TEST guards (VAL = splits['val'], TRAIN = splits['train'], no VAL / TEST frame in TRAIN), the leak check and the node <-> piece alignment on built tables, the cache against a recompute
+    wsl bash tools/env/_py14.sh lane_route_data.py check   [--n N] [--split val|train|both]                             # the TEST guards (VAL = splits['val'], TRAIN = splits['train'], no VAL / TEST frame in TRAIN), the leak check and the node <-> piece alignment on built tables, the cache against a recompute
+    wsl bash tools/env/_py14.sh lane_route_data.py loadercheck                                  # the defaults of `loader` on the real caches (TRAIN shuffled / drop_last / mode train, VAL in order / mode error)
     wsl bash tools/env/_py14.sh lane_route_data.py fixture --split val [--n 200] [--out FILE]  # the card's data fixture (section 1 a - d): PASS / FAIL + numbers; the wrong conventions must FAIL
     wsl bash tools/env/_py14.sh lane_route_data.py stats   --split val|train [--ident e292_a] [--seed 0] [--out FILE]   # route share, label shares of the covered GT nodes, route tokens, decision frames
     wsl bash tools/env/_py14.sh lane_route_data.py selftest                                    # no cache needed; tests: grid/test_lane_route.py (the hand mutants)
@@ -21,12 +22,12 @@ on_road = (the node lies within n * 1.75 m + 0.5 m of the EXACT SD route polylin
 or it is on_lane; on_road_id (diagnostic) = its piece belongs to a ROAD that contains a route piece (`g['roads'][i]['pieces']`; a junction road holds ALL its connectors, so it blurs the fork decision) or it is on_lane. decision = FORKS ONLY: a route piece with more than one successor whose end lies within 40 m in
 front of the ego along the route (a merge creates no route ambiguity).
 Route tokens (`sample_route`): the route polylines (one per route piece, centred over the parallel lanes, a lane count at every vertex) after the map error, sampled every 2 m: pos, unit tangent in the direction of travel, the lane count (interpolated, rounded, 1 - 5);
-at most 64 samples, the nearest the ego are kept (`check` counts the truncated frames). FIXED KEY SET (pos, dir, count, valid): `check_keys` refuses any other key. Modes (`RouteData(mode=)`; the map-error draws of the E374 map loader, applied to the route):
+at most 160 samples, the nearest the ego are kept (`check` counts the truncated frames). FIXED KEY SET (pos, dir, count, valid): `check_keys` refuses any other key. Modes (`RouteData(mode=)`; the map-error draws of the E374 map loader, applied to the route):
   exact   no error                                    error  a FIXED draw per frame (a generator seeded by the frame token, md5): shift 1 - 2 m in a random direction, yaw N(0, 1 degree), `sd_lib.degrade_sd` (Douglas-Peucker 0.5 - 2 m, count errors 0.1)
   train   one DRAW per read (TRAIN): exact 25 %, error-like 47 % (shift U(0, 2) m), counts unknown 8 %, absent 10 %, gross 10 % (50 %: shift U(4, 8) m, 50 %: the error-like route of a frame of ANOTHER scene); the generator is seeded by (the init seed, the frame token,
           the draw index of the frame: a counter array in shared memory, so persistent workers count together); a RESUMED run starts its counters at 0 again
   gross   the `error` route shifted rigidly by 5 m   none  no samples   wrong  the `error` route of ANOTHER scene (frame (i + 97) mod N, moved on to the next frame of another scene that has a route: a fixed plan)
-The labels never change with the map error (they come from the GT). Derived cache `runs/e389_route/<split>/`: per frame the labels (padded to the largest table, -1), has_route, decision, the exact route polylines (ragged) and the exact route tokens (padded to 64),
+The labels never change with the map error (they come from the GT). Derived cache `runs/e389_route/<split>/`: per frame the labels (padded to the largest table, -1), has_route, decision, the exact route polylines (ragged) and the exact route tokens (padded to 160),
 the scene id; manifest.json (version, lane GT signature, counts, sha256 of the frame token list) last; the reader refuses another version, another GT or another frame list.
 """
 import argparse
@@ -49,10 +50,10 @@ import lane_ptok_data as LP  # noqa: E402
 import lane_tokcache as LC  # noqa: E402
 import sd_lib as SD  # noqa: E402
 
-VERSION = "v3"
+VERSION = "v4"
 CACHE = os.path.join(ROOT, "runs", "e389_route")
 KEYS = ("pos", "dir", "count", "valid")                                      # the fixed key set of a route table
-MAX_SAMPLES = 64                                                             # route samples per frame: the nearest the ego are kept
+MAX_SAMPLES = 160                                                            # route samples per frame: the nearest the ego are kept (the raw route is at most 171 samples: 0.00 % of VAL, 0.04 % of TRAIN above 160)
 STEP = 2.0                                                                   # m between the samples of a route polyline
 COUNT_MAX = 5                                                                # the lane counts of the table are 1 - COUNT_MAX (0 = unknown)
 MAX_D, COS_MIN = 2.5, float(np.cos(np.deg2rad(45.0)))                       # the route match: a piece vertex within 2.5 m of a path point, heading cosine >= cos 45 degrees
@@ -446,6 +447,17 @@ def tokens_sha(tokens):
     return hashlib.sha256("\n".join(tokens).encode()).hexdigest()
 
 
+def cache_params():
+    """the module constants that a route cache depends on: stored in its manifest, compared by the reader (the band, duplicate and count constants are covered by VERSION)"""
+    return dict(max_samples=MAX_SAMPLES, step=STEP, max_d=MAX_D, cos_min=COS_MIN, ahead=AHEAD, cost_succ=COST_SUCC, cost_jump=COST_JUMP)
+
+
+def token_lane_gt(tok):
+    """the lane GT signature that a token cache was built for (its meta.json); None for a stand-in without a directory"""
+    d = getattr(tok, "dir", None)
+    return json.load(open(os.path.join(d, "meta.json")))["lane_gt"] if d else None
+
+
 def write_cache(d, arrays, tokens, meta):
     """arrays of `pack` + the frame tokens + the manifest fields `meta` -> the directory `d`: every file written whole and renamed, manifest.json last (the cache is finished when it exists)"""
     os.makedirs(d, exist_ok=True)
@@ -455,20 +467,22 @@ def write_cache(d, arrays, tokens, meta):
     ok = arrays["has_route"]
     man = dict(meta, version=VERSION, frames=len(tokens), tokens_sha=tokens_sha(tokens), frames_with_route=int(ok.sum()), frames_without_route=int((~ok).sum()), decision_frames=int(arrays["decision"].sum()), route_tokens_mean=float(arrays["rt_n"].mean()),
                route_tokens_max=int(arrays["rt_n"].max()), frames_truncated=int((arrays["rt_cut"] > 0).sum()), max_nodes=int(arrays["n_nodes"].max()),
-               params=dict(max_samples=MAX_SAMPLES, step=STEP, max_d=MAX_D, cos_min=COS_MIN, ahead=AHEAD, cost_succ=COST_SUCC, cost_jump=COST_JUMP))
+               params=cache_params())
     LPD._save_json(os.path.join(d, "manifest.json"), man)
     return man
 
 
 class TokenRoute:
-    """read access to a route cache directory: `rc.tokens`, `rc.a` (the arrays by name, memory maps), `rc.manifest`; `labels(i)` = (on_road, on_lane) of the table nodes of frame i, `labels_id(i)` = the diagnostic on_road_id, `polys(i)` the exact route polylines, `exact(i)` the exact route table (`finish`)"""
+    """read access to a route cache directory (refused: no manifest, another version, other constants, another lane GT than `lane_gt` when given, another frame list): `rc.tokens`, `rc.a` (the arrays by name, memory maps), `rc.manifest`; `labels(i)` = (on_road, on_lane) of the table nodes of frame i, `labels_id(i)` = the diagnostic on_road_id, `polys(i)` the exact route polylines, `exact(i)` the exact route table (`finish`)"""
 
-    def __init__(self, d):
+    def __init__(self, d, lane_gt=None):
         self.dir = d
         mp = os.path.join(d, "manifest.json")
         assert os.path.exists(mp), f"{d} is not a finished route cache: run `lane_route_data.py build`"
         self.manifest = json.load(open(mp))
         assert self.manifest["version"] == VERSION, f"{d}: version {self.manifest['version']}, expected {VERSION}: rebuild"
+        assert self.manifest["params"] == cache_params(), f"{d}: built with other constants {self.manifest['params']}, now {cache_params()}: rebuild"
+        assert lane_gt is None or self.manifest["lane_gt"] == lane_gt, f"{d}: built for the lane GT {self.manifest['lane_gt']}, the token cache has {lane_gt}: rebuild"
         self.tokens = json.load(open(os.path.join(d, "tokens.json")))
         assert tokens_sha(self.tokens) == self.manifest["tokens_sha"] and len(self.tokens) == self.manifest["frames"], f"{d}: the frame list does not match its manifest"
         self.a = {n: np.load(os.path.join(d, n + ".npy"), mmap_mode="r") for n in ARRAYS}
@@ -551,7 +565,7 @@ class RouteData(torch.utils.data.Dataset):
             tok = LP.PTokData(split, seed, ident, K, 0.0, cache, dir)
             if dir is None:
                 rows_guard(split, tok.rows)                       # the TEST guard: a VAL cache is data/splits.json['val'] exactly
-        self.tok, self.rc = tok, rc or TokenRoute(rdir or route_dir(split))
+        self.tok, self.rc = tok, rc or TokenRoute(rdir or route_dir(split), token_lane_gt(tok))
         assert list(self.tok.tokens) == self.rc.tokens, f"the route cache {self.rc.dir} is not the frame list of the token cache {self.tok.dir}"
         self.mode, self.init_seed, self.tokens = mode, int(init_seed), list(self.tok.tokens)
         self.scene, self.has = np.asarray(self.rc.a["scene"]), np.asarray(self.rc.a["has_route"], bool)
@@ -641,6 +655,41 @@ def loader(split="train", seed=0, bs=8, workers=4, init_seed=0, mode="auto", ide
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle, persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ loadercheck: the defaults of `loader` on the real caches
+def loader_check(seed=0, ident="e292_a", cache=LC.CACHE, log=print):
+    """the defaults of `loader` on the real caches: TRAIN = shuffled, drop_last, mode train (6 batches of 8 come from >= 4 scenes; some routes are the exact one, many are not); VAL = in order, not dropped, mode error (the route of a frame is its fixed error route)"""
+    torch.manual_seed(0)
+    ds, dl = loader("train", seed, bs=8, workers=0, init_seed=0, ident=ident, cache=cache)
+    assert ds.mode == "train" and dl.drop_last and type(dl.sampler).__name__ == "RandomSampler", f"TRAIN default: mode {ds.mode}, drop_last {dl.drop_last}, sampler {type(dl.sampler).__name__}"
+    at = {t: i for i, t in enumerate(ds.tokens)}
+    scenes, same, differ, empty, n = set(), 0, 0, 0, 0
+
+    def route_of_item(b, j):
+        v = int(b["route"]["valid"][j].sum())
+        return {k: b["route"][k][j][:v].numpy() for k in ("pos", "dir", "count")}, v
+    for _, b in zip(range(6), dl):
+        assert len(b["token"]) == 8 and b["route"]["pos"].shape[0] == 8
+        for j, t in enumerate(b["token"]):
+            i = at[t]
+            scenes.add(int(ds.scene[i]))
+            got, v = route_of_item(b, j)
+            ex = ds.rc.exact(i)
+            eq = v == len(ex["valid"]) and all(np.array_equal(got[k], ex[k]) for k in ("pos", "dir", "count"))
+            same, differ, empty, n = same + int(eq), differ + int(not eq), empty + int(v == 0 and len(ex["valid"]) > 0), n + 1
+    assert len(scenes) >= 4, f"6 shuffled batches of TRAIN come from {len(scenes)} scenes only"
+    assert same >= 1 and differ >= n // 3, f"mode train: {same} of {n} routes are the exact one, {differ} differ: the draws of the train mix are missing"
+    dv, dlv = loader("val", seed, bs=8, workers=0, ident=ident, cache=cache)
+    assert dv.mode == "error" and dv.draws is None and not dlv.drop_last and type(dlv.sampler).__name__ == "SequentialSampler", f"VAL default: mode {dv.mode}, drop_last {dlv.drop_last}, sampler {type(dlv.sampler).__name__}"
+    b = next(iter(dlv))
+    assert b["token"] == dv.tokens[:8], "VAL batches are in the order of the cache"
+    for j, t in enumerate(b["token"]):
+        got, v = route_of_item(b, j)
+        want = finish(error_route(dv.polys(j), t))
+        assert v == len(want["valid"]) and all(np.array_equal(got[k], want[k]) for k in ("pos", "dir", "count")), f"VAL frame {j}: the route is not its fixed error route"
+    log(f"loader defaults ok: TRAIN shuffled, drop_last, mode train: {n} frames of 6 batches from {len(scenes)} scenes, {same} with the exact route, {differ} others ({empty} without any sample); VAL in order, mode error, the fixed error routes")
+    return dict(train_scenes=len(scenes), exact=same, other=differ, empty=empty)
+
+
 # ------------------------------------------------------------------------------------------------------------------------------ check: the guards, the leak check, the alignment, the cache against a recompute
 def train_guard(rows, tokens, splits, train_tokens, val_tokens):
     """the TRAIN guard: the rows of the TRAIN cache are exactly `data/splits.json['train']`, its frame tokens are those the train feature file holds at these rows, and none of them is the token of a VAL or TEST frame (`splits['val']` and `splits['test']` index
@@ -672,14 +721,14 @@ def guards(seed=0, ident="e292_a", cache=LC.CACHE, log=print):
     return res
 
 
-def check(n=None, seed=0, ident="e292_a", cache=LC.CACHE, log=print):
+def check(n=None, seed=0, ident="e292_a", cache=LC.CACHE, log=print, splits=("val", "train")):
     """`guards`; for the VAL and the TRAIN cache (when built) n evenly spaced frames (default all): the node table's pieces lie on the frame's pieces (every node within 1 mm of a vertex of its piece), the cached route tokens equal those made from the cached polylines
     and from a recompute of the frame, every table of every read-out mode passes the leak check, the labels of a recompute equal the cached ones; the truncation counts -> dict"""
     import lane_gt_data as LD
     import lane_tok_data as LT
     res = dict(n=n, guards=guards(seed, ident, cache, log))
     lane_gt = LD.lane_store()[0]
-    for split in ("val", "train"):
+    for split in splits:
         if not os.path.exists(os.path.join(route_dir(split), "manifest.json")):
             log(f"{split}: no route cache built, the cache part of the check is skipped")
             continue
@@ -942,7 +991,7 @@ def toy_data(mode, rc, n=12, **kw):
 
 def selftest():
     # the numbers of the card, pinned: a changed constant is a new card
-    assert (STEP, MAX_SAMPLES, COUNT_MAX, GROSS_M, OTHER, MAX_D, AHEAD) == (2.0, 64, 5, 5.0, 97, 2.5, 40.0) and (ERROR_SHIFT, TRAIN_SHIFT, GROSS_SHIFT) == ((1.0, 2.0), (0.0, 2.0), (4.0, 8.0)) and abs(COS_MIN - np.cos(np.pi / 4)) < 1e-12
+    assert (STEP, MAX_SAMPLES, COUNT_MAX, GROSS_M, OTHER, MAX_D, AHEAD) == (2.0, 160, 5, 5.0, 97, 2.5, 40.0) and (ERROR_SHIFT, TRAIN_SHIFT, GROSS_SHIFT) == ((1.0, 2.0), (0.0, 2.0), (4.0, 8.0)) and abs(COS_MIN - np.cos(np.pi / 4)) < 1e-12
     assert MIX == (("exact", 0.25), ("error", 0.47), ("unknown", 0.08), ("absent", 0.10), ("gross", 0.10)) and (COST_SUCC, COST_JUMP) == (0.3, 3.0)
     # the route = the tier-1 pieces in driving order (A then C), whatever the path does: a stopped ego still has a route, a path that hugs C2 does not change it, a piece with ONE tier-1 point is a route piece, no tier-1 point = no route
     g = toy_graph()
@@ -1066,11 +1115,12 @@ def selftest():
     assert all(np.array_equal(x, y) for x, y in zip(e1, want)), "error route = pose error, then degrade_sd, then the samples, one generator"
     assert max(np.abs(np.linalg.norm(sample_route(rp)[0][:, None] - e1[0][None], axis=2).min(1))) < 6.0 and np.linalg.norm(e1[0][0] - sample_route(rp)[0][0]) > 0.2
     # truncation: the nearest the ego, in the original order; counts clipped to 1 - 5, 0 stays unknown; the table has the fixed keys, one row per sample
-    far_ = (np.stack([np.arange(100.0), np.zeros(100)], 1), np.tile([1.0, 0.0], (100, 1)), np.full(100, 7.0))
+    nf = MAX_SAMPLES + 36                                                                       # more samples than the cap
+    far_ = (np.stack([np.arange(float(nf)), np.zeros(nf)], 1), np.tile([1.0, 0.0], (nf, 1)), np.full(nf, 7.0))
     t = finish(far_)
-    assert len(t["valid"]) == MAX_SAMPLES and np.array_equal(t["pos"][:, 0], np.arange(64.0)) and (t["count"] == COUNT_MAX).all() and sorted(t) == sorted(KEYS) and t["count"].dtype == np.int64 and t["valid"].all()
-    assert np.array_equal(finish((far_[0][::-1].copy(), far_[1], far_[2]))["pos"][:, 0], np.arange(63.0, -1.0, -1.0)), "the nearest are kept, in their own order"
-    assert (finish(with_count(far_, 0))["count"] == 0).all() and finish((far_[0], far_[1], np.array([0.2] * 99 + [3.0])))["count"][[0, 1]].tolist() == [1, 1] and finish((far_[0][:3], far_[1][:3], np.array([0.0, 1.0, 3.0])))["count"].tolist() == [0, 1, 3]
+    assert len(t["valid"]) == MAX_SAMPLES and np.array_equal(t["pos"][:, 0], np.arange(float(MAX_SAMPLES))) and (t["count"] == COUNT_MAX).all() and sorted(t) == sorted(KEYS) and t["count"].dtype == np.int64 and t["valid"].all()
+    assert np.array_equal(finish((far_[0][::-1].copy(), far_[1], far_[2]))["pos"][:, 0], np.arange(MAX_SAMPLES - 1.0, -1.0, -1.0)), "the nearest are kept, in their own order"
+    assert (finish(with_count(far_, 0))["count"] == 0).all() and finish((far_[0], far_[1], np.array([0.2] * (nf - 1) + [3.0])))["count"][[0, 1]].tolist() == [1, 1] and finish((far_[0][:3], far_[1][:3], np.array([0.0, 1.0, 3.0])))["count"].tolist() == [0, 1, 3]
     assert len(finish(EMPTY)["valid"]) == 0 and finish(EMPTY)["pos"].shape == (0, 2)
     # the leak check: extra keys of any lane-level kind are refused, missing keys too, a wrong shape too
     good = finish(sample_route(polys))
@@ -1080,7 +1130,7 @@ def selftest():
     refuses(lambda: check_keys(dict(good, pos=good["pos"][:, :1])), "route table shapes")
     refuses(lambda: collate_routes([dict(good, road=good["count"])]), "a lane-level field is a leak")
     cb = collate_routes([finish(far_), finish(EMPTY), good])
-    assert cb["pos"].shape == (3, 64, 2) and cb["valid"].sum(1).tolist() == [64, 0, 6] and not cb["valid"][2, 6:].any() and cb["pos"].dtype == torch.float32 and cb["count"].dtype == torch.int64 and cb["valid"].dtype == torch.bool and (cb["pos"][1] == 0).all()
+    assert cb["pos"].shape == (3, MAX_SAMPLES, 2) and cb["valid"].sum(1).tolist() == [MAX_SAMPLES, 0, 6] and not cb["valid"][2, 6:].any() and cb["pos"].dtype == torch.float32 and cb["count"].dtype == torch.int64 and cb["valid"].dtype == torch.bool and (cb["pos"][1] == 0).all()
     ce = collate_routes([finish(EMPTY)] * 2)
     assert ce["pos"].shape == (2, 1, 2) and not ce["valid"].any(), "all absent: one padding column"
     # the draw classes: the boundaries of MIX and the shares over many draws
@@ -1115,6 +1165,18 @@ def selftest():
         refuses(lambda: TokenRoute(os.path.join(tmp, "val")), "frame list")
         json.dump(good_man, open(mp, "w"))
         refuses(lambda: TokenRoute(os.path.join(tmp, "nope")), "not a finished route cache")
+        json.dump(dict(good_man, params=dict(good_man["params"], max_samples=good_man["params"]["max_samples"] + 1)), open(mp, "w"))
+        refuses(lambda: TokenRoute(os.path.join(tmp, "val")), "built with other constants")
+        json.dump(good_man, open(mp, "w"))
+        assert len(TokenRoute(os.path.join(tmp, "val"), "sig")) == 12 and good_man["params"] == cache_params()
+        refuses(lambda: TokenRoute(os.path.join(tmp, "val"), "other_sig"), "built for the lane GT")
+        fake = ToyTok([f"toy{k}" for k in range(12)])                                                 # a token cache of another lane GT: RouteData must hand its signature to the reader
+        fake.dir = os.path.join(tmp, "tokcache")
+        os.makedirs(fake.dir)
+        json.dump(dict(lane_gt="other_sig"), open(os.path.join(fake.dir, "meta.json"), "w"))
+        refuses(lambda: RouteData(tok=fake, rdir=os.path.join(tmp, "val"), mode="error"), "built for the lane GT")
+        json.dump(dict(lane_gt="sig"), open(os.path.join(fake.dir, "meta.json"), "w"))
+        assert len(RouteData(tok=fake, rdir=os.path.join(tmp, "val"), mode="error")) == 12 and token_lane_gt(ToyTok(["a"])) is None
         # the dataset on the toy world, every read-out mode by hand
         dd = {m: toy_data(m, rc) for m in MODES}
         assert all("route" in dd[m][0] for m in MODES) and "route" not in toy_data(None, rc)[0], "every mode adds the route key to the item, mode None adds none"
@@ -1215,8 +1277,12 @@ def main(argv=None):
     s.add_argument("--limit", type=int)
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--ident", default="e292_a")
+    s = sub.add_parser("loadercheck")
+    s.add_argument("--seed", type=int, default=0)
+    s.add_argument("--ident", default="e292_a")
     s = sub.add_parser("check")
     s.add_argument("--n", type=int)
+    s.add_argument("--split", default="both", choices=("val", "train", "both"))
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--ident", default="e292_a")
     s.add_argument("--out")
@@ -1233,7 +1299,9 @@ def main(argv=None):
         return selftest()
     if a.cmd == "build":
         return build(a.split, a.seed, a.ident, a.limit)
-    res = check(a.n, a.seed, a.ident) if a.cmd == "check" else (fixture(a.split, a.n, a.seed, a.ident) if a.cmd == "fixture" else stats(a.split, a.seed, a.ident))
+    if a.cmd == "loadercheck":
+        return loader_check(a.seed, a.ident)
+    res = check(a.n, a.seed, a.ident, splits=("val", "train") if a.split == "both" else (a.split,)) if a.cmd == "check" else (fixture(a.split, a.n, a.seed, a.ident) if a.cmd == "fixture" else stats(a.split, a.seed, a.ident))
     if a.out:
         p = a.out if os.path.isabs(a.out) else os.path.join(ROOT, a.out)
         with open(p, "w") as fh:
