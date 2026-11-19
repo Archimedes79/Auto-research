@@ -19,6 +19,10 @@ autocast OFF (the student stays in the trainer's autocast), and the loss is the 
 a process the parts, the teachers' own GT loss, the KL of their mean in float32 against bf16 autocast and the frame tokens in the log). HARD start checks (also at a resume): a teacher learned on the student's tokens
 (cache seed, ident, K, cache root), its step counter is its run's steps, the sha256 of its model.pt is in the recipe (`distill_sha256`: a changed file is refused at a resume), and the MEAN of its own GT loss over the run's first START_BATCHES
 batches (`first_batches`) lies in TEACHER_GT.
+`--noise-pos SP` / `--noise-e SE` (E381 card v2, D126; default 0 = the loss of before bit for bit): per training step the head's INPUTS are perturbed (`add_noise`: valid tokens, pos += N(0, SP^2) per axis, e and e_raw += one
+N(0, SE^2) draw, an own generator keyed on (head seed, the head's step counter): a resume repeats the draw, the data order is untouched); the label tensors are the clean tokens', but the gate and the pair geometry come from the
+perturbed positions (a GT link can leave the gate: `gt_outside` in the clock line); the first-loss line holds the CLEAN loss of the first batch and its frame tokens, every clock line the mean displacement and mean |noise e|;
+the read-outs (`jtoken_eval.py`) take no noise. In the recipe.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
 are TEST-ONLY arguments (a run uses 500 / 384).
@@ -27,6 +31,7 @@ import argparse
 import collections
 import hashlib
 import json
+import math
 import os
 import sys
 import time
@@ -41,9 +46,9 @@ import jtoken as JK  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "none_weight", "pos_loss", "head_seed",
-          "distill_from", "distill_weight", "distill_sha256")
+          "distill_from", "distill_weight", "distill_sha256", "noise_pos", "noise_e")
 ARCH_DEFAULTS = dict(none_weight=1.0, pos_loss="sum", head_seed=None, live_inputs=False,
-                     distill_from=None, distill_weight=1.0, distill_sha256=None)     # what a run of before these options means (the head of the first build)
+                     distill_from=None, distill_weight=1.0, distill_sha256=None, noise_pos=0.0, noise_e=0.0)     # what a run of before these options means (the head of the first build)
 ARCH = dict(d=64, heads=4, layers=3, ffn=128)                               # the champion's architecture (the head of the first build), a constant since D117
 REMOVED = dict(prior="none", teacher="none", init=None, token_drop=0.0, none_weight_near=None, **ARCH)     # D117: options that no longer exist -> the value a stored run must hold (or nothing): today's head and loss are then that run's
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
@@ -68,10 +73,33 @@ def parse_args(argv=None):
     ap.add_argument("--head-seed", type=int, default=None, dest="head_seed", help="the seed of the head's initialisation and the data order (default: --seed); --seed keeps choosing the B' cache")
     ap.add_argument("--distill-from", default=ARCH_DEFAULTS["distill_from"], dest="distill_from", help="E379: comma list of run folders (relative to the problem folder) whose frozen heads are the teachers of the KD term")
     ap.add_argument("--distill-weight", type=float, default=ARCH_DEFAULTS["distill_weight"], dest="distill_weight", help="E379: W, the loss = the GT loss + W x the KD term (only with --distill-from)")
+    ap.add_argument("--noise-pos", type=float, default=ARCH_DEFAULTS["noise_pos"], dest="noise_pos", help="E381: per training step pos += N(0, SP^2) per axis on the valid tokens (m; 0 = off)")
+    ap.add_argument("--noise-e", type=float, default=ARCH_DEFAULTS["noise_e"], dest="noise_e", help="E381: per training step e and e_raw += the same N(0, SE^2) draw on the valid tokens (logit; 0 = off)")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
     a = ap.parse_args(argv)
     check_options(vars(a))
     return a
+
+
+NOISY = ("pos", "e", "e_raw")                                               # E381: the batch keys `add_noise` changes (every other key, the labels among them, is passed on as the same object)
+
+
+def add_noise(b, sp, se, seed, step):
+    """E381 (card v2, D126): the head's inputs of one training step perturbed, the labels untouched -> (batch, (mean displacement of the valid tokens in m, mean |noise| on e)) or (b itself, None) when both are 0.
+    pos += N(0, sp^2) per axis, e and e_raw += the SAME N(0, se^2) draw, valid tokens only; drawn on the CPU from an own generator seeded by (seed, step) (the head seed and the head's own step counter, restored at a resume:
+    a resumed run repeats the draw; the global random stream, i.e. the data order, is not touched). The head computes its gate and pair geometry from the perturbed positions (so a GT link can leave the gate)"""
+    if not sp and not se:
+        return b, None
+    g = torch.Generator().manual_seed(int(seed) * 1_000_003 + int(step))
+    valid = b["valid"].bool().cpu()
+    vf = valid.to(torch.float32)
+    npos = torch.randn(b["pos"].shape, generator=g) * sp * vf[..., None]
+    ne = torch.randn(b["e"].shape, generator=g) * se * vf
+    out = dict(b)
+    out["pos"] = b["pos"] + npos.to(b["pos"].device, b["pos"].dtype)
+    out["e"] = b["e"] + ne.to(b["e"].device, b["e"].dtype)
+    out["e_raw"] = b["e_raw"] + ne.to(b["e_raw"].device, b["e_raw"].dtype)
+    return out, (float(npos.norm(dim=-1)[valid].mean()), float(ne.abs()[valid].mean()))
 
 
 def check_options(args):
@@ -82,6 +110,7 @@ def check_options(args):
         assert args["distill_weight"] >= 0.0, f"--distill-weight {args['distill_weight']}: >= 0"
     else:
         assert args.get("distill_weight", 1.0) == 1.0, f"--distill-weight {args['distill_weight']} without --distill-from"
+    assert args.get("noise_pos", 0.0) >= 0.0 and args.get("noise_e", 0.0) >= 0.0, f"--noise-pos {args.get('noise_pos')} / --noise-e {args.get('noise_e')}: >= 0"
 
 
 def _abs(p):
@@ -133,7 +162,7 @@ def arch(args):
     return ARCH["d"], ARCH["heads"], ARCH["layers"], ARCH["ffn"]
 
 
-def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=1.0):
+def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=1.0, noise_pos=0.0, noise_e=0.0, noise_seed=0):
     """`jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line); teachers (E379, the frozen heads of `load_teachers`): `teacher_forward` on the
     same batch, + distill_weight x `jtoken.distill_loss` from the first step, its parts in the info; at the first call the parts, the teachers' own GT loss (the student's loss options), `precision_kl` and the frame tokens
     in the first-loss line"""
@@ -147,9 +176,23 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
 
     def loss_fn(m, b):
         n[0] += 1
-        b = to_device(b, next(m.parameters()).device)
+        dev = next(m.parameters()).device
+        ns = None
+        if noise_pos or noise_e:                                                # E381: the inputs of this step perturbed (`add_noise`, keyed on the head's own step counter)
+            if n[0] == 1:                                                       # the CLEAN loss of the first batch of this process (eval: no step count; the head has no dropout): the twin check against the run without noise
+                was = m.training
+                m.eval()
+                with torch.no_grad():
+                    bc = to_device(b, dev)
+                    first.update(clean=float(gt_loss(m(bc), bc)[0]), tokens=list(b.get("token") or []))
+                torch.clear_autocast_cache()                                    # the no_grad forward filled autocast's cast-weight cache with copies WITHOUT grad_fn: the training forward below would reuse them (no grads)
+                m.train(was)
+            b, ns = add_noise(b, noise_pos, noise_e, noise_seed, m._step_py)
+        b = to_device(b, dev)
         out = m(b)
         loss, info = gt_loss(out, b)
+        if ns is not None:
+            info.update(noise_disp=ns[0], noise_e_abs=ns[1])
         if teachers:
             outs_t = teacher_forward(teachers, b)
             if n[0] == 1:
@@ -165,14 +208,17 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
             run.log(f"first loss of this process: {float(loss):.4f} (head step {m._step_py - 1} at this forward; before any update of this process)"
                     + (f"; GT loss {info['gt']:.4f} + KD {info['kd']:.4f} (x W {distill_weight}) = kd_s {info['kd_s']:.4f} + kd_l {info['kd_l']:.4f}, entropy of the teachers' mean per source short {info['ent_s']:.4f} / long {info['ent_l']:.4f}; "
                        f"the teachers' own GT loss on this batch {', '.join(f'{v:.4f}' for v in first['gt'])}; KL(the teachers' mean in float32 || under bf16 autocast) short {first['prec'][0]:.2e} / long "
-                       f"{first['prec'][1]:.2e}; frame tokens of this batch {first['tokens']}" if teachers else ""))
+                       f"{first['prec'][1]:.2e}; frame tokens of this batch {first['tokens']}" if teachers else "")
+                    + (f"; input noise (E381) SP {noise_pos} SE {noise_e}: mean displacement of the valid tokens {ns[0]:.4f} m, mean |noise e| {ns[1]:.4f}; the CLEAN loss of this batch {first['clean']:.4f}; "
+                       f"frame tokens of this batch {first['tokens']}" if ns is not None else ""))
         if n[0] == 10:
             mark[:] = [time.time(), 10]
         if n[0] == 50 or n[0] % 100 == 0:
             run.log(f"clock: {(time.time() - mark[0]) / (n[0] - mark[1]):.3f} s/step over the last {n[0] - mark[1]} steps of this process; over all {n[0]} steps so far: peak GPU allocated {info['gpu_gb']:.2f} GB, "
                     f"reserved {info['gpu_res_gb']:.2f} GB, valid tokens in the largest frame {float(b['valid'].sum(1).max()):.0f}; GT links outside the gate in this batch {info['gt_outside']:.0f} of "
                     f"{info['gt_links']:.0f}, ylong against the token chord class {info['gt_class']:.0f}; loss parts nll_s {info['nll_s']:.3f} nll_l {info['nll_l']:.3f} ce1 {info['ce1']:.3f} ce3 "
-                    f"{info['ce3']:.3f} scale_l1 {info.get('scale_l1', float('nan')):.3f}")
+                    f"{info['ce3']:.3f} scale_l1 {info.get('scale_l1', float('nan')):.3f}"
+                    + (f"; input noise: mean displacement {ns[0]:.4f} m, mean |noise e| {ns[1]:.4f}" if ns is not None else ""))
             mark[:] = [time.time(), n[0]]
         return loss, info
     return loss_fn
@@ -254,11 +300,13 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
             + (f"none weight {a.none_weight}, " if a.none_weight != 1.0 else "")
             + (f"positive loss {a.pos_loss}, " if a.pos_loss != "sum" else "")
             + (f"distill from {a.distill_from} (sha256 {', '.join(s[:12] for s in args['distill_sha256'])}, weight {a.distill_weight}), " if a.distill_from else "")
+            + (f"input noise (E381) pos {a.noise_pos} m per axis, e {a.noise_e} (expected mean displacement {a.noise_pos * math.sqrt(math.pi / 2):.4f} m, mean |noise e| {a.noise_e * math.sqrt(2 / math.pi):.4f}), "
+               if a.noise_pos or a.noise_e else "")
             + (f"synthetic batches, K {smoke_k}" if a.smoke else f"cache {a.cache or 'default root'}, ident {a.ident}, K {a.K or 'auto'}"))
     if teachers:
         run.log(f"teachers (float32, eval, step counters {[t._step_py for t in teachers]}): their own GT loss (the student's loss options) on the first {START_BATCHES} batches "
                 + "; ".join(f"{p}: mean {row.mean():.4f} (one batch {row.min():.4f} - {row.max():.4f})" for p, row in zip(a.distill_from.split(","), tl)) + f"; the band of the mean {TEACHER_GT}: ok")
-    T.fit(model, make_loss(run, a.none_weight, a.pos_loss, teachers, a.distill_weight), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05,
+    T.fit(model, make_loss(run, a.none_weight, a.pos_loss, teachers, a.distill_weight, a.noise_pos, a.noise_e, hs), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05,
           ckpt_every=ckpt_every, seed=hs, args=args, device=dev, config=dict(design="jtoken"))
     run.log(f"done {a.name}")
 

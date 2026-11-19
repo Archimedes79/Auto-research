@@ -18,6 +18,8 @@ textual mutants), distill_trainer (E379 --distill-from / --distill-weight: unset
 gt_mean / kd_mean, the teacher key, the start check on the teachers' GT loss over the first 20 batches, the first batch through a persistent-worker DataLoader unchanged by the teachers, the first-batch log, float32
 teachers inside autocast, the student initialised as its teacher has KD 0 at step 1, the teachers frozen with their own counters; the refusals; textual mutants of jtoken_train.py; the card's teachers on their VAL
 dumps and the twin of E373 (2 loader workers) on the real cache when they are there).
+noise (E381 card v2 `--noise-pos` / `--noise-e`: `add_noise` on valid tokens only, e / e_raw one draw, the labels the same objects, the global stream untouched, keyed on (seed, step), the logged statistics; textual mutants;
+0 = the champion's 20 smoke steps bit for bit; the noise in the args and the log, the clean first loss; another noise at a resume refused; kill / resume repeats the draws by the restored step counter; no noise in the read-outs).
 """
 import json
 import math
@@ -1113,7 +1115,7 @@ def test_distill_trainer():
                    "the autocast-off of the teachers removed": [('with torch.no_grad(), torch.autocast(b["valid"].device.type, dtype=torch.bfloat16, enabled=amp):', "with torch.no_grad():")],
                    "the start check on the first batch only": [("for v in tl.mean(1))", "for v in tl[:, 0])")],
                    "the cache root out of the teacher key": [('x.get("K"), x.get("cache"))', 'x.get("K"))')],
-                   "the sha256 out of the recipe": [('"distill_from", "distill_weight", "distill_sha256")', '"distill_from", "distill_weight")')]}
+                   "the sha256 out of the recipe": [('"distill_from", "distill_weight", "distill_sha256", "noise_pos", "noise_e")', '"distill_from", "distill_weight", "noise_pos", "noise_e")')]}
         for edits in mutants.values():
             with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
                 must_fail(_check_distill_runs, _mutant(*edits, of=JKT), tmp, td, sha, band)
@@ -1133,8 +1135,120 @@ def test_distill_trainer():
           f"({', '.join(mutants)}) fail; {real}; {twin}: ok")
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ E381: input noise
+def _noise_ok(mod, b, sp=0.2, se=0.5, seed=2, step=7):
+    """the checks of one `add_noise` (of `mod`, a mutant or the module) on batch b -> True / an AssertionError"""
+    v = b["valid"].bool()
+    state = torch.random.get_rng_state()
+    nb, st = mod.add_noise(b, sp, se, seed, step)
+    assert torch.equal(torch.random.get_rng_state(), state), "the global random stream (the data order) is touched"
+    assert all(nb[k] is b[k] for k in b if k not in mod.NOISY), "a key other than pos / e / e_raw (a label) changed"
+    dp, de, der = nb["pos"] - b["pos"], nb["e"] - b["e"], nb["e_raw"] - b["e_raw"]
+    assert bool((dp[~v] == 0).all()) and bool((de[~v] == 0).all()) and bool((der[~v] == 0).all()), "a padding token got noise"
+    assert bool((dp[v] != 0).all()) and bool((de[v] != 0).all()) and bool((der[v] != 0).all()), "a valid token got no noise"
+    assert torch.allclose(de, der, atol=1e-5), "e and e_raw got different draws"
+    nb2, _ = mod.add_noise(b, sp, se, seed, step)
+    nb3, _ = mod.add_noise(b, sp, se, seed, step + 1)
+    nb4, _ = mod.add_noise(b, sp, se, seed + 1, step)
+    assert all(torch.equal(nb[k], nb2[k]) for k in mod.NOISY) and not torch.equal(nb["pos"], nb3["pos"]) and not torch.equal(nb["pos"], nb4["pos"]), "the draw is not a function of (seed, step)"
+    assert abs(st[0] - float(dp.norm(dim=-1)[v].mean())) < 1e-5 and abs(st[1] - float(de.abs()[v].mean())) < 1e-5, ("the logged statistics are not the draw's", st)
+    return True
+
+
+def test_noise():
+    """E381 card v2 (D126): `--noise-pos SP` / `--noise-e SE` (`jtoken_train.add_noise`): (1) per step, valid tokens only, pos += N(0, SP^2) per axis, e and e_raw += the SAME N(0, SE^2) draw, every other key (the labels) the
+    same object, the global random stream untouched, the draw a function of (head seed, head step), the logged mean displacement / mean |noise e| are the draw's and near SP sqrt(pi/2) / SE sqrt(2/pi) on a large batch, zeros = the
+    batch itself; textual mutants (e_raw an own draw, no valid mask, the global generator) fail; (2) the trainer: both flags at 0 = the champion command line's 20 smoke steps bit for bit (losses, weights), the noise moves the
+    losses (finite) and is in model.pt's args and the log; another noise at a resume is refused; (3) kill at step 12 and resume: the draws are keyed on the restored step counter (steps 0 - 11, then 10 - 19); (4) no read-out takes a noise flag"""
+    b = JK.synthetic_batch(4, 96, seed=3)
+    assert bool((~b["valid"].bool()).any()), "the toy needs padding"
+    assert _noise_ok(JKT, b)
+    nb, st = JKT.add_noise(b, 0.0, 0.0, 2, 7)
+    assert nb is b and st is None, "zero noise must give the batch itself"
+    big = JK.synthetic_batch(16, 512, seed=5)
+    _, st = JKT.add_noise(big, 0.2, 0.5, 0, 0)
+    assert abs(st[0] / (0.2 * math.sqrt(math.pi / 2)) - 1) < 0.03 and abs(st[1] / (0.5 * math.sqrt(2 / math.pi)) - 1) < 0.03, st
+    mutants = {"e_raw own draw": ('out["e_raw"] = b["e_raw"] + ne.to(b["e_raw"].device, b["e_raw"].dtype)',
+                                  'out["e_raw"] = b["e_raw"] + (torch.randn(b["e"].shape, generator=g) * se * vf).to(b["e_raw"].device, b["e_raw"].dtype)'),
+               "no valid mask": ("vf = valid.to(torch.float32)", "vf = torch.ones_like(valid, dtype=torch.float32)"),
+               "global generator": ("npos = torch.randn(b[\"pos\"].shape, generator=g)", "npos = torch.randn(b[\"pos\"].shape)"),
+               "no seed in the key": ("manual_seed(int(seed) * 1_000_003 + int(step))", "manual_seed(int(step))"),
+               "e_raw without noise": ('out["e_raw"] = b["e_raw"] + ne.to(b["e_raw"].device, b["e_raw"].dtype)', 'out["e_raw"] = b["e_raw"] + 0 * ne.to(b["e_raw"].device, b["e_raw"].dtype)')}
+    for name, edit in mutants.items():
+        must_fail(_noise_ok, _mutant(edit, of=JKT), b)
+    # (2) the trainer
+    losses, real, now = {}, JK.jtoken_loss, [None]
+
+    def recording(out, batch, **k):
+        r = real(out, batch, **k)
+        losses[now[0]].append(float(r[0]))
+        return r
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25"]
+        for name, extra in (("champ", []), ("zero", ["--noise-pos", "0", "--noise-e", "0"]), ("noisy", ["--noise-pos", "0.2", "--noise-e", "0.5"])):
+            now[0], losses[name] = name, []
+            patched(JK, "jtoken_loss", recording, JKT.train, JKT.parse_args(["--name", name] + base + extra), runs, 500, 48)
+        ck = {n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False) for n in losses}
+        log = open(os.path.join(runs, "noisy", "train.log"), encoding="utf-8").read()
+        must_fail(JKT.train, JKT.parse_args(["--name", "noisy"] + base + ["--noise-pos", "0.3", "--noise-e", "0.5"]), runs=runs, ckpt_every=500, smoke_k=48)
+    assert len(losses["champ"]) == 20 and losses["zero"] == losses["champ"] and all(torch.equal(v, ck["champ"]["state"][k]) for k, v in ck["zero"]["state"].items()), "noise 0 changes the champion recipe"
+    assert len(losses["noisy"]) == 21 and losses["noisy"][0] == losses["champ"][0], "the clean first-batch loss (one call more) is not the champion's first loss"
+    assert all(math.isfinite(x) for x in losses["noisy"]) and all(x != y for x, y in zip(losses["noisy"][1:], losses["champ"])), "the noise does not move every step's loss"
+    assert (ck["noisy"]["args"]["noise_pos"], ck["noisy"]["args"]["noise_e"], ck["champ"]["args"]["noise_pos"]) == (0.2, 0.5, 0.0)
+    assert "input noise" in log and "mean displacement" in log and f"the CLEAN loss of this batch {losses['champ'][0]:.4f}" in log, log[-800:]
+    # the clean forward inside bf16 autocast (the GPU trainer): the training forward after it still gives every parameter a gradient (autocast's cast cache must not hold the no_grad copies; code critic B1)
+    def grads_ok(mod):
+        m = mod.build_head(vars(mod.parse_args(["--name", "x"])))
+        fn = mod.make_loss(types.SimpleNamespace(log=lambda *a, **k: None), 0.25, "sum", (), 1.0, 0.2, 0.5, 0)
+        with torch.autocast("cpu", dtype=torch.bfloat16):
+            loss, _ = fn(m, JK.synthetic_batch(2, 48, seed=1))
+            loss.backward()
+        missing = [n for n, p in m.named_parameters() if p.requires_grad and p.grad is None]
+        assert not missing, f"no gradient after the clean forward under autocast: {missing[:6]}"
+        return True
+    assert grads_ok(JKT)
+    must_fail(grads_ok, _mutant(("                torch.clear_autocast_cache()", "                pass"), of=JKT))
+    mutants["autocast cache kept"] = None
+    # (3) kill and resume: the draws follow the head's restored step counter
+    steps, real_noise = [], JKT.add_noise
+
+    def rec_noise(b, sp, se, seed, step):
+        steps.append(step)
+        return real_noise(b, sp, se, seed, step)
+    calls = [0]
+
+    def dying(out, batch, **k):
+        calls[0] += 1
+        if calls[0] == 12:
+            raise KeyboardInterrupt("kill")
+        return real(out, batch, **k)
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        argv = JKT.parse_args(["--name", "k"] + base + ["--noise-pos", "0.2", "--noise-e", "0.5"])
+        JKT.add_noise, JK.jtoken_loss = rec_noise, dying
+        try:
+            try:
+                JKT.train(argv, runs=runs, ckpt_every=5, smoke_k=48)
+            except KeyboardInterrupt:
+                pass
+            else:
+                raise RuntimeError("the kill did not happen")
+            JK.jtoken_loss = real
+            JKT.train(argv, runs=runs, ckpt_every=5, smoke_k=48)
+        finally:
+            JKT.add_noise, JK.jtoken_loss = real_noise, real
+        ck_k = torch.load(os.path.join(runs, "k", "model.pt"), map_location="cpu", weights_only=False)
+    assert steps == list(range(11)) + list(range(10, 20)), steps                # the 12th loss call is step 10's (the clean first-batch loss is one more call): killed there, resumed from the checkpoint of step 10
+    assert all(torch.equal(v, ck["noisy"]["state"][k]) for k, v in ck_k["state"].items()), "the killed and resumed noisy run is not the uninterrupted one bit for bit"
+    # (4) the read-outs take no noise
+    for f in ("jtoken_eval.py", "jthresh.py"):
+        assert "noise" not in open(os.path.join(JT.ROOT, "evaluation", f), encoding="utf-8").read(), f
+    print(f"noise: add_noise on valid tokens only, e / e_raw one draw, labels the same objects, the global stream untouched, keyed on (seed, step), logged statistics = the draw's (large batch {st[0]:.4f} m / {st[1]:.4f} "
+          f"against {0.2 * math.sqrt(math.pi / 2):.4f} / {0.5 * math.sqrt(2 / math.pi):.4f}); mutants ({', '.join(mutants)}) fail; trainer: noise 0 = the champion's 20 smoke steps bit for bit, noise moves the losses (finite), in the args and "
+          f"the log, another noise at a resume refused; kill / resume: draws at steps {steps[0]}..{steps[10]} then {steps[11]}..{steps[-1]}, the final weights = the uninterrupted run's bit for bit; no noise in the read-outs: ok")
+
+
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
-         test_live_inputs, test_head_seed, test_distill, test_distill_trainer]
+         test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want
