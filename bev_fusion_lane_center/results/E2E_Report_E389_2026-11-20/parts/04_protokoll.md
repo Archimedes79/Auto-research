@@ -1,0 +1,24 @@
+# 4. Protokoll: Arme, Regel, Vorhersage, Referenzzeilen
+
+**Kurz.** Alles in diesem Kapitel stand **vor** dem Lauf in der Karte `experiments/E389_sd-route-association-of-champion-tokens/experiment.md` (Version 2 nach dem ersten Kritiker-Durchgang; die Entscheidung zur Kappung der Route steht ebenfalls dort), das Urteil kommt aus der dort geschriebenen Regel und ist **von Hand** gelesen (die Karte nennt keine Metrik-Kartenpfade, `decide.py` kann sie nicht beurteilen: „by hand“ steht dort ausdrücklich). VAL 873 Frames in der Reihenfolge des Caches E365, TEST wurde nie berührt.
+
+**Die Einheit.** Der **abgedeckte GT-Knoten**: ein Knoten der Tabelle des Frames ist abgedeckt, wenn ihm ein *gelieferter* Token zugewiesen ist (gelieferte Token = die des Stufe-1-Kopfes E373 bei der Dekodierung D115: p_none < 0.6 und Existenz p >= 0.5). Sein Label ist das GT-Label des Knotens, die Vorhersage ist p_route >= 0.5 seines Tokens. **route_F1_road** ist die gepoolte F1 über die abgedeckten Knoten der Frames mit Route (Präzision = markierte abgedeckte Knoten, die on_road sind; Recall = on_road-Knoten, die markiert sind), mit gepaartem Szenen-Bootstrap; **route_F1_lane** analog für on_lane. **Gabelungs-Frames**: mindestens 60 Frames aus mindestens 8 Szenen in VAL verlangt die Karte, sonst ist die Klausel mit einem genannten Status leer.
+
+**Die Regel (geschrieben vor dem Lauf).** **KEEP** (die Zuordnung wird als A6-Stufe der Wahrnehmung des Champions übernommen) verlangt ALLES von: (1) m - z route_F1_road >= +0.10 im Modus *error* auf BEIDEN Seeds, die untere Grenze des gepaarten 95-%-Szenen-Bootstraps über 0; (2) **Vertrauen:** m ohne Karte (*none*) nicht mehr als 0.01 unter z, mit der FALSCHEN Karte (*wrong*) nicht mehr als 0.03 unter z auf allen Frames und nicht mehr als 0.05 auf den Gabelungs-Frames, beide Seeds; (3) **die Karte hilft, wo es zählt:** F1_road auf den Gabelungs-Frames m - z >= +0.10 auf beiden Seeds mit unterer Grenze über 0; (4) F1_lane von m nicht mehr als 0.02 unter z; (5) der Abbruch (kill) hat nicht ausgelöst; (6) Kosten: der Kopf fügt dem Champion-Pfad höchstens 1.0 ms zu (gemessen im ruhigen Fenster oder, falls es keins gibt, aus Parametern und FLOPs abgeleitet und als „nicht gemessen“ gekennzeichnet). **CUT:** m - z <= -0.03 auf beiden Seeds. **TIE:** alles andere (Standard ist z: keine Kartenstufe). **INCONCLUSIVE:** die Seeds weichen im Vorzeichen ab und beide |Differenz| >= 0.03. **Rauschen:** der Seed-Zwilling z2 misst die Streuung vor dem Urteil; ist |z - z2| > 0.01, gilt als Schwelle von (1) das Größere aus +0.10 und 5 x |z - z2|.
+
+**Abbruchkriterien (kill):** ein nicht endlicher Verlust; kein Lernen (der mittlere Verlust der letzten 200 von 3000 Schritten nicht unter 0.8 x dem Mittel der Schritte 21 - 40); der Kopf **ignoriert die Karte** (F1_road von m mit der Route einer anderen Szene innerhalb 0.01 vom Wert mit der richtigen auf BEIDEN Seeds UND m - z < 0.01: dann TIE mit dem Status „der Kopf hat nicht gelernt, die Karte zu lesen“); falsche Labels (die Daten-Prüfung scheitert); oder die Lernbarkeits-Probe scheitert (m muss in 300 Schritten auf der exakten Karte den geraden Prior schlagen).
+
+**Vorhersage (Schätzung, Trefferfenster +-0.05):** route_F1_road m - z = **+0.14** im Modus *error*; auf den Gabelungs-Frames etwa +0.15; F1_lane m - z etwa +0.01. **Quoten (vor dem Lauf): KEEP etwa 50 %, TIE etwa 45 %, CUT / INCONCLUSIVE etwa 5 %.**
+
+**Referenzzeilen (Regeln, kein Maßstab: ein Regelschritt ist nie eine Schwelle, D88 / D113).** Auf denselben abgedeckten, gelieferten Knoten, ohne Kopf: *alles markieren*, der **gerade Prior** (|x| <= 3.5 m und Richtungs-Kosinus zu +y >= 0.7, ohne Karte) und die **geometrische Regel** auf der exakten und auf der fehlerhaften Route (ein Token liegt auf der Route, wenn er innerhalb n x 1.75 m + 0.5 m der Polylinie liegt und die Richtung passt). Sie zeigen, wie viel Spielraum zwischen dem Kopf ohne Karte und einer Regel mit Karte liegt.
+
+Table: Referenzzeilen, VAL, abgedeckte gelieferte Knoten (route_F1_road; Gabelungs-F1; Erfolg@30 m je Frame). Quelle: `jroute_eval.py rules`, die Karten `runs/e389_rules/rules_card_val_s<S>.json`, neu gerechnet nach der Entscheidung zur Kappung.
+
+| Zeile | F1 Fahrbahn | F1 Gabelungen | Erfolg@30 m |
+|---|---|---|---|
+| alles markieren | {{E389_REF_ALL_F1}} | {{E389_REF_ALL_FORK}} | {{E389_REF_ALL_SUCC}} |
+| gerader Prior (ohne Karte) | {{E389_REF_STR_F1}} | {{E389_REF_STR_FORK}} | {{E389_REF_STR_SUCC}} |
+| geometrische Regel, exakte Route | {{E389_REF_GEX_F1}} | {{E389_REF_GEX_FORK}} | {{E389_REF_GEX_SUCC}} |
+| geometrische Regel, fehlerhafte Route | {{E389_REF_GER_F1}} | {{E389_REF_GER_FORK}} | {{E389_REF_GER_SUCC}} |
+
+**Eine Beobachtung vor dem Lauf, die die Zahlen der Karte veränderte.** Die Routen-Tabelle fasst höchstens 64 Stützstellen (`MAX_SAMPLES`, 2 m Abstand): {{E389_KAPPUNG}}

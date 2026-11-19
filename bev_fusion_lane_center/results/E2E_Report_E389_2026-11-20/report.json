@@ -1,0 +1,68 @@
+{
+ "title": "E389: Ordnet ein kleiner differenzierbarer Kopf die Token des Spurgraph-Champions der Navigationsroute einer SD-Karte zu?",
+ "subtitle": "Spurmitte-Projekt | 2026-11-20, Bericht auf Wunsch von Mirko (D128) | Problemgruppe A6 | dazu kurz: E388 (NO) und E381 (TIE) | VAL 873 Frames / 22 Szenen, TEST unberührt | Champion unverändert (D120)",
+ "abstract": "Der Token-Champion liefert einen Spurmitten-Graphen aus Kamera und Radar (topo F1 0.6682 / 0.6813), weiss aber nicht, welche seiner Knoten auf der Navigationsroute einer SD-Karte liegen (Problemgruppe A6). E389 fragt, ob ein kleiner, durchgehend differenzierbarer Kopf (33,738 Parameter: ein MLP auf den eigenen Merkmalen jedes Tokens und eine Cross-Attention auf die Routen-Token der Karte mit Meter-Merkmalen) die Fahrbahn der Route und die Eigenspur zuordnen kann, unter den Kartenfehlern des Protokolls (Versatz 1 - 2 m, Gier, ausgedünnte Polylinie), und das besser als derselbe Kopf ohne Karte. Ergebnis nach der vor dem Lauf geschriebenen Regel: {{E389_ERGEBNIS_SATZ}} Offen bleiben: die Karte ist simuliert, das Label ist die gefahrene und nicht die geplante Route, es gibt keine TEST-Zahl, und der Kopf hängt nicht in der Stufe 2 des Champions. Zwei weitere Experimente der Nacht sind negativ geschlossen: E388 (gelernte Ausgangsschwellen: NO) und E381 (Rauschen auf den Trainings-Token: TIE).",
+ "teaser": {
+  "image": "parts/figures/teaser_fork_frame.png",
+  "caption": "{{E389_TEASER_BILDUNTERSCHRIFT}}"
+ },
+ "sections": [
+  {"id": "intro", "title": "1. Einleitung und Stand", "part": "01_intro.md"},
+  {"id": "head", "title": "2. Der Kopf: Architektur und Beschreibung", "part": "02_kopf.md", "svg": "04_head.svg",
+   "svg_caption": "Der Route-Assoziations-Kopf von E389, gezeichnet aus dem echten Modul (Parameterzahlen gelesen). Blau = gelernt, grün = gegeben (gecachte Token des eingefrorenen B', simulierte SD-Route), Bernstein = ein genannter Auswertungsschritt, grau gestrichelt = nur im Training. Arm z ist derselbe Kopf mit jeder Route ungültig."},
+  {"id": "gt", "title": "3. Ground Truth: wie sie aussehen muss, und was E389 zusätzlich braucht", "part": "03_gt.md"},
+  {"id": "protocol", "title": "4. Protokoll: Arme, Regel, Vorhersage, Referenzzeilen", "part": "04_protokoll.md"},
+  {"id": "results", "title": "5. Ergebnisse von E389 gegen die passenden Baselines", "part": "05_ergebnis.md"},
+  {"id": "qual", "title": "6. Qualitative Beispiele und Fehlerbilder", "part": "06_qual.md"},
+  {"id": "limits", "title": "7. Ehrliche Negative und Grenzen", "part": "07_grenzen.md"},
+  {"id": "night", "title": "8. Die zwei Experimente der Nacht, kurz", "part": "08_nacht.md"},
+  {"id": "git", "title": "9. Was in git liegt und was nicht", "part": "09_git.md"},
+  {"id": "open", "title": "10. Offene Punkte", "part": "10_offen.md"},
+  {"id": "repeat", "title": "A. Wie man es wiederholt", "part": "A1_wiederholung.md"}
+ ],
+ "values": {},
+ "sources": [
+  "../../experiments/E389_*/experiment.md",
+  "../../experiments/E388_*/experiment.md",
+  "../../experiments/E381_*/experiment.md",
+  "../../experiments/E374_*/experiment.md",
+  "../../experiments/E373_*/experiment.md",
+  "../../experiments/E372_*/experiment.md",
+  "../../experiments/E283_*/experiment.md",
+  "../../experiments/E285_*/experiment.md",
+  "../../experiments/E307_*/experiment.md",
+  "../../experiments/E346_*/experiment.md",
+  "../../experiments/E356_*/experiment.md",
+  "../../experiments/E379_*/experiment.md",
+  "../../experiment_execution/decisions/D120.md",
+  "../../experiment_execution/decisions/D126.md",
+  "../../experiment_execution/decisions/D127.md",
+  "../../experiment_execution/decisions/D128.md"
+ ],
+ "utilities": [
+  {"path": "../../tools/draw_route_head.py", "usage": "python tools/draw_route_head.py <out.svg>  (from bev_fusion_lane_center/, gcar python with torch; --selftest)"},
+  {"path": "../../evaluation/jroute_eval.py", "usage": "python jroute_eval.py dump|score|rules --run R --seed S --mode error"},
+  {"path": "../../../reporter/reporter.py", "usage": "python reporter.py build results/E2E_Report_E389_2026-11-20 --strict"}
+ ],
+ "output": "E389_Bericht_2026-11-20.html",
+ "package": "E389_Code_Paket_2026-11-20.zip",
+ "pack": {
+  "limit": 2000000,
+  "include_report": false,
+  "code": [
+   "../../training/grid/jroute.py",
+   "../../training/grid/test_jroute.py",
+   "../../training/grid/test_lane_route.py",
+   "../../training/train/jroute_train.py",
+   "../../training/data/lane_route_data.py",
+   "../../evaluation/jroute_eval.py",
+   "../../evaluation/tests/test_jroute_eval.py",
+   "../../evaluation/jthresh.py",
+   "../../tools/draw_route_head.py",
+   "../../../reporter/**/*"
+  ],
+  "strip": "../..",
+  "require_clean_git": false,
+  "readme": "E389 (route association of the champion tokens), code package of 2026-11-20 (the report is the separate html file).\n\ncode/ = the sources that made the numbers, repository-relative paths: training/grid/jroute.py (RouteHead, route_loss), training/train/jroute_train.py (arms m / z), training/data/lane_route_data.py (route GT, route tokens, map modes, fork frames), evaluation/jroute_eval.py (dump / score / rules, paired scene bootstrap), their tests, evaluation/jthresh.py (E388), and code/../reporter (the documentation system that built the report; it imports nothing from the project). No weights, no caches (derived data and checkpoints stay in the repository run folders, see chapter 9 of the report); they need the repository: copy code/ over bev_fusion_lane_center/ and run from there.\nutilities/ = the helper scripts the report names.\nStatus: see the report; TEST untouched."
+ }
+}
