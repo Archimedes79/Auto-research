@@ -1,6 +1,6 @@
 # E300 Where does the pair head fail? Splits of the end and pair recall by driven / city / lanes / turn / painted / visible / range (D82: "what might be overlooked")
 
-Card of 2026-11-11, CPU analysis on the dump of a head (`runs/<run>/ends_val.pkl`), `evaluation/jsplits.py`. One number per head hides where it fails; the splits show what the next experiment must attack and where the guards of the experiments should look.
+Card of 2026-11-11, CPU analysis on the dump of a head (`runs/<run>/ends_val.pkl`), `evaluation/jsplits.py` (removed on 2026-11-21, git history). One number per head hides where it fails; the splits show what the next experiment must attack and where the guards of the experiments should look.
 
 ## 0. The card (what the tools run)
 ```json card
