@@ -18,6 +18,6 @@ matched reference, null baseline, equal-budget control, seed twin; split rules; 
 ## End of loop (P4)
 - per node: result and decision (one line each, numbers from metric cards)
 - best system now, and what changed against the last best
-- questions closed (as CLOSED rows of the problem's `DESIGN.md`), open points for the next cycle
+- questions closed (into the 'open to attack when' column of the problem's `DESIGN.md`), open points for the next cycle
 - decisions for the owner (into the decisions record: an entry in the Open table of `DECISIONS.md`, next free id)
 - checks: numbers check, numbers reviewer, structure check, tests

@@ -3,7 +3,7 @@
 The outer loop is run by the person: paste one step, read its result, then start the next (or stop). Every step reads `PROBLEM.md`, `HANDOVER.md` and the design spec (`DESIGN.md`) first (bev_fusion keeps `README.md`, `plan/` and `records/` instead), and ends by rewriting `HANDOVER.md`. No downloads (abstract, project and repository pages only) unless the step says so (step 1 (b) does). Method: `autoresearch/METHOD.md`.
 
 **0. Start a round** - `Start round <NN>.`
-Read `HANDOVER.md`, the gaps and current best of `PROBLEM.md`, `DESIGN.md` (rules and CLOSED rows), the open branches (in `HANDOVER.md`, or at the end of the plan file where a loop keeps one) and `ledger.py tail`. Answer in about ten lines: the question of the round; which research trigger fired (none is the normal case: `METHOD.md`, "Planning a round"); the lenses for step 3; what starts first. Wait for my OK.
+Read `HANDOVER.md`, the gaps and current best of `PROBLEM.md`, `DESIGN.md` (the modules and the rules), the open branches (in `HANDOVER.md`, or at the end of the plan file where a loop keeps one) and `ledger.py tail`. Answer in about ten lines: the question of the round; which research trigger fired (none is the normal case: `METHOD.md`, "Planning a round"); the lenses for step 3; what starts first. Wait for my OK.
 
 **1. Research a topic or a group (when its trigger fired, or when I order it)** - `Research <topic, or group id, or foundation F<n>> (<budget: n searches, n notes>).`
 One order, run in a row without waiting for me. The topic folder is `<research folder>/topics/<slug>/`. Tools run as `wsl python3 <path from the workspace root>` (there is no python in Git Bash); the commands below leave out the `wsl`.

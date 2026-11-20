@@ -8,7 +8,7 @@ You judge what someone else wrote, from the primary sources only; the brief name
 **cards**: for every card ask
 1. Is the statement falsifiable, and does the prediction name a metric, a split and a number?
 2. Is the mechanism plausible given the product chain (`PROBLEM.md`) and the evidence cited (open the cited notes and experiments)?
-3. Was it tried already (ledger, experiment summaries, the rows of `DESIGN.md`, CLOSED ones included)? If so, what is new? Does the card name the rows it attacks or changes (Design delta), and a new mechanism where a row is CLOSED?
+3. Was it tried already (ledger, experiment summaries, the rules of `DESIGN.md`)? If so, what is new? Does the card name the rows it attacks or changes (Design delta), and a new mechanism where the rule records a failed attack?
 4. Is the test decisive: controls (null, matched reference, equal budget, seed twin), noise band, enough frames and seeds? Could a confound produce the predicted effect?
 5. Is the cost realistic, is there a kill criterion, are the inputs ready or listed as tasks?
 Give each card its verdict: accept / revise (what exactly) / reject (why); the planner writes it into the card's "Referee" line (you never edit). A card is hand-over ready (G2) only when all five are answered and `experiment.py check E<id>` says ready.

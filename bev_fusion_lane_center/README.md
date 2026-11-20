@@ -5,7 +5,7 @@
 - Short graphs, correct graphs, fast (17.5 - 24 ms per frame)
 - New chat: read HANDOVER.md
 - The problem: PROBLEM.md (goal, chain, metrics, current best, gaps, problem groups, foundation topics); paths for the tools: project.json
-- The design spec: DESIGN.md (what to build and why: requirements, design rules with basis / status / attack, closed questions, how the spec moves); the coder is given it with the card's `design_delta`
+- The design spec: DESIGN.md (the modules of the chain and the rules it obeys, small; the code is the detail spec); the coder is given it with the card's Design delta
 - The research system around it: `../autoresearch/` (METHOD.md, agents, templates, prompts, tools); rules for an AI session: CLAUDE.md
 - Folder tree with sizes on demand: `tools/maintenance/make_structure.py` (writes `temp/STRUCTURE.md`); structure and document check: `../autoresearch/tools/check_structure.py`
 

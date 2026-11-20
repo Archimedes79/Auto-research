@@ -129,14 +129,14 @@
   },
   {
    "id": "design",
-   "label": "DESIGN.md\nrules + delta,\nclosed rows",
+   "label": "DESIGN.md\nmodules + rules",
    "kind": "file",
    "col": 1,
    "row": 6,
    "code": [
     "bev_fusion_lane_center/DESIGN.md"
    ],
-   "note": "the standing design spec of a problem (D131): what to build and why, requirements, design rules with basis, status and attack. The coder is given it with the card's Design delta; the planner merges a KEEP into the row at close; an instruction of the person that fixes how the system must be becomes a requirement row"
+   "note": "the standing design spec of a problem (D131, D133): the modules of the chain and the rules it obeys, small on purpose (the code is the detail spec). The coder is given it with the card's Design delta; the planner merges a KEEP into the rule at close; an instruction of the person that fixes how the system must be becomes a rule"
   },
   {
    "id": "decisions",
