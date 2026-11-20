@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Recipe (first run 2026-10-26, approved by Mirko; a new download needs his OK again): the Occ3D-nuScenes labels (gts.tar.gz 2.74 GB +
+# Recipe (first run 2026-10-26, approved by the project owner; a new download needs the owner's OK again): the Occ3D-nuScenes labels (gts.tar.gz 2.74 GB +
 # annotations.json 0.15 GB, NOT the 30.7 GB images) to D:\Auto-research\NuScenes\occ3d. Source: public Google Drive folder
 # 1JObO75iTA2Ge5fa8D3BWC8R7yIG8VhrP of https://github.com/CVPR2023-3D-Occupancy-Prediction/CVPR2023-3D-Occupancy-Prediction
 # (MIT + nuScenes non-commercial terms). Usage (from the repository root): wsl bash data/NuScenes/tools/get_occ3d_labels.sh

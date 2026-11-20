@@ -2,7 +2,7 @@
 # Build the WSL "views" of nuScenes that existing code reads (~/data/nuscenes_full, ~/data/nuscenes): folders of
 # symlinks only - raw entries point to the raw data on D: (D:\Auto-research\NuScenes), the lane project's additions
 # point to its project folder on C: (bev_fusion_lane_center/data/nuscenes_additions). The former real folders in
-# WSL are moved to ~/_to_delete/ (purge only with Mirko's OK). Re-run after the repository folder or the D: root
+# WSL are moved to ~/_to_delete/ (purge only with the project owner's OK). Re-run after the repository folder or the D: root
 # moves (the links are absolute). Refuses while a process has a file open under ~/data (checked on the link TARGETS: an
 # open file reached through a view shows as /mnt/d/... or as the additions path in /proc/*/fd, never as ~/data/...).
 # Usage (from the repository root): wsl bash data/NuScenes/tools/link_views.sh [--selftest]
