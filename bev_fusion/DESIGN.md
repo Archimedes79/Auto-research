@@ -1,0 +1,46 @@
+# DESIGN - camera + radar BEV system (bf)
+
+One small file for people and for AI: the modules of the chain at a glance and the rules it obeys. With it a coder can build a similar chain; the exact specification is the code (paths in the table). Every rule can be attacked: a card names the rule and a new mechanism or a cheaper test, and the written verdict changes the rule here. What the system must satisfy (set by the owner, each with its check) is `plan/requirements.md`; the owner's permissions and the decision ids are in `../bev_fusion_lane_center/experiment_execution/DECISIONS.md`; numbers are in `records/LEDGER.md` and the cards, not here.
+
+## The chain: five layers
+
+```
+precompute     deterministic, no gradient: calibration, ego steps, radar points compensated to now, frozen image features, visibility maps
+  -> input interface    the named batch (ONE frame, ONE radar scan per step), the only thing the network reads
+  -> network (slots)    camera encoder + radar encoder -> temporal fusion per branch -> fusion -> backbone -> time mover -> heads
+  -> output interface   dense and differentiable, per time offset dt: maps, object maps, velocity field
+  -> post-processing    hard box selection and line threshold, for metrics and the prototype only
+```
+| module | job | code (`training/`) |
+|---|---|---|
+| Precompute | calibration, ego steps and gaps, radar detections moved to now, frozen image features, the visibility maps (camera now, radar fan, fusion area) | `precompute.py`, `nuscenes_dataset.py`, `feature_cache.py` |
+| Input interface | the batch dict and the forward arguments, each named with shape, unit and frame | `interface.py` |
+| Camera encoder | images + calibration -> a camera BEV: frozen DualBEV / BEVFusion features (cached), a lift that keeps the depth distribution; option: a small trained student encoder | `camera_encoder.py`, `lift_pd.py`, `bevfusion_camera.py`, `student_encoder.py` |
+| Radar encoder | radar points (position, Doppler, RCS) -> a BEV: a raster before any weight, or lossless delta slots | `radar_encoder.py`, `radar_bev.py` |
+| Temporal fusion | the past enters as a state moved with the ego motion (splat), one block per branch | `temporal_fusion.py`, `splat.py` |
+| Fusion + backbone | concat of the two BEVs, the DualBEV trunk -> features S | `fusion.py`, `bev_trunk.py` |
+| Motion block | two camera BEVs, ego steps and radar points -> the velocity field in a three-level pyramid | `motion_block.py` |
+| Time mover + heads | S moved to each dt by ego motion and the velocity field, then the map head (areas, line masks and distance fields, dense footprints, a 1 m centre-line head), the object head (heat map, offset, size, heading, moving flag, velocity) | `timed_head.py`, `bev_trunk.py`, `object_head.py`, `layers.py` |
+| Loss | one term per head layer from the layer table, learned weights between the four groups, masks from the visibility maps | `losses.py`, `loss_extras.py` |
+| Post-processing | the one box extractor and the line threshold | `extract.py` |
+
+The whole chain is `model.py` (builder tables, one kind per slot chosen in `ModelConfig`); a configuration names a system (`training/configs/`, the base `t20_base_nol4.json`); the trainer is `train.py` on the engine `../autoresearch/trainkit/`. Frozen image heads, the cached features and the ground truth (`../GtGenerator/`, release v14) are inputs, not part of the network. The planner is not part of the system: it reads the output interface.
+
+## Rules
+| rule | why | open to attack when |
+|---|---|---|
+| R1 **Calibration drives the projection:** the image-to-vehicle mapping is a general pinhole projection from the calibration (any roll, pitch, yaw, position), it is computed, never learned, and no idealised virtual camera is used | the owner: `plan/requirements.md` R-GEO-1 to 4 | the owner |
+| R2 **A dataset is not the problem:** no block contains a dataset constant; any number of cameras and radars at any mounting; every sensor has its own timestamps and the dt to the target time is an input | the owner: R-DATA-1, 2 | the owner |
+| R3 **Every block rests on a paper and its code, has a documented fallback to a proven component and a test on synthetic data with a known answer;** published designs run through the same code and test as ours | the owner: R-METH-1 to 3 | the owner |
+| R4 **Efficient and fast:** ms per frame on an idle GPU, batch 1 | the owner: R-METH-4 | the owner |
+| R5 **The output interface is dense and differentiable:** the loss, the post-processing and a later planner read only it; hard selection (boxes, line threshold) lives in post-processing; refinement is a separate second-stage network, never part of the model or the loss | the owner: D43, D47 | the owner, or a candidate that is better and still differentiable |
+| R6 **One frame and one radar scan per step;** the past only as the recursive state of the previous step at feature level, no window of frames. Built as options (`cam_buffer` recurrent, `rad_temporal`); the window is still the default, the pair arm is the control, and the radar memory was never trained successfully | the owner: D91; D51 | the owner, or a radar recursion that learns (t25) |
+| R7 **The rig is the front camera plus radar; scoring and loss live on the fusion area** (the cells both sensors observe and that are not hidden behind a box): outside it a cell or object is 'don't care' in training and in evaluation; camera-only baselines are scored on the same area | the owner: D31, D37, D38 | a narrower radar mask, which shrinks the area |
+| R8 **One visibility map per sensor, made once, used three times** (network, loss, evaluation): a camera loss only on cells the camera observes, a radar loss only on cells the radar observes; per-sensor aux heads are test and debug tools, off in the final arms and never dominant | the owner: D36, D38, D43 | the owner |
+| R9 **Start from a strong frozen image front end** (cached DualBEV / BEVFusion features), then add one step at a time; image features become trainable only through a small student encoder (t22 stage B was inconclusive, the one long run t26 waits for a GPU go, D102) | the owner: R-METH-1, 3; D26 (8) | a student that beats the teacher features inside the cost |
+| R10 **Lanes and centre-lines are trained end to end,** no rule step on the training path; dense maps are allowed as auxiliary targets, probes and side outputs, not as a stage that must come first; the stride-4 lane branch (L4) is off for new from-scratch runs | the owner: D47, D65 | a lane head that needs a rule step to work |
+| R11 **Loss weighting:** learned (Kendall) weights between the four groups (areas, lines, objects, motion), time weights w(dt) 1 / 0.5 / 0.25 with a warm-up | D27 (revisit after the trainable-encoder run) | the run with trainable image features |
+| R12 **Separate codebase and protocol:** this system and the lane project do not import each other (shared: `autoresearch/`, `GtGenerator/`); the network always runs warm (no cold run), the Runner reads no ground truth; TEST once with the owner's recorded OK | the owner: D50, D70, D72; hard rule 1 | the owner |
+
+## How this file moves
+A card names the rules it attacks or changes (its Design delta); the coder is given this file plus the delta. KEEP: the delta becomes the rule and the card's id the reason (the old text stays in git); CUT or TIE: the rule stays and records the result of the attack. An instruction of the owner that fixes how the system must be becomes a rule, his words or the decision id in the reason; permissions go to the decisions record named at the top. The evidence stays in the cards and the ledger.

@@ -54,10 +54,10 @@
   "_jobrunner": "python -m jobrunner (autoresearch/jobrunner): one call of a suite as a job under run.py, the data named in the job. suites = the modules whose JOBS table adds calls (GtGenerator/jobs.py: the two generation commands). The interpreter of the child processes is an option of the runner (--python, JOBRUNNER_PYTHON), nothing is set here.",
   "jobrunner": {"suites": ["GtGenerator"]},
   "structure": {
-    "root_files": ["README.md", "project.json"],
+    "root_files": ["README.md", "DESIGN.md", "project.json"],
     "root_dirs": ["_to_delete", "data", "evaluation", "experiments", "literature", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "tests", "tools", "training"],
     "folders_with_readme": ["_to_delete", "data", "evaluation", "experiments", "models", "plan", "records", "results", "runner", "runs", "splits", "studies", "temp", "training"],
-    "living": ["README.md", "data/README.md", "records/README.md", "runner/README.md", "splits/README.md", "studies/README.md", "temp/README.md"],
+    "living": ["README.md", "DESIGN.md", "data/README.md", "records/README.md", "runner/README.md", "splits/README.md", "studies/README.md", "temp/README.md"],
     "skip_parts": [],
     "index_dirs": ["training", "evaluation", "../GtGenerator", "tests", "temp"],
     "extra_bases": []
