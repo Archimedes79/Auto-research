@@ -1017,22 +1017,22 @@
    "fmt": "{:.3f}"
   },
   "ms_full_M66_fp32": {
-   "file": "../../temp/e389/head_timing.json",
+   "file": "../../runs/eval/e389_head_timing.json",
    "key": "results.full_M66_fp32.median_ms",
    "fmt": "{:.2f}"
   },
   "ms_full_M136_fp32": {
-   "file": "../../temp/e389/head_timing.json",
+   "file": "../../runs/eval/e389_head_timing.json",
    "key": "results.full_M136_fp32.median_ms",
    "fmt": "{:.2f}"
   },
   "ms_full_M66_bf16": {
-   "file": "../../temp/e389/head_timing.json",
+   "file": "../../runs/eval/e389_head_timing.json",
    "key": "results.full_M66_bf16.median_ms",
    "fmt": "{:.2f}"
   },
   "ms_full_M136_bf16": {
-   "file": "../../temp/e389/head_timing.json",
+   "file": "../../runs/eval/e389_head_timing.json",
    "key": "results.full_M136_bf16.median_ms",
    "fmt": "{:.2f}"
   },
@@ -1200,6 +1200,26 @@
    "file": "parts/figures/e389_frames.json",
    "key": "candidates",
    "fmt": "{:d}"
+  },
+  "mean_diff": {
+   "file": "../../runs/eval/e389_verdict.json",
+   "key": "mean_m_minus_z_road_error",
+   "fmt": "{:+.4f}"
+  },
+  "abs_z_z2": {
+   "file": "../../runs/eval/e389_verdict.json",
+   "key": "abs_z_minus_z2",
+   "fmt": "{:.4f}"
+  },
+  "abs_m_m2": {
+   "file": "../../runs/eval/e389_verdict.json",
+   "key": "abs_m_minus_m2",
+   "fmt": "{:.4f}"
+  },
+  "spread": {
+   "file": "../../runs/eval/e389_verdict.json",
+   "key": "spread",
+   "fmt": "{:.4f}"
   }
  },
  "sources": [
@@ -1220,7 +1240,9 @@
   "../../experiment_execution/decisions/D120.md",
   "../../experiment_execution/decisions/D126.md",
   "../../experiment_execution/decisions/D127.md",
-  "../../experiment_execution/decisions/D128.md"
+  "../../experiment_execution/decisions/D128.md",
+  "../../runs/eval/e389_verdict.json",
+  "../../runs/eval/e389_head_timing.json"
  ],
  "utilities": [
   {
