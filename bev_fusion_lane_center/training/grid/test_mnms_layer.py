@@ -287,7 +287,7 @@ check(abs(float(pz.grad[0, 1, 0, 1]) - dpos) < 1e-3 * dpos and abs(float(pz.grad
 # ---- 14. (--real) the kill criterion of the card: the layer reproduces qgraph_readout.matrix_nms on 20 frames of B's full dump
 if "--real" in sys.argv:
     dump_path = os.path.join(ROOT, "temp", "e276", "predfull_e273_p_s0.pkl")
-    assert os.path.exists(dump_path), f"--real needs B's full dump {dump_path} (qgraph_run_eval.py score --run e273_p_s0 --seed 0 --exp e276 --readouts plain@0.5 --dump-full)"
+    assert os.path.exists(dump_path), f"--real needs B's full dump {dump_path} (made by `qgraph_run_eval.py score --run e273_p_s0 --seed 0 --exp e276 --readouts plain@0.5 --dump-full`, removed on 2026-11-21: run it from the git tag archive/lane-before-dead-code-2026-11-21)"
     dump = pickle.load(open(dump_path, "rb"))
     H = W = 50
     cell = torch.stack(torch.meshgrid(-50 + 2 * (torch.arange(H).double() + 0.5), -50 + 2 * (torch.arange(W).double() + 0.5), indexing="ij"), 0)       # (2, H, W) centres in metres

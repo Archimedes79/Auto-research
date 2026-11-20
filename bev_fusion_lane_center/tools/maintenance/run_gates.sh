@@ -34,18 +34,13 @@ run "head: end read-out (connectors, rule) (E284)"       qends_eval.py selftest
 run "head: junction GT layer, order rule (E285)"         grid/jgt.py
 run "head: junction map targets (E285)"                  grid/qjunction.py
 run "head: junction maps head, loss, keypoints (E286)"   grid/jmaps.py
-run "head: junction maps scoring (E286)"                 jmaps_eval.py selftest
-run "head: junction pictures (E285)"                     viz/junction_view.py --selftest
 run "head: pair head v2, order penalty (E287)"            grid/jends.py
 run "head: pair head v2 read-out (E287)"                 jends_eval.py selftest
 run "head: rule control of the pair decision (E287)"      jrule_control.py selftest
-run "head: read-out replay (E288)"                       readout_replay.py selftest
-run "head: failure splits of the pair head (E300)"        jsplits.py selftest
 run "head: pair precision at a fixed recall (E302)"       jpair_pr.py selftest
 run "head: maneuver coverage of a delivered graph (E310)"   jmaneuver.py selftest
 run "head: diagnostics of the junction thread (E307 - E313)"  jdiag.py selftest
 run "head: wiring of the connectors, oracle gate (E322)"  jwiring.py selftest
-run "head: duplicate attribution of dup_frac (E324)"  jdup.py selftest
 run "head: previous-keyframe ceiling and replay (E299 step 0)"  jtime.py selftest
 run "head: wiring twin of the nearest-piece rule, kept ends (E325)"  grid/jwire.py
 run "head: wiring head Wire, features, labels, places, leak tests (E325)"  grid/jwire_head.py
@@ -61,7 +56,5 @@ run "head: all phases, gradients, E274 switches"         grid/qgraph.py
 run "head: pixel targets"                                grid/qraster.py
 run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py
 run "head: close-node read-out (rule cases, 300 frames)" test_qgraph_readout.py
-run "head: scorer glue (toy lane)"                       test_qgraph_score_glue.py
-run "head: tier metrics"                                 test_tier_metrics.py
 run "head: pictures selftest"                            viz/qgraph_view.py --selftest
 exit $fail

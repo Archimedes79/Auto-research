@@ -84,15 +84,15 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 
 | folder | size | references | first reference |
 |---|---|---|---|
-| `temp/e282/` | 3126 MB | 5 | `training/train/qnode_pilot.py:4` |
+| `temp/e282/` | 3126 MB | 5 | `training/train/qnode_pilot.py:4` (file removed 2026-11-21) |
 | `temp/e343/` | 1171 MB | 17 | `evaluation/jtest_eval.py:19` |
-| `temp/e276/` | 487 MB | 18 | `evaluation/jdup.py:102` |
+| `temp/e276/` | 487 MB | 18 | `evaluation/jdup.py:102` (file removed 2026-11-21) |
 | `temp/e321/` | 476 MB | 11 | `evaluation/jtest_eval.py:46` |
 | `temp/e292/` | 449 MB | 4 | `evaluation/qends_eval.py:407` |
 | `temp/e352/` | 294 MB | 3 | `evaluation/jprune_b.py:7` |
 | `temp/jwire/` | 219 MB | 6 | `evaluation/jwire_data.py:275` |
 | `temp/simplify/` | 200 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
-| `temp/e275/` | 150 MB | 2 | `evaluation/tests/test_qgraph_score_glue.py:79` |
+| `temp/e275/` | 150 MB | 2 | `evaluation/tests/test_qgraph_score_glue.py:79` (file removed 2026-11-21) |
 | `temp/qual_report_1115/` | 80 MB | 4 | `evaluation/README.md:55` |
 | `temp/e345/` | 77 MB | 10 | `evaluation/README.md:38` |
 | `temp/e273/` | 77 MB | 1 | `training/configs/README.md:23` |
@@ -106,7 +106,7 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 | `temp/landing/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
 | `temp/jwiring/` | 1 MB | 3 | `evaluation/jwire_data.py:5` |
 | `temp/jtime/` | 1 MB | 8 | `evaluation/jheat_replay.py:296` |
-| `temp/jdup/` | 1 MB | 2 | `evaluation/jdup.py:161` |
+| `temp/jdup/` | 1 MB | 2 | `evaluation/jdup.py:161` (file removed 2026-11-21) |
 | `temp/e385/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
 | `temp/e383_tests/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
 | `temp/e383/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |

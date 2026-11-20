@@ -45,7 +45,6 @@ run "grid chain parts (soft_lines, hold, assign, targets, head, losses; E271 / E
 run "grid hold: ego warp reproduces the second observation" grid/hold.py
 run "grid assign: soft assignment with a dustbin" grid/assign.py
 run "grid targets (cell targets, heat)" grid/targets.py
-run "E291 lane-count prior: the corruption (pure function, rates, junction cases, s / sc read-outs), the features (known answers, real peaks only, presence radius), the gated head (zero start, gradient)" grid/jprior.py
 run "grid head (2.05 M, reads x[:39])" grid/head.py
 run "grid losses" grid/losses.py
 run "grid chain: one function, gradient reaches every block (G2)" grid/chain.py
@@ -69,19 +68,12 @@ run "E273 pixel targets on real lane GT frames" grid/test_qraster.py
 run "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
 run "E273 local scorer (oracle, degradations, lane suite reproduction)" test_qgraph_eval.py
 run "E273 pictures: selftest" viz/qgraph_view.py --selftest
-run "E274 verdict rule (fake cards)" test_verdict274.py
 run "E275 close-node suppression (cases, 300 random frames, toy scorer)" test_qgraph_readout.py
-run "E275 verdict rule (fake cards)" test_verdict275.py
-run "E275 scorer glue (toy lane, CPU: cards, kill criterion, reproduction gate, dumps)" test_qgraph_score_glue.py
-run "E276 tier metrics and verdict276 (toy lane, fake cards)" test_tier_metrics.py
 run "E276 tier / vis / sparse targets (toy lane, 40 real frames)" grid/test_tiers_sparse.py
 run "E276 tier loss switches (defaults = the frozen E273 loss)" grid/test_tier_loss.py
 run "E277 soft close-node step (hard limit on 183 random frames, chain, ties, gradients, model switch, load_model)" grid/test_soft_nms.py
-run "E277 verdict rule (fake cards)" test_verdict277.py
 run "E292 Matrix-NMS layer = matrix_nms on 20 frames of B's real dump (kill criterion), switch, phase 9, mutations" grid/test_mnms_layer.py --real
 run "E282 zones of the sparse node target, zone-matching loss (toy lane, winner rules, E273 loss bit for bit, 6 real frames)" grid/test_zones.py
-run "E282 zone metrics (hand cases, position membership, additivity, bootstrap, matched threshold, density against the scorer)" test_zone_metrics.py
-run "E282 pilot runner (gate outcomes on fake results, control matched density, targets per arm, run names)" train/test_qnode_pilot.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
 run "lanegraph champion code == original modules (exact, 24 frames x 2 seeds, read-out fuzz, golden digests; CPU, about 2 minutes)" lanegraph/tests/run_lg_tests.py
 # the token head (E365 - E383): none of these was in this list before 2026-11-17

@@ -1,8 +1,7 @@
 """A wait before a GPU evaluation step: do not start a dump / score next to two trainings (D100). Best effort, no numeric effect.
 
 On 2026-11-14 the pair-head dump of E341.p_s1 ran next to two trainings (GPU 11.6 of 12.3 GB, host load 12) and `E317.g_s0` failed at step 2929 with `CUDA error: unknown error`
-(resumed from its checkpoint by `tools/env/_pyr.sh`). The launcher's memory limit (< 11 GB) gates the start of a TRAINING only; the evaluation steps of the chains (`jends_eval.py dump`,
-`jmaps_eval.py score`) start whenever their chain gets there. `wait_for_room()` is called at the start of those two commands when the process would use the GPU: it waits while the
+(resumed from its checkpoint by `tools/env/_pyr.sh`). The launcher's memory limit (< 11 GB) gates the start of a TRAINING only; the evaluation steps of the chains (`jends_eval.py dump`; the maps scoring step `jmaps_eval.py score` was removed on 2026-11-21) start whenever their chain gets there. `wait_for_room()` is called at the start of that command when the process would use the GPU: it waits while the
 GPU memory in use (device wide, every process, read by `nvidia-smi` as the launcher's own gate does: no CUDA context is created by the waiting process) is NOT below `max_used_mb`, polls
 every `poll_s` seconds and goes on after `timeout_s` (a chain never dead-locks; the line it prints says so). An unreadable `nvidia-smi` is "go on, loudly" (an evaluation step is not
 held up by a broken tool). nvidia-smi reads the physical GPU 0 whatever CUDA_VISIBLE_DEVICES says (one GPU on this box; with an empty mask the call sites are never reached).

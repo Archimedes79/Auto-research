@@ -1,5 +1,5 @@
 """Tests of evaluation/gpu_gate.py (D100): the nvidia-smi reading and its failures, the boundary of the limit, the count of waiting lines, the timeout and environment overrides, the status file,
-and that `jends_eval.dump` and `jmaps_eval.score` call the gate before they touch the model. CPU only, no GPU, no CUDA call (nvidia-smi is replaced by a fake).
+and that `jends_eval.dump` calls the gate before they touch the model. CPU only, no GPU, no CUDA call (nvidia-smi is replaced by a fake).
 Run (from the problem folder): wsl bash tools/env/_py14.sh test_gpu_gate.py"""
 import os
 import subprocess
@@ -84,8 +84,8 @@ def test_overrides_and_status_file():
 
 
 def test_call_sites_gate_before_the_model():
-    """the gate sits before the first thing that loads the model or builds the loader, in both commands (a deleted call would pass every other test)"""
-    for fn, marker_after in (("jends_eval.py", "m, args = load_model(a.run, dev)"), ("jmaps_eval.py", "model.to(dev).eval()")):
+    """the gate sits before the first thing that loads the model or builds the loader (a deleted call would pass every other test; the maps scoring command `jmaps_eval.py score` was removed on 2026-11-21)"""
+    for fn, marker_after in (("jends_eval.py", "m, args = load_model(a.run, dev)"),):
         src = open(os.path.join(EVAL, fn), encoding="utf-8").read()
         i, j = src.index("gpu_gate.wait_for_room("), src.index(marker_after)
         assert 0 < i < j, (fn, i, j)
