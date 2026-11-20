@@ -2,7 +2,7 @@
 
 Nothing of the live chain imports these modules: not `../model.py` / `../train.py` and their imports, not `../../evaluation/`
 (checked with a search of every import on 2026-10-31, repository review `../../../autoresearch/history/repo_review_2026-10-31.md`
-section 7, Mirko's decision D24). They stay runnable: each puts `training/` on `sys.path` and imports the live blocks from there;
+section 7, decision D24). They stay runnable: each puts `training/` on `sys.path` and imports the live blocks from there;
 the tests that use them add `training/legacy` to their path. Old run snapshots (`runs/<name>/code/`) keep their own copies.
 
 | file | what it is | used by | self-test |

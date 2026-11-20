@@ -11,7 +11,7 @@ AR_PROJECT=../bev_fusion python -m Evaluation Evaluation.score <results id> smal
 AR_PROJECT=../bev_fusion python -m Evaluation Evaluation.show-numbers <evaluation id>                    # the numbers of a stored evaluation
 ```
 
-| Mirko's sketch | here |
+| the evaluation sketch | here |
 |---|---|
 | `resultSet = runner.run(network, dataset_json, settype)` | `Runner.predict(network, frames)` -> the stored predictions (a `ResultSet`, `runs/<name>/eval/results/<id>`) |
 | `Evaluation.run(runner, network, dataset_json, setId / seq1, seq2 / n, gt_key)` | `Evaluation.run(network, frames, gt_key)` with `frames` = a set (`small.val`), `scenes:a,b:val`, `random:3:7:val` (3 random scenes, seed 7), `spread:1000:large.val`, `frames:scene-0061/12:val` |
