@@ -278,7 +278,6 @@
         "training/data/prep/make_route_heat.py",
         "training/data/prep/make_route_alt.py",
         "training/data/prep/sd_precompute.py",
-        "training/data/prep/prior_precompute.py",
         "training/data/prep/make_prior.py",
         "training/data/prep/reg_precompute.py",
         "training/data/prep/sd_reg_precompute.py"
