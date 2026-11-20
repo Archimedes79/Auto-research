@@ -5,6 +5,7 @@
 - Short graphs, correct graphs, fast (17.5 - 24 ms per frame)
 - New chat: read HANDOVER.md
 - The problem: PROBLEM.md (goal, chain, metrics, current best, gaps, problem groups, foundation topics); paths for the tools: project.json
+- The design spec: DESIGN.md (what to build and why: requirements, design rules with basis / status / attack, closed questions, how the spec moves); the coder is given it with the card's `design_delta`
 - The research system around it: `../autoresearch/` (METHOD.md, agents, templates, prompts, tools); rules for an AI session: CLAUDE.md
 - Folder tree with sizes on demand: `tools/maintenance/make_structure.py` (writes `temp/STRUCTURE.md`); structure and document check: `../autoresearch/tools/check_structure.py`
 
@@ -14,7 +15,7 @@ The delivered chain of `champion`, `fast_recall` and `recall`, drawn from the co
 
 ## Folders (by role in the method)
 - research - literature/ : OVERVIEW.md (why, nine axes, findings, gaps), CATALOGUE.md (the one reference for 540 papers), papers.csv (the one table to edit), papers/ (404 notes), deep/ + code/ (extractions), register.md (K ids)
-- execution state - experiment_execution/ : LEDGER.md (every run), closed_questions.md, runs/ (run records), plans/ (design documents), history/
+- execution state - experiment_execution/ : LEDGER.md (every run), DECISIONS.md (the owner's permissions), runs/ (run records), plans/ (design documents), history/
 - experiment summaries - experiments/ : one folder per experiment, E<id>_<slug> (card, detail plan, summary); reports/weekly/
 - training - training/ : the product (models, data, losses, train, pipeline, search), trainer.py with checkpoint + resume
 - evaluation - evaluation/ : evaluate.py (one entry point, names in models/registry.json), metrics and protocol (sparse_lanes, lane_grid), drivers/, loops/, tests, examples

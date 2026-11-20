@@ -33,6 +33,7 @@ The prediction, the decision rule, the arms and controls, the budget and the kil
 - **Mechanism** (why it should work):
 - **Inputs** (ready / to build: data, code blocks, tests):
 - **Starts from** (the version or run it changes):
+- **Design delta** (the rows of the problem's `DESIGN.md` this card attacks or changes: row ids and, for a change, the new text; a card that attacks a CLOSED row names the new mechanism; the coder is given `DESIGN.md` plus this delta):
 - **Lens / group / sources / status** (one line: lens, problem group, note and K ids; status proposed / accepted / scheduled / confirmed / refuted / closed):
 - **Referee** (one line: the critic's verdict and a link to its report):
 

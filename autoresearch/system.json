@@ -128,6 +128,17 @@
    "note": "fresh eyes: the critic reviews code and numbers it did not write"
   },
   {
+   "id": "design",
+   "label": "DESIGN.md\nrules + delta,\nclosed rows",
+   "kind": "file",
+   "col": 1,
+   "row": 6,
+   "code": [
+    "bev_fusion_lane_center/DESIGN.md"
+   ],
+   "note": "the standing design spec of a problem (D131): what to build and why, requirements, design rules with basis, status and attack. The coder is given it with the card's Design delta; the planner merges a KEEP into the row at close; an instruction of the person that fixes how the system must be becomes a requirement row"
+  },
+  {
    "id": "decisions",
    "label": "DECISIONS.md\nD<n> rows:\nquestion, answer",
    "kind": "file",
@@ -509,6 +520,12 @@
    "from": "results",
    "to": "you",
    "label": "KEEP -> promotion"
+  },
+  {
+   "from": "subagents",
+   "to": "design",
+   "label": "coder reads, planner merges",
+   "both": true
   }
  ]
 }

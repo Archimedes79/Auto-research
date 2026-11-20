@@ -9,6 +9,7 @@ A problem is a folder. The person writes `PROBLEM.md` (goal, metric, splits, cur
 | file (in the problem folder) | what it holds | who writes it |
 |---|---|---|
 | `PROBLEM.md` | the problem; protected (changes only under a decided D<n>) | the person; the planner drafts |
+| `DESIGN.md` | the standing design spec (D131): what to build and why, the requirements, the design rules with basis / status / attack, the closed questions; the coder is given it with the card's Design delta, a KEEP merges the delta into the row | the lead and the planner; an instruction of the person becomes a requirement row |
 | `experiments/<id>/experiment.md` | one file per experiment: the card (question, prediction as a number, decision rule, kill criterion) as a `json card` block, later the summary | the planner or the lead |
 | `schedule.csv` (optional) | the list of experiments as work items: `node` = the experiment, `depends_on`, `resource`, `run_ids`, `command`; the state is derived from the run records, never stored; `plan.py status` lists the experiments with their runs and verdicts | the planner or the lead |
 | `LEDGER.csv` | the run log, one row per run: written by `run.py` and `decide.py`, edited by nobody | the tools |
