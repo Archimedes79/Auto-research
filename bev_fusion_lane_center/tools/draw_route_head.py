@@ -14,6 +14,9 @@ ROOT = os.path.abspath(os.path.join(HERE, ".."))                                
 sys.path.insert(0, os.path.join(ROOT, "training", "grid"))
 import jroute as J  # noqa: E402
 
+sys.path.insert(0, os.path.join(ROOT, "training", "data"))
+import lane_route_data as LRD  # noqa: E402                                   # MAX_SAMPLES, the cap of the route table
+
 
 def counts(inputs):
     m = J.RouteHead(inputs=inputs)
@@ -56,7 +59,7 @@ def main(out):
     s += arrow(195, 124, 195, 142)
     s += box(30, 142, 330, 84, "Own features of every token", [f"tok -> Linear + LayerNorm (64): {tok:,} parameters", f"geometry MLP (position in m, heading, sigmoid(e), flags): {geo:,}", f"concat x (96-d) -> LayerNorm + Linear q (4 heads x 16): {lnq + q:,}", "arm z and the geometry-only control drop tok"], BLUE, BS)
     # right column: the route
-    s += box(420, 56, 330, 68, "SD route tokens (ADASIS-like map, simulated)", ["up to 64 samples every 2 m, +-50 m: position, direction,", "lane count, valid; the lane choice is lost;", "map errors: shift 1 - 2 m, yaw, sparsified polyline"], GREEN, GS)
+    s += box(420, 56, 330, 68, "SD route tokens (ADASIS-like map, simulated)", [f"up to {LRD.MAX_SAMPLES} samples every 2 m, +-50 m: position, direction,", "lane count, valid; the lane choice is lost;", "map errors: shift 1 - 2 m, yaw, sparsified polyline"], GREEN, GS)
     s += arrow(585, 124, 585, 142)
     s += box(420, 142, 330, 84, "Route keys", [f"[position, direction, one-hot lane count] -> Linear + LayerNorm: {rkey:,}", f"keys and values (Linear 64 -> 128): {kv:,}", f"one learned none key per head (k, v, bias): {none}", "a frame without a map: the none key only (arm z)"], BLUE, BS)
     # pair features
@@ -97,6 +100,7 @@ def selftest():
         svg = open(out, encoding="utf-8").read()
     for name in ("tok", "geo", "rkey", "kv", "bias", "out"):
         assert f"{cf[name]:,}" in svg, f"the parameter count of the block {name!r} ({cf[name]:,}) is not in the drawing"
+    assert f"up to {LRD.MAX_SAMPLES} samples" in svg, "the route cap in the drawing is the data layer cap"
     assert f"{cf['total']:,} parameters" in svg and f"{cg['total']:,} geometry-only" in svg
     import re
     for h in set(re.findall(r"#([0-9a-fA-F]{6})", svg)):
