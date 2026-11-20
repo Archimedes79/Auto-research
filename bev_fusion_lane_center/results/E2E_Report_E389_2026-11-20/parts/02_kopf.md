@@ -26,4 +26,4 @@
 | m2 | Seed-Zwilling von m (Cache-Seed 0, `--init-seed 1`: andere Initialisierung, Datenreihenfolge, Kartenfehler-Züge) | misst die Streuung eines trainierten Kopfes gegen einen anderen; mit z2 legt sie das Rauschen vor dem Urteil fest |
 | zg, mg | die Kontrolle nur mit Geometrie (ohne `tok`): 21,130 Parameter | explorativ, kein Urteil |
 
-**Kosten.** Parameter: 33,738 (full) und 21,130 (geo), im Selbsttest festgeschrieben. Zeit pro Frame: {{E389_MS_ZEILE}}
+**Kosten.** Parameter: 33,738 (full) und 21,130 (geo), im Selbsttest festgeschrieben. 0.055 GMACs je Frame; Zeit pro Frame, Kopf allein: {{ms_full_M66_fp32}} ms (fp32) bei 66 Routen-Stützen, **nicht im ruhigen Fenster** gemessen, also nur indikativ (Kapitel 5).

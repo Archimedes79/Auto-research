@@ -22,8 +22,8 @@ bash tools/env/_py14.sh jroute_eval.py rules --seed 0 --split val --modes exact,
 
 **Urteil.** Von Hand nach der Regel der Karte (Kapitel 4); die Karten der Auswertung liegen in `runs/<run>/route_card_<mode>[_vs_<z>].json`.
 
-**Zahlen erreichen, bevor man dem Urteil traut.** {{E389_ZAHLEN_ZIEL}}
+**Zahlen erreichen, bevor man dem Urteil traut.** Das Startgate (300 Schritte, m im Modus *exact*): F1_road 0.9493. Die Arme im Modus *error* auf VAL (Seed 0 / 1): z {{z_road_s0}} / {{z_road_s1}}, m {{m_road_error_s0}} / {{m_road_error_s1}}, m - z {{d_road_error_s0}} / {{d_road_error_s1}}, die Zwillinge z2 {{z2_road}} und m2 {{m2_road}} (Seed 0); die Referenzzeilen wie in Kapitel 4. Die Läufe sind bf16 auf der GPU nicht bitweise wiederholbar; die Streuung zweier Köpfe ist etwa 0.002.
 
-**Bericht.** `python reporter/reporter.py build results/E2E_Report_E389_2026-11-20 --strict` (scheitert, solange ein PENDING-Zeichen oder ein Platzhalter ohne Wert bleibt), `check ... --strict`, `pack`; die Zeichnung des Kopfes: `python tools/draw_route_head.py <svg>` (gcar-Python mit torch). Zusätzlich `python autoresearch/tools/check_numbers.py` auf den Kapiteln gegen die Karten und das Ledger.
+**Bericht.** `python reporter/reporter.py build results/E2E_Report_E389_2026-11-20 --strict` (scheitert, solange eine Platzhalter-Marke oder ein Platzhalter ohne Wert bleibt), `check ... --strict`, `pack`; die Zeichnung des Kopfes: `python tools/draw_route_head.py <svg>` (gcar-Python mit torch). Zusätzlich `python autoresearch/tools/check_numbers.py` auf den Kapiteln gegen die Karten und das Ledger.
 
 **Bekannte Fallstricke.** Die Routen-Tabelle ist auf 160 Stützstellen gekappt (Cache v4; die Referenzkarten der Kappung 64 liegen als `*_v3cap64.json` daneben und dürfen nicht mit den neuen Köpfen gemischt werden); `_py14.sh` verweigert ein Skript, dessen Name unter `temp/` doppelt vorkommt; ein Lauf durch `_py14.sh` kann trotz Traceback mit Exit 0 enden: das Urteil des Laufs ist die letzte „ok“-Zeile, nicht der Exit-Code.

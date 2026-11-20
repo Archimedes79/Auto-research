@@ -1,6 +1,6 @@
 # 10. Offene Punkte und was als Nächstes käme
 
-**Kurz.** {{E389_NAECHSTES}}
+**Kurz.** Die Karte sagt: **keine Kartenstufe im Champion**; das Ergebnis ist TIE (NO GAIN). Vorschläge der Lane-Seite, nicht gelaufen und nicht entschieden: (a) **Vertrauen:** der Anteil falscher Karten im Training beträgt etwa 5 %; ein Training mit mehr falschen Karten oder eine Konsistenzlesung, die eine falsche von einer richtigen Route unterscheidet, wäre die direkte Korrektur der einen scheiternden Sicherheitsklausel. (b) **Kosten:** 2 - 3 ms für 33,738 Parameter ist Start-Overhead; eine fusionierte Formulierung mit zwischengespeicherter Route (die Routen-Token sind für alle Token eines Frames gleich) kommt vor jeder Genauigkeitsarbeit. (c) Die Frage „hilft es einem Planer?“ braucht die Lesung auf Astebene und eine gemeinsame Feinabstimmung mit dem Champion. (d) Eine neue Karte würde die Hürde aus dem gemessenen z ({{z_road_s0}}) setzen, nicht aus dem geraden Prior.
 
 **Entscheidungen, die beim Eigner liegen.** Eine Übernahme der Kartenstufe in das Champion-System (Urteil KEEP nach der Regel genügt nicht allein: die Karte ist simuliert, das Label ist die gefahrene und nicht die geplante Route); ein TEST-Lauf (nur mit einem protokollierten OK des Eigners); eine gemeinsame Feinabstimmung (der Routenverlust erreicht B' und den Kopf: eine eigene Karte).
 

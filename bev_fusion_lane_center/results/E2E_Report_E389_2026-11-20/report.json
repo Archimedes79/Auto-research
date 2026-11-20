@@ -1,32 +1,1215 @@
 {
  "title": "E389: Ordnet ein kleiner differenzierbarer Kopf die Token des Spurgraph-Champions der Navigationsroute einer SD-Karte zu?",
  "subtitle": "Spurmitte-Projekt | 2026-11-20, Bericht auf Wunsch von Mirko (D128) | Problemgruppe A6 | dazu kurz: E388 (NO) und E381 (TIE) | VAL 873 Frames / 22 Szenen, TEST unberührt | Champion unverändert (D120)",
- "abstract": "Der Token-Champion liefert einen Spurmitten-Graphen aus Kamera und Radar (topo F1 0.6682 / 0.6813), weiss aber nicht, welche seiner Knoten auf der Navigationsroute einer SD-Karte liegen (Problemgruppe A6). E389 fragt, ob ein kleiner, durchgehend differenzierbarer Kopf (33,738 Parameter: ein MLP auf den eigenen Merkmalen jedes Tokens und eine Cross-Attention auf die Routen-Token der Karte mit Meter-Merkmalen) die Fahrbahn der Route und die Eigenspur zuordnen kann, unter den Kartenfehlern des Protokolls (Versatz 1 - 2 m, Gier, ausgedünnte Polylinie), und das besser als derselbe Kopf ohne Karte. Ergebnis nach der vor dem Lauf geschriebenen Regel: {{E389_ERGEBNIS_SATZ}} Offen bleiben: die Karte ist simuliert, das Label ist die gefahrene und nicht die geplante Route, es gibt keine TEST-Zahl, und der Kopf hängt nicht in der Stufe 2 des Champions. Zwei weitere Experimente der Nacht sind negativ geschlossen: E388 (gelernte Ausgangsschwellen: NO) und E381 (Rauschen auf den Trainings-Token: TIE).",
+ "abstract": "Der Token-Champion liefert einen Spurmitten-Graphen aus Kamera und Radar (topo F1 0.6682 / 0.6813), weiss aber nicht, welche seiner Knoten auf der Navigationsroute einer SD-Karte liegen (Problemgruppe A6). E389 fragt, ob ein kleiner, durchgehend differenzierbarer Kopf (33,738 Parameter: ein MLP auf den eigenen Merkmalen jedes Tokens und eine Cross-Attention auf die Routen-Token der Karte mit Meter-Merkmalen) die Fahrbahn der Route und die Eigenspur zuordnen kann, unter den Kartenfehlern des Protokolls (Versatz 1 - 2 m, Gier, ausgedünnte Polylinie), und das besser als derselbe Kopf ohne Karte. Ergebnis nach der vor dem Lauf geschriebenen Regel: **TIE (NO GAIN).** Die Karte verbessert die Zuordnung der Fahrbahn gegenüber dem Kopf ohne Karte um {{d_road_error_s0}} / {{d_road_error_s1}} F1 (Untergrenzen {{lo_road_error_s0}} / {{lo_road_error_s1}}), die vor dem Lauf geschriebene Hürde war +0.10; mit einer falschen Karte ist der Kopf schlechter als ohne ({{d_road_wrong_s0}} / {{d_road_wrong_s1}}); der Kopf ohne Karte ist mit {{z_road_s0}} / {{z_road_s1}} viel stärker als angenommen. Der Champion bekommt keine Kartenstufe. Offen bleiben: die Karte ist simuliert, das Label ist die gefahrene und nicht die geplante Route, es gibt keine TEST-Zahl, und der Kopf hängt nicht in der Stufe 2 des Champions. Zwei weitere Experimente der Nacht sind negativ geschlossen: E388 (gelernte Ausgangsschwellen: NO) und E381 (Rauschen auf den Trainings-Token: TIE).",
  "teaser": {
-  "image": "parts/figures/teaser_fork_frame.png",
-  "caption": "{{E389_TEASER_BILDUNTERSCHRIFT}}"
+  "image": "parts/figures/e389_frame_gain.png",
+  "caption": "Ein echter VAL-Frame (Szene {{fr_gain_scene}}, Frame {{fr_gain_frame}}), in dem die Karte am meisten hilft: links der Kopf ohne Karte (F1 an der Fahrbahn {{fr_gain_f1_z}}), rechts der Kopf mit der SD-Route (F1 {{fr_gain_f1_m}}). Grün: richtig markiert; blau: Route nicht erkannt; bernsteinfarben: fälschlich markiert. Das ist der größte Gewinn der {{fr_candidates}} Kandidaten-Frames, kein typischer Fall (Kapitel 6)."
  },
  "sections": [
-  {"id": "intro", "title": "1. Einleitung und Stand", "part": "01_intro.md"},
-  {"id": "head", "title": "2. Der Kopf: Architektur und Beschreibung", "part": "02_kopf.md", "svg": "04_head.svg",
-   "svg_caption": "Der Route-Assoziations-Kopf von E389, gezeichnet aus dem echten Modul (Parameterzahlen gelesen). Blau = gelernt, grün = gegeben (gecachte Token des eingefrorenen B', simulierte SD-Route), Bernstein = ein genannter Auswertungsschritt, grau gestrichelt = nur im Training. Arm z ist derselbe Kopf mit jeder Route ungültig."},
-  {"id": "gt", "title": "3. Ground Truth: wie sie aussehen muss, und was E389 zusätzlich braucht", "part": "03_gt.md"},
-  {"id": "protocol", "title": "4. Protokoll: Arme, Regel, Vorhersage, Referenzzeilen", "part": "04_protokoll.md"},
-  {"id": "results", "title": "5. Ergebnisse von E389 gegen die passenden Baselines", "part": "05_ergebnis.md"},
-  {"id": "qual", "title": "6. Qualitative Beispiele und Fehlerbilder", "part": "06_qual.md"},
-  {"id": "limits", "title": "7. Ehrliche Negative und Grenzen", "part": "07_grenzen.md"},
-  {"id": "night", "title": "8. Die zwei Experimente der Nacht, kurz", "part": "08_nacht.md"},
-  {"id": "git", "title": "9. Was in git liegt und was nicht", "part": "09_git.md"},
-  {"id": "open", "title": "10. Offene Punkte", "part": "10_offen.md"},
-  {"id": "repeat", "title": "A. Wie man es wiederholt", "part": "A1_wiederholung.md"}
+  {
+   "id": "intro",
+   "title": "1. Einleitung und Stand",
+   "part": "01_intro.md"
+  },
+  {
+   "id": "head",
+   "title": "2. Der Kopf: Architektur und Beschreibung",
+   "part": "02_kopf.md",
+   "svg": "04_head.svg",
+   "svg_caption": "Der Route-Assoziations-Kopf von E389, gezeichnet aus dem echten Modul (Parameterzahlen gelesen). Blau = gelernt, grün = gegeben (gecachte Token des eingefrorenen B', simulierte SD-Route), Bernstein = ein genannter Auswertungsschritt, grau gestrichelt = nur im Training. Arm z ist derselbe Kopf mit jeder Route ungültig."
+  },
+  {
+   "id": "gt",
+   "title": "3. Ground Truth: wie sie aussehen muss, und was E389 zusätzlich braucht",
+   "part": "03_gt.md"
+  },
+  {
+   "id": "protocol",
+   "title": "4. Protokoll: Arme, Regel, Vorhersage, Referenzzeilen",
+   "part": "04_protokoll.md"
+  },
+  {
+   "id": "results",
+   "title": "5. Ergebnisse von E389 gegen die passenden Baselines",
+   "part": "05_ergebnis.md"
+  },
+  {
+   "id": "qual",
+   "title": "6. Qualitative Beispiele und Fehlerbilder",
+   "part": "06_qual.md"
+  },
+  {
+   "id": "limits",
+   "title": "7. Ehrliche Negative und Grenzen",
+   "part": "07_grenzen.md"
+  },
+  {
+   "id": "night",
+   "title": "8. Die zwei Experimente der Nacht, kurz",
+   "part": "08_nacht.md"
+  },
+  {
+   "id": "git",
+   "title": "9. Was in git liegt und was nicht",
+   "part": "09_git.md"
+  },
+  {
+   "id": "open",
+   "title": "10. Offene Punkte",
+   "part": "10_offen.md"
+  },
+  {
+   "id": "repeat",
+   "title": "A. Wie man es wiederholt",
+   "part": "A1_wiederholung.md"
+  }
  ],
- "values": {},
+ "values": {
+  "z_road_s0": {
+   "file": "../../runs/e389_z_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "z_lane_s0": {
+   "file": "../../runs/e389_z_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "z_fork_s0": {
+   "file": "../../runs/e389_z_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "z_succ_s0": {
+   "file": "../../runs/e389_z_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.success30",
+   "fmt": "{:.3f}"
+  },
+  "z_false_s0": {
+   "file": "../../runs/e389_z_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.false_flag_road",
+   "fmt": "{:.3f}"
+  },
+  "m_road_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_error_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_succ_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.success30",
+   "fmt": "{:.3f}"
+  },
+  "m_false_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.false_flag_road",
+   "fmt": "{:.3f}"
+  },
+  "d_succ_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.success30.diff",
+   "fmt": "{:+.3f}"
+  },
+  "gap_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.gap_closed.value",
+   "fmt": "{:.2f}"
+  },
+  "m_road_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_exact_s0": {
+   "file": "../../runs/e389_m_s0/route_card_exact_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_road_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_gross_s0": {
+   "file": "../../runs/e389_m_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_road_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_none_s0": {
+   "file": "../../runs/e389_m_s0/route_card_none_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_road_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_z_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "self_wrong_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_m_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "self_wrong_lo_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_m_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "self_wrong_hi_s0": {
+   "file": "../../runs/e389_m_s0/route_card_wrong_vs_e389_m_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "z_road_s1": {
+   "file": "../../runs/e389_z_s1/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "z_lane_s1": {
+   "file": "../../runs/e389_z_s1/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "z_fork_s1": {
+   "file": "../../runs/e389_z_s1/route_card_error.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "z_succ_s1": {
+   "file": "../../runs/e389_z_s1/route_card_error.json",
+   "key": "by_delivered.kept.numbers.success30",
+   "fmt": "{:.3f}"
+  },
+  "z_false_s1": {
+   "file": "../../runs/e389_z_s1/route_card_error.json",
+   "key": "by_delivered.kept.numbers.false_flag_road",
+   "fmt": "{:.3f}"
+  },
+  "m_road_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_error_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_succ_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.numbers.success30",
+   "fmt": "{:.3f}"
+  },
+  "m_false_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.numbers.false_flag_road",
+   "fmt": "{:.3f}"
+  },
+  "d_succ_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.paired.success30.diff",
+   "fmt": "{:+.3f}"
+  },
+  "gap_s1": {
+   "file": "../../runs/e389_m_s1/route_card_error_vs_e389_z_s1.json",
+   "key": "by_delivered.kept.gap_closed.value",
+   "fmt": "{:.2f}"
+  },
+  "m_road_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_exact_s1": {
+   "file": "../../runs/e389_m_s1/route_card_exact_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_road_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_gross_s1": {
+   "file": "../../runs/e389_m_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_road_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_none_s1": {
+   "file": "../../runs/e389_m_s1/route_card_none_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_road_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_road_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_road_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_road_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_lane_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "d_lane_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_lane_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_lane_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m_fork_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d_fork_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo_fork_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi_fork_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_z_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "self_wrong_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_m_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "self_wrong_lo_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_m_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "self_wrong_hi_s1": {
+   "file": "../../runs/e389_m_s1/route_card_wrong_vs_e389_m_s1_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "z2_road": {
+   "file": "../../runs/e389_z2_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "m2_road": {
+   "file": "../../runs/e389_m2_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "d2_road": {
+   "file": "../../runs/e389_m2_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "lo2_road": {
+   "file": "../../runs/e389_m2_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "hi2_road": {
+   "file": "../../runs/e389_m2_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "m2_lane": {
+   "file": "../../runs/e389_m2_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "m2_fork": {
+   "file": "../../runs/e389_m2_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "z2_lane": {
+   "file": "../../runs/e389_z2_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_lane",
+   "fmt": "{:.4f}"
+  },
+  "z2_fork": {
+   "file": "../../runs/e389_z2_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.fork_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "zg_road": {
+   "file": "../../runs/e389_zg_s0/route_card_error.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "mg_road": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.numbers.route_F1_road",
+   "fmt": "{:.4f}"
+  },
+  "gdiff_road": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "glo_road": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "ghi_road": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "gdiff_lane": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "glo_lane": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.lo",
+   "fmt": "{:+.4f}"
+  },
+  "ghi_lane": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.route_F1_lane.hi",
+   "fmt": "{:+.4f}"
+  },
+  "gdiff_fork": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "glo_fork": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "ghi_fork": {
+   "file": "../../runs/e389_mg_s0/route_card_error_vs_e389_zg_s0.json",
+   "key": "by_delivered.kept.paired.fork_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "gnone_d": {
+   "file": "../../runs/e389_mg_s0/route_card_none_vs_e389_zg_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "gwrong_d": {
+   "file": "../../runs/e389_mg_s0/route_card_wrong_vs_e389_zg_s0_rmerror.json",
+   "key": "by_delivered.kept.paired.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "fork_frames": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.fork.fork_frames",
+   "fmt": "{:d}"
+  },
+  "fork_scenes": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.fork.fork_scenes",
+   "fmt": "{:d}"
+  },
+  "nodes_s0": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.numbers.nodes",
+   "fmt": "{:,d}"
+  },
+  "deliv_per_frame": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.delivered_tokens_per_frame",
+   "fmt": "{:.0f}"
+  },
+  "cal0_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.0.n",
+   "fmt": "{:,d}"
+  },
+  "cal0_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.0.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal1_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.1.n",
+   "fmt": "{:,d}"
+  },
+  "cal1_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.1.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal2_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.2.n",
+   "fmt": "{:,d}"
+  },
+  "cal2_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.2.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal3_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.3.n",
+   "fmt": "{:,d}"
+  },
+  "cal3_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.3.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal4_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.4.n",
+   "fmt": "{:,d}"
+  },
+  "cal4_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.4.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal5_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.5.n",
+   "fmt": "{:,d}"
+  },
+  "cal5_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.5.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal6_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.6.n",
+   "fmt": "{:,d}"
+  },
+  "cal6_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.6.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal7_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.7.n",
+   "fmt": "{:,d}"
+  },
+  "cal7_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.7.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal8_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.8.n",
+   "fmt": "{:,d}"
+  },
+  "cal8_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.8.share_on",
+   "fmt": "{:.3f}"
+  },
+  "cal9_n": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.9.n",
+   "fmt": "{:,d}"
+  },
+  "cal9_s": {
+   "file": "../../runs/e389_m_s0/route_card_error_vs_e389_z_s0.json",
+   "key": "by_delivered.kept.calibration.road.9.share_on",
+   "fmt": "{:.3f}"
+  },
+  "ms_full_M66_fp32": {
+   "file": "../../temp/e389/head_timing.json",
+   "key": "results.full_M66_fp32.median_ms",
+   "fmt": "{:.2f}"
+  },
+  "ms_full_M136_fp32": {
+   "file": "../../temp/e389/head_timing.json",
+   "key": "results.full_M136_fp32.median_ms",
+   "fmt": "{:.2f}"
+  },
+  "ms_full_M66_bf16": {
+   "file": "../../temp/e389/head_timing.json",
+   "key": "results.full_M66_bf16.median_ms",
+   "fmt": "{:.2f}"
+  },
+  "ms_full_M136_bf16": {
+   "file": "../../temp/e389/head_timing.json",
+   "key": "results.full_M136_bf16.median_ms",
+   "fmt": "{:.2f}"
+  },
+  "fr_typical_frame": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.frame",
+   "fmt": "{:d}"
+  },
+  "fr_typical_scene": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.scene",
+   "fmt": "{:d}"
+  },
+  "fr_typical_nodes": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.nodes",
+   "fmt": "{:d}"
+  },
+  "fr_typical_f1_z": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.f1_z",
+   "fmt": "{:.3f}"
+  },
+  "fr_typical_f1_m": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.f1_m",
+   "fmt": "{:.3f}"
+  },
+  "fr_typical_f1_m_wrong": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.f1_m_wrong",
+   "fmt": "{:.3f}"
+  },
+  "fr_typical_gain": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.gain",
+   "fmt": "{:+.3f}"
+  },
+  "fr_typical_drop": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.typical.drop",
+   "fmt": "{:.3f}"
+  },
+  "fr_gain_frame": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.frame",
+   "fmt": "{:d}"
+  },
+  "fr_gain_scene": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.scene",
+   "fmt": "{:d}"
+  },
+  "fr_gain_nodes": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.nodes",
+   "fmt": "{:d}"
+  },
+  "fr_gain_f1_z": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.f1_z",
+   "fmt": "{:.3f}"
+  },
+  "fr_gain_f1_m": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.f1_m",
+   "fmt": "{:.3f}"
+  },
+  "fr_gain_f1_m_wrong": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.f1_m_wrong",
+   "fmt": "{:.3f}"
+  },
+  "fr_gain_gain": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.gain",
+   "fmt": "{:+.3f}"
+  },
+  "fr_gain_drop": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.gain.drop",
+   "fmt": "{:.3f}"
+  },
+  "fr_loss_frame": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.frame",
+   "fmt": "{:d}"
+  },
+  "fr_loss_scene": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.scene",
+   "fmt": "{:d}"
+  },
+  "fr_loss_nodes": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.nodes",
+   "fmt": "{:d}"
+  },
+  "fr_loss_f1_z": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.f1_z",
+   "fmt": "{:.3f}"
+  },
+  "fr_loss_f1_m": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.f1_m",
+   "fmt": "{:.3f}"
+  },
+  "fr_loss_f1_m_wrong": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.f1_m_wrong",
+   "fmt": "{:.3f}"
+  },
+  "fr_loss_gain": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.gain",
+   "fmt": "{:+.3f}"
+  },
+  "fr_loss_drop": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.loss.drop",
+   "fmt": "{:.3f}"
+  },
+  "fr_wrong_frame": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.frame",
+   "fmt": "{:d}"
+  },
+  "fr_wrong_scene": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.scene",
+   "fmt": "{:d}"
+  },
+  "fr_wrong_nodes": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.nodes",
+   "fmt": "{:d}"
+  },
+  "fr_wrong_f1_z": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.f1_z",
+   "fmt": "{:.3f}"
+  },
+  "fr_wrong_f1_m": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.f1_m",
+   "fmt": "{:.3f}"
+  },
+  "fr_wrong_f1_m_wrong": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.f1_m_wrong",
+   "fmt": "{:.3f}"
+  },
+  "fr_wrong_gain": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.gain",
+   "fmt": "{:+.3f}"
+  },
+  "fr_wrong_drop": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "cases.wrong.drop",
+   "fmt": "{:.3f}"
+  },
+  "fr_candidates": {
+   "file": "parts/figures/e389_frames.json",
+   "key": "candidates",
+   "fmt": "{:d}"
+  }
+ },
  "sources": [
   "../../experiments/E389_*/experiment.md",
   "../../experiments/E388_*/experiment.md",
   "../../experiments/E381_*/experiment.md",
   "../../experiments/E374_*/experiment.md",
   "../../experiments/E373_*/experiment.md",
+  "../../runs/e389_*/route_card_*.json",
+  "../../runs/e389_rules/rules_card_val_s*.json",
   "../../experiments/E372_*/experiment.md",
   "../../experiments/E283_*/experiment.md",
   "../../experiments/E285_*/experiment.md",
@@ -40,9 +1223,22 @@
   "../../experiment_execution/decisions/D128.md"
  ],
  "utilities": [
-  {"path": "../../tools/draw_route_head.py", "usage": "python tools/draw_route_head.py <out.svg>  (from bev_fusion_lane_center/, gcar python with torch; --selftest)"},
-  {"path": "../../evaluation/jroute_eval.py", "usage": "python jroute_eval.py dump|score|rules --run R --seed S --mode error"},
-  {"path": "../../../reporter/reporter.py", "usage": "python reporter.py build results/E2E_Report_E389_2026-11-20 --strict"}
+  {
+   "path": "../../tools/draw_route_head.py",
+   "usage": "python tools/draw_route_head.py <out.svg>  (from bev_fusion_lane_center/, gcar python with torch; --selftest)"
+  },
+  {
+   "path": "../../tools/route_frames_fig.py",
+   "usage": "python tools/route_frames_fig.py --seed 0 --out <dir>   (the example frames by the written rule; --selftest)"
+  },
+  {
+   "path": "../../evaluation/jroute_eval.py",
+   "usage": "python jroute_eval.py dump|score|rules --run R --seed S --mode error"
+  },
+  {
+   "path": "../../../reporter/reporter.py",
+   "usage": "python reporter.py build results/E2E_Report_E389_2026-11-20 --strict"
+  }
  ],
  "output": "E389_Bericht_2026-11-20.html",
  "package": "E389_Code_Paket_2026-11-20.zip",
@@ -59,6 +1255,7 @@
    "../../evaluation/tests/test_jroute_eval.py",
    "../../evaluation/jthresh.py",
    "../../tools/draw_route_head.py",
+   "../../tools/route_frames_fig.py",
    "../../../reporter/**/*"
   ],
   "strip": "../..",
