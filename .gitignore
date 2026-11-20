@@ -156,8 +156,6 @@ __pycache__/
 *.sqlite
 *.so
 *.exe
-# legacy stub of the loop-17 recovery (a 19-byte shell script tracked before .exe became a forbidden type; history is not rewritten)
-!/bev_fusion_lane_center/experiment_execution/history/loop17_recovery/fakebin/wsl.exe
 *.tif
 *.tiff
 *.webp
