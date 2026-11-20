@@ -37,6 +37,8 @@ If everything marked "candidate" went: about 24 (fused32) + 9 (p8) + 3 (p10) + 4
 
 ## C. training/ (audit of 2026-10-25; do after loop 18, loop 18 imports from here)
 
+**2026-11-21 (D93 / D129):** 17 of the old reference-chain files below left the tree (tag `archive/lane-before-dead-code-2026-11-21`): `drivers/e2e_gradient_report.py`, `drivers/p16_pipeline_eval.py`, `loops/loop12/p12_calib.py`, `loops/loop17/p17_consumer.py`, `data/p14_chain_data.py`, `data/p16_chain_data.py`, `models/p13_{jhead,junction,phead}.py`, `models/p8_{assign,seg}.py`, `search/` (`p16_triage.py`, `_run_p16.sh`), `train/p16_ctrl.py`, `p17_dense_train.py`, `p17_mapft.py`, `p18_regis_train.py`; the rows below that name them are history. Kept because a test or the TEST log names them: `p16_fast_check.py`, `p18_asm_check.py`, `p16_ref.py`, `pipeline/route_data.py`, `p18_joint.py` and `p10_route_train.py` (imported by it), `p16_final_eval.py` (TEST log).
+
 Size is small (about 1 MB of code, 82 files + 28 in `legacy/` + 38 in `data/prep/`), so the issue is not volume but naming and purpose: files are stamped with the loop that made them (`p8_` ... `p18_`), not with their function, and about 25 modules (most of `data/prep/`, `dense_head`, `graph_from_dense`, `assoc_lib`, the old modules) have German docstrings, against the English rule.
 
 | group | files | state | recommendation |

@@ -289,20 +289,6 @@
       "note": "simulated ADASIS-like SD map and registrations"
     },
     {
-      "id": "chain_caches",
-      "where": "~/exp_gcar_b123/p8, p10, p14 (token and chain caches of loops 8-16)",
-      "status": "partial",
-      "scripts": [
-        "training/data/p14_chain_data.py",
-        "training/data/p16_chain_data.py"
-      ],
-      "needs": [
-        "gcar_features_b123",
-        "trained heads"
-      ],
-      "note": "the p8 and p10 cache builders of loops 8-10 are in experiment_execution/history/ only; the current chain (p16) rebuilds its own cache"
-    },
-    {
       "id": "failure_series_p17",
       "where": "~/exp_gcar_b123/p17 (39 GB: clean / failure half per scene, out-of-fold heads)",
       "status": "partial",
