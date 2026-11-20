@@ -9,7 +9,7 @@ Nothing here is urgent for disk space: the WSL disk has 715 GB free of 1007 GB (
 | ~~`data/nuscenes/`~~ (done 2026-10-25) | 3.0 GB | Windows copy of nuScenes **mini** (samples, sweeps, maps). The code reads the WSL copy `~/data/nuscenes`; only the default of `extract_features.py` (loop 1) names `data/nuscenes` | move to `_to_delete/` (duplicate); keep `data/splits.json` and `data/README.md` |
 | ~~`runs/` loose files~~ (done 2026-10-25) | 185 files | moved to `_to_delete/runs_2026-10-25/loose/`; the 8 logs that experiments name and the small json / npz files stay | - |
 | `runs/` dead runs | ~1 GB | done 2026-10-25 for the smoke runs (`e120_smoke`, `e121_smoke`, `e18_smoke_joint` -> `_to_delete/runs_2026-10-25/smoke/`); KEPT: `e30_s4_diverged` and `e30_scene11` (read by `experiments/E030_*/code/make_e30.py`), `e34_*` / `e35_B` (named in E034) | move the kept ones only together with their experiment code |
-| ~~`experiment_execution/loop17_recovery/`~~ (done) | 0.6 MB | already in `experiment_execution/history/loop17_recovery/` | - |
+| ~~`experiment_execution/loop17_recovery/`~~ (done) | 0.6 MB | moved to `history/`, then removed from the tree on 2026-11-21 (D129 clean-up; behind git tag `archive/pre-cleanup-2026-11-20`) | - |
 | `literature/sources/` | 4 MB | multi-paper notes without per-paper structure | the literature chat is reorganising `literature/`; leave to it |
 | `temp/literature_backup_2026-10-24/` | small | safety copy made by the literature chat | done 2026-10-31: moved to `_to_delete/cleanup_2026-10-31_review/temp/` (its copied `tools/catalogue.py` shadowed the live one through the temp/ search path of `_py14.sh`) |
 
@@ -61,7 +61,7 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 | the Claude project key of the old folder name (`.claude/projects/C--ML-Experiment` in your user folder: memory and transcripts) | small | the memory was copied to the key of the new name (`C--Auto-research`); delete the old key when no session of the old name is open any more |
 
 ## D. Known findings of `check_structure.py` that wait for the end of loop 18
-- `experiment_execution/PROGRAM.md` names `indexes/LOOP17_STATE.md` (the loop-17 state file is `loop17_recovery/out__loop2__e17__LOOP17_STATE.md`) and a memory note outside the project; PROGRAM.md belongs to the running loop, fix it in the next plan.
+- `experiment_execution/PROGRAM.md` names `indexes/LOOP17_STATE.md` (the loop-17 state file was in the loop-17 replay, now behind git tag `archive/pre-cleanup-2026-11-20`) and a memory note outside the project; PROGRAM.md belongs to the running loop, fix it in the next plan.
 
 ## E. Dead code and bugs found by the read-only hunt of 2026-11-07 (agent report, checked by `git grep -w`; the lane chat applied the bug fixes C1-C6, the removals wait for a quiet time and a decision)
 **Dead code** (SAFE = no card / record names it; NEEDS-DECISION = it is the recipe of old numbers, git history keeps it)

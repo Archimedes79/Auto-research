@@ -11,7 +11,7 @@
 
 ## Result
 
-see the loop-17 report and experiment_execution/loop17_recovery (internal E136; e17/e136_*, e17_joint_*)
+see the loop-17 report and the loop-17 replay behind git tag archive/pre-cleanup-2026-11-20 (internal E136; e17/e136_*, e17_joint_*)
 
 ## Data
 
