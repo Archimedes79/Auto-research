@@ -18,7 +18,7 @@ export AR_PROJECT=../bev_fusion; R=../bev_fusion/runs
 Two layers and nothing else: the **class** `Training` (`api.py`) and above it the **command line API**, `python -m Training`, which is generated from the class (`autoresearch/suitecli.py`, the
 same generator for every suite; the rules all suites share are in [../README.md](../README.md), section "The interface of the suites"). Below the class are the engine and the launcher
 (`compose.py`, `view.py`, `runs.py`, `health.py`, `kill.py`, `tools/run.py`); a caller never touches them. A training is one job; the class has everything for one: start it, watch it, stop it,
-continue it, compare it. There is **no queue** in the class (Mirko 2026-11-10: take the queue out for now): `queue_api.py` has it as a mixin, section 7 describes it.
+continue it, compare it. There is **no queue** in the class (taken out of it on 2026-11-10, in the rebuild of the training interface, for now): `queue_api.py` has it as a mixin, section 7 describes it.
 
 ### 0.1 The class
 ```python
@@ -85,7 +85,7 @@ python -m Training --root ../bev_fusion/runs watch t23_C_s1 --enforce      # not
 ```
 In Python the same views are dicts: `t.list()["runs"]`, `t.status("t23.C_s1")["grad"]`, `t.status()["findings"]`. A healthy run is not a good network: these checks say the training is sound, the evaluation says
 whether the result is good. All checks, their thresholds, the kill-rule syntax and the stop details: [EXTENSIONS.md](EXTENSIONS.md) chapters 2, 3, 8, 9, 10. More logging for deep debugging: section 6.
-Mirko's sketch: `Training.run(network.json)` = `run`, `queueGetStatus(i)`, `queueRunningTrainingId` and `queueRunningTrainingStatus` = `status(i)` (no `i`: the running one, an error when two run; `list()['running']` has its id),
+The names of the first sketch of the interface map onto these methods: `Training.run(network.json)` = `run`, `queueGetStatus(i)`, `queueRunningTrainingId` and `queueRunningTrainingStatus` = `status(i)` (no `i`: the running one, an error when two run; `list()['running']` has its id),
 `QueueLogSpeed` = `compare` and the speed part of `status`; `queueAdd`, `queueGet`, `queueRemove`, `queueStart`, `queueHold`, `queueResume` are the queue (`queue_api.QueueMixin`, not in the class for now).
 `python -m Training.selftest_api` tests the class, `python -m Training.selftest_queue_api` the queue mixin (both also run inside `selftest`).
 
@@ -202,7 +202,7 @@ python -m Training status t20_diag                                  # the module
 `check` marks `profile_steps` as NEW (the base file does not list it); it is a `TrainConfig` field, so the check accepts it. The trainer accepts a changed `probe`, `profile_steps` or `grad_diag_every` on a resume, but `run` refuses a different config for an id that has a run: use a new id.
 
 ## 7. The training queue
-> **Status 2026-11-10: the queue is not part of the class `Training`** (Mirko: "Nimm die Queue hier erstmal raus"). `queue_api.py` has its methods as a mixin (`class Q(QueueMixin, Training)`) and the
+> **Status 2026-11-10 (still so on 2026-11-21): the queue is not part of the class `Training`** (taken out for now in the rebuild of the interface). `queue_api.py` has its methods as a mixin (`class Q(QueueMixin, Training)`) and the
 > older `queue ...` commands below still work; the class lists the trainings with `list` and continues a stopped one with `resume`.
 
 ```
@@ -243,7 +243,7 @@ Where the launches come from (counted on CPU for the t20 chain, 2026-11-03, `bev
 |---|---|---|---|
 | 1 | fewer launches: one mover call per dt for both heads (-9 % ops), one `index_add` instead of the 4-corner loop in `splat` (-13 %), the ~35 sync-like ops per keyframe that can go bit for bit (`motion_term` masks, `radar_encoder`, `lift_pd` `.tolist()`, `w_obj` copies), one host-to-device copy of the GT per key instead of per sample (-1,300 copies per step) | operators counted per section (CPU), sync sites from a dispatch trace; module code was open under the freeze of D44, the `flip` / `isfinite` syncs were not (nothing is frozen since D73) | the seconds: `profile_steps` + `speed` on a quiet GPU. The old cut (one read-back per clip, multi-tensor EMA) stayed inside the spread (`speed.b`). **Built behind default-off flags (D53, preset `fast`) and measured on the t20 chain: all four together 3.51 s per step against 3.86 / 3.69 s for two plain runs (-5 to -9 %, -1.2 GB peak); one lever alone is inside the 4 % noise** (`records/speed_options_2026-11-03.md` section 7) |
 | 2 | `torch.compile` of the parts that trace without a break: trunk + fusion, `map_terms`, the motion-block net, `splat_bev` | `dynamo.explain`: forward 34 breaks, loss 39 (per-box `float()`, `.tolist()`, dynamic shapes); the listed parts have none; trunk + fusion is only 5 % of the operators | compile time, the pinned code snapshot, whether the GPU time falls |
-| 3 | the 3 dts as one batch of 3B (-40 % ops) | counted | **changes the training**: BatchNorm statistics over dt (open finding #5), so a new baseline and Mirko's word |
+| 3 | the 3 dts as one batch of 3B (-40 % ops) | counted | **changes the training**: BatchNorm statistics over dt (open finding #5), so a new baseline and a decision of the person |
 | 4 | larger micro-batch, fewer accumulation steps | t1 chain, effective batch 16, idle GPU: 4 x 4 = 2.5 s per step (4.4 GB), 8 x 2 = 2.1 s (8.6 GB), 2 x 8 = 5.3 s (`training/configs/README.md`) | the current chain peaks at 8.8 - 9.3 GB of 11 GB; BatchNorm sees other batches |
 | 5 | more loader workers / targets in the workers | data wait 4 % (`speed.a3`) to 7 % (`t16.full_s0`): at most that much; `w_obj` depends on the splat mass, so the targets cannot leave the main process | RAM per worker (one run takes about 10 GB) |
 | no gain | fused AdamW (< 1 % of the launches), `cudnn_benchmark`, TF32 (risky for coordinates) while the step is host-bound; bf16 + `cudnn_benchmark` (`speed.c2`): 2.71 against 2.66 s, peak memory -40 %, gradient norm median 865 against 34, loss +8 % | | fp16 with a loss scale is built |

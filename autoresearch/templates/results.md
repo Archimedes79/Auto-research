@@ -12,4 +12,4 @@ The summary of a finished experiment, in the experiment's result directory next 
 - **Verdict.** What `decide.py` wrote, by the rule as written in the card (copy the rule, the effect, the interval). If the rule did not cover the case: "by hand: <reason>".
 - **Numbers.** A small table: the metric of the card and the guards, variant against control, split and frames named, ms per frame where it matters.
 - **What it says.** About the hypothesis and why; negatives stay.
-- **Next.** The next card or item, and every question for the person: options, recommendation, evidence. Put each question into `decisions/D<n>.md` (the only channel the gate reads) and link it here; the answer is recorded there with the date and the person's words.
+- **Next.** The next card or item, and every question for the person: options, recommendation, evidence. Put each question into the table Open of the problem's `DECISIONS.md` (next free id; the only channel the gate reads) and name its id here; the answer is recorded there as a decided row with the date.
