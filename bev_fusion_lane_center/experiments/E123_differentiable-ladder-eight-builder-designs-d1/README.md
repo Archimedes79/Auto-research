@@ -16,5 +16,5 @@ champion D7 + junction head + time recursion; see Loop16 report and runs/e123_la
 
 ## Data
 
-- `results/`: 548 small files from `e123`, `e123_ladder`
+- `results/`: 437 small files from `e123`, `e123_ladder` (the card copies `e123_ladder/cards/` and the ladder state files `state.json`, `queue.json` were removed in the 2026-11-21 clean-up: the run cards are `../../runs/e123_ladder/cards/<run>.json`)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

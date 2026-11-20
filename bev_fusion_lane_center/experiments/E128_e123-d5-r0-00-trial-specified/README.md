@@ -31,5 +31,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 
 ## Data
 
-- `results/`: 6 small files from `cards`, `e123_D5_r0_00`
+- `results/`: 3 small files from `e123_D5_r0_00`; the run cards are `runs/e123_ladder/cards/<run>.json` (the copies in `results/cards/` were removed in the 2026-11-21 clean-up)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`
