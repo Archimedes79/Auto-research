@@ -2,15 +2,15 @@
 
 Working document of the radar block (plan.md section 3 is the agreed state; this file collects the ideas until one is chosen). The camera block is fixed: lift PD, V(cell) = c(pixel) * p(depth of the cell | pixel), gathered through a lookup table per calibration (plan.md section 2).
 
-## A. The radar path as built (log of 2026-10-25, for the temporal-fusion chat) and the information-preserving encoder
-Settled chain (Mirko 2026-10-25; code `training/radar_bev.py`, self-tests pass):
+## A. The radar path as built (log of 2026-10-25, for the temporal fusion) and the information-preserving encoder
+Settled chain (2026-10-25; code `training/radar_bev.py`, self-tests pass):
 1. adapter (per dataset / rig): detections of each radar sweep as r (range from the sensor), azimuth phi in the sensor frame, ego-compensated radial velocity vr, rcs, quality codes, the sweep time, and the sensor pose (sx, sy, yaw in the vehicle frame) -> `to_vehicle` gives x, y and the ray direction psi in the vehicle frame
 2. time alignment at POINT level, before any raster: ego motion (v, omega, dt: `splat.splat_positions`) moves x, y to the target time; the ray direction is the ORIGINAL ray rotated rigidly with the frame (psi - omega dt), never recomputed from the moved position (the Doppler was measured along the original ray); dt = age stays as a property
 3. encoder = raster in the 0.5 m BEV grid (120 x 104, same grid and index order (x, y) as the camera BEV) with 11 properties per detection - distance r / 60, direction cos / sin psi, Doppler as a circular code (sin / cos of k pi vr / v_max, k = 1, 2, 4; v_max = 30 m/s is a sensor property), rcs / 20, age / 0.5 s - plus the sub-cell offset (dx, dy) and the count
    - R0 `rasterize`: one mean per cell (14 channels): the simple block
    - R1 `rasterize_slots`: the information-preserving form: the K = 3 first detections of a cell (newest first, then nearest) are stored exactly in slots, the rest as a remainder mean with its count (57 channels); `decode_slots` is its exact inverse (round trip tested to 2e-4 on all eight fields)
 4. two 3 x 3 convolutions -> radar BEV features (B, 32, 120, 104) (`RadarBEV`, `RadarBEVSlots`; the slot version can also return its raster as the lossless state)
-5. radar-only auxiliary head (training only) and the fusion / temporal blocks read the radar BEV; the temporal chat moves it from the radar time t_r to the camera time t_c
+5. radar-only auxiliary head (training only) and the fusion / temporal blocks read the radar BEV; the temporal block moves it from the radar time t_r to the camera time t_c
 
 What the raster loses - measured on nuScenes mini (404 keyframes, 262,827 detections of 5 radars in the 0.5 s window, ego-aligned, front grid; `studies/recipes/radar/radar_collision_stats.py`, `radar_cell_dispersion.py`):
 | | one sweep per radar (0.1 s) | 0.5 s (about 6 sweeps) |
@@ -68,14 +68,14 @@ Doppler, measured (`studies/recipes/radar/doppler_stats.py`, 213,276 detections 
 - `vx`, `vy` are NOT only the radial component: their component across the line of sight reaches 25.0 m/s (99 % quantile), so the sensor reports a 2D velocity estimate per detection (the earlier assumption "radial vector" was wrong); the radial part v_r = (vx, vy) . u is computed from them
 - the sensor resolves the Doppler ambiguity itself: `ambig_state` 3 (85 % of the detections) stays within raw v_r -28.2..+26.2 m/s, states 0 / 1 within about +-25 m/s; state 2 (1.7 %) reaches -90.4..+79.8 m/s; no folding at a fixed interval is visible in nuScenes - the unambiguous interval of the sensor cannot be read from these data
 
-## 1a. Input encodings of a detection (Mirko, 2026-10-25)
+## 1a. Input encodings of a detection (2026-10-25)
 - original sensor ray direction: the line of sight u at the time of the measurement, as a circular value (cos phi, sin phi) - in the sensor frame (where the azimuth noise lives) and in the vehicle frame of the measurement time (where the ego motion and the static Doppler live). After ego-motion compensation of an older sweep the ORIGINAL u is kept: the Doppler was measured along it (v_r = v . u_original), so the static residual and the Doppler information A, b use u_original, not the direction recomputed from the compensated position.
 - Doppler as a circular value: a radar measures the radial velocity only modulo its unambiguous interval [-v_max, +v_max); a target faster than v_max folds to the other end, so +v_max and -v_max are neighbours. Encoding the phase psi = pi v_r / v_max as (sin psi, cos psi) gives the network exactly that topology: a folded measurement stays close to its true neighbourhood instead of jumping across the input range. Precision: add harmonics (sin k psi, cos k psi), k = 1, 2, 4, 8 - all with the same period, so the folding topology is kept while small velocity differences stay resolvable.
 - v_max is a property of the sensor model (like the intrinsics of a camera: an input, not a constant of the network); for nuScenes it is not visible in the data (above), so: v_max from the sensor specification if known, else a value above the observed range (e.g. 30 m/s for the unambiguous states); the linear (scaled) v_r and an embedding of `ambig_state` are given as well, so the network can rely on the circular code where the sensor is ambiguous and on the linear value where it is not.
 - the same circular code for the static residual r_s = wrap(v_r - v_static(u_original)) (wrap into [-v_max, v_max)) and for the tangential component of (vx, vy) (linear, since it is the sensor's own estimate, not a folded measurement).
 - the other inputs: range (linear, scaled), RCS, the quality codes x_rms / y_rms / vx_rms and the states dyn_prop / invalid_state / ambig_state as embeddings, dt, sensor id.
 
-### 1b. The input vector per detection: simple, yet complete (Mirko: "simple, easy, yet complete values")
+### 1b. The input vector per detection: simple, yet complete (simple, easy, yet complete values)
 Everything a nuScenes detection carries, each value once, in the frame where it is simple; dropped only what carries nothing (z = 0 always, vy_rms constant, the cluster id) or what is derivable (vx_comp / vy_comp: replaced by the static residual).
 | group | values | encoding | dims |
 |---|---|---|---|
@@ -90,7 +90,7 @@ Everything a nuScenes detection carries, each value once, in the frame where it 
 | total | | | about 42 |
 v_max: from the sensor model (section 1a); for nuScenes a value above the observed range of the unambiguous states (30 m/s) until a specification is known. This vector is the input of both options: the point encoder of A, and the per-cell channels of the polar image in B (averaged per cell, plus the count and the sub-cell offsets).
 
-## 1. Mirko's idea: a feature per detection and a decoder around it
+## 1. The idea: a feature per detection and a decoder around it
 f_j = E(r_j, phi_j, data_j) per detection; a decoder g(f_j, x + l, y + m) gives the values of the cells around the detection (l, m in -1..1).
 
 It makes sense - it is the published form of a learned continuous kernel: Deep Parametric Continuous Convolution 2101.06742 (kernel g = MLP of the continuous offset between output cell and input point; output cells may be a dense BEV grid) and ContFuse 2012.10992 (h_i = sum_j MLP(f_j, x_j - x_i); their ablation: removing the geometric offset input hurts significantly). Three refinements:
@@ -130,7 +130,7 @@ Decoders from the polar domain to Cartesian:
 - Simple-BEV's radar path (nearest-cell raster of 15 fields + one 3 x 3 conv): occupancy only 55.0 vs all fields 55.7 IoU; filters off +2.0, 3 sweeps +2.6 - the cheap baseline that our radar block must beat
 - CRN's radar-view transform (sigmoid radar occupancy x depth, +8.2 NDS) is the Cartesian form of c_rad x p_rad
 
-## 2b. Elevation: where it enters and how it propagates (Mirko's question, 2026-10-25)
+## 2b. Elevation: where it enters and how it propagates (question of 2026-10-25)
 Principle: elevation is to the radar what depth is to the camera - the dimension it does not observe. The system treats both the same way: the unknown dimension becomes a learned distribution that is multiplied onto the measurement, and the sensor model (an input, like intrinsics) says what is measured.
 - nuScenes radar is a 2D radar: z = 0 always, no elevation angle (measured, section 0). A 4D radar (View-of-Delft, TJ4D, K-Radar) measures it. The sensor model therefore declares `angles = (azimuth)` or `(azimuth, elevation)`.
 - Sensor geometry (calibration): sensor height z_s and the full rotation (yaw, pitch, roll) enter the line of sight u in the vehicle frame; the ego pose adds the vehicle pitch and the road slope at the time of the measurement (the ground height under a target is not exactly z = 0).
@@ -156,7 +156,7 @@ Tests: (1) a synthetic point at a known (x, y, z) seen by a radar at a random po
 - Basis: deep radar ISM 2305.12409 (detections binned into the sensor's polar grid, a CNN learns the footprint; learned vs geometric Gaussian mixture: P(occupied | occupied) 38.7 vs 15.3 %), Weston et al. 1810.08151 (polar encoder + fixed polar-to-Cartesian bilinear resampling inside the network, per-cell variance), FFT-RadNet 2112.10646 (polar cell + offset code), RadarOcc 2405.14014 (keeping the radar in its own polar frame until the last step: +2 to +3 IoU), camera + radar polar fusion 2411.13311 (fusion on a polar grid at 59 FPS). Gap: these work on dense radar spectra or single sensors; a multi-radar, multi-sweep detection image with a camera on a Cartesian grid is ours.
 - Cost (estimate): 5 images of 128 x 132, a 6-layer CNN with 32-64 channels, a few ms; the pull is 12,480 cells x 5 radars, negligible.
 
-## 3a. Option B-lite: smart features + soft rasterisation + two 3x3 convolutions in the polar domain (Mirko, 2026-10-25: "low calculation time, simple")
+## 3a. Option B-lite: smart features + soft rasterisation + two 3x3 convolutions in the polar domain (2026-10-25 requirement: low calculation time, simple)
 Hypothesis: the uncertainty need not be decoded by a heavy network if the features carry the physics and the rasterisation already writes an approximate footprint; two small convolutions then only correct it.
 1. Per-detection encoder: the 42-value vector of section 1b -> a shared MLP (42 -> 32) = the high-dimensional state of the detection (750 detections for 5 radars and 0.5 s: about 1 M multiply-adds).
 2. Soft rasterisation into the sensor's polar image (range x azimuth bins): each detection writes its 32-vector into the 3 x 3 (or 5 x 5) bins around its exact position with analytic weights w = exp(-0.5 ((dr / sigma_r)^2 + (dphi / sigma_phi)^2)), normalised; dr, dphi = the exact offset to the bin centre (continuous, no aliasing), sigma_r and sigma_phi in bins from a small learned table indexed by the quality codes (x_rms, y_rms) and the range. This is the "smart feature design": the prior footprint is built in analytically, in the axis where radar noise is axis-aligned.
@@ -185,7 +185,7 @@ Reading (prediction PS2 >= P2 > C4 > C2 beyond 30 m was only partly right):
 - limits of the test: synthetic; one radar at one pose (the rig independence that polar promises is not tested); point targets (no extent, no Doppler); the footprint uses exactly the noise model of the generator (the real sigma has to come from a learned table indexed by the quality codes, so the real gain is smaller than here); timings are launch-bound single-scene numbers
 - the cost of CS2: an 11 x 11 window (121 cells) per detection because the lateral spread at 50 m is several cells; 750 detections x 121 = 91 k writes per frame, small; a window that follows the +-3 sigma ellipse (sensor-aligned rectangle) would cut it to the cells that matter
 
-## 4. Option A: sparse per-detection decoder (Mirko's idea with the refinements) - the control
+## 4. Option A: sparse per-detection decoder (the per-detection decoder idea with the refinements) - the control
 1. Encoder over the detections of all radars and sweeps (point MLP + local attention among neighbours within a few metres): f_j from (r_j, phi_j, RCS, v_r, static residual, quality codes, states, dt, sensor id / mount).
 2. Window per detection: the BEV cells within +-k range bins and +-k azimuth bins of the detection, in its sensor's polar frame (computed per detection from the calibration).
 3. Decoder g(f_j, r_cell - r_j, phi_cell - phi_j, r_j, dt) -> a weight logit and a feature; softmax over the window (each detection carries mass 1, or a learned confidence); scatter-add into the radar BEV.
@@ -212,7 +212,7 @@ Reading (prediction PS2 >= P2 > C4 > C2 beyond 30 m was only partly right):
 - physics of the learned spread: B - the learned footprint of a single detection, in azimuth bins, is about constant over range; A - the mass centre stays near the detection
 - usefulness: radar-only auxiliary heads above the null; shuffled radar (from another frame) removes the gain of the fusion
 
-## 7. Open points for Mirko
+## 7. Open points for the project owner
 1. B (symmetric) as the main radar block and A as its control - agreed?
 2. Polar resolution: 0.5 m x 1 deg (128 x 132 per radar) or 0.25 m x 0.5 deg (256 x 264)?
 3. Detections beyond 60 m (about 40 %): drop them, or keep them in the image (range axis to e.g. 100 m) as context for the backbone even though the BEV ends at 60 m?
