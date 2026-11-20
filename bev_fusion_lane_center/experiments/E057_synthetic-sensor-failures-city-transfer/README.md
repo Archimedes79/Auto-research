@@ -22,5 +22,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 
 ## Data
 
-- `code/`: `make_e57.py`, `make_e58.py`, `run_e57_eval.sh`, `run_e57_eval2.sh`, `run_e57_extract.sh`, `run_e57_extract2.sh`, `run_e57_extract3.sh`, `run_e57_extract4.sh`, `run_e57_fogresume.sh`, `run_e57_resume.sh`, `run_e58.sh`, `run_e58_rest.sh`, `run_e58_retry.sh`, `run_e58_train.sh` ... (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

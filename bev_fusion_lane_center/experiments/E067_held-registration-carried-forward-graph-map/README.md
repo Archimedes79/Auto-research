@@ -16,5 +16,5 @@ night: hold 0.53 m better than per frame; carry-forward 0.651 to 0.741 for about
 
 ## Data
 
-- `code/`: `boot_e71.py`, `make_e67.py`, `make_e68.py`, `make_e69.py`, `make_e70.py`, `make_e71.py`, `make_e72.py`, `run_e67.sh`, `run_e67seeds.sh`, `run_e68.sh`, `run_e69.sh`, `run_e70.sh`, `run_e71.sh`, `run_e72.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

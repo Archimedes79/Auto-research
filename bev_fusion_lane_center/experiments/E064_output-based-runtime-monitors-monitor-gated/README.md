@@ -17,5 +17,5 @@ failing frames found with AUROC 0.953; lateral error 1.03 to 0.43 m
 ## Data
 
 - `results/`: 3 small files from `e64_monitors`
-- `code/`: `make_e64.py`, `run_e64.sh`, `run_e64b.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

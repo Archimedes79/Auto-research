@@ -24,5 +24,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 23 small files from `e30_base2`, `e30_boot.json`, `e30_boot_counts.json`, `e30_boot_loc.json`, `e30_flip`, `e30_fold_seen.json`, `e30_reg`, `e30_s16` ...
-- `code/`: `make_e30.py`, `run_e30_adj.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

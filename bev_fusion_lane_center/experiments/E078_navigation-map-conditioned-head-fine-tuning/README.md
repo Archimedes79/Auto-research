@@ -30,5 +30,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 
 - `results/`: 44 small files from `e78_alt_final`, `e78_alt_nt`, `e78_final`, `e78_poorq_final`, `e78_poorq_nt`, `e78_sd_a`, `e78_sd_init_e60`, `e78_sd_lr1e3` ...
 - `figures/`: 2 images from the report sources
-- `code/`: `_insert_e78.py`, `analyze_e78.py`, `fig_e78_qual.py` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

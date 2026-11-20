@@ -25,5 +25,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 46 small files from `e40_clean`, `e40_clean_s03_align`, `e40_clean_s03_noalign`, `e40_clean_s05_align`, `e40_clean_s05_noalign`, `e40_clean_s1_align`, `e40_clean_s1_noalign` ...
-- `code/`: `_e40_base.py`, `make_e40.py`, `run_e40_e41.sh`, `run_e40_extra.sh`, `run_e40_na.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

@@ -25,5 +25,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 58 small files from `e65_base`, `e65_base7`, `e65_e65_faug_blur`, `e65_e65_faug_cam_front3_off`, `e65_e65_faug_cam_front_off`, `e65_e65_faug_dark`, `e65_e65_faug_extr3`, `e65_e65_faug_fog` ...
-- `code/`: `make_e65.py`, `run_e65.sh`, `run_e65_base.sh`, `run_e65_eval.sh`, `run_e65_extract.sh`, `run_e65_extract2.sh`, `run_e65_extract3.sh`, `run_e65b.sh`, `run_e65d.sh`, `run_e65e.sh`, `run_e65f.sh`, `run_e65f_extract.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

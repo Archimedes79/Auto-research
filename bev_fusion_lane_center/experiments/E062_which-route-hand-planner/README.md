@@ -23,5 +23,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 15 small files from `e62_boot.json`, `e62_d03`, `e62_dbg`, `e62_s0`, `e62_s1_noreg`, `e62_s1_reg`, `e62_s2_reg`, `e62p_blur` ...
-- `code/`: `boot_e62.py`, `make_e62.py`, `run_e62.sh`, `run_e62p.sh`, `run_e62p_retry.sh`, `run_e62r.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

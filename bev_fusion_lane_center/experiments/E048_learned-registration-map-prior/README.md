@@ -24,5 +24,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 31 small files from `e48_align`, `e48_chain2`, `e48_clean_s05_corrfine`, `e48_clean_s05_lalign`, `e48_clean_s1_chain`, `e48_clean_s1_corrfine`, `e48_clean_s1_lalign`, `e48_clean_s2_chain` ...
-- `code/`: `make_e48.py`, `run_e48_chain.sh`, `run_e48_eval.sh`, `run_e48_eval2.sh`, `run_e48_sys.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

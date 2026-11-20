@@ -16,5 +16,5 @@ Failure half, exact map: path error at 20 m 0.28 / 0.27 / 0.28 m (night / blur /
 ## Data
 
 - no separate data files (numbers in the loop-18 report and the state file)
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/` (all loop-18 scripts in their original layout: git tag `lcr/loop18-scratch`)
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/`

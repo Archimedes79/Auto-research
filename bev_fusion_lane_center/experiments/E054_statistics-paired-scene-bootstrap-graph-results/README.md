@@ -16,5 +16,5 @@ seed SD 0.0025 (VAL) / 0.0006 (TEST) F1; absolute F1 about +-0.035, paired diffe
 
 ## Data
 
-- `code/`: `make_e54.py`, `make_e55.py`, `run_e54.sh`, `run_e55.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

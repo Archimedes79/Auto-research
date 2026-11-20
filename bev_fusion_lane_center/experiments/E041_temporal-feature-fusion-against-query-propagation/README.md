@@ -25,5 +25,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 8 small files from `e41_A`, `e41_B`, `e41_Btr`, `sys_e41_A`, `sys_e41_Btr`
-- `code/`: `make_e41.py`, `run_e41b.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

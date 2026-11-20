@@ -24,5 +24,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 
 ## Data
 
-- `code/`: `make_e44.py`, `make_e53.py`, `run_e44_cfg.sh`, `run_e44_cons.sh`, `run_e44_cut2.sh`, `run_e44_map_cons.sh`, `run_e53.sh`, `run_e53_map.sh`, `run_e53_reg.sh`, `run_e53b.sh`, `run_e53c.sh` (reference copy of the scripts that ran it; the shared library is in `../../training`)
+- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`
