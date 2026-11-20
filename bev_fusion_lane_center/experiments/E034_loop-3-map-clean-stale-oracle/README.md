@@ -15,5 +15,5 @@ see reports/source/text (loop 3) and the dense-head runs
 
 ## Data
 
-- `results/`: 30 small files from `e34_map_clean`, `e34_map_stale`, `e34_nomap_ft`, `e34_oracle`, `e34_stale_d6`, `e35_A`, `e35_B`
+- `results/`: 28 small files from `e34_map_clean`, `e34_nomap_ft`, `e34_oracle`, `e35_A`, `e35_B`
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`
