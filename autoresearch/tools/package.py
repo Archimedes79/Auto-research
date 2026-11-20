@@ -670,14 +670,19 @@ def gt_clean(apply=False, root=None, problems=None, planned=None):
 
 
 def decision_text(decision):
-    """the text of the file D<n>.md of a DECIDED decision (guard_hook.decided: its file has a 'Decided:' line), looked up in every problem folder; None when `decision` is not decided anywhere"""
+    """the text of a DECIDED decision (guard_hook.decided): its file D<n>.md when the record is a folder, its row when the record is the single file with the `## Decided` table (D129),
+    looked up in every problem folder; None when `decision` is not decided anywhere"""
     import guard_hook as GH
+    import testgate as TG
     for root in problem_roots():
         try:
             with open(os.path.join(root, "project.json"), encoding="utf-8") as f:
                 cfg = json.load(f)
             if decision and decision in GH.decided(root, cfg):
-                p = os.path.join(root, cfg.get("grant_decisions") or cfg.get("decisions", "experiment_execution/DECISIONS.md"), decision + ".md")
+                rec = os.path.join(root, cfg.get("grant_decisions") or cfg.get("decisions", "experiment_execution/DECISIONS.md"))
+                if os.path.isfile(rec):
+                    return decision + ": " + TG.table_texts(rec).get(decision, "")
+                p = os.path.join(rec, decision + ".md")
                 return open(p, encoding="utf-8").read() if os.path.isfile(p) else ""
         except (OSError, ValueError):
             continue
@@ -1131,6 +1136,23 @@ def selftest():
             assert "lane GT store ldraft (a draft" in log and "(D78)" in log, "logged with the decision"
         finally:
             decision_text = saved_text
+        # D129: decision_text itself, the single-file record (the row of a decided id) and the folder form (its file); an open id, an unknown id and an id only mentioned in another row give None
+        saved_roots = problem_roots
+        try:
+            rec, fold = os.path.join(tmp, "d129", "rec"), os.path.join(tmp, "d129", "fold")       # one level down: the later tests count the problem folders directly under tmp
+            os.makedirs(rec)
+            os.makedirs(os.path.join(fold, "dec"))
+            json.dump({"decisions": "DECISIONS.md"}, open(os.path.join(rec, "project.json"), "w"))
+            open(os.path.join(rec, "DECISIONS.md"), "w", encoding="utf-8").write(
+                "## Decided\n| date | decision |\n|---|---|\n| 2026-11-20 | D5: the person drops ldraft |\n| 2026-11-20 | D6: nothing is named, see D5 |\n\n## Open\n| D9 | drop ldraft? |\n")
+            json.dump({"decisions": "dec"}, open(os.path.join(fold, "project.json"), "w"))
+            open(os.path.join(fold, "dec", "D7.md"), "w", encoding="utf-8").write("# D7\nDecided: 2026-11-20\ndrops ldraft\n")
+            problem_roots = lambda top=None: [rec]       # noqa: E731
+            assert decision_text("D5") == "D5: the person drops ldraft" and decision_text("D9") is None and decision_text("D3") is None and "ldraft" not in decision_text("D6"), "single-file record"
+            problem_roots = lambda top=None: [fold]      # noqa: E731
+            assert "ldraft" in decision_text("D7") and decision_text("D8") is None, "folder record"
+        finally:
+            problem_roots = saved_roots
         for bad in (("", None), ("", "D78"), (None, "D78"), (",", "D78")):
             try:
                 drop_names(*bad)

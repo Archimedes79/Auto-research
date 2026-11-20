@@ -8,10 +8,11 @@ The rule (hard rule 1 of METHOD.md: TEST only with a logged row under the person
   * the run id is a whole token in the 'who / which run' cell (the fourth) of a TABLE ROW of the log (a line that starts with |; a free-text line opens nothing, a mention as a
     comparison in another cell opens nothing, and the id `T.1` is not in `T.10` or `T.1.b`; a log with another layout than six columns: anywhere in the row);
   * the LAST row of that id decides, and an id that has a USED row (DONE, already used) anywhere is closed for good: log a new id in a new row;
-  * that row carries the person's OK in its last cell (the note): the cell STARTS with OK (optionally `the person's OK`, `Mirko's OK`, `user's OK`) and holds no word of a condition or a
+  * that row carries the person's OK in its last cell (the note): the cell STARTS with OK (optionally `the person's OK`, `the owner's OK`, `user's OK`) and holds no word of a condition or a
     negation (not, without, never, missing, pending, cancelled, revoked, wait, ask, need, expected, later, until, if, when, `for VAL`, a question mark); or the row cites a GRANT of a
-    decision that grants a TEST check: `granted by D28` / `authorised|allowed|approved by|under D28`, or `D28 (Mirko 2026-10-31: "One TEST check")` (a date and a quotation in the
-    parenthesis). A grant counts only when the project's decisions record calls the decision decided (a `Decided: <date>` line in its file) and the file says that it grants a TEST
+    decision that grants a TEST check: `granted by D28` / `authorised|allowed|approved by|under D28`, or `D28 (the owner, 2026-10-31: "One TEST check")` (a date and a quotation in the
+    parenthesis). A grant counts only when the project's decisions record calls the decision decided (a `Decided: <date>` line in its file, or its row in the `## Decided` table of the
+    single-file record, D129) and the file or row says that it grants a TEST
     check (`one TEST check`, `TEST ... granted / allowed`, `grants ... TEST`; a design called D7 or a decision that only mentions TEST grants nothing);
   * the row does not say it is not approved (CLOSED_ROW: not approved, refused, denied, withdrawn, awaiting, no OK, OK?, requested, not yet answered, OK pending ...).
 `grants` is the set of decision ids that grant a TEST check (grant_ids()); the default is the empty set: without a decisions record only the OK of the person opens.
@@ -28,7 +29,7 @@ CLOSED_ROW = re.compile(
     r"\b(?:not\s+approved|refused|denied|withdrawn|awaiting|waiting\s+for|no\s+OK|OK\s*[?？]|requested(?!\s+by)|to\s+be\s+(?:approved|answered|confirmed)|"
     r"not\s+yet\s+(?:answered|given|granted|approved)|(?:OK|approval|answer)\s+pending|pending\s+(?:OK|approval|answer)|pending[^|]{0,30}\b(?:yes|OK|approval|answer))(?!\w)",
     re.I)   # a holdout log row that says the run is not approved (a bare "pending" or "not yet" in the numbers cell is ordinary wording)
-OK_NOTE = re.compile(r"^\s*(?:(?:the\s+)?(?:person|user|Mirko)(?:'s|’s)?\s+)?OK\b")            # the note cell starts with the person's OK ...
+OK_NOTE = re.compile(r"^\s*(?:(?:the\s+)?(?:person|user|owner|Mirko)(?:'s|’s)?\s+)?OK\b")            # the note cell starts with the person's OK ...
 NOT_OK_NOTE = re.compile(r"\b(?:not|without|never|missing|pending|cancel\w*|revok\w*|wait\w*|ask\w*|need\w*|expected|later|tomorrow|soon|until|if|when|requested|"
                          r"for\s+VAL)\b|[?？]", re.I)   # ... and holds no condition or negation (a legitimate note that uses one of these words is worded differently: the gate fails closed)
 GRANT_D = re.compile(r"\b(?:granted|authori[sz]ed|allowed|approved)\s+(?:by|under)\s+(D\d+)\b|(?<![\w.])(D\d+)\s*\((?=[^)]*\d{4}-\d{2}-\d{2}[^)]*[\"“”])", re.I)
@@ -53,16 +54,43 @@ def _load_guard_hook():
     return mod
 
 
+def table_rows(path):
+    """[(id, text)] of the DECIDED rows of a single-file decisions record (D129), in file order: the `## Decided` table of the file, rows `| <yyyy-mm-dd> | D<n>: <text> |`;
+    an open row (section `## Open`), a row of another section and an id that is only mentioned in another row's text do not count (the same rule as guard_hook.decided)"""
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    m = re.search(r"^## Decided\s*$(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return [(r.group(1), r.group(2).lstrip(":").strip().rstrip("|").strip())
+            for r in re.finditer(r"^\|[ \t]*\d{4}-\d{2}-\d{2}[ \t]*\|[ \t]*(D\d+)\b(.*)$", m.group(1) if m else "", re.M)]
+
+
+def table_texts(path):
+    """{id: text} of the decided rows (`table_rows`); the first row of an id wins"""
+    out = {}
+    for d, t in table_rows(path):
+        out.setdefault(d, t)
+    return out
+
+
 def grant_ids(root, cfg):
-    """the decision ids of the project's decisions FOLDER that are decided (guard_hook.decided: a `Decided: <date>` line) and whose file says that it grants a TEST check
-    (GRANT_STMT): the ones a row may cite. A project without a decisions folder, or a record that cannot be read, grants nothing: only the OK of the person opens (the gate fails closed)"""
+    """the decision ids of the project's decisions record that are decided (guard_hook.decided) and whose record says that it grants a TEST check (GRANT_STMT): the ones a row may cite.
+    The record is a FOLDER of files D<n>.md (the statement is in the file) or the single file with the `## Decided` table (the statement is in the row of the id; an id with more than one
+    row grants nothing: a later row may revoke). Only the key `decisions` is read: a problem without it (bev_fusion names a record for the hook alone, `grant_decisions`) grants nothing, and
+    so does a record that cannot be read: only the OK of the person opens (the gate fails closed)"""
     try:
         gh = _load_guard_hook()
-        folder = os.path.join(root, cfg.get("decisions", "experiment_execution/DECISIONS.md"))
+        rel = cfg.get("decisions")
+        if not rel:
+            return set()
+        folder = os.path.join(root, rel)
+        gcfg = dict(cfg, grant_decisions=None)
+        out = set()
+        if os.path.isfile(folder):
+            decided, ids = gh.decided(root, gcfg), [d for d, _ in table_rows(folder)]
+            return {d for d, t in table_texts(folder).items() if d in decided and ids.count(d) == 1 and GRANT_STMT.search(t)}
         if not os.path.isdir(folder):
             return set()
-        out = set()
-        for d in gh.decided(root, cfg):
+        for d in gh.decided(root, gcfg):
             try:
                 with open(os.path.join(folder, d + ".md"), encoding="utf-8") as f:
                     if GRANT_STMT.search(f.read()):
@@ -103,7 +131,7 @@ def test_log_refusal(log_text, run_id, grants=frozenset()):
         return ""
     if cited:
         return (f"is named in the log, but its row cites {', '.join(sorted(cited))} and none of them is a decided decision that grants a TEST check (a 'Decided: <date>' line and "
-                "'one TEST check' in its file of the decisions folder): the person's OK in the note cell, or such a decision")
+                "'one TEST check' in its file or row of the decisions record): the person's OK in the note cell, or such a decision")
     return "is named in the log, but its row carries no OK of the person (its note cell starts with OK, or `granted by D<n>` of a decision that grants a TEST check)"
 
 
@@ -154,6 +182,23 @@ def _selftest():
         assert grant_ids(root, {"decisions": "dec"}) == {"D28", "D4"}, "decided and granting a TEST check (D7 only mentions TEST, D9 is open)"
         assert (list(sys.path), "project" in sys.modules, "hold" in sys.modules) == before, "loading the gate changes neither sys.path nor sys.modules"
         assert grant_ids(root, {}) == set() and grant_ids("/no/such/root", {"decisions": "dec"}) == set(), "no decisions record grants nothing"
+        # D129: the single-file record (the `## Decided` table): the statement must be in the row of the id; an open row, an id only mentioned in another row, a row of the Notes section grant nothing
+        open(os.path.join(root, "DECISIONS.md"), "w", encoding="utf-8").write(
+            "# Decisions\n\n## Decided\n| date | decision |\n|---|---|\n| 2026-10-31 | D28: one TEST check of E268.p is permitted |\n"
+            "| 2026-10-25 | D7: the split, before its TEST check |\n| 2026-10-20 | D4: TEST once is granted |\n| 2026-10-21 | D5: nothing is granted here, see D28 |\n"
+            "| 2026-10-22 | D4: a second row of D4 revokes the first |\n| 2026-10-23 | D8: a TEST use is allowed for one run |\n| - | D12: undated, one TEST check |\n\n"
+            "## Open\n| id | question |\n|---|---|\n| D9 | One TEST check, still open |\n| 2026-11-20 | D10: one TEST check, appended at the END of the file |\n")
+        rec = os.path.join(root, "DECISIONS.md")
+        assert table_texts(rec).keys() == {"D28", "D7", "D4", "D5", "D8"} and "permitted" in table_texts(rec)["D28"], "decided rows only (a dated row appended after the Open header, an undated row and a header are not decided), the first row of an id wins"
+        assert "granted" in table_texts(rec)["D4"], "the first row of D4 is kept"
+        assert grant_ids(root, {"decisions": "DECISIONS.md"}) == {"D28", "D8"}, "table form: decided, ONE row, and the row says it grants a TEST check (D7 only mentions TEST, D5 only mentions D28, D4 has two rows, D9 / D10 are open)"
+        os.makedirs(os.path.join(root, "empty_dec"))
+        assert grant_ids(root, {"decisions": "DECISIONS.md", "grant_decisions": "empty_dec"}) == {"D28", "D8"}, "the hook-only key does not change what the TEST gate reads (an empty record named there decides nothing)"
+        assert grant_ids(root, {"grant_decisions": "DECISIONS.md"}) == set() and grant_ids(root, {"decisions": ""}) == set(), "the bev shape: no `decisions` key grants nothing, whatever record the hook reads"
+        os.makedirs(os.path.join(root, "experiment_execution"))
+        open(os.path.join(root, "experiment_execution", "DECISIONS.md"), "w", encoding="utf-8").write("## Decided\n| 2026-11-20 | D5: one TEST check |\n")
+        assert grant_ids(root, {"grant_decisions": "DECISIONS.md"}) == set(), "a stray file at the old default path does not open a problem without the key"
+        assert grant_ids(root, {"decisions": "NO_SUCH.md"}) == set(), "a missing single file grants nothing"
     return "testgate selftest passed"
 
 

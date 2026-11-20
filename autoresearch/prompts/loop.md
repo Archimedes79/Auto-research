@@ -24,6 +24,6 @@ Every wake-up (when a run record changes, else every 20-25 min)
 
 At STOP_AT (P4)
 - end-of-loop section of the plan; report from the experiment summaries; `check_numbers.py`; `ar-critic` mode numbers; tracking (inline, or `ar-planner` mode tracking: the best versions, a promotion proposal, the next round's open branches, written into `HANDOVER.md`, or at the end of the plan file)
-- card statuses, closed questions, open points for the next cycle; decisions for the person into the decisions folder (one file `decisions/D<n>.md` each)
+- card statuses, closed questions, open points for the next cycle; decisions for the owner into the decisions record (an entry in the Open table of `DECISIONS.md`, next free id)
 - commit the experiment code that is long-lived (`commit_paths.py`; scratch is not committed by hand: `clean_temp.py loop<NN> --move` tags it first); `check_structure.py`; tests
 - HANDOVER rewritten; mail / shutdown only as allowed above

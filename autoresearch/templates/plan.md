@@ -19,5 +19,5 @@ matched reference, null baseline, equal-budget control, seed twin; split rules; 
 - per node: result and decision (one line each, numbers from metric cards)
 - best system now, and what changed against the last best
 - questions closed (into the closed-questions file), open points for the next cycle
-- decisions for the person (into the decisions folder, one file `decisions/D<n>.md` each)
+- decisions for the owner (into the decisions record: an entry in the Open table of `DECISIONS.md`, next free id)
 - checks: numbers check, numbers reviewer, structure check, tests

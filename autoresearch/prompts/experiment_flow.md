@@ -1,6 +1,6 @@
 # The experiment flow (one experiment, six steps)
 
-Mirko's picture of 2026-11-01: plan card -> coding -> experiment -> training -> evaluation -> store to folder, with the data refreshed where necessary. The lead (or an experiment agent) follows it for every experiment that feeds a verdict; the loop prompt (`loop.md`) is about the rounds around it. Commands run from the problem folder through the WSL (`wsl python3 ../autoresearch/tools/<tool>.py`; bev_fusion: `AR_PROJECT=. ` inside the WSL call).
+The picture of 2026-11-01: plan card -> coding -> experiment -> training -> evaluation -> store to folder, with the data refreshed where necessary. The lead (or an experiment agent) follows it for every experiment that feeds a verdict; the loop prompt (`loop.md`) is about the rounds around it. Commands run from the problem folder through the WSL (`wsl python3 ../autoresearch/tools/<tool>.py`; bev_fusion: `AR_PROJECT=. ` inside the WSL call).
 
 | # | step | what | tool / file |
 |---|---|---|---|
