@@ -12,6 +12,21 @@
 6. **Attention B (scharf, fest, ohne Parameter).** Weiches Argmin über den Abstand (Temperatur 0.3 m): die nächste Stütze trägt fast das ganze Gewicht, ohne harte Auswahl. Sie liefert die Meter-Merkmale der nächsten Stütze, vor allem den Quer-Versatz.
 7. **Ausgabe-MLP.** [x, gewichtete Werte, Attention-Masse auf echten Schlüsseln, Paarmerkmale gepoolt nach A und nach B, Karte vorhanden] (181 Werte) -> 64 -> zwei Logits: *road* (der Token liegt auf der Fahrbahn der Route) und *lane* (er liegt auf der Spur, die das Fahrzeug fährt).
 
+Table: Parameter je Block, aus dem Modul gelesen (`tools/draw_route_head.py --table`); die Zeichnung zeigt die drei Wege eines Tokens: (1) eigene Merkmale, (2) gelernte Attention A, (3) scharfe Attention B, danach verketten und eine Ausgabe-MLP.
+
+| Block | Parameter |
+|---|---|
+| Token-Projektion (`tok` -> 64, LayerNorm) | 4,288 |
+| Geometrie-MLP (eigene Merkmale) | 1,568 |
+| Anfrage q (LayerNorm + Linear) | 6,400 |
+| Routen-Schlüssel (Eingabe -> 64, LayerNorm) | 832 |
+| Schlüssel und Werte (64 -> 128) | 8,320 |
+| Bias-MLP der Paarmerkmale (8 -> 32 -> 4) | 420 |
+| None-Schlüssel (k, v, Bias; 4 Köpfe) | 132 |
+| Ausgabe-MLP (181 -> 64 -> 2) | 11,778 |
+| **Summe** (mit `tok`) | **33,738** |
+| Summe nur Geometrie (ohne `tok`, Kontrolle zg / mg) | 21,130 |
+
 **Verlust.** BCE beider Logits auf den Token mit Label, positive Gewichte nach der TRAIN-Häufigkeit; 3000 Schritte, Batch 8, lr 1e-3, AdamW, Cosinus. Das Training liest die gecachten Token, die Stufe-1-Köpfe des Champions sind **nicht** in der Schleife (ihr Ergebnis, die gelieferte Token-Menge, wird erst bei der Auswertung gelesen).
 
 **Differenzierbarkeit.** Der Kopf ist durchgehend differenzierbar (weiche Aufmerksamkeit, kein harter Schritt innerhalb des Kopfes). Genannte feste Schritte außerhalb: die Auswahl der **gelieferten Token** (der Champion-Kopf E373 bei der Dekodierung D115) und die Schwelle p_route >= 0.5 bei der Ausgabe. Es gibt keinen Gradienten von der Route in B' oder in den Champion: eine gemeinsame Feinabstimmung wäre eine eigene Karte.
