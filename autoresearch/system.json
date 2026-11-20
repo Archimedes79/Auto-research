@@ -1,6 +1,6 @@
 {
  "title": "The whole system at work: who gives an order, what the agents do, which files and tools they touch, how the tools call each other",
- "subtitle": "Left to right: you speak only in chat; agents write plain files; tools read them, refuse what breaks a rule and run the suites; numbers come back as a verdict. Red borders refuse.",
+ "subtitle": "Left to right: the person speaks only in chat; agents write plain files; tools read them, refuse what breaks a rule and run the suites; numbers come back as a verdict. Red borders refuse.",
  "root": "..",
  "colw": 240,
  "steps": [
@@ -76,7 +76,7 @@
  "nodes": [
   {
    "id": "you",
-   "label": "You (Mirko)\norders in chat,\nanswers, TEST OK",
+   "label": "The person\norders in chat,\nanswers, TEST OK",
    "kind": "person",
    "col": 0,
    "row": 0,
@@ -85,7 +85,7 @@
     "CLAUDE.md",
     "autoresearch/METHOD.md"
    ],
-   "note": "an order is a chat message to one chat; nothing is a decision until it is written as a D<n> with your words"
+   "note": "an order is a chat message to one chat; nothing is a decision until it is a decided D<n> row of DECISIONS.md"
   },
   {
    "id": "lead",
@@ -129,14 +129,14 @@
   },
   {
    "id": "decisions",
-   "label": "decisions/D<n>.md\nquestion + your words",
+   "label": "DECISIONS.md\nD<n> rows:\nquestion, answer",
    "kind": "file",
    "col": 2,
    "row": 0,
    "code": [
-    "bev_fusion_lane_center/experiment_execution/decisions/"
+    "bev_fusion_lane_center/experiment_execution/DECISIONS.md"
    ],
-   "note": "a line 'Decided: <date>' makes D<n> decided; only a decided D<n> opens a protected file"
+   "note": "a row in the table Decided (date, D<n>: text) makes D<n> decided, a question waits in the table Open; only a decided D<n> opens a protected file"
   },
   {
    "id": "handover",

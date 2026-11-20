@@ -227,7 +227,7 @@
       "code": [
         "../GtGenerator/versions.csv"
       ],
-      "note": "derived data, not in git; regenerated from the tag and the options of index.json. The stores live on D: behind links"
+      "note": "derived data, not in git; regenerated from the tag and the options of index.json. The stores of front v9 and the lane stores live on D: behind links (data/NuScenes/tools/link_storage.sh); the front store of v13 (a107e0b4e8) lies on C: in data/autogt/"
     },
     {
       "id": "f_tr",
