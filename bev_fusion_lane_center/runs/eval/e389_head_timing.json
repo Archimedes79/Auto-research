@@ -1,0 +1,42 @@
+{
+ "date": "2026-11-20 01:29:41",
+ "before": {
+  "util": 18.0,
+  "mem_mb": 2160.0
+ },
+ "after": {
+  "util": 4.0,
+  "mem_mb": 2342.0
+ },
+ "load1_before": 1.08,
+ "load1_after": 1.0,
+ "quiet": false,
+ "params": 33738,
+ "results": {
+  "full_M66_fp32": {
+   "median_ms": 2.092095971107483,
+   "p10_ms": 1.9849247813224793,
+   "p90_ms": 2.440275168418885,
+   "n": 300
+  },
+  "full_M66_bf16": {
+   "median_ms": 2.680575966835022,
+   "p10_ms": 2.527408003807068,
+   "p90_ms": 3.1375264644622805,
+   "n": 300
+  },
+  "full_M136_fp32": {
+   "median_ms": 2.0807679891586304,
+   "p10_ms": 1.9444576263427735,
+   "p90_ms": 7.105740642547612,
+   "n": 300
+  },
+  "full_M136_bf16": {
+   "median_ms": 2.667456030845642,
+   "p10_ms": 2.5299264192581177,
+   "p90_ms": 3.075472021102906,
+   "n": 300
+  }
+ },
+ "note": "head alone, batch 1, K 512, random weights, CUDA events; clause 6 of the card: at most 1.0 ms on the champion path"
+}
