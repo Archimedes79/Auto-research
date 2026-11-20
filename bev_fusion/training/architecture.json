@@ -1,6 +1,6 @@
 {
  "title": "bev_fusion: camera + radar BEV system in five layers",
- "subtitle": "Built 2026-11-01, updated 2026-11-03 (Mirko's layered design). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, tests/test_slots.py) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.",
+ "subtitle": "Built 2026-11-01 as a five-layer design, updated 2026-11-21 (student image encoder, recursive one-frame / one-scan input, fusion-area masks). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, tests/test_slots.py) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.",
  "root": "..",
  "colw": 190,
  "kinds": {
@@ -106,25 +106,25 @@
  "nodes": [
   {
    "id": "in_cam",
-   "label": "Cameras\nnow + past frames",
+   "label": "Cameras\nwindow, or one frame + state",
    "kind": "input",
    "col": 0,
    "row": 0,
    "code": [
     "training/nuscenes_dataset.py::FrontRadarDataset"
    ],
-   "note": "today the front camera; six cameras are one more entry of the interface, not a new chain"
+   "note": "default: the window of n_cam frames of the batch (cam_buffer 'window'); options (t21, D91): ONE frame per step with the past carried as the state of the previous step at BEV-feature level (cam_buffer 'pair' / 'recurrent'); today the front camera; six cameras are one more entry of the interface, not a new chain"
   },
   {
    "id": "in_rad",
-   "label": "Radars\ndetections, 0.5 s",
+   "label": "Radars\ndetections: 0.5 s or one sweep",
    "kind": "input",
    "col": 0,
    "row": 1,
    "code": [
     "training/nuscenes_dataset.py::FrontRadarDataset._radar"
    ],
-   "note": "all five radars"
+   "note": "all five radars; default: the sweeps of the last 0.5 s accumulated at point level; option radar_per_frame (t25, D91): ONE sweep per camera frame (batch['radar_seq'])"
   },
   {
    "id": "in_ego",
@@ -149,7 +149,7 @@
     "training/feature_cache.py::FeatureStore",
     "training/cache_bevfusion_features.py"
    ],
-   "note": "frozen DualBEV / BEVFusion image heads: depth probabilities + context per pixel; while frozen they are a cache (with a meta.json identity), once unfrozen the image encoder becomes the first network slot"
+   "note": "frozen DualBEV / BEVFusion image heads: depth probabilities + context per pixel; while frozen they are a cache (with a meta.json identity), once unfrozen the image encoder becomes the first network slot (the optional student encoder of the camera slot, t22 / t26, is that step)"
   },
   {
    "id": "pre_radar",
@@ -193,7 +193,7 @@
   },
   {
    "id": "cam_enc",
-   "label": "Camera BEV encoder\nlift + collapse; mirror in BEV",
+   "label": "Camera BEV encoder\nlift + collapse; student (option)",
    "kind": "learned",
    "col": 3,
    "row": 0,
@@ -201,9 +201,10 @@
     "training/lift_pd.py::LiftPD",
     "training/model.py::BEVFusionModel.camera_bevs",
     "training/model.py::BEVFusionModel.camera_visibility",
-    "training/blocks_new.py::ZSumReduce"
+    "training/blocks_new.py::ZSumReduce",
+    "training/student_encoder.py::StudentEncoder"
    ],
-   "note": "contract: BEVInputs -> (BEVs (B, F, C_cam, X, Y), visibility (B, 1, X, Y)), mirrored in BEV for flipped samples (cached perspective features cannot be mirrored); kinds dualbev, bevfusion, dual"
+   "note": "contract: BEVInputs -> (BEVs (B, F, C_cam, X, Y), visibility (B, 1, X, Y)), mirrored in BEV for flipped samples (cached perspective features cannot be mirrored); kinds dualbev, bevfusion, dual; option camera_student (t22 stage B, t26): a small trained image encoder (StudentEncoder, EfficientViT-B1 or ResNet-18) replaces the cached teacher outputs of the current frame, with student_frames 'all' (t26) of every frame of the window, and can be trained on the task (student_trainable)"
   },
   {
    "id": "rad_enc",
@@ -217,7 +218,7 @@
     "training/blocks_new.py::RadarPillars",
     "training/radar_encoder.py::RadarEncoder"
    ],
-   "note": "contract: radar points -> (B, C_rad, X, Y); the raster is the first op, before any weight, so it costs no gradient; radar history is the sweeps inside the points; kind delta_slots (radar_encoder.py, in the t16 / t20 chain): the lossless delta-coded slot raster (K = 3 exact slots per cell + remainder mean + count) and two convolutions, with a reconstruction side loss (radar_aux) whose weight decays to a floor"
+   "note": "contract: radar points -> (B, C_rad, X, Y); the raster is the first op, before any weight, so it costs no gradient; radar history is the sweeps inside the points (with radar_per_frame, t25: one sweep per camera frame, the past in the radar memory of the temporal block); kind delta_slots (radar_encoder.py, in the t16 / t20 chain): the lossless delta-coded slot raster (K = 3 exact slots per cell + remainder mean + count) and two convolutions, with a reconstruction side loss (radar_aux) whose weight decays to a floor"
   },
   {
    "id": "temporal",
@@ -231,7 +232,7 @@
     "training/splat.py::splat_window",
     "training/fallbacks.py::EgoWarpGRU"
    ],
-   "note": "the same block for both branches (TemporalFusion takes channels and grid); camera: window + world memory; radar: none today, world memory as the first arm (its 0.5 s history is in the points); contract: (BEV now, past BEVs with their ego steps, state, step since the last call, coverage) -> (BEV, state); the re-centre is a whole-cell roll, the gradient passes; finding (tests/test_slots.py): with no past radar frames the window part and the velocity head of the radar block get no gradient, so the radar memory needs its own static gate (the measured Doppler) or past radar BEVs"
+   "note": "the same block for both branches (TemporalFusion takes channels and grid); camera: window (default) or one buffered frame, pair / recurrent (cam_buffer, t21, D91), + world memory; radar: none by default (its 0.5 s history is in the points), the radar memory with the Doppler static gate (rad_temporal 'window_memory') and the per-frame recursion (radar_per_frame, t25) are options, not trained successfully so far; contract: (BEV now, past BEVs with their ego steps, state, step since the last call, coverage) -> (BEV, state); the re-centre is a whole-cell roll, the gradient passes; finding (tests/test_slots.py): with no past radar frames the window part and the velocity head of the radar block get no gradient, so the radar memory needs its own static gate (the measured Doppler) or past radar BEVs"
   },
   {
    "id": "fusion",
@@ -356,7 +357,7 @@
   },
   {
    "id": "gt",
-   "label": "Ground truth\nautogt, cached",
+   "label": "Ground truth\nGtGenerator, cached",
    "kind": "train",
    "col": 1,
    "row": 4,
@@ -364,7 +365,8 @@
     "../GtGenerator/",
     "training/gt_cache_build.py",
     "training/gt_scenes.py"
-   ]
+   ],
+   "note": "GT release v14 (front v13 + lane l6, merged under D83); the BEV trainer's cache is keyed by the front signature"
   },
   {
    "id": "data",
@@ -418,7 +420,7 @@
    "code": [
     "training/lane_branch.py::LaneBranch"
    ],
-   "note": "reads the lane image, K, T, ida and the DualBEV depth of the current frame; its BEV is added to the camera BEV after the temporal block; mirrored on its own; since t20 it also works on the dual camera features (it reads the first source's depth, K and crop and adds to the merged camera BEV): at 20 m a stride-16 image pixel is 0.57 m wide (more than a 0.5 m cell), a stride-4 pixel 0.14 m"
+   "note": "reads the lane image, K, T, ida and the DualBEV depth of the current frame; its BEV is added to the camera BEV after the temporal block; mirrored on its own; off for new from-scratch base runs (D65, training/configs/t20_base_nol4.json); since t20 it also works on the dual camera features (it reads the first source's depth, K and crop and adds to the merged camera BEV): at 20 m a stride-16 image pixel is 0.57 m wide (more than a 0.5 m cell), a stride-4 pixel 0.14 m"
   },
   {
    "id": "soft",
@@ -622,14 +624,12 @@
   {
    "from": "vis",
    "to": "loss",
-   "label": "loss masks (D36, next)",
-   "dashed": true
+   "label": "loss masks (D36; fusion_area_only, D31)"
   },
   {
    "from": "vis",
    "to": "consumers",
-   "label": "scoring masks (D37, next)",
-   "dashed": true
+   "label": "scoring masks (D37, D31)"
   },
   {
    "from": "motion",
@@ -749,7 +749,6 @@
   "training/startable.py": "tool: static checks, smoke config and start lines of a training config; no GPU, not part of the network",
   "training/ab_timing.py": "tool: in-process A/B step timer (two speed settings in one process, blocks A B | B A, paired interval); not part of the network",
   "training/launch_saving.py": "speed variants of the forward (D53 / D54: fused splat, one shared mover, sync-free forms, host copies), same arithmetic as the plain code and off by default; drawn as the plain boxes",
-  "training/student_encoder.py": "t22 student image encoder (stage A: reproduces the cached DualBEV / BEVFusion outputs from the key-frame JPEG); in the chain only as the optional module `student` (ModelConfig.camera_student, off by default; model.STUDENTS, stage B), not drawn",
   "training/distill_student.py": "t22 stage A trainer of the student encoder (offline, against the cached teacher outputs); not part of the network",
   "training/gt_bev.py": "compatibility shim that re-exports GtGenerator",
   "training/legacy": "S1 single-sensor pipeline and the t4 DualBEV front; nothing in model / train / evaluation imports it"
