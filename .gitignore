@@ -231,3 +231,8 @@ status.json
 !/bev_fusion_lane_center/results/system_report_*/
 /bev_fusion_lane_center/results/system_report_*/*
 !/bev_fusion_lane_center/results/system_report_*/README.md
+
+# per-run state: the run record run.json carries status / exit / ended, so the flag file done is redundant with it (run.py still writes it); jobrunner state of the BEV records
+/bev_fusion/records/runs/*/done
+/bev_fusion_lane_center/experiment_execution/runs/*/done
+/bev_fusion/records/runs/.jobs/
