@@ -89,6 +89,7 @@ run "E389 route-association head + trainer (CPU, synthetic, 67 mutants)" grid/te
 run "E389 route-association read-out: hand frames, cost, dump / score / rules on 24 real VAL frames (CPU; the full run with the textual mutants is test_jroute_eval.py without argument, about 30 min)" test_jroute_eval.py selftests
 run "E389 route data: tier-1 route, band labels, forks, map-error modes (needs the VAL cache; mutants: run the file without the argument)" grid/test_lane_route.py selftests
 run "E390 SD road-graph encoding: leaks, invariance, divider line, paired levels, P6, cut (CPU, hand graphs, mutants)" grid/test_sdgraph.py
+run "E391 map association: perception untouched (no-detach mutant), the label rule, targets + every arm on a real batch (CPU)" grid/test_mapassoc.py
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
 run "jthresh: learned decode thresholds (E388): soft F1 by hand, a known optimum, mutants" jthresh.py selftest
 run "lane suite of the evaluation (5 checks, about 9 minutes)" test_lane_suite.py
