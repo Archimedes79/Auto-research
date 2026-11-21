@@ -103,3 +103,41 @@ Reported beside P6 (not deciding): the accuracy on road proxies and on intersect
 
 ## 3. Read-out log
 - v2 caches and nulls (superseded; `runs/e390_sdgraph/v2/`), v4 caches and nulls (superseded by the v3 critic; `v4/`; times in the ledger rows of E390.build4_* / E390.nulls4b), v5 caches and nulls (superseded by the v4 critic; `v5/`), v6 caches and nulls (the bar table; VAL 873 frames / 22 scenes, TRAIN 8414 / 212, no frame at the node cap, 94 % of the links inside the P2 gap, 60941 VAL proxies of 9114 one-node pieces of 13080; ledger rows E390.build6_* / E390.nulls6).
+- 03:36 - 05:57 the chain `temp/e390/chain390.sh` (commit 2a0023f444): E390.g_s0 / n_s0 (03:37 - 04:23), g_s1 / n_s1 (04:23 - 05:09), the VAL reads and the graph clauses (05:09 - 05:57), all exit 0. The clause table (written by `temp/e390/verdict390.py` from the result files; it applies the card's arithmetic, the verdict is by hand):
+
+| seed | clause | result | numbers (VAL 873; from runs/e390_<arm>_s<S>/probe_card.json, clause_vs_n_base.json) |
+|---|---|---|---|
+| 0 | P1 base | PASS | 0.9380 (bar 0.7335); - copy +0.2420 [+0.2234, +0.2597] |
+| 0 | P1 ce0 | FAIL | 0.9883 (bar 0.99) |
+| 0 | P2 base | PASS | 0.9854 (bar 0.938); - logistic +0.0681 [+0.0545, +0.0831] |
+| 0 | P2 s2 | PASS | 0.9848 (bar 0.9354); - logistic +0.0709 [+0.0570, +0.0866] |
+| 0 | P3 base | PASS | 0.8390 (bar 0.7138); - rule +0.2206 [+0.1260, +0.3156] |
+| 0 | P6 base | PASS | 0.9564 (bar 0.942); - nearest +0.0338 [+0.0248, +0.0443]; false-unassigned 0.0021; road 0.9321 / intersection 0.9861 |
+| 0 | P6 pose2 | PASS | 0.9295 (bar 0.8747); - logistic +0.0966 [+0.0771, +0.1146] |
+| 0 | P6 nd | PASS | accuracy 0.9233 (bar 0.8444), none recall 0.7911 (bar 0.3918); none - nearest +0.6021 [+0.5057, +0.6734]; false-unassigned 0.0085 |
+| 0 | graph clause | PASS | g - n: P3 +0.1143 [+0.0701, +0.1682], P1 +0.1504, P2 +0.0109, P6 +0.0100 |
+| 0 | P4 | FAIL | max rel change 1.83e+00, flips 1116 |
+| 0 | P5 | PASS | all steps within the null's drop + 0.01; s5 / pose5 not below the null |
+| 0 | counts | PASS | {"p1_nodes": 5710, "p2_pos_dec": 2751, "p3_pos": 394, "p6_proxies": 60941}, nd unassigned 11560 |
+| 0 | (arm n, reported) | - | P1 0.7876, P2 0.9746, P3 0.7247, P6 0.9465 (base); P6 nd none recall 0.7026; boot_nan g 10000 |
+| 1 | P1 base | PASS | 0.9363 (bar 0.7335); - copy +0.2403 [+0.2171, +0.2598] |
+| 1 | P1 ce0 | FAIL | 0.9853 (bar 0.99) |
+| 1 | P2 base | PASS | 0.9870 (bar 0.938); - logistic +0.0696 [+0.0558, +0.0843] |
+| 1 | P2 s2 | PASS | 0.9865 (bar 0.9354); - logistic +0.0726 [+0.0584, +0.0883] |
+| 1 | P3 base | PASS | 0.8665 (bar 0.7138); - rule +0.2481 [+0.1577, +0.3369] |
+| 1 | P6 base | PASS | 0.9553 (bar 0.942); - nearest +0.0326 [+0.0234, +0.0440]; false-unassigned 0.0066; road 0.9306 / intersection 0.9852 |
+| 1 | P6 pose2 | PASS | 0.9299 (bar 0.8747); - logistic +0.0970 [+0.0763, +0.1177] |
+| 1 | P6 nd | PASS | accuracy 0.9320 (bar 0.8444), none recall 0.8433 (bar 0.3918); none - nearest +0.6543 [+0.5531, +0.7297]; false-unassigned 0.0137 |
+| 1 | graph clause | PASS | g - n: P3 +0.1086 [+0.0721, +0.1549], P1 +0.1450, P2 +0.0149, P6 +0.0038 |
+| 1 | P4 | FAIL | max rel change 1.91e+00, flips 1049 |
+| 1 | P5 | PASS | all steps within the null's drop + 0.01; s5 / pose5 not below the null |
+| 1 | counts | PASS | {"p1_nodes": 5710, "p2_pos_dec": 2751, "p3_pos": 394, "p6_proxies": 60941}, nd unassigned 11560 |
+| 1 | (arm n, reported) | - | P1 0.7912, P2 0.9721, P3 0.7578, P6 0.9515 (base); P6 nd none recall 0.7501; boot_nan g 10000 |
+
+## Result (2026-11-21 ~06:30, by hand by the card v5 rule written before the run)
+**NOT SOUND** (the first outcome that applies, in the card's order): **P4 fails on both seeds** (the largest embedding change under a joint rigid transform 1.83 / 1.91 x the mean absolute embedding, 1116 / 1049 flips, against the bar 1e-4 and 0 flips). Also failing on both seeds: **P1 at count error 0** (0.9883 / 0.9853 against 0.99; the card's kill text named this level as 'the heads cannot even copy the input'; here the head copies 98.5 - 98.8 %: it learned to distrust the input counts of the training mix). Everything else passes on both seeds, by wide margins: P1 at count error 0.3 0.938 / 0.936 (bar 0.7335; copy 0.696), P2 0.985 / 0.987 (bar 0.938; logistic null 0.917), P3 0.839 / 0.867 (bar 0.714; rule 0.618), **P6 association 0.956 / 0.955 at the exact pose (bar 0.942; nearest rule 0.923), 0.930 / 0.930 at a 2 m pose error (bar 0.875), and with 20 % of the segments missing a none recall of 0.79 / 0.84 (bar 0.39; nearest rule 0.19, logistic 0.04) at a false-unassigned rate of 0.009 / 0.014**, the graph clause (g - n on P3 +0.114 / +0.109, lower ends +0.070 / +0.072), P5 (every paired step within the null's drop + 0.01, s5 / pose5 above the null). Action (the card): NOT SOUND = redesign; nothing of step 2 is planned; Mirko gets the numbers. Prediction: P6 +0.02 over the stronger null at base (measured +0.034 / +0.033: a hit); the outcome odds gave NOT SOUND 5 %.
+
+**Why P4 fails (diagnosis by hand, after the read; `temp/e390/p4diag390.py`, `p4feat390.py`, `p4tie390.py`, `p4one390.py`): two implementation defects, not the design.** (1) 25 of the 873 VAL frames hold an intersection token without geometry (no area, or no inner stretch with its midpoint inside it: the 1 % of the v5 check); `ends` / `_dense` then fall back to a point at the EGO ORIGIN, which a rigid transform does not move: an absolute-position leak (a pair feature 'gap' of 43.3 m became 35.3 m under a transform). (2) The road line is the lane centre offset by exactly 1.75 m, so many road / intersection pairs have the two attach candidates (an entry of b against a's points, an exit of a against b's points) EXACTLY equal (1.75 m both ways) or several coincident points of different heading: `argmin` and the `d1 <= d2` branch are then decided by float noise of 1e-15, and the attach position and the headings jump (frame 13: the attach-position feature 0 -> 1). The frames without an empty token fail too (1.23 x, 193 flips over 848 frames): defect (2) alone breaks P4. Both are cheap to fix (an empty node = absent, masked; the attach choice with a tolerance and a fixed order: the first candidate within 1e-6 m of the minimum, d1 preferred within 1e-6 m), with a test on real VAL frames that P4 holds; then step 1 is read again as a new version of this card (a fresh critic, the nulls unchanged for P1 - P3 and P6 except where the empty tokens enter).
+
+**What the numbers say, beside the verdict (not a verdict):** the logical road-graph encoding carries what Mirko asked for well above every simple rule: the lanes per direction survive a 30 % count error (0.94 against a 0.70 copy and a 0.77 naive-Bayes reference), dropped connections are recovered (AUC 0.985), hidden route membership is recovered through the links (0.84 - 0.87, and the relations are needed: g - n +0.11), and the D135 association works where the geometric rules fail: with segments missing from the map the encoder leaves 79 - 84 % of their perceived elements UNASSIGNED where the nearest rule leaves 19 % (the rest it overwrites wrongly), at a 2 m pose error it still assigns 93 % (rules 0.82 / 0.83). The no-relation arm n is already strong on P2 / P6 (0.97 / 0.95: the pair and proxy geometry carry most of it) and weaker on P1 (0.79) and P3 (0.72 - 0.76). These readings stand only after the P4 defects are fixed and the probes read again: until then the embedding is not proven to be free of the absolute pose.
+
