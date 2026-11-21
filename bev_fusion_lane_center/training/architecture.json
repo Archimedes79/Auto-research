@@ -503,22 +503,6 @@
    "note": "arm z = the same loader, loss and order with the route of every sample stripped"
   },
   {
-   "id": "e390",
-   "label": "E390 step 1: the SD map as a logical road graph (encoder + probes, running)",
-   "kind": "alt",
-   "col": 0,
-   "row": 9,
-   "code": [
-    "training/data/lane_sdgraph_data.py",
-    "training/grid/jsdgraph.py",
-    "evaluation/sdgraph_probe.py"
-   ],
-   "note": "roads with logical lanes per direction and their connections, encoded first, then fusion, then error models (R9); the card of 2026-11-21, no result yet",
-   "w": 2,
-   "hpx": 52,
-   "sub": "jsdgraph.py +2"
-  },
-  {
    "id": "ref_lg",
    "label": "E324 s: training/lanegraph/ (earlier end-to-end system: attached ends, wiring by rule)",
    "kind": "alt",
@@ -992,7 +976,6 @@
   "training/grid/test_oracle.py": "G0 oracle test of the grid chain (reference)",
   "training/grid/test_qraster.py": "test of the pixel targets of B (qraster.py)",
   "training/grid/test_qtargets.py": "test of the node and link targets of B (qtargets.py)",
-  "training/grid/test_sdgraph.py": "test of the E390 road-graph encoder and data",
   "training/grid/test_soft_nms.py": "test of the soft close-node suppression of B (E277)",
   "training/grid/test_tier_loss.py": "test of the E276 tier loss switches of B",
   "training/grid/test_tiers_sparse.py": "test of the E276 sparse node target of B",

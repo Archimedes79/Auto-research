@@ -231,11 +231,6 @@
 <text x="724.0" y="1133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">head (arms m / z)</text>
 <text x="724.0" y="1147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jroute_train.py</text>
 </g>
-<g><title>e390: training/data/lane_sdgraph_data.py; training/grid/jsdgraph.py; evaluation/sdgraph_probe.py</title><rect x="44" y="1002.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
-<text x="224.0" y="1018.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E390 step 1: the SD map as a logical road graph</text>
-<text x="224.0" y="1033.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(encoder + probes, running)</text>
-<text x="224.0" y="1047.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jsdgraph.py +2</text>
-</g>
 <g><title>ref_lg: training/lanegraph/</title><rect x="44" y="1302.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
 <text x="224.0" y="1318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E324 s: training/lanegraph/ (earlier end-to-end</text>
 <text x="224.0" y="1333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">system: attached ends, wiring by rule)</text>
