@@ -12,11 +12,11 @@ Dense heads output a 200 x 200 raster (0.5 m cells, ego frame, row = x, column =
 | `load_gt_points(split, part, idx)` | dense exact ground-truth points `~/exp_crn_<split>/feats/<part>_gt_pts_exact.npy` |
 | `selftest.py` | spec of `skeletons` with hysteresis and range threshold together (CPU, review bug L3 fixed 2026-10-31: far seeds survive), then re-scores the full validation maps of the dense head `e37_final` and must reproduce the numbers stored in `runs/e37_final/metrics.json` (deviation 0.0 on 873 rows, 2026-10-24) |
 
-The functions are unchanged copies of the code that produced all grid numbers of loops 2-17 (the former `dense_head.py`, `field_tools.py`, `heat_align.py` and `centerline_estimator.py` of the old training tree, removed since); the code that is left imports them from here.
+The functions are unchanged copies of the code that produced all grid numbers of loops 2-17 (the former `dense_head.py`, `field_tools.py`, `heat_align.py` and `centerline_estimator.py` of the old training tree; `dense_head.py` is still in `../../training/train/`, the other three are removed and only in the git history); the code that is left imports them from here.
 
 ## Review notes (2026-10-24)
 
-1. Three copies of `thin_batch` and three implementations of the point counts (`CenterlineEstimator.prf` with torch `cdist`, `dense_head.geom_counts` with KD-tree + 1:1, `graph_eval.eval_sample`) existed. They define the same quantity; now one definition each. `prf` (no 1:1) remains for `est_eval` because it is the definition of the loop-1 estimator (`centerline_estimator.py`).
+1. Three copies of `thin_batch` and three implementations of the point counts (`CenterlineEstimator.prf` with torch `cdist`, `dense_head.geom_counts` with KD-tree + 1:1, `graph_eval.eval_sample`) existed. They define the same quantity; now one definition each. `prf` (no 1:1) remains for `est_eval` because it is the definition of the loop-1 estimator (`centerline_estimator.py`, removed; in the git history).
 2. The grid metric is topology-blind: a parallel duplicate line costs precision, a missing fork costs nothing. Anything about forks, junctions or sparsity needs the graph (`graph_from_dense.py` -> `../sparse_lanes`).
 3. Probability maps use `min_comp = 30`, distance fields `min_comp = 0` by default: sweeps from the two families differ by this alone.
 4. Threshold choice is a protocol decision: tau is chosen on VAL (clean) and then fixed for perturbed TEST rows (E57 protocol); do not choose it per condition.

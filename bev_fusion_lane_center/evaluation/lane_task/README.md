@@ -1,6 +1,6 @@
 # evaluation/lane_task - the lane-centre-line Task of the Evaluation (picture and graph), common metrics, error causes
 
-A ready-made `Task` of the Evaluation (`../../../autoresearch/Evaluation/`) for networks that output lane centre lines; `../lane_suite.py` is its adapter on the project's VAL data. No torch: numpy + scipy (matplotlib for the views). It lived in the Evaluation of autoresearch (package lanes) until 2026-10-31 and moved here with D24 (problem-specific code out of the problem-independent `autoresearch/`); `import lane_task` puts the Evaluation on the path itself. Design history: `../../../autoresearch/history/evalsuite_architecture_2026-10-30.md` section 8.
+A ready-made `Task` of the Evaluation (`../../../autoresearch/Evaluation/`) for networks that output lane centre lines; `../lane_suite.py` is its adapter on the project's VAL data. No torch: numpy + scipy (matplotlib for the views). It lived in the Evaluation of autoresearch (package lanes) until 2026-10-31 and moved here with D24 (problem-specific code out of the problem-independent `autoresearch/`); `import lane_task` puts the Evaluation on the path itself. The design history (section 8 of the evalsuite architecture note) is in the git history of `autoresearch/history/evalsuite_architecture_2026-10-30.md` (removed in commit 3b6ce944; read it at `3b6ce944^`).
 
 Use (the `img` metric scores the picture, `geo` and `topo` the graph; one output is scored at both levels in the same run):
 ```

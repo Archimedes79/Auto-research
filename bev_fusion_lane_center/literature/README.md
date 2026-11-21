@@ -22,17 +22,17 @@ Not here any more: the original research notes of the loops (removed 2026-11-03 
 ## Note format (the schema of a paper note; moved here from the removed research-notes archive, D49)
 
 
-Goal: capture, for every relevant technique, **what it is, how exactly it works, what it needs and what it excludes**, so that techniques can later be mixed systematically and tested in our pipeline (see `PROJECT_CONTEXT.md`). Depth matters more than breadth: a card read from the method section is worth more than ten abstract-level cards.
+Goal: capture, for every relevant technique, **what it is, how exactly it works, what it needs and what it excludes**, so that techniques can later be mixed systematically and tested in our pipeline (see `../PROBLEM.md` and `../DESIGN.md`). Depth matters more than breadth: a card read from the method section is worth more than ten abstract-level cards.
 
 ## Rules
-1. Read `PROJECT_CONTEXT.md` first. Judge fit against OUR interfaces (cached 200 x 200 BEV feature pyramid, ego metres, vertex + token + validity + edges output, matching-free losses, WSL env without mmcv / mmdet, RTX 3060).
+1. Read `../PROBLEM.md` and `../DESIGN.md` first (the former `PROJECT_CONTEXT.md` is only in the git history). Judge fit against OUR interfaces (cached 200 x 200 BEV feature pyramid, ego metres, vertex + token + validity + edges output, matching-free losses, WSL env without mmcv / mmdet, RTX 3060).
 2. **Reading only.** Use WebSearch and WebFetch. Do not download files, do not use git, curl, pip or any package manager, do not write anything to disk except your own output files named below. Prefer arXiv HTML pages (`arxiv.org/html/<id>`, `ar5iv.labs.arxiv.org/html/<id>`), abs pages, OpenReview / CVF / proceedings pages, GitHub README and LICENSE pages as web pages. If only a PDF exists, fetching its text via WebFetch is allowed.
 3. **Depth code per card:** `A` = abstract or listing page only; `M` = method section read (equations, architecture figure description, loss, training details); `C` = code page read (README, licence, framework statement). Combine, e.g. `M+C`. Never claim a depth you did not reach. Facts not seen on a page must be written "(from memory)" or "not found".
 4. **Numbers:** only numbers you saw, with dataset, metric and where (paper table / abstract). If a number differs between versions say so. Never invent numbers, hyper-parameters or equations; write "not stated" instead.
 5. **Own words.** No long quotes (max one quote under 15 words per source). No copying of tables beyond a few numbers. Never reproduce lyrics etc.
 6. Do not name commercial products as competitors; refer to papers and open code only.
 7. Budget: about 100 - 150 tool calls; stop searching a sub-topic when returns diminish; spend the depth on the **priority list** of your cluster first, then widen.
-8. Mark what the project already tried (see the table in `PROJECT_CONTEXT.md`) in the card field `tried_before`.
+8. Mark what the project already tried (see the cards in `../experiments/` and the rules of `../DESIGN.md`) in the card field `tried_before`.
 
 ## Stage taxonomy (field `stage`)
 S1 seeding / initialisation of hypotheses · S2 sampling pattern and feature access · S3 verification / scoring along a line or around a point · S4 hypothesis generation and selection (children, beams, NMS, top-k) · S5 refinement / cascade / iterative update · S6 topology and linking (adjacency, link head) · S7 graph assembly / merge / DAG conversion · S8 temporal propagation and fusion · S9 route / SD-map / navigation attribution · S10 planner interface · L loss and label construction · T training regime · E evaluation metric / protocol · D data and labels · B BEV encoder / sensor fusion · X other.

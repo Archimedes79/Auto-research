@@ -24,7 +24,7 @@ x (39 x 200 x 200 cached GaussianCaR BEV features, 0.5 m)                       
       4 pairs p >= 0.1 (allowed only) | 5 drop B's long links a connector covers | 6 wire each connector end to the nearest piece end (4 m, 45 deg)
  └─ Graph (polylines, edges, node ids, kinds) -> JSON with Douglas-Peucker 0.3 m       lg_graph.py
 ```
-`lg_model.py` wires it and holds the checkpoint key map (`B_KEYS`, `J_KEYS`) and the checked training options; `lg_config.py` holds every selection
+`lg_layers.py` holds the shared building blocks (conv block, attention blocks, BEV sampling, positional codes, cubic curves); `lg_model.py` wires it and holds the checkpoint key map (`B_KEYS`, `J_KEYS`) and the checked training options; `lg_config.py` holds every selection
 and read-out setting (the fixed input scalings of the trained layers are part of the weights and stay in the layer code). The model hands the
 read-out one `LaneFrame` and one `PairFrame` per frame (`lg_readout.py`, TypedDicts). Everything before the read-out is soft and differentiable
 (index choices: the candidate sets).
