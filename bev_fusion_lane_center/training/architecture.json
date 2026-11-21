@@ -1,163 +1,1002 @@
 {
-  "title": "bev_fusion_lane_center: camera + radar BEV features -> lane-centre-line graph on an SD-map route",
-  "subtitle": "Delivered chain of the registry systems champion / fast_recall / recall (D7 builder, one growth level). Snake layout: row 1 left to right, row 3 right to left, row 5 left to right, row 7 right to left. Orange = a choice inside the network, red = post-processing without a gradient path.",
-  "root": "..",
-  "kinds": {
-    "input": {"label": "input", "fill": "#fef9c3", "stroke": "#ca8a04", "class": "other"},
-    "learned": {"label": "learned network (gradient flows)", "fill": "#dbeafe", "stroke": "#2563eb", "class": "learned"},
-    "fixed": {"label": "fixed math, differentiable", "fill": "#ccfbf1", "stroke": "#0d9488", "class": "fixed"},
-    "frozen": {"label": "frozen / cached (no gradient)", "fill": "#e5e7eb", "stroke": "#6b7280", "class": "frozen"},
-    "select": {"label": "choice inside the network (gradient through the picked items, not the choice)", "fill": "#ffedd5", "stroke": "#ea580c", "class": "rule", "dashed": true},
-    "rule": {"label": "post-processing (no gradient path)", "fill": "#fee2e2", "stroke": "#dc2626", "class": "rule", "dashed": true},
-    "output": {"label": "delivered output", "fill": "#dcfce7", "stroke": "#16a34a", "class": "other"},
-    "train": {"label": "training only", "fill": "#f3e8ff", "stroke": "#7c3aed", "class": "other"},
-    "alt": {"label": "optional or control (not in the registry chain)", "fill": "#fff7ed", "stroke": "#a16207", "class": "other"}
+ "title": "bev_fusion_lane_center: the token champion, camera + radar BEV features -> lane-centre graph",
+ "subtitle": "Token champion (D113 - D120), VAL 873 frames: topo F1 0.6682 / 0.6813 (seeds 0 / 1), 16.2 ms per frame on an RTX 3060, 2.323 M parameters, no TEST check. Orange / red = the named hard steps; everything else is soft.",
+ "root": "..",
+ "kinds": {
+  "input": {
+   "label": "input",
+   "fill": "#fef9c3",
+   "stroke": "#ca8a04",
+   "class": "other"
   },
-  "nodes": [
-    {"id": "opt", "label": "Optional front stages\ngate, map net, registration", "kind": "alt", "col": 0, "row": 0,
-     "code": ["training/train/p17_gate.py::Stabilizer", "training/models/p17_mapnet.py", "training/models/p18_regis.py::SoftRegister"],
-     "note": "learned memory gate (2.1 ms, not in the timed total), SD map as five extra channels, soft FFT registration + trust; evaluated on failure series, no registry entry"},
-    {"id": "trust", "label": "Hard trust gate\nmap x (trust >= 0.62)", "kind": "rule", "col": 1, "row": 0, "code": ["training/models/p18_regmap.py::RegMapWrap"],
-     "note": "optional, off the delivered chain",
-     "why": "the SD-map raster is multiplied by 1 or 0 depending on a threshold on the learned trust (p18_regmap.py:46-47); registration recovers about half of the gap between no map and an exact map (E213)",
-     "replace_with": "multiply by the trust probability itself (the trust head already outputs a number in [0, 1]) and train the builder with it",
-     "catch": "the soft version has to be trained with map faults in the loop (wrong map 10 %, no map 10 %) or it over-trusts a wrong map"},
-    {"id": "ctrl", "label": "Control: E94 trace network\n628 ms, graphs stored", "kind": "alt", "col": 2, "row": 0,
-     "code": ["training/models/p10_expert.py", "training/models/p10_wave.py", "training/models/p13_jhead.py", "training/models/p13_junction.py", "training/models/p13_phead.py",
-              "training/models/p15_refine.py", "training/models/p8_assign.py", "training/models/p8_seg.py", "training/pipeline/graph_from_dense.py", "training/pipeline/line_tracer.py"],
-     "note": "the matched reference of every comparison (registry kind graphs) and the earlier rule systems; not part of the delivered chain"},
-    {"id": "in_sens", "label": "6 cameras + radar\n(nuScenes)", "kind": "input", "col": 0, "row": 1, "code": ["training/data/prep/gcar_tools.py"], "note": "255 scenes, scene-disjoint splits TRAIN 8,414 / VAL 873 / TEST 833 frames"},
-    {"id": "gcar", "label": "GaussianCaR\nfrozen foundation", "kind": "frozen", "col": 1, "row": 1, "code": ["training/data/prep/gcar_tools.py"],
-     "note": "camera + radar BEV features, decoder PCA 32 + 7 map logits = 39 channels at 200 x 200, 0.5 m, cached",
-     "why": "extracted once with frozen weights (about 0.4 s per frame on the RTX 3060); the 17-24 ms of the chain start from the cached features, so the delivered system from raw sensors is not that fast",
-     "replace_with": "an image-radar BEV encoder trained inside the chain, or a small student distilled from GaussianCaR (the same direction as D26 for bev_fusion: the image features become trainable)",
-     "catch": "any replacement has to fit the speed budget or the headline claim changes; the cache is what makes the loop cheap"},
-    {"id": "dense", "label": "Dense lane head\nU-Net heat + direction", "kind": "frozen", "col": 2, "row": 1,
-     "code": ["training/train/dense_head.py::UNet", "training/pipeline/p10_infer.py::load_maps"],
-     "note": "trained separately, train rows from 3-fold out-of-fold heads, cached; its forward is not run by evaluate.py or the timing driver (old cost 5-8 ms)",
-     "why": "its maps are stored arrays; no gradient from the builder or the graph ever reaches it",
-     "replace_with": "fold it into the builder stem and train both together, the dense loss kept as an auxiliary",
-     "catch": "the builder was tuned on out-of-fold maps; joint training has to keep train rows from seeing their own labels"},
-    {"id": "x42", "label": "42-channel input\nz-score + concat", "kind": "fixed", "col": 3, "row": 1, "code": ["training/data/p16_data.py::BuilderData._x_of"], "note": "39 normalised channels + heat + direction"},
-    {"id": "stem", "label": "Builder stem\nconv pyramid", "kind": "learned", "col": 4, "row": 1, "code": ["training/models/p10_net.py::Stem", "training/models/p16_builder.py::Builder.encode"],
-     "note": "initialised from the control run e94_a, fine-tuned at 0.3x learning rate; features at 200, 100 and 50 cells"},
-    {"id": "seeds", "label": "Seed spray\nlattice 5 m + snap", "kind": "learned", "col": 5, "row": 1, "code": ["training/models/p16_builder.py::Builder.seed_candidates"],
-     "note": "fixed lattice, 25 offset samples per node, learned validity, snap and direction"},
-    {"id": "seednms", "label": "Seed selection\ngreedy NMS 3 m, K0", "kind": "select", "col": 6, "row": 1, "code": ["training/models/p16_builder.py::Builder.seeds_select"],
-     "note": "K0 = 96 or 144 seeds",
-     "why": "a greedy distance NMS with an argmax loop on detached scores (p16_builder.py:289-295)",
-     "replace_with": "a learned objectness gate under a budget loss, or a Gumbel top-k with a straight-through estimate; or no selection: every lattice seed grows a gated branch",
-     "catch": "K0 sets the frame time; soft gating over all lattice seeds costs a multiple of the compute"},
-    {"id": "ctx", "label": "Context + ray read-out\nverified rays", "kind": "learned", "col": 6, "row": 3,
-     "code": ["training/models/p16_builder.py::CtxLayer", "training/models/p16_builder.py::Builder.read_rays", "training/models/p16_geom.py::survival"],
-     "note": "graph-biased self-attention over all tips, 12 rays x <= 5 samples per tip, survival T = cumprod of the verification probabilities"},
-    {"id": "choice", "label": "Child choice\nargmax + endpoint NMS", "kind": "select", "col": 5, "row": 3,
-     "code": ["training/models/p16_geom.py::select_children", "training/models/p16_builder.py::Builder.level"],
-     "note": "b = 3 children per tip",
-     "why": "last verified sample per ray by argmax, then dominance and a greedy endpoint NMS (p16_geom.py:104, 135-140); inputs detached",
-     "replace_with": "a softmax / sparsemax or straight-through Gumbel over the ray samples, and a learned suppression score instead of the greedy endpoint NMS",
-     "catch": "the picked items already carry gradient (header of p16_builder.py); a soft choice mainly changes credit assignment, at the cost of gradients for every sample"},
-    {"id": "rescore", "label": "Child tokens\nrescoring layer", "kind": "learned", "col": 4, "row": 3, "code": ["training/models/p16_builder.py::Builder.rescore"], "note": "a transformer layer over parent and siblings re-scores the child validity (stage_c)"},
-    {"id": "beam", "label": "Beam top-M\n+ link top-k", "kind": "select", "col": 3, "row": 3, "code": ["training/models/p16_geom.py::beam_topm", "training/models/p16_builder.py::Builder.link_head"],
-     "note": "M = 288 / 144 seeds (champion, recall) or 192 / 96 (fast_recall)",
-     "why": "topk(M) on detached path validity (p16_geom.py:153) keeps M nodes per direction; the link head sees only the 6 nearest ends inside a cone (p16_builder.py:541-546)",
-     "replace_with": "soft top-k by optimal transport (Xie et al. 2020), or a learned keep gate trained with the vertex-budget loss (vc_penalty exists, weight 0)",
-     "catch": "M sets the frame time; a soft budget has to be annealed to a hard cut at test time unless the gate trains to saturate"},
-    {"id": "link", "label": "Link head\nforward x backward ends", "kind": "learned", "col": 2, "row": 3, "code": ["training/models/p16_builder.py::Builder.link_head"], "note": "link logit between ends of different seeds, connector verification"},
-    {"id": "recur", "label": "Time recursion\nprior + hard match", "kind": "select", "col": 1, "row": 3,
-     "code": ["training/models/p16_time.py::prior_from_prev", "training/models/p16_builder.py::Builder.fuse_prior"],
-     "note": "champion and recall only; fast_recall runs without it",
-     "why": "the previous frame is run through the same builder, its top 64 nodes are warped by the ego motion and fused when a hard test (1.5 m, 30 deg) matches; costs +5.9 ms; the repo says its value is stability, not the single-frame score (E123, E132, E196)",
-     "replace_with": "carry the previous node tokens as a recurrent state and attend to them (the learned memory gate is the pixel-level version) instead of re-running the builder and matching",
-     "catch": "no measured gain to protect, so the replacement only has to be cheaper and no less stable"},
-    {"id": "alive", "label": "Alive filter + export\ntau 0.7, sort", "kind": "rule", "col": 0, "row": 3,
-     "code": ["training/pipeline/p16_infer.py::assemble", "training/pipeline/p16_runtime.py::FastBuilder"],
-     "note": "first step of assemble(): CUDA-graph replay, copy to numpy, then numpy / numba",
-     "why": "nodes with validity > 0 and path validity >= 0.7 are kept and sorted (p16_infer.py:548-561); tau 0.7 was fixed on VAL",
-     "replace_with": "a keep gate trained to saturate (the survival loss exists), so the threshold is the gate's own 0.5",
-     "catch": "calibration of the gate under failure (cameras off, wrong map)"},
-    {"id": "union", "label": "Path union\nsnap + split on edge", "kind": "rule", "col": 0, "row": 5,
-     "code": ["training/pipeline/p16_infer.py::FastUnion", "training/pipeline/p18_union_nb.py::NumbaUnion"],
-     "note": "16 % of the assembly time; the numba kernels are bit-identical to the python version (E216)",
-     "why": "merges the beam nodes into one graph: reuse a vertex within 1.5 m, else snap onto the nearest edge within 0.5 m and split it, else a new vertex; link probability >= 0.5 makes an edge",
-     "replace_with": "learned node merging: a soft assignment of nodes to vertices (differentiable clustering or graph coarsening) with the link head predicting same-vertex; the snap itself stays as the differentiable closest-point projection onto a segment, with soft radius gates",
-     "catch": "exact edge splitting at foot points is geometry and should stay exact; learn only the merge decision"},
-    {"id": "clean", "label": "Clean-up\nbubbles, spurs", "kind": "rule", "col": 1, "row": 5, "code": ["training/pipeline/p16_infer.py::simplify"],
-     "note": "E259.b0: switched off on 7 models it adds 0.44 to 0.73 vertices per 100 m, so it stays",
-     "why": "graph walks remove duplicate bubbles under 2.5 m and spurs under 5 m, keeping the branch of highest mean validity",
-     "replace_with": "an edge-keep head (message passing over the union graph) trained with the graph losses, plus the duplicate penalty (dup_geo) so that the builder stops emitting bubbles",
-     "catch": "the vertex budget is part of the headline, so the learned step has to match the 14.3 per 100 m"},
-    {"id": "anchor", "label": "Junction anchoring\nheat peaks -> split", "kind": "rule", "col": 2, "row": 5, "code": ["training/pipeline/p16_infer.py::anchor_junctions_fast"],
-     "note": "E258.a0: off costs Q -0.0004 and J -0.0042 on fast_recall (about 1.0 ms saved): registry fast_recall_na runs without it",
-     "why": "junction-heat peaks (maximum filter 9) split the nearest edge at the foot point and link free ends within 8 m and 100 deg",
-     "replace_with": "give the junction heat to the link head as a feature and let the learned link decide",
-     "catch": "carries almost nothing on fast_recall, so it is the first rule to drop, not to replace; champion is not covered by that measurement"},
-    {"id": "reloc", "label": "Fork relocation\nmove to heat peak", "kind": "rule", "col": 3, "row": 5, "code": ["training/pipeline/p16_infer.py::relocate_forks"],
-     "note": "E258.a0: off costs Q -0.0111 and J -0.054 on fast_recall",
-     "why": "moves a fork vertex up the trunk (at most 12 m) to the nearest junction-heat peak",
-     "replace_with": "regress the fork position from the junction head (a sub-cell offset as in CenterPoint) and let the builder place the fork: a learned fork decision inside the builder",
-     "catch": "needs a fork-position loss on the GT junction landmarks; the heat peak is also what the metric rewards"},
-    {"id": "prune", "label": "Fork pruning\nkeep one branch", "kind": "rule", "col": 4, "row": 5, "code": ["training/pipeline/p16_infer.py::prune_forks"],
-     "note": "E215: J 0.265 -> 0.409, Q 0.701 -> 0.735, S 0.746 -> 0.769, F1@1 and lanes found unchanged: the largest measured gain of any rule step",
-     "why": "at forks whose 3 x 3 junction heat is below 0.3 (champion) / 0.4 (recall) one branch keeps its continuation and the others get a copied vertex, geometry unchanged",
-     "replace_with": "a learned continuation head: score continuation pairs at every junction and assign branches by a soft assignment (Sinkhorn), trained with the graph losses",
-     "catch": "the replacement has to reproduce J 0.409 first; the rule is the reference to beat"},
-    {"id": "cut", "label": "Piece cut\nlegacy chain walk", "kind": "rule", "col": 5, "row": 5, "code": ["evaluation/sparse_lanes/sparse_metrics.py::graph_from_vertices"],
-     "note": "the legacy cut is kept because the route head and the consumer were trained on it (D24 open item)",
-     "why": "degree-based chain walk turns vertices and edges into polyline pieces",
-     "replace_with": "tokens per edge by message passing over the vertex-edge graph, so that the route head reads the graph and no cut is needed",
-     "catch": "route head and consumer have to be retrained on the new tokens and route success measured again"},
-    {"id": "dp", "label": "Douglas-Peucker\n(*_dp systems only)", "kind": "rule", "col": 6, "row": 5, "code": ["training/pipeline/p16_infer.py::simplify_dp"],
-     "note": "champion 14.8 -> 9.5, fast_recall 15.0 -> 9.9 node ids per 100 m, Q -0.0005 (E257, D20); off by default, not in the timed chain",
-     "why": "polylines simplified with a 0.2 m tolerance, ends and junction ids kept",
-     "replace_with": "a learned vertex gate under a vertex-count loss",
-     "catch": "the budget of 14.3 per 100 m is on the per-piece basis; node-id counts are quoted separately (D25)"},
-    {"id": "in_ego", "label": "Ego poses", "kind": "input", "col": 1, "row": 4, "code": ["training/data/prep/make_poses.py"], "note": "exact nuScenes poses; feed the time recursion and the consumer"},
-    {"id": "junc", "label": "Junction head\nsplit / merge heat", "kind": "learned", "col": 3, "row": 4, "code": ["training/models/p16_builder.py::Builder"],
-     "note": "reads the stem features; its heat travels with the raw tree to anchoring, relocation and pruning (heat peaks alone find forks about as well as the control: split F1 0.42 against 0.35, E123)"},
-    {"id": "in_map", "label": "SD map\n(ADASIS-like, simulated)", "kind": "input", "col": 4, "row": 6, "code": ["training/data/sd_lib.py"], "note": "rasterised to 5 channels; the timing driver uses the exact map"},
-    {"id": "lane_graph", "label": "Lane graph\nvertices, edges, pieces", "kind": "output", "col": 6, "row": 7, "code": ["training/pipeline/p16_infer.py::assemble"], "note": "the output of the piece cut (of Douglas-Peucker for *_dp); a function of the post-processing rules"},
-    {"id": "route_in", "label": "Route input\ntokens along edges", "kind": "fixed", "col": 5, "row": 7,
-     "code": ["training/pipeline/p16_pipeline.py::route_input", "training/pipeline/p16_tok_resample.py::resample_item", "training/models/p16_tokens.py::cross_section"],
-     "note": "gather and interpolation in numpy; each vertex takes the node of highest validity (hard); the route head is trained on stored token files"},
-    {"id": "route_head", "label": "Route head\nSD-map attribute", "kind": "learned", "col": 4, "row": 7, "code": ["training/models/p10_net.py::RouteXNet", "training/pipeline/p16_pipeline.py::FastRoute"],
-     "note": "route success champion 0.894 / 0.891 -> 0.899 / 0.900 with fork pruning (E215); builder frozen, tokens stored"},
-    {"id": "consumer", "label": "Planner consumer\nConsB", "kind": "learned", "col": 3, "row": 7, "code": ["training/train/p14_chain_consumer.py::ConsB"], "note": "6 m edge tokens + route probability + ego motion -> 8 ego-path points; path error floor 0.27 m whatever the graph (gap 3)"},
-    {"id": "ego_path", "label": "Ego path\n8 points, 5-40 m", "kind": "output", "col": 2, "row": 7, "code": ["training/train/p14_chain_consumer.py::ConsB"]},
-    {"id": "flags", "label": "Route flags\nper lane point", "kind": "output", "col": 4, "row": 8, "code": ["training/models/p10_net.py::RouteXNet"], "note": "lane-level assignment to the SD-map route, road level as fallback"},
-    {"id": "loss", "label": "Builder losses\nmatching-free", "kind": "train", "col": 0, "row": 8, "code": ["training/losses/p16_loss.py::total_loss"],
-     "note": "per head and per level on network outputs: ray verification, child position, child validity, edge precision + soft-min recall, junction, link; no loss sees the assembled graph"},
-    {"id": "trainers", "label": "Training entry points\nand search", "kind": "train", "col": 1, "row": 8, "code": ["training/train/", "training/trainer.py", "training/search/p16_triage.py"],
-     "note": "builder, dense head, route head and consumer are trained in separate pieces"},
-    {"id": "data", "label": "Data, GT and prep", "kind": "train", "col": 2, "row": 8, "code": ["training/data/"], "note": "features, ground-truth fields, splits, SD-map library, route targets"},
-    {"id": "joint", "label": "Joint builder + route\nfine-tune (closed)", "kind": "alt", "col": 3, "row": 8, "code": ["training/train/p18_joint.py", "training/pipeline/route_data.py"],
-     "note": "the one end-to-end attempt: the assembly runs inside the loop and the route loss reaches the node tokens only, not positions, validity or edges; negative three times (E202, E214, E232), not adopted"}
-  ],
-  "edges": [
-    {"from": "in_sens", "to": "gcar"}, {"from": "gcar", "to": "dense"}, {"from": "dense", "to": "x42"},
-    {"from": "gcar", "to": "x42", "via": [[1.5, 1.0], [3.5, 1.0]]},
-    {"from": "x42", "to": "stem"}, {"from": "stem", "to": "seeds"}, {"from": "seeds", "to": "seednms"}, {"from": "seednms", "to": "ctx"},
-    {"from": "ctx", "to": "choice"}, {"from": "choice", "to": "rescore"}, {"from": "rescore", "to": "beam"}, {"from": "beam", "to": "link"}, {"from": "link", "to": "recur"},
-    {"from": "in_ego", "to": "recur"}, {"from": "recur", "to": "alive"}, {"from": "alive", "to": "union"},
-    {"from": "union", "to": "clean"}, {"from": "clean", "to": "anchor"}, {"from": "anchor", "to": "reloc"}, {"from": "reloc", "to": "prune"}, {"from": "prune", "to": "cut"},
-    {"from": "stem", "to": "junc", "via": [[4.5, 2.0], [4.0, 2.0], [4.0, 4.0], [3.5, 4.0]]},
-    {"from": "junc", "to": "anchor"}, {"from": "junc", "to": "reloc"}, {"from": "junc", "to": "prune"},
-    {"from": "cut", "to": "dp", "dashed": true}, {"from": "dp", "to": "lane_graph", "dashed": true}, {"from": "cut", "to": "lane_graph"},
-    {"from": "cut", "to": "route_in"}, {"from": "route_in", "to": "route_head"}, {"from": "in_map", "to": "route_head"},
-    {"from": "route_head", "to": "consumer"}, {"from": "consumer", "to": "ego_path"}, {"from": "route_head", "to": "flags"},
-    {"from": "loss", "to": "trainers"}, {"from": "data", "to": "trainers"}
-  ],
-  "groups": [
-    {"label": "assemble(): numpy / numba, no gradient path (alive filter above, piece cut and Douglas-Peucker included)", "nodes": ["union", "clean", "anchor", "reloc", "prune", "cut", "dp"]},
-    {"label": "trained separately on stored tokens", "nodes": ["consumer", "route_head", "route_in"]},
-    {"label": "training only", "nodes": ["loss", "trainers", "data", "joint"]}
-  ],
-  "main_path": {"from": ["in_sens", "in_map", "in_ego"], "to": ["lane_graph", "flags", "ego_path"]},
-  "covers": [{"dir": "training", "glob": "*.py"}],
-  "not_drawn": {
-    "training/bflc_paths.py": "project paths from the checkout location, imported everywhere",
-    "training/trainer_selftest.py": "selftest of trainer.fit",
-    "training/models/p16_ref.py": "numpy reference of the tree spec, the oracle of evaluation/tests/test_p16_spec.py",
-    "training/probe.py": "gradient and update size per module for the trainer (Training contract), copied from the BEV system"
+  "learned": {
+   "label": "learned network (gradient flows)",
+   "fill": "#dbeafe",
+   "stroke": "#2563eb",
+   "class": "learned"
+  },
+  "fixed": {
+   "label": "fixed math, differentiable",
+   "fill": "#ccfbf1",
+   "stroke": "#0d9488",
+   "class": "fixed"
+  },
+  "frozen": {
+   "label": "frozen / cached (no gradient)",
+   "fill": "#e5e7eb",
+   "stroke": "#6b7280",
+   "class": "frozen"
+  },
+  "select": {
+   "label": "named hard step inside the network: a budget or a gate (gradient through the picked items, not the choice)",
+   "fill": "#ffedd5",
+   "stroke": "#ea580c",
+   "class": "rule",
+   "dashed": true
+  },
+  "rule": {
+   "label": "named hard step on the output only (no gradient)",
+   "fill": "#fee2e2",
+   "stroke": "#dc2626",
+   "class": "rule",
+   "dashed": true
+  },
+  "output": {
+   "label": "delivered output",
+   "fill": "#dcfce7",
+   "stroke": "#16a34a",
+   "class": "other"
+  },
+  "train": {
+   "label": "training only (data, loss, trainer)",
+   "fill": "#f3e8ff",
+   "stroke": "#7c3aed",
+   "class": "other"
+  },
+  "eval": {
+   "label": "evaluation (numbers and gates, not in the delivered path)",
+   "fill": "#cffafe",
+   "stroke": "#0891b2",
+   "class": "other"
+  },
+  "alt": {
+   "label": "measured or kept for comparison, not in the champion",
+   "fill": "#fff7ed",
+   "stroke": "#a16207",
+   "class": "other"
   }
+ },
+ "nodes": [
+  {
+   "id": "in_sens",
+   "label": "6 cameras + radar\n(nuScenes, one frame,\none radar scan)",
+   "kind": "input",
+   "col": 0,
+   "row": 0,
+   "code": [
+    "training/data/prep/gcar_tools.py"
+   ],
+   "note": "255 scenes, scene-disjoint TRAIN 8,414 / VAL 873 / TEST 833 frames (data/splits.json); one frame and one radar scan per step (D91)"
+  },
+  {
+   "id": "gcar",
+   "label": "GaussianCaR BEV\nfeatures, frozen,\ncached",
+   "kind": "frozen",
+   "col": 1,
+   "row": 0,
+   "code": [
+    "training/data/prep/gcar_tools.py"
+   ],
+   "note": "camera + radar -> 39 channels at 200 x 200 cells of 0.5 m (decoder PCA 32 + 7 map logits), extracted once; the champion starts from the cached features",
+   "why": "extracted once with frozen weights (about 0.4 s per frame on the RTX 3060): the 16.2 ms of the chain start from the cached features, so the delivered system from raw sensors is not that fast",
+   "replace_with": "an image-radar BEV encoder trained inside the chain, or a small student distilled from GaussianCaR (the direction of the bev_fusion student encoder)",
+   "catch": "any replacement has to fit the speed budget (R3); the cache is what keeps the loop cheap; R1 names it as frozen today"
+  },
+  {
+   "id": "pyr",
+   "label": "B' pixel stage\npyramid, frozen\n(0.5 / 1 / 2 m maps)",
+   "kind": "frozen",
+   "col": 2,
+   "row": 0,
+   "code": [
+    "training/grid/pyramid.py::PyramidHead",
+    "training/grid/head.py"
+   ],
+   "note": "one encoder-decoder with three taps: 0.5 m lines, 1 m centres + event heats, 2 m road / intersection; features of the node grid; frozen in both stages",
+   "why": "the pixel stage of the lane head B' (E273 stage A, trained before, checkpoint runs/e292_a_s<seed>) is frozen: in stage 2 only its node head trains",
+   "replace_with": "train the pyramid with the token loss in stage 2 as well",
+   "catch": "the stage-2 recipe of D120 (E372) trains the node head only; I found no card that trains the pyramid with the token loss, so the gain is unmeasured",
+   "sub": "pyramid.py +1"
+  },
+  {
+   "id": "nodes",
+   "label": "B' node head\none node per 2 m cell\n(trained in stage 2)",
+   "kind": "learned",
+   "col": 3,
+   "row": 0,
+   "code": [
+    "training/grid/qnodes.py::NodeHead",
+    "training/grid/qgraph.py::QGraph",
+    "training/grid/qpredict.py"
+   ],
+   "note": "per cell: existence logit, offset, direction, 8 flag logits, section-start and long-link scores, a 64-d node token; in stage 2 the loss of the token head reaches it (D120), B' keeps its own node loss"
+  },
+  {
+   "id": "mnms",
+   "label": "Soft Matrix-NMS\nlayer on existence\n(R 1.75 m, sigma 0.1)",
+   "kind": "fixed",
+   "col": 4,
+   "row": 0,
+   "code": [
+    "training/grid/qmnms.py::matrix_nms_logit"
+   ],
+   "note": "E292: the close-node suppression as a layer of the forward path, no parameters, computed in log space so the gradient is alive; replaces the hard close-node step of the earlier system",
+   "sub": "qmnms.py"
+  },
+  {
+   "id": "topk",
+   "label": "Top-K 512 tokens\nby existence\n(named budget)",
+   "kind": "select",
+   "col": 5,
+   "row": 0,
+   "code": [
+    "training/data/lane_tokcache.py::select_tokens",
+    "training/data/lane_live_tok.py::live_tokens"
+   ],
+   "note": "the K = 512 cells with the largest existence logit (a stable argsort) become tokens; cells with sigmoid(e) <= 0.05 are padding",
+   "why": "a hard index choice on the existence of B' (the named compute budget of R5): no gradient goes through the choice, the picked tokens carry the gradient to the node head in stage 2",
+   "replace_with": "an attention cheap enough for all 2,500 cells of the node grid, or a sparser pair set that keeps the ground-truth links",
+   "catch": "K 384 is faster but loses node coverage (E383: GT node coverage 0.9878 against the written 0.99), so K 512 stays; K sets the time of the head",
+   "sub": "lane_tokcache.py +1"
+  },
+  {
+   "id": "tok_live",
+   "label": "Live tokens\nposition, direction,\nexistence, node token",
+   "kind": "fixed",
+   "col": 6,
+   "row": 0,
+   "code": [
+    "training/data/lane_live_tok.py::LiveSource"
+   ],
+   "note": "the delivered path and stage 2: B' runs inside the step, the K tokens are made from its live output with the graph kept (token rounded to float16 as the cache stores it, gradient passed straight through)",
+   "sub": "lane_live_tok.py"
+  },
+  {
+   "id": "gate",
+   "label": "Allowed-pair gate (named hard step)\nforward chord, turn <= 130 deg, chord 0.3 - 100 m",
+   "kind": "select",
+   "col": 4,
+   "row": 1,
+   "code": [
+    "training/grid/jtok.py::pair_geometry"
+   ],
+   "note": "also the source of the 13 pair features of the attention bias; the attention bias and the wiring softmax range over the allowed pairs only",
+   "w": 2,
+   "hpx": 52,
+   "sub": "jtok.py::pair_geometry",
+   "why": "a geometric mask on the token pairs of a frame (forward along the chord, turn at most 130 degrees, chord between 0.3 and 100 m); at K = 512 the gate and the token set let 94.3 % of the GT links through (E365 manifest, VAL, B' seed 0)",
+   "replace_with": "no mask: the geometry bias alone over all K x K pairs",
+   "catch": "costs compute and probably precision; the mask also bounds the wiring softmax; 5.7 % of the GT links lie outside the gate or the token set"
+  },
+  {
+   "id": "embed",
+   "label": "Token embedding\n64-d node token +\nFourier pos., heading",
+   "kind": "learned",
+   "col": 6,
+   "row": 2,
+   "code": [
+    "training/grid/jtoken.py::JTokenHead",
+    "training/grid/jtoken.py::fourier"
+   ],
+   "note": "x0 = LayerNorm(Linear(tok) + MLP(Fourier(pos), dirv, e, e_raw, flags, s, uout, uin)); 0.127 M parameters in the whole head",
+   "sub": "jtoken.py::JTokenHead"
+  },
+  {
+   "id": "attn",
+   "label": "3 x self-attention\nrelative-geometry bias\n+ soft pruning weight",
+   "kind": "learned",
+   "col": 5,
+   "row": 2,
+   "code": [
+    "training/grid/jtoken.py::SelfLayer",
+    "training/grid/jtoken.py::pair_mlp"
+   ],
+   "note": "d 64, 4 heads, FFN 128; logit = q.k / 4 + bias(13 pair features) + log(key weight); the key weight is sigmoid(e) of B' for the first 1000 steps, then 1 - p_none of the head itself: no token is dropped inside"
+  },
+  {
+   "id": "wiring",
+   "label": "Wiring softmax\nper source + none slot\n(short <= 8 m / long)",
+   "kind": "learned",
+   "col": 4,
+   "row": 2,
+   "code": [
+    "training/grid/jtoken.py::wiring_logp",
+    "training/grid/jtoken.py::JTokenHead"
+   ],
+   "note": "the wiring IS the attention of the last layer: per source and class a softmax over the allowed destinations and one learned none slot; two handle scales per pair give the connector curve",
+   "sub": "jtoken.py::wiring_logp"
+  },
+  {
+   "id": "types",
+   "label": "Node-type softmax\n7 classes; p_none is\nthe pruning weight",
+   "kind": "learned",
+   "col": 5,
+   "row": 3,
+   "code": [
+    "training/grid/jtoken.py::JTokenHead.read_types"
+   ],
+   "note": "none, lane point, fork, merge, junction entry, junction exit, boundary; read after layer 1 and after layer 3 by the same linear layer",
+   "sub": "jtoken.py::read_types"
+  },
+  {
+   "id": "thr_link",
+   "label": "Link read-out (named)\nshort 0.3, long 0.2,\nnone gate off",
+   "kind": "rule",
+   "col": 3,
+   "row": 2,
+   "code": [
+    "evaluation/jtoken_eval.py::decode_variant",
+    "evaluation/jtoken_eval.py::D115",
+    "training/grid/jtoken.py::decode"
+   ],
+   "note": "a link is delivered when its probability reaches the threshold of its class (short: chord <= 8 m, long: above) and both ends are kept; three of the four named thresholds",
+   "why": "hand-tuned on TRAIN and named (R7, D115): the decode of the champion is link short 0.3, link long 0.2, node keep p_none < 0.6, none gate off",
+   "replace_with": "learn the thresholds with a loss that sees the graph metric (delivered lanes, junction precision)",
+   "catch": "E388: a soft-F1 surrogate loses (-0.025 / -0.028 topo F1, -0.11 junction F1 on VAL; it loses on TRAIN too), so the thresholds stay named",
+   "sub": "jtoken_eval.py +2"
+  },
+  {
+   "id": "thr_keep",
+   "label": "Node keep (named)\np_none < 0.6",
+   "kind": "rule",
+   "col": 3,
+   "row": 3,
+   "code": [
+    "evaluation/jtoken_eval.py::node_e",
+    "evaluation/jtoken_eval.py::frame_prediction",
+    "training/data/lane_ptok_data.py::to_pred"
+   ],
+   "note": "a token becomes a node of the graph when the none probability of its own type softmax is below 0.6; the fourth named threshold",
+   "why": "the same hand-tuned and named read-out (R7, D115); the existence written for a kept node is 1 - p_none shifted by keep_thr - 0.5",
+   "replace_with": "a kept-node loss on the graph metric",
+   "catch": "as above: the surrogate of E388 lost, and the cell is chosen on TRAIN before the single VAL score (E375)",
+   "sub": "jtoken_eval.py +2"
+  },
+  {
+   "id": "graph",
+   "label": "Lane graph\nnodes, links, types\nin the ego frame",
+   "kind": "output",
+   "col": 2,
+   "row": 2,
+   "code": [
+    "training/grid/qformat.py",
+    "training/data/lane_ptok_data.py::to_pred"
+   ],
+   "note": "the qformat prediction of a frame: nodes (position, direction, existence, flags), links with their Hermite connectors, node types; no GT field",
+   "h": 2
+  },
+  {
+   "id": "testgate",
+   "label": "TEST gate: logged row\nand the owner's OK;\nnone for the champion",
+   "kind": "eval",
+   "col": 0,
+   "row": 4,
+   "code": [
+    "evaluation/TEST_USAGE_LOG.md",
+    "evaluation/jtest_eval.py"
+   ],
+   "note": "select and tune on TRAIN / VAL only; TEST once per finished design (R12); the champion has no TEST check yet"
+  },
+  {
+   "id": "boot",
+   "label": "Paired scene\nbootstrap, band 0.010\ntopo F1, 2 seeds",
+   "kind": "eval",
+   "col": 1,
+   "row": 4,
+   "code": [
+    "evaluation/sparse_lanes/bootstrap.py",
+    "evaluation/jtoken_eval.py::paired_junction"
+   ],
+   "note": "scene-level resampling of paired frames; the D115 cell (batch 4, 873 VAL frames)"
+  },
+  {
+   "id": "scorers",
+   "label": "Scorer: topo F1,\njunction F1, F1@1.0,\nlanes found",
+   "kind": "eval",
+   "col": 2,
+   "row": 4,
+   "code": [
+    "evaluation/jtoken_eval.py::score",
+    "evaluation/jtoken_eval.py::dump",
+    "evaluation/jtoken_eval.py::sweep",
+    "evaluation/jtoken_eval.py::choose_cell",
+    "evaluation/qgraph_eval.py",
+    "evaluation/qgraph_readout.py",
+    "evaluation/sparse_lanes/",
+    "evaluation/lane_suite.py",
+    "evaluation/lane_task/",
+    "evaluation/jmaneuver.py"
+   ],
+   "note": "dump (the head's output per frame) -> a decode of the dump -> the qformat prediction -> the scorer; one definition of every metric, never a private one"
+  },
+  {
+   "id": "timing",
+   "label": "Timing, batch 1,\nquiet GPU, cached\nfeatures: 16.2 ms",
+   "kind": "eval",
+   "col": 3,
+   "row": 4,
+   "code": [
+    "evaluation/jtoken_eval.py::timing",
+    "evaluation/jtiming.py"
+   ],
+   "note": "median ms of the whole path, CUDA events, GPU idle (quiet 16.2 - 16.4 ms for the champion); in the first recipe, with the identical architecture, B' alone took 11.4 ms and the head alone 6.7 ms, timed separately",
+   "sub": "jtoken_eval.py +1"
+  },
+  {
+   "id": "gt",
+   "label": "Lane ground truth\nv13 / l6\n(GtGenerator)",
+   "kind": "input",
+   "col": 0,
+   "row": 6,
+   "code": [
+    "../GtGenerator/lane_gt.py"
+   ],
+   "note": "lane GT per keyframe from the nuScenes map: pieces, nodes, links, junction layers; the signature changes with every edit of the generator"
+  },
+  {
+   "id": "data",
+   "label": "Frames, features,\nsplits and GT targets",
+   "kind": "train",
+   "col": 1,
+   "row": 6,
+   "code": [
+    "training/data/lane_gt_data.py",
+    "training/data/p16_data.py",
+    "training/data/p16_common.py",
+    "training/data/p8_lib.py",
+    "training/data/assoc_lib.py",
+    "training/grid/qtargets.py",
+    "training/grid/qraster.py",
+    "training/grid/qzones.py"
+   ],
+   "note": "the 39 frozen channels of a frame and the targets drawn from the lane GT (nodes on a 2 m grid, links, pixel maps); the splits and cached files still come through p16_data.BuilderData of the old chain (a dependency of the removal of D97)"
+  },
+  {
+   "id": "st0",
+   "label": "Stage 0: lane head B'\ntrained earlier, then\nfrozen (E273, E292)",
+   "kind": "train",
+   "col": 2,
+   "row": 6,
+   "code": [
+    "training/train/qgraph_train.py",
+    "training/train/qgates.py",
+    "training/grid/qgraph.py::qgraph_loss",
+    "training/grid/losses.py",
+    "training/grid/soft_lines.py",
+    "training/grid/targets.py"
+   ],
+   "note": "pixel maps -> nodes in gated phases, then phase 9 with the Matrix-NMS layer; the checkpoint runs/e292_a_s<seed> is the B' of the champion"
+  },
+  {
+   "id": "cache",
+   "label": "Token cache (stage 1)\nB' run once, tokens\n+ GT labels stored",
+   "kind": "frozen",
+   "col": 3,
+   "row": 6,
+   "code": [
+    "training/data/lane_tokcache.py",
+    "training/data/lane_ptok_data.py",
+    "training/data/lane_tok_data.py",
+    "evaluation/jtok_eval.py::sub_table"
+   ],
+   "note": "derived data, not in git: the K = 512 tokens of the frozen B' on every TRAIN and VAL frame with the labels of every token (assignment to the GT nodes, contracted link targets); the loader batches it"
+  },
+  {
+   "id": "st1",
+   "label": "Stage 1: token head\non the cache\n12000 steps",
+   "kind": "train",
+   "col": 5,
+   "row": 6,
+   "code": [
+    "training/train/jtoken_train.py"
+   ],
+   "note": "batch 8, lr 1e-3 (5 % warm-up, cosine), AdamW, none weight 0.25; no gradient reaches B' (cached)"
+  },
+  {
+   "id": "st2",
+   "label": "Stage 2 (S4): head +\nB' node head together\n3000 steps, lr 1e-4",
+   "kind": "train",
+   "col": 6,
+   "row": 6,
+   "code": [
+    "training/train/jlive_train.py",
+    "training/data/lane_live_tok.py::b_loss"
+   ],
+   "note": "B' runs in the step (live tokens), its node head trains on the token loss plus its own node loss; the champion recipe of D120 (E372), no past block, no map block"
+  },
+  {
+   "id": "trainer",
+   "label": "Shared trainer: checkpoint, resume, status.json, probe, startable check",
+   "kind": "train",
+   "col": 0,
+   "row": 7,
+   "code": [
+    "training/trainer.py",
+    "training/probe.py",
+    "training/startable.py",
+    "training/train/run_config.py"
+   ],
+   "note": "every stage trains and resumes through trainer.fit (the Training contract of autoresearch)",
+   "w": 2,
+   "hpx": 50,
+   "sub": "trainer.py +3"
+  },
+  {
+   "id": "loss",
+   "label": "Token loss: per-source likelihood with the none slot + 0.5 type CE + 0.5 L1 of the handle scales",
+   "kind": "train",
+   "col": 5,
+   "row": 7,
+   "code": [
+    "training/grid/jtoken.py::jtoken_loss"
+   ],
+   "note": "per class and per source the negative log of the summed probability of the GT successors (the none slot when there is none); the none target and class weighted 0.25 in the champion; matching inside the loss only (D55)",
+   "w": 2,
+   "hpx": 52,
+   "sub": "jtoken.py::jtoken_loss"
+  },
+  {
+   "id": "sd_route",
+   "label": "SD route of the frame\nroute tokens / 2 m,\nsimulated map errors",
+   "kind": "alt",
+   "col": 2,
+   "row": 9,
+   "code": [
+    "training/data/lane_route_data.py::route_of",
+    "training/data/sd_lib.py"
+   ],
+   "note": "the driven route from the lane GT, at most 160 samples (the nearest to the ego are kept), the map-error modes exact / error / train / none / wrong / gross; no piece id or node label enters a route token",
+   "sub": "lane_route_data.py +1"
+  },
+  {
+   "id": "route_head",
+   "label": "Route head (E389)\none cross-attention to\nthe route tokens",
+   "kind": "alt",
+   "col": 3,
+   "row": 9,
+   "code": [
+    "training/grid/jroute.py::RouteHead"
+   ],
+   "note": "reads the cached tokens of the frozen B' and the SD route; 33,738 parameters; outputs road and lane logits per token; separate stage, not in the delivered path"
+  },
+  {
+   "id": "flags",
+   "label": "Route flags per token\non the road / on the lane",
+   "kind": "alt",
+   "col": 4,
+   "row": 9,
+   "code": [
+    "training/grid/jroute.py::route_loss"
+   ],
+   "note": "result E389: TIE (no gain): the gain over the no-map head, +0.094 / +0.097 F1_road, missed the bar +0.10; not safe under a wrong map; 2 - 3 ms on a busy GPU"
+  },
+  {
+   "id": "route_eval",
+   "label": "Route read-out and\nscoring (VAL, 5 modes)",
+   "kind": "alt",
+   "col": 5,
+   "row": 9,
+   "code": [
+    "evaluation/jroute_eval.py"
+   ],
+   "note": "dump per map mode, score against the matched no-map head, rules, paired bootstrap"
+  },
+  {
+   "id": "route_train",
+   "label": "Trainer of the route\nhead (arms m / z)",
+   "kind": "alt",
+   "col": 3,
+   "row": 10,
+   "code": [
+    "training/train/jroute_train.py"
+   ],
+   "note": "arm z = the same loader, loss and order with the route of every sample stripped"
+  },
+  {
+   "id": "e390",
+   "label": "E390 step 1: the SD map as a logical road graph (encoder + probes, running)",
+   "kind": "alt",
+   "col": 0,
+   "row": 9,
+   "code": [
+    "training/data/lane_sdgraph_data.py",
+    "training/grid/jsdgraph.py",
+    "evaluation/sdgraph_probe.py"
+   ],
+   "note": "roads with logical lanes per direction and their connections, encoded first, then fusion, then error models (R9); the card of 2026-11-21, no result yet",
+   "w": 2,
+   "hpx": 52,
+   "sub": "jsdgraph.py +2"
+  },
+  {
+   "id": "ref_lg",
+   "label": "E324 s: training/lanegraph/ (earlier end-to-end system: attached ends, wiring by rule)",
+   "kind": "alt",
+   "col": 0,
+   "row": 12,
+   "code": [
+    "training/lanegraph/"
+   ],
+   "note": "clean inference re-implementation of the system of record before the token champion (D94): topo F1 0.6912 / 0.6948, 19.7 ms, 2.741 M parameters; a reference, never a bar",
+   "w": 2,
+   "hpx": 52,
+   "sub": "lanegraph/"
+  },
+  {
+   "id": "ref_j",
+   "label": "E324 s training + junction thread: junction maps, pair and wiring heads, trainers, probes",
+   "kind": "alt",
+   "col": 2,
+   "row": 12,
+   "code": [
+    "training/grid/jmaps.py",
+    "training/grid/jends.py",
+    "training/grid/jgt.py",
+    "training/grid/qjunction.py",
+    "training/grid/qendnet.py",
+    "training/grid/qends.py",
+    "training/grid/jwire.py",
+    "training/grid/jwire_head.py",
+    "training/grid/jnarrow.py",
+    "training/data/prep/junction_paint.py",
+    "training/train/jmaps_train.py",
+    "training/train/jends_train.py",
+    "training/train/jwire_train.py",
+    "training/train/jnarrow_train.py",
+    "training/train/jnarrow_eval.py",
+    "evaluation/jends_eval.py",
+    "evaluation/qends_eval.py",
+    "evaluation/jpair_pr.py",
+    "evaluation/jflip.py",
+    "evaluation/jgraph.py",
+    "evaluation/jheat_replay.py",
+    "evaluation/jmodel_cost.py",
+    "evaluation/jprune_b.py",
+    "evaluation/jprune_cost.py",
+    "evaluation/jprune_probe.py",
+    "evaluation/jprune_table.py",
+    "evaluation/jrule_control.py",
+    "evaluation/jrule_removal.py",
+    "evaluation/jstack.py",
+    "evaluation/jtime.py",
+    "evaluation/jwire_check.py",
+    "evaluation/jwire_data.py",
+    "evaluation/jwire_verdict.py",
+    "evaluation/jwiring.py",
+    "evaluation/jdiag.py"
+   ],
+   "note": "the training and scoring code behind E324 s (E285 - E363); the champion's jtok.py still imports helpers from it (Hermite curve, dual softmax, set block)",
+   "w": 2,
+   "hpx": 52,
+   "sub": "jmaps.py +35"
+  },
+  {
+   "id": "ref_old",
+   "label": "Route-graph builder chain of loops 8 - 18 (p8 ... p18): kept for comparison, removal decided in D97",
+   "kind": "alt",
+   "col": 4,
+   "row": 12,
+   "code": [
+    "training/models/",
+    "training/pipeline/",
+    "training/losses/",
+    "training/data/p10_data.py",
+    "training/train/p10_train.py",
+    "training/train/p10_route_train.py",
+    "training/train/p14_chain_consumer.py",
+    "training/train/p16_train.py",
+    "training/train/p17_gate.py",
+    "training/train/p18_joint.py",
+    "training/train/dense_head.py",
+    "evaluation/evaluate.py",
+    "evaluation/eval_parts.py",
+    "evaluation/drivers/",
+    "evaluation/loops/"
+   ],
+   "note": "the registry systems champion / recall / fast_recall and the control (Q 0.735 - 0.740, 17 - 24 ms; the control 628 ms), the prototype of record recall_sp0_dp; p16_data / p8_lib / sd_lib of this chain are still read by the champion's data layer",
+   "w": 3,
+   "hpx": 52,
+   "sub": "models/ +14"
+  },
+  {
+   "id": "ref_b",
+   "label": "B's link, section and assignment stages (E273 C - E): trained in B, not run on the token path",
+   "kind": "alt",
+   "col": 0,
+   "row": 13,
+   "code": [
+    "training/grid/qlinks.py",
+    "training/grid/sections.py",
+    "training/grid/qassign.py",
+    "training/grid/map_sim.py"
+   ],
+   "note": "the lane head B is trained with these stages (phases 4 - 6); the token head replaces them; the map side simulates lane-level maps with errors",
+   "w": 2,
+   "hpx": 52,
+   "sub": "qlinks.py +3"
+  },
+  {
+   "id": "ref_grid",
+   "label": "E271 / E272 grid\nchain: 1 m head,\nsparsify, hold, assign",
+   "kind": "alt",
+   "col": 2,
+   "row": 13,
+   "code": [
+    "training/grid/chain.py",
+    "training/grid/chain_data.py",
+    "training/grid/hold.py",
+    "training/grid/assign.py",
+    "training/grid/data.py",
+    "training/train/grid_train.py",
+    "evaluation/vertex_eval.py",
+    "evaluation/lane_grid/"
+   ],
+   "note": "the ancestor of the pixel stage of B'; its test and scoring stay",
+   "sub": "chain.py +7"
+  },
+  {
+   "id": "ref_t0",
+   "label": "E357 stage T0: GT\nnodes as tokens, one\npair head (control)",
+   "kind": "alt",
+   "col": 3,
+   "row": 13,
+   "code": [
+    "training/grid/jtok.py::JTok",
+    "training/grid/jtok.py::JTokModel",
+    "training/train/jtok_train.py",
+    "evaluation/jtok_eval.py"
+   ],
+   "note": "the step that led to the token design (D105): the rule controls and the oracle on lattice tokens",
+   "sub": "jtok.py +2"
+  },
+  {
+   "id": "ref_past",
+   "label": "Past at feature /\ntoken level (E354,\nS2, S2b): TIE",
+   "kind": "alt",
+   "col": 4,
+   "row": 13,
+   "code": [
+    "training/data/lane_past_data.py",
+    "training/data/lane_seq_data.py"
+   ],
+   "note": "the champion has no state (R2); the data of the previous keyframe and of keyframe sequences stay for a new mechanism",
+   "sub": "lane_past_data.py +1"
+  },
+  {
+   "id": "ref_misc",
+   "label": "Measured, not adopted: learned thresholds (E388), ensemble cost (E379)",
+   "kind": "alt",
+   "col": 5,
+   "row": 13,
+   "code": [
+    "evaluation/jthresh.py",
+    "evaluation/token_time_ens.py"
+   ],
+   "note": "E388: -0.025 / -0.028 topo F1 with learned output thresholds; E379: the cost of a plain ensemble of two token heads",
+   "w": 2,
+   "hpx": 52,
+   "sub": "jthresh.py +1"
+  }
+ ],
+ "edges": [
+  {
+   "from": "in_sens",
+   "to": "gcar"
+  },
+  {
+   "from": "gcar",
+   "to": "pyr",
+   "label": "39 ch"
+  },
+  {
+   "from": "pyr",
+   "to": "nodes",
+   "label": "features"
+  },
+  {
+   "from": "nodes",
+   "to": "mnms",
+   "label": "e, pos"
+  },
+  {
+   "from": "mnms",
+   "to": "topk",
+   "label": "e'"
+  },
+  {
+   "from": "topk",
+   "to": "tok_live"
+  },
+  {
+   "from": "tok_live",
+   "to": "embed",
+   "label": "tokens"
+  },
+  {
+   "from": "tok_live",
+   "to": "gate",
+   "via": [
+    [
+     6.5,
+     0.92
+    ],
+    [
+     5.0,
+     0.92
+    ]
+   ]
+  },
+  {
+   "from": "embed",
+   "to": "attn"
+  },
+  {
+   "from": "gate",
+   "to": "attn"
+  },
+  {
+   "from": "gate",
+   "to": "wiring"
+  },
+  {
+   "from": "attn",
+   "to": "wiring"
+  },
+  {
+   "from": "attn",
+   "to": "types"
+  },
+  {
+   "from": "wiring",
+   "to": "thr_link",
+   "label": "p(link)"
+  },
+  {
+   "from": "types",
+   "to": "thr_keep",
+   "label": "p_none"
+  },
+  {
+   "from": "thr_link",
+   "to": "graph"
+  },
+  {
+   "from": "thr_keep",
+   "to": "graph"
+  },
+  {
+   "from": "graph",
+   "to": "scorers"
+  },
+  {
+   "from": "scorers",
+   "to": "boot"
+  },
+  {
+   "from": "boot",
+   "to": "testgate"
+  },
+  {
+   "from": "timing",
+   "to": "scorers",
+   "label": "ms"
+  },
+  {
+   "from": "gt",
+   "to": "data"
+  },
+  {
+   "from": "data",
+   "to": "st0"
+  },
+  {
+   "from": "st0",
+   "to": "cache",
+   "label": "B' frozen"
+  },
+  {
+   "from": "cache",
+   "to": "st1",
+   "label": "tokens + labels"
+  },
+  {
+   "from": "st1",
+   "to": "st2",
+   "label": "head weights"
+  },
+  {
+   "from": "loss",
+   "to": "st1"
+  },
+  {
+   "from": "loss",
+   "to": "st2"
+  },
+  {
+   "from": "st2",
+   "to": "embed",
+   "label": "trains head + node head",
+   "dashed": true
+  },
+  {
+   "from": "cache",
+   "to": "route_head",
+   "label": "cached tokens",
+   "dashed": true
+  },
+  {
+   "from": "sd_route",
+   "to": "route_head",
+   "dashed": true
+  },
+  {
+   "from": "route_head",
+   "to": "flags",
+   "dashed": true
+  },
+  {
+   "from": "flags",
+   "to": "route_eval",
+   "dashed": true
+  },
+  {
+   "from": "route_train",
+   "to": "route_head",
+   "dashed": true
+  }
+ ],
+ "groups": [
+  {
+   "label": "B' = frozen lane head B + soft Matrix-NMS layer (E273, E292): stage 2 trains its node head",
+   "nodes": [
+    "pyr",
+    "nodes",
+    "mnms"
+   ]
+  },
+  {
+   "label": "token head JTokenHead, 0.127 M parameters (stage 1, then stage 2)",
+   "nodes": [
+    "gate",
+    "embed",
+    "attn",
+    "wiring",
+    "types"
+   ]
+  },
+  {
+   "label": "read-out: named hard steps on the output",
+   "nodes": [
+    "thr_link",
+    "thr_keep"
+   ]
+  },
+  {
+   "label": "evaluation",
+   "nodes": [
+    "testgate",
+    "boot",
+    "scorers",
+    "timing"
+   ]
+  },
+  {
+   "label": "training: stage 0 (B'), stage 1 (head on the cache), stage 2 (head + node head together)",
+   "nodes": [
+    "gt",
+    "data",
+    "st0",
+    "cache",
+    "st1",
+    "st2",
+    "trainer",
+    "loss"
+   ]
+  },
+  {
+   "label": "side branch E389 (A6): the SD route, measured, TIE, not in the champion",
+   "nodes": [
+    "sd_route",
+    "route_head",
+    "flags",
+    "route_eval",
+    "route_train"
+   ]
+  },
+  {
+   "label": "reference systems and stages that were measured and not adopted (kept, not developed)",
+   "nodes": [
+    "ref_lg",
+    "ref_j",
+    "ref_old",
+    "ref_b",
+    "ref_grid",
+    "ref_t0",
+    "ref_past",
+    "ref_misc"
+   ]
+  }
+ ],
+ "main_path": {
+  "from": [
+   "in_sens"
+  ],
+  "to": [
+   "graph"
+  ]
+ },
+ "covers": [
+  {
+   "dir": "training",
+   "glob": "*.py"
+  },
+  {
+   "dir": "evaluation",
+   "glob": "*.py"
+  },
+  {
+   "dir": "tools",
+   "glob": "*.py"
+  }
+ ],
+ "not_drawn": {
+  "evaluation/gpu_gate.py": "helper: wait until the GPU has room before a GPU evaluation step (D100)",
+  "evaluation/pmap.py": "helper: order-keeping parallel map over a fork pool for CPU scoring",
+  "evaluation/tests/": "unit tests of the evaluation modules (run by tools/maintenance/run_all_tests.sh)",
+  "tools/": "helpers around the chain: pictures, one-off figure scripts, literature catalogue, maintenance, environment; no part of the delivered path",
+  "training/bflc_paths.py": "project paths from the checkout location, imported by every module",
+  "training/data/prep/centerline_gt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/crn_make_infos.py": "variants of the foundation extraction (older BEVFusion extraction, PCA compression, wider PCA, sensor perturbations, CRN infos); the champion uses the 32 + 7 channel GaussianCaR features of gcar_tools.py",
+  "training/data/prep/extract_features.py": "variants of the foundation extraction (older BEVFusion extraction, PCA compression, wider PCA, sensor perturbations, CRN infos); the champion uses the 32 + 7 channel GaussianCaR features of gcar_tools.py",
+  "training/data/prep/gcar_pert.py": "variants of the foundation extraction (older BEVFusion extraction, PCA compression, wider PCA, sensor perturbations, CRN infos); the champion uses the 32 + 7 channel GaussianCaR features of gcar_tools.py",
+  "training/data/prep/gcar_wide.py": "variants of the foundation extraction (older BEVFusion extraction, PCA compression, wider PCA, sensor perturbations, CRN infos); the champion uses the 32 + 7 channel GaussianCaR features of gcar_tools.py",
+  "training/data/prep/make_b456_tokens.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
+  "training/data/prep/make_dir_gt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_dist_gt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_graph_gt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_gt_arrays.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_node_gt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_poses.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
+  "training/data/prep/make_prior.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_route_alt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_route_gt.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_route_heat.py": "ground-truth, prior and route builders of the loops 2 - 8 (German-language scripts); the old chain's data layer reads what they wrote",
+  "training/data/prep/make_splits.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
+  "training/data/prep/pca_features.py": "variants of the foundation extraction (older BEVFusion extraction, PCA compression, wider PCA, sensor perturbations, CRN infos); the champion uses the 32 + 7 channel GaussianCaR features of gcar_tools.py",
+  "training/data/prep/reg_precompute.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
+  "training/data/prep/sd_precompute.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
+  "training/data/prep/sd_reg_precompute.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
+  "training/grid/test_grid.py": "tests of the E271 / E272 grid chain (reference)",
+  "training/grid/test_jlive_train.py": "test of the stage-2 trainer (jlive_train.py)",
+  "training/grid/test_jmaps_dirx.py": "test of the junction maps head DirX exchange (E324 s reference)",
+  "training/grid/test_jmaps_simplify.py": "test of the junction maps head simplification flags (E324 s reference)",
+  "training/grid/test_jnarrow.py": "test of the E353 narrowing (E324 s reference)",
+  "training/grid/test_jroute.py": "test of the E389 route head and its trainer",
+  "training/grid/test_jtok.py": "test of the E357 GT-token pair head (jtok.py)",
+  "training/grid/test_jtoken.py": "test of the token head (jtoken.py)",
+  "training/grid/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
+  "training/grid/test_lane_past.py": "test of the past data (E368, reference)",
+  "training/grid/test_lane_route.py": "test of the E389 route data",
+  "training/grid/test_lane_tokcache.py": "test of the token cache and its loader",
+  "training/grid/test_mnms_layer.py": "test of the Matrix-NMS layer (qmnms.py, E292)",
+  "training/grid/test_oracle.py": "G0 oracle test of the grid chain (reference)",
+  "training/grid/test_qraster.py": "test of the pixel targets of B (qraster.py)",
+  "training/grid/test_qtargets.py": "test of the node and link targets of B (qtargets.py)",
+  "training/grid/test_sdgraph.py": "test of the E390 road-graph encoder and data",
+  "training/grid/test_soft_nms.py": "test of the soft close-node suppression of B (E277)",
+  "training/grid/test_tier_loss.py": "test of the E276 tier loss switches of B",
+  "training/grid/test_tiers_sparse.py": "test of the E276 sparse node target of B",
+  "training/grid/test_zones.py": "test of the zone targets of B (qzones.py)",
+  "training/trainer_selftest.py": "selftest of trainer.fit (crash and resume give the same weights)"
+ }
 }

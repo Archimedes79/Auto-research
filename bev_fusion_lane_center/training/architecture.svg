@@ -1,248 +1,308 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 1050" width="1448" height="1050" font-family="Segoe UI, Helvetica, Arial, sans-serif">
-<title>bev_fusion_lane_center: camera + radar BEV features -&gt; lane-centre-line graph on an SD-map route</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1448 1550" width="1448" height="1550" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+<title>bev_fusion_lane_center: the token champion, camera + radar BEV features -&gt; lane-centre graph</title>
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
-<rect width="1448" height="1050" fill="#ffffff"/>
-<text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion_lane_center: camera + radar BEV features -&gt; lane-centre-line graph on an SD-map route</text>
-<text x="24" y="50" font-size="12" fill="#475569">Delivered chain of the registry systems champion / fast_recall / recall (D7 builder, one growth level). Snake layout: row 1 left to right, row 3 right to left, row 5 left to right, row 7 right to left. Orange = a choice inside the network, red = post-processing without a gradient path.</text>
-<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 24 stages = 8 learned, 2 fixed-differentiable, 2 frozen, 12 rule steps</text>
-<rect x="32.0" y="573.0" width="1384.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<rect x="632.0" y="773.0" width="584.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<rect x="32.0" y="873.0" width="784.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
-<path d="M204.0,228.0 C224.0,228.0 224.0,228.0 244.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M404.0,228.0 C424.0,228.0 424.0,228.0 444.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M604.0,228.0 C624.0,228.0 624.0,228.0 644.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M324.0,197.0 L324.0,187.5 Q324.0,178.0 333.5,178.0 L714.5,178.0 Q724.0,178.0 724.0,187.5 L724.0,197.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M804.0,228.0 C824.0,228.0 824.0,228.0 844.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1004.0,228.0 C1024.0,228.0 1024.0,228.0 1044.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1204.0,228.0 C1224.0,228.0 1224.0,228.0 1244.0,228.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1324.0,259.0 C1324.0,328.0 1324.0,328.0 1324.0,397.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1244.0,428.0 C1224.0,428.0 1224.0,428.0 1204.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1044.0,428.0 C1024.0,428.0 1024.0,428.0 1004.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M844.0,428.0 C824.0,428.0 824.0,428.0 804.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M644.0,428.0 C624.0,428.0 624.0,428.0 604.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M444.0,428.0 C424.0,428.0 424.0,428.0 404.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M324.0,497.0 C324.0,478.0 324.0,478.0 324.0,459.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M244.0,428.0 C224.0,428.0 224.0,428.0 204.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M124.0,459.0 C124.0,528.0 124.0,528.0 124.0,597.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M204.0,628.0 C224.0,628.0 224.0,628.0 244.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M404.0,628.0 C424.0,628.0 424.0,628.0 444.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M604.0,628.0 C624.0,628.0 624.0,628.0 644.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M804.0,628.0 C824.0,628.0 824.0,628.0 844.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1004.0,628.0 C1024.0,628.0 1024.0,628.0 1044.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M924.0,259.0 L924.0,268.5 Q924.0,278.0 914.5,278.0 L834.0,278.0 Q824.0,278.0 824.0,288.0 L824.0,468.0 Q824.0,478.0 814.0,478.0 L733.5,478.0 Q724.0,478.0 724.0,487.5 L724.0,497.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M644.0,528.0 C624.0,528.0 624.0,628.0 604.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M724.0,559.0 C724.0,578.0 724.0,578.0 724.0,597.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M804.0,528.0 C824.0,528.0 824.0,628.0 844.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1204.0,628.0 C1224.0,628.0 1224.0,628.0 1244.0,628.0" fill="none" stroke="#334155" stroke-width="2.6" stroke-dasharray="5 4" marker-end="url(#ah)"/>
-<path d="M1324.0,659.0 C1324.0,728.0 1324.0,728.0 1324.0,797.0" fill="none" stroke="#334155" stroke-width="2.6" stroke-dasharray="5 4" marker-end="url(#ah)"/>
-<path d="M1204.0,628.0 C1224.0,628.0 1224.0,828.0 1244.0,828.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1124.0,659.0 C1124.0,728.0 1124.0,728.0 1124.0,797.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M1044.0,828.0 C1024.0,828.0 1024.0,828.0 1004.0,828.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M924.0,759.0 C924.0,778.0 924.0,778.0 924.0,797.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M844.0,828.0 C824.0,828.0 824.0,828.0 804.0,828.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M644.0,828.0 C624.0,828.0 624.0,828.0 604.0,828.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M924.0,859.0 C924.0,878.0 924.0,878.0 924.0,897.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
-<path d="M204.0,928.0 C224.0,928.0 224.0,928.0 244.0,928.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<path d="M444.0,928.0 C424.0,928.0 424.0,928.0 404.0,928.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
-<g><title>opt: training/train/p17_gate.py::Stabilizer; training/models/p17_mapnet.py; training/models/p18_regis.py::SoftRegister</title><rect x="44" y="97.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
-<text x="124.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Optional front stages</text>
-<text x="124.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">gate, map net,</text>
-<text x="124.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">registration</text>
-<text x="124.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p17_gate.py::Stabilizer </text>
+<rect width="1448" height="1550" fill="#ffffff"/>
+<text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion_lane_center: the token champion, camera + radar BEV features -&gt; lane-centre graph</text>
+<text x="24" y="50" font-size="12" fill="#475569">Token champion (D113 - D120), VAL 873 frames: topo F1 0.6682 / 0.6813 (seeds 0 / 1), 16.2 ms per frame on an RTX 3060, 2.323 M parameters, no TEST check. Orange / red = the named hard steps; everything else is soft.</text>
+<text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 13 stages = 5 learned, 2 fixed-differentiable, 2 frozen, 4 rule steps</text>
+<rect x="432.0" y="73.0" width="584.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="832.0" y="178.0" width="584.0" height="293.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="632.0" y="273.0" width="184.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="473.0" width="784.0" height="98.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="673.0" width="1384.0" height="193.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="432.0" y="973.0" width="784.0" height="198.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<rect x="32.0" y="1278.0" width="1384.0" height="193.0" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+<path d="M204.0,128.0 C224.0,128.0 224.0,128.0 244.0,128.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M404.0,128.0 C424.0,128.0 424.0,128.0 444.0,128.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M604.0,128.0 C624.0,128.0 624.0,128.0 644.0,128.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M804.0,128.0 C824.0,128.0 824.0,128.0 844.0,128.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1004.0,128.0 C1024.0,128.0 1024.0,128.0 1044.0,128.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1204.0,128.0 C1224.0,128.0 1224.0,128.0 1244.0,128.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1324.0,159.0 C1324.0,228.0 1324.0,228.0 1324.0,297.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1324.0,159.0 L1324.0,164.5 Q1324.0,170.0 1318.5,170.0 L1034.0,170.0 Q1024.0,170.0 1024.0,180.0 L1024.0,202.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1244.0,328.0 C1224.0,328.0 1224.0,328.0 1204.0,328.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1124.0,254.0 C1124.0,275.5 1124.0,275.5 1124.0,297.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M924.0,254.0 C924.0,275.5 924.0,275.5 924.0,297.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1044.0,328.0 C1024.0,328.0 1024.0,328.0 1004.0,328.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1124.0,359.0 C1124.0,378.0 1124.0,378.0 1124.0,397.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M844.0,328.0 C824.0,328.0 824.0,328.0 804.0,328.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M1044.0,428.0 C924.0,428.0 924.0,428.0 804.0,428.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M644.0,328.0 C624.0,328.0 624.0,378.0 604.0,378.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M644.0,428.0 C624.0,428.0 624.0,378.0 604.0,378.0" fill="none" stroke="#334155" stroke-width="2.6" marker-end="url(#ah)"/>
+<path d="M524.0,459.0 C524.0,478.0 524.0,478.0 524.0,497.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M444.0,528.0 C424.0,528.0 424.0,528.0 404.0,528.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M244.0,528.0 C224.0,528.0 224.0,528.0 204.0,528.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M644.0,528.0 C624.0,528.0 624.0,528.0 604.0,528.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M204.0,728.0 C224.0,728.0 224.0,728.0 244.0,728.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M404.0,728.0 C424.0,728.0 424.0,728.0 444.0,728.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M604.0,728.0 C624.0,728.0 624.0,728.0 644.0,728.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M804.0,728.0 C924.0,728.0 924.0,728.0 1044.0,728.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1204.0,728.0 C1224.0,728.0 1224.0,728.0 1244.0,728.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1124.0,802.0 C1124.0,780.5 1124.0,780.5 1124.0,759.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1324.0,802.0 C1324.0,780.5 1324.0,780.5 1324.0,759.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M1324.0,697.0 C1324.0,528.0 1324.0,528.0 1324.0,359.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M724.0,759.0 C724.0,878.0 724.0,878.0 724.0,997.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M604.0,1028.0 C624.0,1028.0 624.0,1028.0 644.0,1028.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M804.0,1028.0 C824.0,1028.0 824.0,1028.0 844.0,1028.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M1004.0,1028.0 C1024.0,1028.0 1024.0,1028.0 1044.0,1028.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M724.0,1097.0 C724.0,1078.0 724.0,1078.0 724.0,1059.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<g><title>in_sens: training/data/prep/gcar_tools.py</title><rect x="44" y="97.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
+<text x="124.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">6 cameras + radar</text>
+<text x="124.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(nuScenes, one frame,</text>
+<text x="124.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">one radar scan)</text>
+<text x="124.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">gcar_tools.py</text>
 </g>
-<g><title>trust: training/models/p18_regmap.py::RegMapWrap</title><rect x="244" y="97.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="6 3"/>
-<text x="324.0" y="118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Hard trust gate</text>
-<text x="324.0" y="133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">map x (trust &gt;= 0.62)</text>
-<text x="324.0" y="147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p18_regmap.py::RegMapWra</text>
+<g><title>gcar: training/data/prep/gcar_tools.py</title><rect x="244" y="97.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="324.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">GaussianCaR BEV</text>
+<text x="324.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">features, frozen,</text>
+<text x="324.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">cached</text>
+<text x="324.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">gcar_tools.py</text>
 </g>
-<g><title>ctrl: training/models/p10_expert.py; training/models/p10_wave.py; training/models/p13_jhead.py; training/models/p13_junction.py; training/models/p13_phead.py; training/models/p15_refine.py; training/models/p8_assign.py; training/models/p8_seg.py; training/pipeline/graph_from_dense.py; training/pipeline/line_tracer.py</title><rect x="444" y="97.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
-<text x="524.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Control: E94 trace</text>
-<text x="524.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">network</text>
-<text x="524.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">628 ms, graphs stored</text>
-<text x="524.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p10_expert.py +9</text>
+<g><title>pyr: training/grid/pyramid.py::PyramidHead; training/grid/head.py</title><rect x="444" y="97.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<text x="524.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">B&#x27; pixel stage</text>
+<text x="524.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pyramid, frozen</text>
+<text x="524.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(0.5 / 1 / 2 m maps)</text>
+<text x="524.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">pyramid.py +1</text>
 </g>
-<g><title>in_sens: training/data/prep/gcar_tools.py</title><rect x="44" y="197.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
-<text x="124.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">6 cameras + radar</text>
-<text x="124.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(nuScenes)</text>
-<text x="124.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">gcar_tools.py</text>
+<g><title>nodes: training/grid/qnodes.py::NodeHead; training/grid/qgraph.py::QGraph; training/grid/qpredict.py</title><rect x="644" y="97.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="724.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">B&#x27; node head</text>
+<text x="724.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">one node per 2 m cell</text>
+<text x="724.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(trained in stage 2)</text>
+<text x="724.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qnodes.py::NodeHead +2</text>
 </g>
-<g><title>gcar: training/data/prep/gcar_tools.py</title><rect x="244" y="197.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
-<text x="324.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">GaussianCaR</text>
-<text x="324.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">frozen foundation</text>
-<text x="324.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">gcar_tools.py</text>
+<g><title>mnms: training/grid/qmnms.py::matrix_nms_logit</title><rect x="844" y="97.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="2.2"/>
+<text x="924.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Soft Matrix-NMS</text>
+<text x="924.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">layer on existence</text>
+<text x="924.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(R 1.75 m, sigma 0.1)</text>
+<text x="924.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qmnms.py</text>
 </g>
-<g><title>dense: training/train/dense_head.py::UNet; training/pipeline/p10_infer.py::load_maps</title><rect x="444" y="197.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
-<text x="524.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Dense lane head</text>
-<text x="524.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">U-Net heat + direction</text>
-<text x="524.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">dense_head.py::UNet +1</text>
+<g><title>topk: training/data/lane_tokcache.py::select_tokens; training/data/lane_live_tok.py::live_tokens</title><rect x="1044" y="97.0" width="160" height="62" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="1124.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Top-K 512 tokens</text>
+<text x="1124.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">by existence</text>
+<text x="1124.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(named budget)</text>
+<text x="1124.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_tokcache.py +1</text>
 </g>
-<g><title>x42: training/data/p16_data.py::BuilderData._x_of</title><rect x="644" y="197.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="2.2"/>
-<text x="724.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">42-channel input</text>
-<text x="724.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">z-score + concat</text>
-<text x="724.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_data.py::BuilderData</text>
+<g><title>tok_live: training/data/lane_live_tok.py::LiveSource</title><rect x="1244" y="97.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="2.2"/>
+<text x="1324.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Live tokens</text>
+<text x="1324.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">position, direction,</text>
+<text x="1324.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">existence, node token</text>
+<text x="1324.0" y="155.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_live_tok.py</text>
 </g>
-<g><title>stem: training/models/p10_net.py::Stem; training/models/p16_builder.py::Builder.encode</title><rect x="844" y="197.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="924.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Builder stem</text>
-<text x="924.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">conv pyramid</text>
-<text x="924.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p10_net.py::Stem +1</text>
+<g><title>gate: training/grid/jtok.py::pair_geometry</title><rect x="844" y="202.0" width="360" height="52" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="1024.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Allowed-pair gate (named hard step)</text>
+<text x="1024.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">forward chord, turn &lt;= 130 deg, chord 0.3 - 100 m</text>
+<text x="1024.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtok.py::pair_geometry</text>
 </g>
-<g><title>seeds: training/models/p16_builder.py::Builder.seed_candidates</title><rect x="1044" y="197.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="1124.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Seed spray</text>
-<text x="1124.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lattice 5 m + snap</text>
-<text x="1124.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_builder.py::Builder.</text>
+<g><title>embed: training/grid/jtoken.py::JTokenHead; training/grid/jtoken.py::fourier</title><rect x="1244" y="297.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1324.0" y="311.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Token embedding</text>
+<text x="1324.0" y="326.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">64-d node token +</text>
+<text x="1324.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Fourier pos., heading</text>
+<text x="1324.0" y="355.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken.py::JTokenHead</text>
 </g>
-<g><title>seednms: training/models/p16_builder.py::Builder.seeds_select</title><rect x="1244" y="197.0" width="160" height="62" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="1324.0" y="218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Seed selection</text>
-<text x="1324.0" y="233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">greedy NMS 3 m, K0</text>
-<text x="1324.0" y="247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_builder.py::Builder.</text>
+<g><title>attn: training/grid/jtoken.py::SelfLayer; training/grid/jtoken.py::pair_mlp</title><rect x="1044" y="297.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1124.0" y="311.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">3 x self-attention</text>
+<text x="1124.0" y="326.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">relative-geometry bias</text>
+<text x="1124.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ soft pruning weight</text>
+<text x="1124.0" y="355.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken.py::SelfLayer +1</text>
 </g>
-<g><title>ctx: training/models/p16_builder.py::CtxLayer; training/models/p16_builder.py::Builder.read_rays; training/models/p16_geom.py::survival</title><rect x="1244" y="397.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="1324.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Context + ray read-out</text>
-<text x="1324.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">verified rays</text>
-<text x="1324.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_builder.py::CtxLayer</text>
+<g><title>wiring: training/grid/jtoken.py::wiring_logp; training/grid/jtoken.py::JTokenHead</title><rect x="844" y="297.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="924.0" y="311.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Wiring softmax</text>
+<text x="924.0" y="326.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">per source + none slot</text>
+<text x="924.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(short &lt;= 8 m / long)</text>
+<text x="924.0" y="355.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken.py::wiring_logp</text>
 </g>
-<g><title>choice: training/models/p16_geom.py::select_children; training/models/p16_builder.py::Builder.level</title><rect x="1044" y="397.0" width="160" height="62" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="1124.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Child choice</text>
-<text x="1124.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">argmax + endpoint NMS</text>
-<text x="1124.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_geom.py::select_chil</text>
+<g><title>types: training/grid/jtoken.py::JTokenHead.read_types</title><rect x="1044" y="397.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1124.0" y="411.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Node-type softmax</text>
+<text x="1124.0" y="426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">7 classes; p_none is</text>
+<text x="1124.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the pruning weight</text>
+<text x="1124.0" y="455.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken.py::read_types</text>
 </g>
-<g><title>rescore: training/models/p16_builder.py::Builder.rescore</title><rect x="844" y="397.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="924.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Child tokens</text>
-<text x="924.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">rescoring layer</text>
-<text x="924.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_builder.py::Builder.</text>
+<g><title>thr_link: evaluation/jtoken_eval.py::decode_variant; evaluation/jtoken_eval.py::D115; training/grid/jtoken.py::decode</title><rect x="644" y="297.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="724.0" y="311.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Link read-out (named)</text>
+<text x="724.0" y="326.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">short 0.3, long 0.2,</text>
+<text x="724.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">none gate off</text>
+<text x="724.0" y="355.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken_eval.py +2</text>
 </g>
-<g><title>beam: training/models/p16_geom.py::beam_topm; training/models/p16_builder.py::Builder.link_head</title><rect x="644" y="397.0" width="160" height="62" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="724.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Beam top-M</text>
-<text x="724.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ link top-k</text>
-<text x="724.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_geom.py::beam_topm +</text>
+<g><title>thr_keep: evaluation/jtoken_eval.py::node_e; evaluation/jtoken_eval.py::frame_prediction; training/data/lane_ptok_data.py::to_pred</title><rect x="644" y="397.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
+<text x="724.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Node keep (named)</text>
+<text x="724.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">p_none &lt; 0.6</text>
+<text x="724.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken_eval.py +2</text>
 </g>
-<g><title>link: training/models/p16_builder.py::Builder.link_head</title><rect x="444" y="397.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="524.0" y="411.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Link head</text>
-<text x="524.0" y="426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">forward x backward</text>
-<text x="524.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ends</text>
-<text x="524.0" y="455.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_builder.py::Builder.</text>
+<g><title>graph: training/grid/qformat.py; training/data/lane_ptok_data.py::to_pred</title><rect x="444" y="297.0" width="160" height="162" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
+<text x="524.0" y="361.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lane graph</text>
+<text x="524.0" y="376.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">nodes, links, types</text>
+<text x="524.0" y="391.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">in the ego frame</text>
+<text x="524.0" y="405.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qformat.py +1</text>
 </g>
-<g><title>recur: training/models/p16_time.py::prior_from_prev; training/models/p16_builder.py::Builder.fuse_prior</title><rect x="244" y="397.0" width="160" height="62" rx="7" fill="#ffedd5" stroke="#ea580c" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="324.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Time recursion</text>
-<text x="324.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">prior + hard match</text>
-<text x="324.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_time.py::prior_from_</text>
+<g><title>testgate: evaluation/TEST_USAGE_LOG.md; evaluation/jtest_eval.py</title><rect x="44" y="497.0" width="160" height="62" rx="7" fill="#cffafe" stroke="#0891b2" stroke-width="1.4"/>
+<text x="124.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">TEST gate: logged row</text>
+<text x="124.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">and the owner&#x27;s OK;</text>
+<text x="124.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">none for the champion</text>
+<text x="124.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">TEST_USAGE_LOG.md +1</text>
 </g>
-<g><title>alive: training/pipeline/p16_infer.py::assemble; training/pipeline/p16_runtime.py::FastBuilder</title><rect x="44" y="397.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="124.0" y="418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Alive filter + export</text>
-<text x="124.0" y="433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">tau 0.7, sort</text>
-<text x="124.0" y="447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::assemble +</text>
+<g><title>boot: evaluation/sparse_lanes/bootstrap.py; evaluation/jtoken_eval.py::paired_junction</title><rect x="244" y="497.0" width="160" height="62" rx="7" fill="#cffafe" stroke="#0891b2" stroke-width="1.4"/>
+<text x="324.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Paired scene</text>
+<text x="324.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">bootstrap, band 0.010</text>
+<text x="324.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">topo F1, 2 seeds</text>
+<text x="324.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bootstrap.py +1</text>
 </g>
-<g><title>union: training/pipeline/p16_infer.py::FastUnion; training/pipeline/p18_union_nb.py::NumbaUnion</title><rect x="44" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="124.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Path union</text>
-<text x="124.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">snap + split on edge</text>
-<text x="124.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::FastUnion </text>
+<g><title>scorers: evaluation/jtoken_eval.py::score; evaluation/jtoken_eval.py::dump; evaluation/jtoken_eval.py::sweep; evaluation/jtoken_eval.py::choose_cell; evaluation/qgraph_eval.py; evaluation/qgraph_readout.py; evaluation/sparse_lanes/; evaluation/lane_suite.py; evaluation/lane_task/; evaluation/jmaneuver.py</title><rect x="444" y="497.0" width="160" height="62" rx="7" fill="#cffafe" stroke="#0891b2" stroke-width="1.4"/>
+<text x="524.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Scorer: topo F1,</text>
+<text x="524.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">junction F1, F1@1.0,</text>
+<text x="524.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lanes found</text>
+<text x="524.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken_eval.py::score +9</text>
 </g>
-<g><title>clean: training/pipeline/p16_infer.py::simplify</title><rect x="244" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="324.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Clean-up</text>
-<text x="324.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">bubbles, spurs</text>
-<text x="324.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::simplify</text>
+<g><title>timing: evaluation/jtoken_eval.py::timing; evaluation/jtiming.py</title><rect x="644" y="497.0" width="160" height="62" rx="7" fill="#cffafe" stroke="#0891b2" stroke-width="1.4"/>
+<text x="724.0" y="511.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Timing, batch 1,</text>
+<text x="724.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">quiet GPU, cached</text>
+<text x="724.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">features: 16.2 ms</text>
+<text x="724.0" y="555.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken_eval.py +1</text>
 </g>
-<g><title>anchor: training/pipeline/p16_infer.py::anchor_junctions_fast</title><rect x="444" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="524.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Junction anchoring</text>
-<text x="524.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">heat peaks -&gt; split</text>
-<text x="524.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::anchor_jun</text>
+<g><title>gt: ../GtGenerator/lane_gt.py</title><rect x="44" y="697.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/>
+<text x="124.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lane ground truth</text>
+<text x="124.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">v13 / l6</text>
+<text x="124.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(GtGenerator)</text>
+<text x="124.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_gt.py</text>
 </g>
-<g><title>reloc: training/pipeline/p16_infer.py::relocate_forks</title><rect x="644" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="724.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Fork relocation</text>
-<text x="724.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">move to heat peak</text>
-<text x="724.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::relocate_f</text>
+<g><title>data: training/data/lane_gt_data.py; training/data/p16_data.py; training/data/p16_common.py; training/data/p8_lib.py; training/data/assoc_lib.py; training/grid/qtargets.py; training/grid/qraster.py; training/grid/qzones.py</title><rect x="244" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="324.0" y="718.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Frames, features,</text>
+<text x="324.0" y="733.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">splits and GT targets</text>
+<text x="324.0" y="747.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_gt_data.py +7</text>
 </g>
-<g><title>prune: training/pipeline/p16_infer.py::prune_forks</title><rect x="844" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="924.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Fork pruning</text>
-<text x="924.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">keep one branch</text>
-<text x="924.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::prune_fork</text>
+<g><title>st0: training/train/qgraph_train.py; training/train/qgates.py; training/grid/qgraph.py::qgraph_loss; training/grid/losses.py; training/grid/soft_lines.py; training/grid/targets.py</title><rect x="444" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="524.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Stage 0: lane head B&#x27;</text>
+<text x="524.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">trained earlier, then</text>
+<text x="524.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">frozen (E273, E292)</text>
+<text x="524.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qgraph_train.py +5</text>
 </g>
-<g><title>cut: evaluation/sparse_lanes/sparse_metrics.py::graph_from_vertices</title><rect x="1044" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="1124.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Piece cut</text>
-<text x="1124.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">legacy chain walk</text>
-<text x="1124.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">sparse_metrics.py::graph</text>
+<g><title>cache: training/data/lane_tokcache.py; training/data/lane_ptok_data.py; training/data/lane_tok_data.py; evaluation/jtok_eval.py::sub_table</title><rect x="644" y="697.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/>
+<text x="724.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Token cache (stage 1)</text>
+<text x="724.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">B&#x27; run once, tokens</text>
+<text x="724.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ GT labels stored</text>
+<text x="724.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_tokcache.py +3</text>
 </g>
-<g><title>dp: training/pipeline/p16_infer.py::simplify_dp</title><rect x="1244" y="597.0" width="160" height="62" rx="7" fill="#fee2e2" stroke="#dc2626" stroke-width="2.2" stroke-dasharray="6 3"/>
-<text x="1324.0" y="618.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Douglas-Peucker</text>
-<text x="1324.0" y="633.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(*_dp systems only)</text>
-<text x="1324.0" y="647.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::simplify_d</text>
+<g><title>st1: training/train/jtoken_train.py</title><rect x="1044" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="1124.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Stage 1: token head</text>
+<text x="1124.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">on the cache</text>
+<text x="1124.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">12000 steps</text>
+<text x="1124.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken_train.py</text>
 </g>
-<g><title>in_ego: training/data/prep/make_poses.py</title><rect x="244" y="497.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
-<text x="324.0" y="526.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ego poses</text>
-<text x="324.0" y="540.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">make_poses.py</text>
+<g><title>st2: training/train/jlive_train.py; training/data/lane_live_tok.py::b_loss</title><rect x="1244" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="1324.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Stage 2 (S4): head +</text>
+<text x="1324.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">B&#x27; node head together</text>
+<text x="1324.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">3000 steps, lr 1e-4</text>
+<text x="1324.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jlive_train.py +1</text>
 </g>
-<g><title>junc: training/models/p16_builder.py::Builder</title><rect x="644" y="497.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="724.0" y="518.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Junction head</text>
-<text x="724.0" y="533.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">split / merge heat</text>
-<text x="724.0" y="547.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_builder.py::Builder</text>
+<g><title>trainer: training/trainer.py; training/probe.py; training/startable.py; training/train/run_config.py</title><rect x="44" y="803.0" width="360" height="50" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="224.0" y="818.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Shared trainer: checkpoint, resume, status.json,</text>
+<text x="224.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">probe, startable check</text>
+<text x="224.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">trainer.py +3</text>
 </g>
-<g><title>in_map: training/data/sd_lib.py</title><rect x="844" y="697.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
-<text x="924.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SD map</text>
-<text x="924.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(ADASIS-like,</text>
-<text x="924.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">simulated)</text>
-<text x="924.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">sd_lib.py</text>
+<g><title>loss: training/grid/jtoken.py::jtoken_loss</title><rect x="1044" y="802.0" width="360" height="52" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="1224.0" y="818.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Token loss: per-source likelihood with the none slot</text>
+<text x="1224.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ 0.5 type CE + 0.5 L1 of the handle scales</text>
+<text x="1224.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken.py::jtoken_loss</text>
 </g>
-<g><title>lane_graph: training/pipeline/p16_infer.py::assemble</title><rect x="1244" y="797.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
-<text x="1324.0" y="811.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lane graph</text>
-<text x="1324.0" y="826.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">vertices, edges,</text>
-<text x="1324.0" y="841.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pieces</text>
-<text x="1324.0" y="855.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_infer.py::assemble</text>
+<g><title>sd_route: training/data/lane_route_data.py::route_of; training/data/sd_lib.py</title><rect x="444" y="997.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="524.0" y="1011.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SD route of the frame</text>
+<text x="524.0" y="1026.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">route tokens / 2 m,</text>
+<text x="524.0" y="1041.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">simulated map errors</text>
+<text x="524.0" y="1055.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_route_data.py +1</text>
 </g>
-<g><title>route_in: training/pipeline/p16_pipeline.py::route_input; training/pipeline/p16_tok_resample.py::resample_item; training/models/p16_tokens.py::cross_section</title><rect x="1044" y="797.0" width="160" height="62" rx="7" fill="#ccfbf1" stroke="#0d9488" stroke-width="2.2"/>
-<text x="1124.0" y="818.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route input</text>
-<text x="1124.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">tokens along edges</text>
-<text x="1124.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_pipeline.py::route_i</text>
+<g><title>route_head: training/grid/jroute.py::RouteHead</title><rect x="644" y="997.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="724.0" y="1011.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route head (E389)</text>
+<text x="724.0" y="1026.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">one cross-attention to</text>
+<text x="724.0" y="1041.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the route tokens</text>
+<text x="724.0" y="1055.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jroute.py::RouteHead</text>
 </g>
-<g><title>route_head: training/models/p10_net.py::RouteXNet; training/pipeline/p16_pipeline.py::FastRoute</title><rect x="844" y="797.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="924.0" y="818.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route head</text>
-<text x="924.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SD-map attribute</text>
-<text x="924.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p10_net.py::RouteXNet +1</text>
+<g><title>flags: training/grid/jroute.py::route_loss</title><rect x="844" y="997.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="924.0" y="1011.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route flags per token</text>
+<text x="924.0" y="1026.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">on the road / on the</text>
+<text x="924.0" y="1041.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lane</text>
+<text x="924.0" y="1055.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jroute.py::route_loss</text>
 </g>
-<g><title>consumer: training/train/p14_chain_consumer.py::ConsB</title><rect x="644" y="797.0" width="160" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="724.0" y="818.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Planner consumer</text>
-<text x="724.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ConsB</text>
-<text x="724.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p14_chain_consumer.py::C</text>
+<g><title>route_eval: evaluation/jroute_eval.py</title><rect x="1044" y="997.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="1124.0" y="1018.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route read-out and</text>
+<text x="1124.0" y="1033.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scoring (VAL, 5 modes)</text>
+<text x="1124.0" y="1047.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jroute_eval.py</text>
 </g>
-<g><title>ego_path: training/train/p14_chain_consumer.py::ConsB</title><rect x="444" y="797.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
-<text x="524.0" y="818.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ego path</text>
-<text x="524.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">8 points, 5-40 m</text>
-<text x="524.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p14_chain_consumer.py::C</text>
+<g><title>route_train: training/train/jroute_train.py</title><rect x="644" y="1097.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="724.0" y="1118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer of the route</text>
+<text x="724.0" y="1133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">head (arms m / z)</text>
+<text x="724.0" y="1147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jroute_train.py</text>
 </g>
-<g><title>flags: training/models/p10_net.py::RouteXNet</title><rect x="844" y="897.0" width="160" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="2.2"/>
-<text x="924.0" y="918.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route flags</text>
-<text x="924.0" y="933.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">per lane point</text>
-<text x="924.0" y="947.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p10_net.py::RouteXNet</text>
+<g><title>e390: training/data/lane_sdgraph_data.py; training/grid/jsdgraph.py; evaluation/sdgraph_probe.py</title><rect x="44" y="1002.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="224.0" y="1018.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E390 step 1: the SD map as a logical road graph</text>
+<text x="224.0" y="1033.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(encoder + probes, running)</text>
+<text x="224.0" y="1047.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jsdgraph.py +2</text>
 </g>
-<g><title>loss: training/losses/p16_loss.py::total_loss</title><rect x="44" y="897.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
-<text x="124.0" y="918.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Builder losses</text>
-<text x="124.0" y="933.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">matching-free</text>
-<text x="124.0" y="947.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p16_loss.py::total_loss</text>
+<g><title>ref_lg: training/lanegraph/</title><rect x="44" y="1302.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="224.0" y="1318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E324 s: training/lanegraph/ (earlier end-to-end</text>
+<text x="224.0" y="1333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">system: attached ends, wiring by rule)</text>
+<text x="224.0" y="1347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lanegraph/</text>
 </g>
-<g><title>trainers: training/train/; training/trainer.py; training/search/p16_triage.py</title><rect x="244" y="897.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
-<text x="324.0" y="918.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Training entry points</text>
-<text x="324.0" y="933.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">and search</text>
-<text x="324.0" y="947.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">train/ +2</text>
+<g><title>ref_j: training/grid/jmaps.py; training/grid/jends.py; training/grid/jgt.py; training/grid/qjunction.py; training/grid/qendnet.py; training/grid/qends.py; training/grid/jwire.py; training/grid/jwire_head.py; training/grid/jnarrow.py; training/data/prep/junction_paint.py; training/train/jmaps_train.py; training/train/jends_train.py; training/train/jwire_train.py; training/train/jnarrow_train.py; training/train/jnarrow_eval.py; evaluation/jends_eval.py; evaluation/qends_eval.py; evaluation/jpair_pr.py; evaluation/jflip.py; evaluation/jgraph.py; evaluation/jheat_replay.py; evaluation/jmodel_cost.py; evaluation/jprune_b.py; evaluation/jprune_cost.py; evaluation/jprune_probe.py; evaluation/jprune_table.py; evaluation/jrule_control.py; evaluation/jrule_removal.py; evaluation/jstack.py; evaluation/jtime.py; evaluation/jwire_check.py; evaluation/jwire_data.py; evaluation/jwire_verdict.py; evaluation/jwiring.py; evaluation/jdiag.py</title><rect x="444" y="1302.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="624.0" y="1318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E324 s training + junction thread: junction maps,</text>
+<text x="624.0" y="1333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pair and wiring heads, trainers, probes</text>
+<text x="624.0" y="1347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jmaps.py +35</text>
 </g>
-<g><title>data: training/data/</title><rect x="444" y="897.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
-<text x="524.0" y="926.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Data, GT and prep</text>
-<text x="524.0" y="940.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">data/</text>
+<g><title>ref_old: training/models/; training/pipeline/; training/losses/; training/data/p10_data.py; training/train/p10_train.py; training/train/p10_route_train.py; training/train/p14_chain_consumer.py; training/train/p16_train.py; training/train/p17_gate.py; training/train/p18_joint.py; training/train/dense_head.py; evaluation/evaluate.py; evaluation/eval_parts.py; evaluation/drivers/; evaluation/loops/</title><rect x="844" y="1302.0" width="560" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="1124.0" y="1318.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Route-graph builder chain of loops 8 - 18 (p8 ... p18): kept for comparison,</text>
+<text x="1124.0" y="1333.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">removal decided in D97</text>
+<text x="1124.0" y="1347.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">models/ +14</text>
 </g>
-<g><title>joint: training/train/p18_joint.py; training/pipeline/route_data.py</title><rect x="644" y="897.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
-<text x="724.0" y="918.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Joint builder + route</text>
-<text x="724.0" y="933.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">fine-tune (closed)</text>
-<text x="724.0" y="947.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">p18_joint.py +1</text>
+<g><title>ref_b: training/grid/qlinks.py; training/grid/sections.py; training/grid/qassign.py; training/grid/map_sim.py</title><rect x="44" y="1402.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="224.0" y="1418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">B&#x27;s link, section and assignment stages (E273 C -</text>
+<text x="224.0" y="1433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E): trained in B, not run on the token path</text>
+<text x="224.0" y="1447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qlinks.py +3</text>
 </g>
-<text x="42.0" y="588.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">assemble(): numpy / numba, no gradient path (alive filter above, piece cut and Douglas-Peucker included)</text>
-<text x="642.0" y="788.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">trained separately on stored tokens</text>
-<text x="42.0" y="888.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training only</text>
-<text x="24" y="1000" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
-<rect x="24" y="1012" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="1022" font-size="11" fill="#334155">input</text>
-<rect x="95.0" y="1012" width="18" height="12" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/><text x="119.0" y="1022" font-size="11" fill="#334155">learned network (gradient flows)</text>
-<rect x="333.4" y="1012" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="357.4" y="1022" font-size="11" fill="#334155">fixed math, differentiable</text>
-<rect x="534.6" y="1012" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="558.6" y="1022" font-size="11" fill="#334155">frozen / cached (no gradient)</text>
-<rect x="754.4000000000001" y="1012" width="18" height="12" rx="3" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" stroke-dasharray="4 2"/><text x="778.4000000000001" y="1022" font-size="11" fill="#334155">choice inside the network (gradient through the picked items, not the choice)</text>
-<rect x="24" y="1030" width="18" height="12" rx="3" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4 2"/><text x="48" y="1040" font-size="11" fill="#334155">post-processing (no gradient path)</text>
-<rect x="274.8" y="1030" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="298.8" y="1040" font-size="11" fill="#334155">delivered output</text>
-<rect x="414.0" y="1030" width="18" height="12" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/><text x="438.0" y="1040" font-size="11" fill="#334155">training only</text>
-<rect x="534.6" y="1030" width="18" height="12" rx="3" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/><text x="558.6" y="1040" font-size="11" fill="#334155">optional or control (not in the registry chain)</text>
+<g><title>ref_grid: training/grid/chain.py; training/grid/chain_data.py; training/grid/hold.py; training/grid/assign.py; training/grid/data.py; training/train/grid_train.py; evaluation/vertex_eval.py; evaluation/lane_grid/</title><rect x="444" y="1397.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="524.0" y="1411.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E271 / E272 grid</text>
+<text x="524.0" y="1426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">chain: 1 m head,</text>
+<text x="524.0" y="1441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">sparsify, hold, assign</text>
+<text x="524.0" y="1455.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">chain.py +7</text>
+</g>
+<g><title>ref_t0: training/grid/jtok.py::JTok; training/grid/jtok.py::JTokModel; training/train/jtok_train.py; evaluation/jtok_eval.py</title><rect x="644" y="1397.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="724.0" y="1411.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E357 stage T0: GT</text>
+<text x="724.0" y="1426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">nodes as tokens, one</text>
+<text x="724.0" y="1441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">pair head (control)</text>
+<text x="724.0" y="1455.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtok.py +2</text>
+</g>
+<g><title>ref_past: training/data/lane_past_data.py; training/data/lane_seq_data.py</title><rect x="844" y="1397.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="924.0" y="1411.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Past at feature /</text>
+<text x="924.0" y="1426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">token level (E354,</text>
+<text x="924.0" y="1441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">S2, S2b): TIE</text>
+<text x="924.0" y="1455.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_past_data.py +1</text>
+</g>
+<g><title>ref_misc: evaluation/jthresh.py; evaluation/token_time_ens.py</title><rect x="1044" y="1402.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="1224.0" y="1418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Measured, not adopted: learned thresholds (E388),</text>
+<text x="1224.0" y="1433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ensemble cost (E379)</text>
+<text x="1224.0" y="1447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jthresh.py +1</text>
+</g>
+<text x="442.0" y="88.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">B&#x27; = frozen lane head B + soft Matrix-NMS layer (E273, E292): stage 2 trains its node head</text>
+<text x="842.0" y="193.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">token head JTokenHead, 0.127 M parameters (stage 1, then stage 2)</text>
+<text x="642.0" y="288.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">read-out: named hard steps on the output</text>
+<text x="42.0" y="488.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">evaluation</text>
+<text x="42.0" y="688.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">training: stage 0 (B&#x27;), stage 1 (head on the cache), stage 2 (head + node head together)</text>
+<text x="442.0" y="988.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">side branch E389 (A6): the SD route, measured, TIE, not in the champion</text>
+<text x="42.0" y="1293.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">reference systems and stages that were measured and not adopted (kept, not developed)</text>
+<text x="424.0" y="123.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">39 ch</text>
+<text x="824.0" y="123.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">e, pos</text>
+<text x="1024.0" y="123.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">e&#x27;</text>
+<text x="1330.0" y="231.0" font-size="10" text-anchor="start" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">tokens</text>
+<text x="924.0" y="423.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">p_none</text>
+<text x="624.0" y="523.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">ms</text>
+<text x="924.0" y="723.0" font-size="10" text-anchor="middle" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">tokens + labels</text>
+<text x="730.0" y="881.0" font-size="10" text-anchor="start" fill="#334155" stroke="#ffffff" stroke-width="3" paint-order="stroke">cached tokens</text>
+<text x="24" y="1500" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>
+<rect x="24" y="1512" width="18" height="12" rx="3" fill="#fef9c3" stroke="#ca8a04" stroke-width="1.4"/><text x="48" y="1522" font-size="11" fill="#334155">input</text>
+<rect x="95.0" y="1512" width="18" height="12" rx="3" fill="#dbeafe" stroke="#2563eb" stroke-width="1.4"/><text x="119.0" y="1522" font-size="11" fill="#334155">learned network (gradient flows)</text>
+<rect x="333.4" y="1512" width="18" height="12" rx="3" fill="#ccfbf1" stroke="#0d9488" stroke-width="1.4"/><text x="357.4" y="1522" font-size="11" fill="#334155">fixed math, differentiable</text>
+<rect x="534.6" y="1512" width="18" height="12" rx="3" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/><text x="558.6" y="1522" font-size="11" fill="#334155">frozen / cached (no gradient)</text>
+<rect x="24" y="1530" width="18" height="12" rx="3" fill="#ffedd5" stroke="#ea580c" stroke-width="1.4" stroke-dasharray="4 2"/><text x="48" y="1540" font-size="11" fill="#334155">named hard step inside the network: a budget or a gate (gradient through the picked items, not the choice)</text>
+<rect x="721.2" y="1530" width="18" height="12" rx="3" fill="#fee2e2" stroke="#dc2626" stroke-width="1.4" stroke-dasharray="4 2"/><text x="745.2" y="1540" font-size="11" fill="#334155">named hard step on the output only (no gradient)</text>
+<rect x="1058.8000000000002" y="1530" width="18" height="12" rx="3" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/><text x="1082.8000000000002" y="1540" font-size="11" fill="#334155">delivered output</text>
+<rect x="24" y="1548" width="18" height="12" rx="3" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/><text x="48" y="1558" font-size="11" fill="#334155">training only (data, loss, trainer)</text>
+<rect x="281.0" y="1548" width="18" height="12" rx="3" fill="#cffafe" stroke="#0891b2" stroke-width="1.4"/><text x="305.0" y="1558" font-size="11" fill="#334155">evaluation (numbers and gates, not in the delivered path)</text>
+<rect x="674.4000000000001" y="1548" width="18" height="12" rx="3" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/><text x="698.4000000000001" y="1558" font-size="11" fill="#334155">measured or kept for comparison, not in the champion</text>
 </svg>
