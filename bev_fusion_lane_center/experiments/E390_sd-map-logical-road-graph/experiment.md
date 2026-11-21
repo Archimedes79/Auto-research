@@ -155,3 +155,38 @@ Reported beside P6 (not deciding): the accuracy on road proxies and on intersect
 
 ### 4.1 Read-out log of version 6
 - 07:10 `E390.invcheck6` (CPU, diagnostic, before any v6 training): every encoder input over ALL 873 VAL frames x 3 joint rigid transforms changes by at most 4.5e-13 (node features) / 1.9e-9 (pair geometry) / 3.0e-8 (proxy-segment geometry), 0 relation flips, 0 present flips; a FRESH encoder's embedding changes by 0.0 with 0 flips. No third source of absolute position is visible in the inputs; the probe driver's selftest ok.
+- 06:25 - 08:47 the v6 chain `temp/e390/chain390v6.sh` (commit a76ba12b0c): E390.g6_s0 / n6_s0 (06:25 - 07:11), g6_s1 / n6_s1 (07:11 - 07:57), the VAL reads and the graph clauses (07:57 - 08:47), all exit 0. The clause table (by `temp/e390/verdict390v6.py` from `runs/e390_<arm>6_s<S>/probe_card.json` and `clause_vs_n_base.json`; the same arithmetic as v5, the verdict by hand):
+
+| seed | clause | result | numbers (VAL 873; from runs/e390_<arm>6_s<S>/probe_card.json, clause_vs_n_base.json) |
+|---|---|---|---|
+| 0 | P1 base | PASS | 0.9419 (bar 0.7335); - copy +0.2459 [+0.2231, +0.2653] |
+| 0 | P1 ce0 | FAIL | 0.9893 (bar 0.99) |
+| 0 | P2 base | PASS | 0.9872 (bar 0.938); - logistic +0.0700 [+0.0566, +0.0845] |
+| 0 | P2 s2 | PASS | 0.9867 (bar 0.9354); - logistic +0.0727 [+0.0585, +0.0880] |
+| 0 | P3 base | PASS | 0.8258 (bar 0.7138); - rule +0.2085 [+0.1090, +0.3107] |
+| 0 | P6 base | PASS | 0.9565 (bar 0.942); - nearest +0.0339 [+0.0234, +0.0465]; false-unassigned 0.0034; road 0.9342 / intersection 0.9837 |
+| 0 | P6 pose2 | PASS | 0.9287 (bar 0.8747); - logistic +0.0957 [+0.0749, +0.1160] |
+| 0 | P6 nd | PASS | accuracy 0.9262 (bar 0.8444), none recall 0.7991 (bar 0.3918); none - nearest +0.6101 [+0.5083, +0.6870]; false-unassigned 0.0077 |
+| 0 | graph clause | PASS | g - n: P3 +0.0962 [+0.0451, +0.1550], P1 +0.1480, P2 +0.0117, P6 +0.0117 |
+| 0 | P4 | PASS | max rel change 0.00e+00, flips 0 |
+| 0 | P5 | PASS | all steps within the null's drop + 0.01; s5 / pose5 not below the null |
+| 0 | counts | PASS | {"p1_nodes": 5710, "p2_pos_dec": 2751, "p3_pos": 394, "p6_proxies": 60941}, nd unassigned 11560 |
+| 0 | (arm n, reported) | - | P1 0.7939, P2 0.9755, P3 0.7295, P6 0.9448 (base); P6 nd none recall 0.7087; boot_nan g 10000 |
+| 1 | P1 base | PASS | 0.9252 (bar 0.7335); - copy +0.2292 [+0.1939, +0.2574] |
+| 1 | P1 ce0 | FAIL | 0.9760 (bar 0.99) |
+| 1 | P2 base | PASS | 0.9863 (bar 0.938); - logistic +0.0690 [+0.0556, +0.0837] |
+| 1 | P2 s2 | PASS | 0.9858 (bar 0.9354); - logistic +0.0718 [+0.0577, +0.0875] |
+| 1 | P3 base | PASS | 0.8556 (bar 0.7138); - rule +0.2383 [+0.1489, +0.3300] |
+| 1 | P6 base | PASS | 0.9556 (bar 0.942); - nearest +0.0329 [+0.0230, +0.0448]; false-unassigned 0.0068; road 0.9323 / intersection 0.9840 |
+| 1 | P6 pose2 | PASS | 0.9287 (bar 0.8747); - logistic +0.0957 [+0.0759, +0.1171] |
+| 1 | P6 nd | PASS | accuracy 0.9329 (bar 0.8444), none recall 0.8577 (bar 0.3918); none - nearest +0.6687 [+0.5658, +0.7458]; false-unassigned 0.0169 |
+| 1 | graph clause | PASS | g - n: P3 +0.0996 [+0.0644, +0.1432], P1 +0.1345, P2 +0.0135, P6 +0.0056 |
+| 1 | P4 | PASS | max rel change 0.00e+00, flips 0 |
+| 1 | P5 | PASS | all steps within the null's drop + 0.01; s5 / pose5 not below the null |
+| 1 | counts | PASS | {"p1_nodes": 5710, "p2_pos_dec": 2751, "p3_pos": 394, "p6_proxies": 60941}, nd unassigned 11560 |
+| 1 | (arm n, reported) | - | P1 0.7907, P2 0.9728, P3 0.7560, P6 0.9500 (base); P6 nd none recall 0.7582; boot_nan g 10000 |
+
+### 4.2 Result of version 6 (2026-11-21 ~08:55, by hand by the rule of section 0 with the clarifications of section 4, written before the v6 run; a SECOND LOOK at the same VAL frames)
+**PARTLY SOUND.** In the card's order: not NOT SOUND (**P4 now passes on both seeds: the embedding change under joint rigid transforms is exactly 0.0, no flip**, on all 873 VAL frames x 10 transforms), not INCONCLUSIVE (no probe splits the seeds, every minimum count is met), and one probe fails on both seeds: **P1 at count error 0 = 0.9893 / 0.9760** against 0.99 (above the kill line 0.90: a failing probe, not a kill). Everything else passes on both seeds: P1 at count error 0.3 0.942 / 0.925 (bar 0.7335), P2 0.987 / 0.986 (bar 0.938), P3 0.826 / 0.856 (bar 0.714), P6 0.957 / 0.956 at the exact pose (bar 0.942), 0.929 / 0.929 at a 2 m pose error (bar 0.875), with 20 % of the segments missing an accuracy of 0.926 / 0.933 (bar 0.844) and a none recall of 0.799 / 0.858 (bar 0.392) at a false-unassigned rate of 0.008 / 0.017, the graph clause (g - n on P3 +0.096 / +0.100, lower ends +0.045 / +0.064), P5 (every paired step within the null's drop + 0.01; s5 / pose5 above the null). **Action (the card):** PARTLY SOUND = the failing part named, the encoding revised before step 2 (a new version), step 2 not planned until then; Mirko gets the numbers. **The failing part, read by hand:** the P1 head changes 1 - 2.4 % of correct counts when the input is exact; the copy path did not change it (the v6 critic expected this: the input class was already an encoder input, and the training mix (two thirds of its draws with count errors, the frame's rate unknown) makes overriding the input the better bet on average); seed 1 got worse (0.976 against 0.985 in v5): the head's trade between trusting and correcting the input is not stable across seeds. The next version would change the TRAINING (e.g. the frame's count-error rate as an input the map provider could state, or a share of exact draws matching the expected error of a real SD map), not the bar. Prediction (v6, section 4): P4 passes (hit), P1 at count error 0 about 0.99 (miss: 0.989 / 0.976), PARTLY SOUND 55 % (the outcome).
+
+**Mirko's three numbers (VAL 873, both seeds, v6):** lanes per direction under a 30 % count error **0.942 / 0.925** (copying the input 0.696, the naive-Bayes reference 0.771); with 20 % of the segments missing from the map, the perceived elements of the missing segments left **unassigned 0.799 / 0.858** (the nearest-segment rule 0.189: it puts the rest on a wrong segment), at 0.8 - 1.7 % false 'unassigned'; the association at a **2 m map pose error 0.929 / 0.929** (the rules 0.818 / 0.833).
