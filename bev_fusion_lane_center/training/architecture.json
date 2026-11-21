@@ -503,6 +503,22 @@
    "note": "arm z = the same loader, loss and order with the route of every sample stripped"
   },
   {
+   "id": "e390",
+   "label": "E390 step 1: the SD map as a logical road graph (encoder + probes, SOUND at step 1)",
+   "kind": "alt",
+   "col": 0,
+   "row": 9,
+   "code": [
+    "training/data/lane_sdgraph_data.py",
+    "training/grid/jsdgraph.py",
+    "evaluation/sdgraph_probe.py"
+   ],
+   "note": "roads with logical lanes per direction and their connections, encoded first, then fusion, then error models (R9); card v7 of 2026-11-21: step 1 SOUND by its written rule; the association of the champion's tokens to it is E391 (draft, not run); not in the champion",
+   "w": 2,
+   "hpx": 52,
+   "sub": "jsdgraph.py +2"
+  },
+  {
    "id": "ref_lg",
    "label": "E324 s: training/lanegraph/ (earlier end-to-end system: attached ends, wiring by rule)",
    "kind": "alt",
@@ -966,6 +982,7 @@
   "training/grid/test_jmaps_simplify.py": "test of the junction maps head simplification flags (E324 s reference)",
   "training/grid/test_jnarrow.py": "test of the E353 narrowing (E324 s reference)",
   "training/grid/test_jroute.py": "test of the E389 route head and its trainer",
+  "training/grid/test_sdgraph.py": "test of the E390 road-graph encoder and data",
   "training/grid/test_jtok.py": "test of the E357 GT-token pair head (jtok.py)",
   "training/grid/test_jtoken.py": "test of the token head (jtoken.py)",
   "training/grid/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
