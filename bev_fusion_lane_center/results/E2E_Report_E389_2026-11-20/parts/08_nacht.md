@@ -2,6 +2,26 @@
 
 **Kurz.** In derselben Nacht wurden zwei Fragen am Champion (S4, D120) geschlossen, beide mit negativem Ausgang: **E388** (gelernte Ausgangsschwellen: NO) und **E381** (Rauschen auf den Trainings-Token: TIE). Der Champion blieb unverändert. Beide Karten stehen in `experiments/`; die Zahlen unten sind aus ihren Ergebnisabschnitten.
 
+## 8.0 Nachtrag E389b: eine Attention statt zwei: GENÜGT (Regel erfüllt)
+
+**Frage (Mirko, 2026-11-21: „kann man da nicht einfach nur 1x attention nehmen?“, und: bei Vereinfachung mit gleicher Leistung ist die Vereinfachung gut).** Der Kopf aus Kapitel 2 hat zwei Attentions: die gelernte A und die feste, parameterlose B. B war nie ohne A geprüft. Die Karte `experiments/E389b_one-attention-route-head` (Regel vor dem Lauf geschrieben) misst den Kopf **nur mit A** (Arm `a`, 33,226 statt 33,738 Parameter; dieselben Daten, Labels, 3000 Schritte, Seeds 0 und 1) und den Kopf mit einer **gewöhnlichen** Attention ohne den Bias aus den Paarmerkmalen (Arm `p`, 32,806 Parameter, Seed 0, nur Zahlen). Referenzen ohne neuen Lauf: der Kopf ohne Karte z und der Kopf mit A und B (m) aus E389.
+
+**Ergebnis nach der Regel: EINE ATTENTION GENÜGT.** F1 Fahrbahn bei Kartenfehler (Modus *error*), gegen z desselben Seeds:
+
+Table: E389b: F1 Fahrbahn bei Kartenfehler (VAL, 873 Frames, Seed 0 / 1) und Differenzen gegen den Kopf ohne Karte z; m = Kopf mit A und B (E389), a = Kopf nur mit A.
+
+| Kopf | F1 Seed 0 | F1 Seed 1 | gegen z, Seed 0 | gegen z, Seed 1 |
+|---|---|---|---|---|
+| z (ohne Karte) | {{o_z0}} | {{o_z1}} | | |
+| m (A und B) | {{o_m0}} | {{o_m1}} | {{o_dm0}} | {{o_dm1}} |
+| a (nur A) | {{o_a0}} | {{o_a1}} | {{o_da0}} | {{o_da1}} |
+
+Die Klauseln der Regel (jede auf beiden Seeds; das Band ist 0.010): (1) a - z liegt höchstens 0.010 unter m - z: ja (a - m {{o_am0}} [{{o_am0_lo}}, {{o_am0_hi}}] und {{o_am1}} [{{o_am1_lo}}, {{o_am1_hi}}]; auf Seed 1 liegt das Intervall unter 0, der Abstand ist aber viel kleiner als das Band); (2) das Vertrauen ist nicht schlechter als bei m: ohne Karte a {{o_na0}} / {{o_na1}} gegen m {{o_nm0}} / {{o_nm1}}, mit der falschen Karte a {{o_wa0}} / {{o_wa1}} gegen m {{o_wm0}} / {{o_wm1}} (jeweils gegen z); (3) auf den Frames mit Abzweig a - z {{o_fa0}} / {{o_fa1}} gegen m - z {{o_fm0}} / {{o_fm1}}; (4) die Kill-Klausel feuerte nicht. Die Vorhersage (a - z etwa +0.09, Fenster +-0.02) traf: Mittel {{o_mean}}. **Die Handlung:** der einfachere Kopf (nur A) ist der Ausgangspunkt für E390 Schritt 2; E389 behält sein Urteil (TIE, die Latte +0.10 bleibt auch für a verfehlt, das Vertrauen mit der falschen Karte bleibt unter den Latten von E389).
+
+**Die gewöhnliche Attention (Arm p, Seed 0, ohne Urteil).** Ohne den Bias aus den Paarmerkmalen liest der Kopf die Karte fast genauso: p - z {{o_dp}} (F1 {{o_p}}), auf den Frames mit Abzweig {{o_fp}}; a liegt {{o_ap}} darüber. Das widerspricht der Vorhersage der Karte (a - p mindestens +0.05, etwa 70 %): die Meter-Merkmale gelangen auch ohne Bias über die gepoolten Werte in den Ausgang, der Bias ist nicht der entscheidende Teil. Es ist ein Seed; eine Vereinfachung zu p wäre eine eigene Karte (zwei Seeds, eigene Regel).
+
+**Was es nicht sagt.** Die Attention B ist überflüssig, nicht die Karte nützlich: der Gewinn gegen den Kopf ohne Karte bleibt rund +0.09 und der Kopf ohne Karte liegt bei 0.883. Auf dem Spurniveau (F1 Lane) war a gegen m gemischt (Seed 0 {{o_lm0}}, Seed 1 {{o_lm1}}). Ein Seed pro Arm p; VAL; TEST nicht berührt; die Zeit ist nicht gemessen (die Rechenkosten sinken um 512 Gewichte der Ausgabeschicht und den Wegfall der Nächste-Stütze-Attention).
+
 ## 8.1 E388: die drei Dekodier-Schwellen des Champions per Gradient lernen: NO
 
 **Frage (D125).** Der Champion dekodiert mit drei von Hand auf TRAIN gewählten Zahlen (Kurzlinks 0.3, lange Verbinder 0.2, Knoten behalten bei p_none < 0.6; das None-Tor bleibt aus). Kann man sie stattdessen per Gradient lernen, auf einem weichen F1-Ersatz der gelieferten Entscheidung, gerechnet auf einer TRAIN-Stichprobe (jeder dritte Frame, 291), und einmal auf VAL mit dem echten Scorer gelesen?

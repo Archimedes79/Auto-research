@@ -4,7 +4,7 @@
  "abstract": "Der Token-Champion liefert einen Spurmitten-Graphen aus Kamera und Radar (topo F1 0.6682 / 0.6813), weiß aber nicht, welche seiner Knoten auf der Navigationsroute einer SD-Karte liegen (Problemgruppe A6). E389 fragt, ob ein kleiner, durchgehend differenzierbarer Kopf (33,738 Parameter: ein MLP auf den eigenen Merkmalen jedes Tokens und eine Cross-Attention auf die Routen-Token der Karte mit Meter-Merkmalen) die Fahrbahn der Route und die Eigenspur zuordnen kann, unter den Kartenfehlern des Protokolls (Versatz 1 - 2 m, Gier, ausgedünnte Polylinie), und das besser als derselbe Kopf ohne Karte. Ergebnis nach der vor dem Lauf geschriebenen Regel: **TIE (NO GAIN).** Die Karte verbessert die Zuordnung der Fahrbahn gegenüber dem Kopf ohne Karte um {{d_road_error_s0}} / {{d_road_error_s1}} F1 (Untergrenzen {{lo_road_error_s0}} / {{lo_road_error_s1}}), die vor dem Lauf geschriebene Hürde war +0.10; mit einer falschen Karte ist der Kopf schlechter als ohne ({{d_road_wrong_s0}} / {{d_road_wrong_s1}}); der Kopf ohne Karte ist mit {{z_road_s0}} / {{z_road_s1}} viel stärker als angenommen. Der Champion bekommt keine Kartenstufe. Offen bleiben: die Karte ist simuliert, das Label ist die gefahrene und nicht die geplante Route, es gibt keine TEST-Zahl, und der Kopf hängt nicht in der Stufe 2 des Champions. Zwei weitere Experimente der Nacht sind negativ geschlossen: E388 (gelernte Ausgangsschwellen: NO) und E381 (Rauschen auf den Trainings-Token: TIE).",
  "teaser": {
   "image": "parts/figures/e389_frame_gain.png",
-  "caption": "Ein echter VAL-Frame (Szene {{fr_gain_scene}}, Frame {{fr_gain_frame}}), in dem die Karte am meisten hilft: oben der Kopf ohne Karte (F1 an der Fahrbahn {{fr_gain_f1_z}}), unten der Kopf mit der SD-Route (F1 {{fr_gain_f1_m}}). Zum Lesen: im oberen Bild sind viele Punkte der Route blau (übersehen), im unteren grün (richtig markiert). Das ist der größte Gewinn der {{fr_candidates}} Kandidaten-Frames, kein typischer Fall; die Frames wurden nach einer vorher geschriebenen Regel gewählt (Kapitel 6)."
+  "caption": "Ein echter VAL-Frame (Szene {{fr_gain_scene}}, Frame {{fr_gain_frame}}), in dem die Karte am meisten hilft: links der Kopf ohne Karte (F1 an der Fahrbahn {{fr_gain_f1_z}}), rechts der Kopf mit der SD-Route (F1 {{fr_gain_f1_m}}). Die Karte besteht aus nummerierten Routenstücken (eigene Farbe, Pfeil = Fahrtrichtung); ein Teil des gelieferten Graphen, der als „auf der Route“ markiert ist und dort wirklich liegt, hat die Farbe seines Stücks. Die Farben links stammen von der wahren Route, die der Kopf ohne Karte nie sieht (gestrichelt). Zum Lesen: links sind viele Knoten hell und hohl (auf der Route, aber übersehen) und orange Kreuze (fälschlich markiert), rechts haben fast alle Knoten die Farbe ihres Routenstücks. Das ist der größte Gewinn der {{fr_candidates}} Kandidaten-Frames, kein typischer Fall; die Frames wurden nach einer vorher geschriebenen Regel gewählt (Kapitel 6)."
  },
  "sections": [
   {
@@ -46,7 +46,7 @@
   },
   {
    "id": "night",
-   "title": "8. Die zwei Experimente der Nacht, kurz",
+   "title": "8. Nachtrag (eine Attention) und die zwei Experimente der Nacht, kurz",
    "part": "08_nacht.md"
   },
   {
@@ -1220,6 +1220,191 @@
    "file": "../../runs/eval/e389_verdict.json",
    "key": "spread",
    "fmt": "{:.4f}"
+  },
+  "o_z0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.z.error",
+   "fmt": "{:.4f}"
+  },
+  "o_z1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.z.error",
+   "fmt": "{:.4f}"
+  },
+  "o_m0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.error",
+   "fmt": "{:.4f}"
+  },
+  "o_m1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.error",
+   "fmt": "{:.4f}"
+  },
+  "o_a0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a.error",
+   "fmt": "{:.4f}"
+  },
+  "o_a1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a.error",
+   "fmt": "{:.4f}"
+  },
+  "o_dm0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_dm1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_da0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_da1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_fm0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.fork_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_fm1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.fork_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_fa0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a.fork_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_fa1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a.fork_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_nm0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.none_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_nm1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.none_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_na0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a.none_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_na1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a.none_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_wm0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.wrong_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_wm1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.wrong_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_wa0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a.wrong_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_wa1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a.wrong_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_am0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a_minus_m.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "o_am0_lo": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a_minus_m.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "o_am0_hi": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a_minus_m.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "o_am1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a_minus_m.route_F1_road.diff",
+   "fmt": "{:+.4f}"
+  },
+  "o_am1_lo": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a_minus_m.route_F1_road.lo",
+   "fmt": "{:+.4f}"
+  },
+  "o_am1_hi": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a_minus_m.route_F1_road.hi",
+   "fmt": "{:+.4f}"
+  },
+  "o_lm0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a_minus_m.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "o_lm1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a_minus_m.route_F1_lane.diff",
+   "fmt": "{:+.4f}"
+  },
+  "o_p": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.error",
+   "fmt": "{:.4f}"
+  },
+  "o_dp": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_fp": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.fork_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "o_ap": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.a_minus_p",
+   "fmt": "{:+.4f}"
+  },
+  "o_pw": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.wrong",
+   "fmt": "{:.4f}"
+  },
+  "o_pn": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.none",
+   "fmt": "{:.4f}"
+  },
+  "o_mean": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "prediction.mean_a_minus_z",
+   "fmt": "{:+.4f}"
   }
  },
  "sources": [
@@ -1242,7 +1427,9 @@
   "../../experiment_execution/decisions/D127.md",
   "../../experiment_execution/decisions/D128.md",
   "../../runs/eval/e389_verdict.json",
-  "../../runs/eval/e389_head_timing.json"
+  "../../runs/eval/e389_head_timing.json",
+  "../../runs/eval/e389b_verdict.json",
+  "../../experiments/E389b_one-attention-route-head/experiment.md"
  ],
  "utilities": [
   {

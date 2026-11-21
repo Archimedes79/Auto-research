@@ -62,4 +62,18 @@ DR-5 ('the map is not in the champion: one cross-attention ... (E389)') is attac
 | decide | the rule above, by hand, arithmetic on the cards and `runs/eval/e389_verdict.json` | `runs/eval/e389b_verdict.json` | numbers in section 4 |
 
 ## 4. Result
-(pending)
+RESULT (2026-11-21): **ONE ATTENTION SUFFICES** by the rule above (by hand; arithmetic `runs/eval/e389b_verdict.json`, made by `temp/e389b/e389b_verdict.py` from the score cards `runs/e389b_<tag>/route_card_*.json` and the stored E389 cards). Code `ecf42b8811` (81 of 81 mutants killed, code critic REVISE only for README hunks and the mutant count, taken in), training `E389b.a_s0`, `E389b.a_s1`, `E389b.p_s0` (exit 0, GPU night, 3000 steps each, 5 - 7 min; loss ratio step 3000 / step 100 = 0.24 / 0.24 / 0.25, kill not fired), read-outs `E389b.read_<tag>` (CPU, five modes).
+
+| F1 road at the mode error (VAL 873) | seed 0 | seed 1 | gap to z, seed 0 / 1 |
+|---|---|---|---|
+| z (no map, E389) | 0.8828 | 0.8835 | |
+| m (A + B, E389) | 0.9768 | 0.9807 | +0.0939 / +0.0972 |
+| a (A only) | 0.9765 | 0.9764 | +0.0936 / +0.0928 |
+
+Clauses: (1) a - z >= (m - z) - 0.010: yes on both seeds (a - m -0.0003 [-0.0020, +0.0015] and -0.0043 [-0.0074, -0.0017]: on seed 1 the paired interval lies below 0, but the distance is far inside the 0.010 band); (2) trust not worse than m: none (a - z -0.0032 / -0.0021 against m -0.0042 / -0.0024), wrong map (a -0.0360 / -0.0474 against m -0.0425 / -0.0534): yes; (3) fork frames a - z +0.1367 / +0.1409 against m - z +0.1357 / +0.1438: yes; (4) kill: no. Prediction +0.09: HIT (mean +0.0932). The absolute bars of E389 are NOT re-decided: the bar +0.10 is missed by a as by m, the wrong-map trust (-0.036 / -0.047) stays below E389's -0.03 bar; the E389 verdict stays TIE (NO GAIN).
+
+Arm p (plain attention, no bias, seed 0, exploratory): F1 0.9646, p - z +0.0818, fork +0.1064, none 0.8825, wrong 0.8463; a - p +0.0118: the bias is NOT what carries the registration (the metre-scale pair features reach the output as the attention-pooled values); the pre-registered guess (a - p >= +0.05, ~70 %) MISSED. One seed: no verdict, a simplification to p would need its own card (two seeds).
+
+Lane level (reported, not in the rule): a - m on F1 lane -0.0174 [-0.033, -0.003] (seed 0) and +0.0105 [-0.005, +0.031] (seed 1): mixed. Cost: 33,226 against 33,738 parameters; no timing (the GPU is not quiet).
+
+Action: the simpler head `attn='a'` is the starting point of E390 step 2 (RQ-9); DR-5 of DESIGN.md should read 'one cross-attention (A) with metre-scale pair-feature bias' (lead's file, not edited here).
