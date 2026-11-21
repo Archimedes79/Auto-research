@@ -316,7 +316,7 @@ def dump(a, runs=RUNS):
             out = m(x)
         frames += dump_frames(*(torch.sigmoid(out[s]).float().cpu().numpy() for s in ("road", "lane")), b["valid"].numpy(), b["token"], b["row"].tolist())
     frames = frames[:n]
-    meta = dict(run=a.run, seed=a.seed, mode=a.mode, split="val", arm=args.get("arm"), inputs=args.get("inputs") or "full", frames=len(frames), tokens=[f["token"] for f in frames], K=ds.tok.K, ident=ident, cache_root=cache, cache=ds.tok.dir,
+    meta = dict(run=a.run, seed=a.seed, mode=a.mode, split="val", arm=args.get("arm"), inputs=args.get("inputs") or "full", attn=args.get("attn") or "ab", frames=len(frames), tokens=[f["token"] for f in frames], K=ds.tok.K, ident=ident, cache_root=cache, cache=ds.tok.dir,
                 route_cache=dict(dir=os.path.relpath(ds.rc.dir, ROOT), **route_cache_identity(ds.rc.manifest)), model=_file_id(os.path.join(runs, a.run, "model.pt")), steps=args.get("steps"),
                 device=dev, autocast=False, torch=torch.__version__, max=a.max)             # fp32, no autocast: the training ran bf16 autocast on the GPU (`jroute_train`)
     with open(path, "wb") as fh:
@@ -403,7 +403,7 @@ def score(a, runs=RUNS):
     pn, champ = champion_pnone(side, a.seed, a.champion, runs=RUNS)
     deliv = delivered_sets(side, pn, a.keep_thr)
     draws = draws_of(side["scene"], a.draws)
-    card = dict(name=f"{a.run}_route_{a.mode}" + (f"_vs_{a.ref_run}" if a.ref_run else ""), run=a.run, seed=a.seed, mode=a.mode, split="val", frames=len(side["tokens"]), arm=m["arm"], inputs=m["inputs"], dump=_file_id(d["path"]), device=m["device"], autocast=m.get("autocast"),
+    card = dict(name=f"{a.run}_route_{a.mode}" + (f"_vs_{a.ref_run}" if a.ref_run else ""), run=a.run, seed=a.seed, mode=a.mode, split="val", frames=len(side["tokens"]), arm=m["arm"], inputs=m["inputs"], attn=m.get("attn") or "ab", dump=_file_id(d["path"]), device=m["device"], autocast=m.get("autocast"),
                 keep_thr=a.keep_thr, champion=champ, data=cache_id(side), definitions=DEFINITIONS, delivered_used="kept", draws=a.draws, by_delivered={})
     if r is not None:
         card["ref"] = dict(run=a.ref_run, mode=ref_mode, arm=r["meta"]["arm"], dump=_file_id(r["path"]), device=r["meta"]["device"])
@@ -438,7 +438,7 @@ def cost(a, runs=RUNS):
     b = JRT.to_device(JR.synthetic_batch(1, a.K, M, 0), args.get("inputs") or "full", "cpu")
     with torch.no_grad(), FlopCounterMode(display=False) as fc:
         m(b)
-    card = dict(run=a.run, arm=args.get("arm"), inputs=args.get("inputs") or "full", params=sum(p.numel() for p in m.parameters()), K=a.K, M=M, gmacs=fc.get_total_flops() / 2e9, timed=False,
+    card = dict(run=a.run, arm=args.get("arm"), inputs=args.get("inputs") or "full", attn=args.get("attn") or "ab", params=sum(p.numel() for p in m.parameters()), K=a.K, M=M, gmacs=fc.get_total_flops() / 2e9, timed=False,
                 note="GMACs of matmuls (matmul FLOPs / 2 of one synthetic frame on the CPU), NOT a timing; the card's 1.0 ms clause (6) stays UNVERIFIED unless a timing on a quiet GPU measured it", clause_6="UNVERIFIED (not timed)")
     write_new(path, card)
     print(f"{a.run}: {card['params']:,} parameters, {card['gmacs']:.3f} GMACs of matmuls per frame (K {a.K}, M {M}), NOT a timing: the 1.0 ms clause stays UNVERIFIED unless timed -> {os.path.relpath(path, ROOT) if path.startswith(ROOT) else path}")

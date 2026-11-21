@@ -1,7 +1,7 @@
 """E389 (A6, D127): the route-association head. A token-wise network over the cached B' tokens of a frame and ONE cross-attention from every token to the SD route tokens: which perceived token lies on the carriageway of the
 navigation route (road) and on the lane the vehicle will drive (lane). The route is read at METRE scale (the map errors are 1 - 2 m): registration is the job.
 
-    head = RouteHead(d=64, heads=4, geo_hidden=32, hidden=64, inputs="full")   # 33,738 parameters ("geo" = no `tok`, the geometry-only control: 21,130; both pinned in the selftest)
+    head = RouteHead(d=64, heads=4, geo_hidden=32, hidden=64, inputs="full", attn="ab")   # 33,738 parameters ("geo" = no `tok`, the geometry-only control: 21,130; "a" / "plain": below; all pinned in the selftest)
     out = head(batch)                                                  # dict(road (B, K), lane (B, K) logits float32, mass (B, K, heads) = the attention on REAL route keys, 0 for no map)
     loss, info = route_loss(out, batch, pos_weight=(wr, wl))           # BCE of both logits on the tokens with a label != -1
     batch = synthetic_batch(B, K, M, seed)                             # tests and the trainer's --smoke; check_batch(batch) = the data contract; label_counts(batch) -> the TRAIN frequencies of the labels
@@ -15,8 +15,11 @@ heading and along / across the ROUTE direction (the across offset of the key fra
 the padding route keys are masked; ONE learned none key per head (k, v and a bias): the softmax runs over {the valid route keys} + {none}, a frame without a map (no valid key = arm z) attends to the none key only. Attention B (sharp, fixed, no parameter):
 softmax over the valid keys of -distance / TAU (TAU = 0.3 m: the nearest route key takes ~all the weight, a soft argmin, no hard selection) -> the metre-scale features of the NEAREST key. feature = [x, the attended values of A (the none value included), the real-key
 mass of A per head (the sum over the real keys: 0 without a map), g pooled by A (the head-mean attention), g pooled by B, `any` = 1 when the frame has a valid key]; an MLP (181 -> 64 -> 2, 117 for "geo") gives the two logits. No self-attention among the tokens: a
-token's output depends on its own row and the route only. Tests: grid/test_jroute.py
+token's output depends on its own row and the route only.
+`attn` (the architecture option; "ab" is the E389 head described above): "a" = ONE attention: A as it is, attention B and its pooled features are removed (the MLP reads 173 values, 109 for "geo"; 33,226 / 20,618 parameters); "plain" = "a" with the plain logit
+q . k / sqrt(dh) (+ the none key) and NO pair-feature bias (no `bias` module; the pair features enter only as the pooled value and the mass; 32,806 / 20,198 parameters). Tests: grid/test_jroute.py
 """
+import itertools
 import math
 
 import numpy as np
@@ -29,7 +32,8 @@ HALF, METRE, CLIP, TAU = 50.0, 5.0, 3.0, 0.3                               # the
 NEG = -1e4                                                                 # the fill of a masked logit
 NIN = 2 + 2 + 2 + 1 + 8                                                    # pos / HALF, clip(pos / METRE), dirv, p_exist, the 8 flag probabilities
 INPUT_SETS = dict(full=("tok", "pos", "dirv", "e", "flags"), geo=("pos", "dirv", "e", "flags"))     # the batch keys the forward reads (besides the route) by the `inputs` option
-ROUTE_KEYS = ("pos", "dir", "count", "valid")                              # the fixed key set of the route tokens
+ATTNS = ("ab", "a", "plain")                                               # the attention variants of the head (module docstring)
+ROUTE_KEYS = ("pos", "dir", "count", "valid")                            # the fixed key set of the route tokens
 LABELS = ("on_road", "on_lane")
 
 
@@ -65,13 +69,14 @@ def own_features(pos, dirv, e, flags):
 
 
 class RouteHead(nn.Module):
-    """the module docstring"""
+    """the module docstring; `attn` = "ab" (the E389 head) | "a" (one attention: no sharp attention B) | "plain" (a, and no pair-feature bias in the logit of A)"""
 
-    def __init__(self, d=D, heads=4, geo_hidden=32, hidden=64, inputs="full"):
+    def __init__(self, d=D, heads=4, geo_hidden=32, hidden=64, inputs="full", attn="ab"):
         super().__init__()
         assert d % heads == 0, f"d {d} is not a multiple of heads {heads}"
         assert inputs in INPUT_SETS, f"inputs {inputs!r}: {sorted(INPUT_SETS)}"
-        self.h, self.dh, self.inputs = heads, d // heads, inputs
+        assert attn in ATTNS, f"attn {attn!r}: {ATTNS}"
+        self.h, self.dh, self.inputs, self.attn = heads, d // heads, inputs, attn
         nf = geo_hidden + (d if inputs == "full" else 0)
         if inputs == "full":
             self.tok = nn.Sequential(nn.Linear(TOK, d), nn.LayerNorm(d))                                      # LN(Linear(tok))
@@ -81,12 +86,13 @@ class RouteHead(nn.Module):
         self.kv = nn.Linear(d, 2 * d)
         self.k_none, self.v_none = nn.Parameter(torch.randn(heads, self.dh) * 0.1), nn.Parameter(torch.randn(heads, self.dh) * 0.1)
         self.none_b = nn.Parameter(torch.zeros(heads))
-        self.bias = nn.Sequential(nn.Linear(NGEO, geo_hidden), nn.GELU(), nn.Linear(geo_hidden, heads))      # bias_h(g_ij)
-        self.out = nn.Sequential(nn.Linear(nf + d + heads + 2 * NGEO + 1, hidden), nn.GELU(), nn.Linear(hidden, 2))
+        if attn != "plain":
+            self.bias = nn.Sequential(nn.Linear(NGEO, geo_hidden), nn.GELU(), nn.Linear(geo_hidden, heads))  # bias_h(g_ij)
+        self.out = nn.Sequential(nn.Linear(nf + d + heads + (2 if attn == "ab" else 1) * NGEO + 1, hidden), nn.GELU(), nn.Linear(hidden, 2))
 
     def parts(self, batch):
         """-> dict(x (B, K, nf), att (B, h, K, M + 1) float32 attention A = the softmax over {the route keys} + {none} (the none key LAST; a masked key has probability exactly 0), g (B, K, M, NGEO), att_b (B, K, M) float32 the sharp attention B
-        (all 0 without a valid key), attended (B, K, d), mass (B, K, h) float32, pm_a, pm_b (B, K, NGEO) float32 the pair features pooled by A (head mean) / B, anyv (B, K, 1) float32): everything the output MLP reads"""
+        (all 0 without a valid key), attended (B, K, d), mass (B, K, h) float32, pm_a, pm_b (B, K, NGEO) float32 the pair features pooled by A (head mean) / B, anyv (B, K, 1) float32): everything the output MLP reads; att_b and pm_b exist for attn = ab only"""
         b, rt = {k: batch[k] for k in INPUT_SETS[self.inputs]}, batch["route"]
         B, K = b["pos"].shape[:2]
         M = check_route(rt, B)
@@ -100,18 +106,23 @@ class RouteHead(nn.Module):
         rf = torch.cat([rpos / HALF, rdir, F.one_hot(rt["count"].long(), NCOUNT).float()], -1)
         k, v = self.kv(self.rkey(rf)).view(B, M, 2, self.h, self.dh).permute(2, 0, 3, 1, 4)                     # (B, h, M, dh) each
         g = pair_features(pos, dirv, rpos, rdir, rt["count"].float())
-        z = (q @ k.transpose(-1, -2)).float() / math.sqrt(self.dh) + self.bias(g).float().permute(0, 3, 1, 2)
+        z = (q @ k.transpose(-1, -2)).float() / math.sqrt(self.dh)
+        if self.attn != "plain":
+            z = z + self.bias(g).float().permute(0, 3, 1, 2)
         att = torch.cat([z.masked_fill(~rvalid[:, None, None, :], NEG), z_none[..., None]], -1).softmax(-1)
         vn = self.v_none[None, :, None, :].to(v.dtype)
         attended = (att[..., :-1].to(v.dtype) @ v + att[..., -1:].to(v.dtype) * vn).transpose(1, 2).reshape(B, K, -1)
         anyv = rvalid.any(1).float()[:, None, None]                                                            # (B, 1, 1)
-        att_b = (-g[..., 6] * (METRE / TAU)).masked_fill(~rvalid[:, None, :], NEG).softmax(-1) * anyv           # the nearest key by distance, soft; all 0 without a key
-        return dict(x=x, att=att, g=g, att_b=att_b, attended=attended, mass=att[..., :-1].sum(-1).transpose(1, 2), pm_a=(att[..., :-1].mean(1)[..., None] * g.float()).sum(2),
-                    pm_b=(att_b[..., None] * g.float()).sum(2), anyv=anyv.expand(B, K, 1))
+        p = dict(x=x, att=att, g=g, attended=attended, mass=att[..., :-1].sum(-1).transpose(1, 2), pm_a=(att[..., :-1].mean(1)[..., None] * g.float()).sum(2), anyv=anyv.expand(B, K, 1))
+        if self.attn == "ab":
+            att_b = (-g[..., 6] * (METRE / TAU)).masked_fill(~rvalid[:, None, :], NEG).softmax(-1) * anyv       # the nearest key by distance, soft; all 0 without a key
+            p.update(att_b=att_b, pm_b=(att_b[..., None] * g.float()).sum(2))
+        return p
 
     def forward(self, batch):
         p = self.parts(batch)
-        lo = self.out(torch.cat([p[n].to(p["x"].dtype) for n in ("x", "attended", "mass", "pm_a", "pm_b", "anyv")], -1)).float()
+        names = ("x", "attended", "mass", "pm_a") + (("pm_b",) if self.attn == "ab" else ()) + ("anyv",)
+        lo = self.out(torch.cat([p[n].to(p["x"].dtype) for n in names], -1)).float()
         return dict(road=lo[..., 0], lane=lo[..., 1], mass=p["mass"])
 
 
@@ -214,14 +225,14 @@ def _trained(seed=0, **kw):
     """a head with live attention at every part (the default start has a tiny geometry bias and uniform none bias)"""
     torch.manual_seed(seed)
     m = RouteHead(**kw)
-    for p in (m.bias[2].weight, m.k_none, m.v_none):
+    for p in ((m.bias[2].weight,) if m.attn != "plain" else ()) + (m.k_none, m.v_none):
         nn.init.normal_(p, std=0.5)
     nn.init.normal_(m.none_b, std=0.5)
     return m
 
 
 def reference(m, batch):
-    """the head by loops over batch, token, head and route key (plain float64 arithmetic of the module docstring) -> (road, lane, mass, pm_a, pm_b): the reference of the selftest"""
+    """the head by loops over batch, token, head and route key (plain float64 arithmetic of the module docstring) -> (road, lane, mass, pm_a, pm_b; pm_b is 0 unless attn = ab): the reference of the selftest"""
     P = {n: p.detach().double() for n, p in m.named_parameters()}
     ln = lambda t, n: (t - t.mean(-1, keepdim=True)) / (t.var(-1, unbiased=False, keepdim=True) + 1e-5).sqrt() * P[n + ".weight"] + P[n + ".bias"]  # noqa: E731
     lin = lambda t, n: t @ P[n + ".weight"].T + P[n + ".bias"]  # noqa: E731
@@ -250,7 +261,7 @@ def reference(m, batch):
             for h in range(m.h):
                 zs, vs = [], []
                 for j, geo in geos.items():
-                    zs.append(q[h] @ kv[j][0, h] / math.sqrt(m.dh) + lin(F.gelu(lin(geo, "bias.0")), "bias.2")[h])
+                    zs.append(q[h] @ kv[j][0, h] / math.sqrt(m.dh) + (lin(F.gelu(lin(geo, "bias.0")), "bias.2")[h] if m.attn != "plain" else 0.0))
                     vs.append(kv[j][1, h])
                 zs.append(q[h] @ P["k_none"][h] / math.sqrt(m.dh) + P["none_b"][h])
                 vs.append(P["v_none"][h])
@@ -263,7 +274,9 @@ def reference(m, batch):
             if geos:
                 wb = torch.softmax(torch.stack([-g_[6] * METRE / TAU for g_ in geos.values()]), 0)
                 gb, anyv = (wb[:, None] * torch.stack(list(geos.values()))).sum(0), torch.ones(1, dtype=torch.float64)
-            o = lin(F.gelu(lin(torch.cat([x, att_out.reshape(-1), a_mass, gsum, gb, anyv]), "out.0")), "out.2")
+            if m.attn != "ab":
+                gb = gb * 0.0
+            o = lin(F.gelu(lin(torch.cat([x, att_out.reshape(-1), a_mass, gsum] + ([gb] if m.attn == "ab" else []) + [anyv]), "out.0")), "out.2")
             road[bi, i], lane[bi, i], mass[bi, i], pm_a[bi, i], pm_b[bi, i] = o[0], o[1], a_mass, gsum, gb
     return road, lane, mass, pm_a, pm_b
 
@@ -276,10 +289,10 @@ def _no_map(batch):
     return _with_route(batch, valid=torch.zeros_like(batch["route"]["valid"]))
 
 
-def _fit(batch_fn, arm, steps, lr=4e-3, inputs="full"):
+def _fit(batch_fn, arm, steps, lr=4e-3, inputs="full", attn="ab"):
     """a short CPU fit of a fresh head on batch_fn(step); arm z = the route of every batch invalid -> the head"""
     torch.manual_seed(11)
-    h = RouteHead(inputs=inputs)
+    h = RouteHead(inputs=inputs, attn=attn)
     opt = torch.optim.AdamW(h.parameters(), lr=lr, weight_decay=0.0)
     for step in range(steps):
         b = batch_fn(step)
@@ -301,12 +314,13 @@ def _score(h, b, arm):
 
 def learn_tests(steps=300):
     """the learnability sanity tests: (1) a head WITH the route fits the exact-map rule (tokens on / off the carriageway band of a curved polyline, the label depends on the route of the sample) to > 0.95 accuracy, the same head without a
-    map cannot; (2) a no-map head fits the straight corridor prior from the tokens' own position and heading (> 0.95); (3) the geometry-only control ("geo") fits the exact-map rule too"""
+    map cannot; (2) a no-map head fits the straight corridor prior from the tokens' own position and heading (> 0.95); (3) the geometry-only control ("geo") fits the exact-map rule too; (4) the one-attention head (attn "a") does as (1)"""
     te = synthetic_batch(64, 32, 16, seed=9999)
     acc = {}
-    for arm in ("m", "z"):
-        acc[arm] = _score(_fit(lambda s: synthetic_batch(16, 32, 16, seed=100 + s), arm, steps), te, arm)
+    for arm, attn in (("m", "ab"), ("z", "ab"), ("a_m", "a"), ("a_z", "a")):
+        acc[arm] = _score(_fit(lambda s: synthetic_batch(16, 32, 16, seed=100 + s), arm[-1], steps, attn=attn), te, arm[-1])
     assert acc["m"][0] > 0.95 and acc["m"][1] > 0.9 and acc["z"][0] < 0.8 and acc["m"][1] - acc["z"][1] > 0.25, f"m reads the map, z cannot: (accuracy, F1) {acc}"
+    assert acc["a_m"][0] > 0.95 and acc["a_m"][1] > 0.9 and acc["a_z"][0] < 0.8 and acc["a_m"][1] - acc["a_z"][1] > 0.25, f"attn a: m reads the map, z cannot: (accuracy, F1) {acc}"
     ts = straight_batch(64, 32, seed=9999)
     acc["straight"] = _score(_fit(lambda s: straight_batch(16, 32, seed=100 + s), "z", steps), ts, "z")
     assert acc["straight"][0] > 0.95 and acc["straight"][1] > 0.9, f"the no-map head cannot fit the straight corridor prior: {acc['straight']}"
@@ -321,8 +335,27 @@ def selftest():
     batch = synthetic_batch(B, K, M, seed=1)
     check_batch(batch)
     # the size (a pinned number: a changed head is a new card): the full head and the geometry-only control
-    assert sum(p.numel() for p in RouteHead().parameters()) == 33738, sum(p.numel() for p in RouteHead().parameters())
-    assert sum(p.numel() for p in RouteHead(inputs="geo").parameters()) == 21130, sum(p.numel() for p in RouteHead(inputs="geo").parameters())
+    sizes = {(i, a): sum(p.numel() for p in RouteHead(inputs=i, attn=a).parameters()) for i in ("full", "geo") for a in ATTNS}
+    assert sizes == {("full", "ab"): 33738, ("geo", "ab"): 21130, ("full", "a"): 33226, ("geo", "a"): 20618, ("full", "plain"): 32806, ("geo", "plain"): 20198}, sizes
+    heads = {a: RouteHead(attn=a) for a in ATTNS}
+    assert heads["ab"].out[0].in_features == 181 and heads["a"].out[0].in_features == 173 and heads["plain"].out[0].in_features == 173 and RouteHead(inputs="geo", attn="a").out[0].in_features == 109, "the width of the output MLP"
+    assert sorted({k.split(".")[0] for k in heads["ab"].state_dict()}) == sorted({k.split(".")[0] for k in heads["a"].state_dict()}) == ["bias", "geo", "k_none", "kv", "ln_q", "none_b", "out", "q", "rkey", "tok", "v_none"] and not hasattr(heads["plain"], "bias"), "the parameter blocks of the variants"
+    try:
+        RouteHead(attn="b")
+        raise RuntimeError("an unknown attn is accepted")
+    except AssertionError as e:
+        assert "attn" in str(e), e
+    # "a" is "ab" without the columns of the sharp pooled features: the same weights, those columns of out.0 cut -> the same output as "ab" with those columns zeroed; and it is another function than the "ab" head of the same seed
+    mb = _trained(7)
+    ma = _trained(7, attn="a")
+    nb0 = mb.out[0].in_features - NGEO - 1                                                                      # the first column of pm_b: [x, attended, mass, pm_a | pm_b | anyv]
+    sd = {k: v.clone() for k, v in mb.state_dict().items()}
+    sd["out.0.weight"] = torch.cat([sd["out.0.weight"][:, :nb0], sd["out.0.weight"][:, nb0 + NGEO:]], 1)
+    ma.load_state_dict(sd)
+    mb.out[0].weight.data[:, nb0:nb0 + NGEO] = 0.0
+    assert all(torch.allclose(ma(batch)[k], mb(batch)[k], atol=1e-5) for k in ("road", "lane", "mass")), '"a" is not "ab" without attention B'
+    mb2 = _trained(7)
+    assert not torch.allclose(mb2(batch)["road"], ma(batch)["road"], atol=1e-4) and "att_b" not in ma.parts(batch) and "pm_b" not in ma.parts(batch) and "att_b" in mb2.parts(batch), '"a" and "ab" are the same function'
     # pair_features by hand: the query at the origin heading north, the key at (3, 4) heading east with 2 lanes; a second query heading east; a far key (clipped)
     g = pair_features(torch.tensor([[[0.0, 0.0], [0.0, 0.0]]]), torch.tensor([[[0.0, 1.0], [1.0, 0.0]]]), torch.tensor([[[3.0, 4.0], [100.0, -80.0]]]), torch.tensor([[[1.0, 0.0], [0.0, 1.0]]]), torch.tensor([[2.0, 5.0]]))
     # query 1 (north, n_q = (-1, 0)) vs key 1 (3, 4) east (n_k = (0, 1)): cos 0, sin -1, along t_q 4, across n_q -3, along t_k 3, across n_k 4, distance 5, 2 lanes; vs key 2 (100, -80) north: cos 1, sin 0, every length beyond 15 m: clipped to -3, distance 3, 5 lanes;
@@ -332,30 +365,33 @@ def selftest():
     # the loop reference of the whole head (live weights; a route with padding keys; samples without a map; padding tokens): the mixed batch and the all-invalid route (arm z); the geometry-only head too
     rv = batch["route"]["valid"].clone()
     rv[1] = False                                                                                              # sample 1 has no map
-    for inputs in ("full", "geo"):
-        m = _trained(inputs=inputs)
+    for inputs, attn in itertools.product(("full", "geo"), ATTNS):
+        m = _trained(inputs=inputs, attn=attn)
         for br in (batch, _with_route(batch, valid=rv), _no_map(batch)):
             out = m(br)
             road, lane, mass, pm_a, pm_b = reference(m, br)
-            assert (out["road"].double() - road).abs().max() < 1e-4 and (out["lane"].double() - lane).abs().max() < 1e-4 and (out["mass"].double() - mass).abs().max() < 1e-5, (inputs, "reference", float((out["road"].double() - road).abs().max()))
+            assert (out["road"].double() - road).abs().max() < 1e-4 and (out["lane"].double() - lane).abs().max() < 1e-4 and (out["mass"].double() - mass).abs().max() < 1e-5, (inputs, attn, "reference", float((out["road"].double() - road).abs().max()))
             pp = m.parts(br)
-            assert (pp["pm_a"].double() - pm_a).abs().max() < 1e-5 and (pp["pm_b"].double() - pm_b).abs().max() < 1e-5, (inputs, "pooled features", float((pp["pm_b"].double() - pm_b).abs().max()))
+            assert (pp["pm_a"].double() - pm_a).abs().max() < 1e-5 and (attn != "ab" or (pp["pm_b"].double() - pm_b).abs().max() < 1e-5), (inputs, attn, "pooled features")
             assert out["road"].shape == (B, K) == out["lane"].shape and out["mass"].shape == (B, K, 4) and out["road"].dtype == torch.float32
             assert torch.allclose(pp["att"].sum(-1), torch.ones(B, 4, K), atol=1e-6) and torch.allclose(pp["mass"], 1 - pp["att"][..., -1].transpose(1, 2), atol=1e-6), "softmax over the keys + none; mass = 1 - the none attention"
     m = _trained()
     # the attention and the pooled features by hand: one token at the origin heading north (p_exist 0.5), two valid route keys + one padding key, every logit of A 0 (q = 0, the geometry bias 0, none_b 0): att = 1/3 on each real key and on none,
     # mass = 2/3 per head, pm_a = (g_1 + g_2) / 3 with g_1 = the key (3, 4) heading east, 2 lanes, g_2 = (0, 10) heading north, 0 lanes (by the 8 features of the module docstring); the sharp attention B takes key 1 (5 m against 10 m: weight 1 - 6e-8)
-    mh = _trained(2)
-    for p_ in (mh.q.weight, mh.q.bias, mh.bias[2].weight, mh.bias[2].bias, mh.none_b):
-        nn.init.zeros_(p_)
     hb = dict(tok=torch.randn(1, 1, TOK), pos=torch.zeros(1, 1, 2), dirv=torch.tensor([[[0.0, 1.0]]]), e=torch.zeros(1, 1), flags=torch.zeros(1, 1, 8), valid=torch.ones(1, 1, dtype=torch.bool),
               route=dict(pos=torch.tensor([[[3.0, 4.0], [0.0, 10.0], [0.0, 0.5]]]), dir=torch.tensor([[[1.0, 0.0], [0.0, 1.0], [0.0, 1.0]]]), count=torch.tensor([[2, 0, 5]]), valid=torch.tensor([[True, True, False]])))      # the padding key sits next to the token
-    ph = mh.parts(hb)
     g1 = torch.tensor([0.0, -1.0, 4 / 5, -3 / 5, 3 / 5, 4 / 5, 1.0, 0.4])
     g2 = torch.tensor([1.0, 0.0, 2.0, 0.0, 2.0, 0.0, 2.0, 0.0])
-    assert torch.allclose(ph["att"][0, :, 0], torch.tensor([1 / 3, 1 / 3, 0.0, 1 / 3]).expand(4, 4), atol=1e-6) and torch.allclose(ph["mass"], torch.full((1, 1, 4), 2 / 3), atol=1e-6), ph["att"]
-    assert torch.allclose(ph["pm_a"][0, 0], (g1 + g2) / 3, atol=1e-6) and torch.allclose(ph["g"][0, 0, 0], g1, atol=1e-6) and torch.allclose(ph["g"][0, 0, 1], g2, atol=1e-6), (ph["pm_a"], (g1 + g2) / 3)
-    assert torch.allclose(ph["pm_b"][0, 0], g1, atol=1e-5) and torch.allclose(ph["att_b"][0, 0], torch.tensor([1.0, 0.0, 0.0]), atol=1e-5) and float(ph["anyv"]) == 1.0, (ph["pm_b"], ph["att_b"])
+    for attn in ATTNS:                                                                                         # "plain" has no geometry bias to zero: its logits are 0 with q = 0 and none_b = 0 too
+        mh = _trained(2, attn=attn)
+        for p_ in (mh.q.weight, mh.q.bias, mh.none_b) + ((mh.bias[2].weight, mh.bias[2].bias) if attn != "plain" else ()):
+            nn.init.zeros_(p_)
+        ph = mh.parts(hb)
+        assert torch.allclose(ph["att"][0, :, 0], torch.tensor([1 / 3, 1 / 3, 0.0, 1 / 3]).expand(4, 4), atol=1e-6) and torch.allclose(ph["mass"], torch.full((1, 1, 4), 2 / 3), atol=1e-6), (attn, ph["att"])
+        assert torch.allclose(ph["pm_a"][0, 0], (g1 + g2) / 3, atol=1e-6) and torch.allclose(ph["g"][0, 0, 0], g1, atol=1e-6) and torch.allclose(ph["g"][0, 0, 1], g2, atol=1e-6), (attn, ph["pm_a"], (g1 + g2) / 3)
+        assert ("att_b" in ph) == ("pm_b" in ph) == (attn == "ab") and float(ph["anyv"]) == 1.0, (attn, sorted(ph))
+        if attn == "ab":
+            assert torch.allclose(ph["pm_b"][0, 0], g1, atol=1e-5) and torch.allclose(ph["att_b"][0, 0], torch.tensor([1.0, 0.0, 0.0]), atol=1e-5), (ph["pm_b"], ph["att_b"])
     # a token 1.0 m from a route polyline and one 6 m from it: the same token, the route 1 m / 6 m to its right (a line heading north, keys 10 m apart, 1 lane): the pooled features are the metre-scale offsets by hand (the nearest key (x, 0): across the heading 1 / 5 = 0.2
     # and 6 / 5 = 1.2, the distance the same, 1 lane 0.2; the other keys 10 m away or further take weight < 1e-8), and the two outputs differ
     ys = torch.arange(-20.0, 21.0, 10.0)
@@ -433,15 +469,15 @@ def selftest():
     big = synthetic_batch(4, 40, 12, seed=5)
     rv2 = big["route"]["valid"].clone()
     rv2[3] = False
-    for inputs in ("full", "geo"):
-        mg = _trained(3, inputs=inputs)
+    for inputs, attn in itertools.product(("full", "geo"), ATTNS):
+        mg = _trained(3, inputs=inputs, attn=attn)
         route_loss(mg(_with_route(big, valid=rv2)), big)[0].backward()
         dead = [n for n, p in mg.named_parameters() if p.grad is None or not torch.isfinite(p.grad).all() or float(p.grad.abs().sum()) == 0]
-        assert not dead, f"{inputs}: no gradient: {dead}"
-        mz = _trained(3, inputs=inputs)
+        assert not dead, f"{inputs} {attn}: no gradient: {dead}"
+        mz = _trained(3, inputs=inputs, attn=attn)
         route_loss(mz(_no_map(big)), big)[0].backward()
         live = {n.split(".")[0] for n, p in mz.named_parameters() if p.grad is not None and float(p.grad.abs().sum()) > 0}
-        assert live == ({"tok", "geo", "out", "v_none"} if inputs == "full" else {"geo", "out", "v_none"}), f"{inputs}: arm z gradient (a softmax over the none key alone has no gradient into q, k_none, none_b): {sorted(live)}"
+        assert live == ({"tok", "geo", "out", "v_none"} if inputs == "full" else {"geo", "out", "v_none"}), f"{inputs} {attn}: arm z gradient (a softmax over the none key alone has no gradient into q, k_none, none_b): {sorted(live)}"
     # K = 512, M = 160, batch 8: finite, bf16 autocast finite, the evidence stays float32, memory below 2 GB on the CPU
     bb = _trained(4)
     xb = synthetic_batch(8, 512, 160, seed=6)

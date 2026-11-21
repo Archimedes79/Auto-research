@@ -1,10 +1,11 @@
 """Trainer of E389 (A6, D127): the route-association head `grid/jroute.RouteHead` on the cached B' tokens of a frame (`data/lane_route_data.loader`, the batch of `lane_ptok_data` + the SD route tokens with the protocol's map errors + the labels
 on_road / on_lane); start it through `autoresearch/tools/run.py`.
 
-    wsl bash tools/env/_pyr.sh jroute_train.py --name e389_m_s0 --seed 0 --arm m --steps 3000 --bs 8 --lr 1e-3 --workers 4 --ident e292_a [--inputs full|geo] [--init-seed I] [--cache <cache root>] [--K 384] [--smoke]
+    wsl bash tools/env/_pyr.sh jroute_train.py --name e389_m_s0 --seed 0 --arm m --steps 3000 --bs 8 --lr 1e-3 --workers 4 --ident e292_a [--inputs full|geo] [--attn ab|a|plain] [--init-seed I] [--cache <cache root>] [--K 384] [--smoke]
 
 --arm m: the map modes of `lane_route_data.loader("train", seed, bs, workers, init_seed=, mode="train", ident=, K=, cache=)` (imported only when the loop starts); --arm z: the SAME loader, loss and data order with the route of every sample forced invalid (`strip_route`:
-the no-map reference reads the none key only). --inputs full (default: tok + pos, dirv, p_exist, flags) | geo (no tok: the geometry-only control). The loss is `jroute.route_loss` with the positive weights n_neg / n_pos of the first FREQ_BATCHES
+the no-map reference reads the none key only). --inputs full (default: tok + pos, dirv, p_exist, flags) | geo (no tok: the geometry-only control). --attn ab (default: the E389 head) | a (one attention: no sharp attention B) | plain (a without the pair-feature bias); part of
+the recipe (a run of before the option counts as ab). The loss is `jroute.route_loss` with the positive weights n_neg / n_pos of the first FREQ_BATCHES
 batches of the loader (`estimate_pos_weight`; stored in the args of config.json, a resume reuses them). Only the keys `jroute.needed(inputs)` of a batch reach the device and the head; the first batch is checked against the data contract (`jroute.check_batch`).
 --seed = the cache seed (B' seed 0 / 1), --init-seed (default --seed) = the head initialisation, the data order and the map-error draws of the loader (`init_seed`). The loop, the run-directory contract, the checkpoint every 500 steps with resume and the roll-back guard are those of `trainer.fit`: AdamW lr 1e-3,
 5 % warm-up, cosine to 0, bf16 autocast on the GPU. Logged every 100 steps (`trainer.fit`'s row): the loss, bce_road / bce_lane, acc_road / acc_lane, lab_road / lab_lane = the share of the valid tokens that carry a label, pos_road / pos_lane = the share of the
@@ -28,7 +29,7 @@ for sub_ in ("training", "training/grid", "training/data", "training/data/prep",
 import jroute as JR  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs")
+RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs", "attn")
 SMOKE_K, SMOKE_M = 512, 160                                                 # tokens / route keys per synthetic frame of the smoke run: the real K and M
 FREQ_BATCHES = 50                                                           # the batches whose labels give the positive weights
 WINDOW = 100                                                                # the logged accuracies are the means of the last 100 steps
@@ -41,6 +42,7 @@ def parse_args(argv=None):
     ap.add_argument("--init-seed", type=int, default=None, dest="init_seed", help="the head initialisation and the data order (default: --seed)")
     ap.add_argument("--arm", choices=("m", "z"), default="m", help="m = with the SD route tokens, z = the no-map reference (the route of every sample forced invalid)")
     ap.add_argument("--inputs", choices=sorted(JR.INPUT_SETS), default="full", help="full = tok + the geometry, geo = the geometry only (the control)")
+    ap.add_argument("--attn", choices=JR.ATTNS, default="ab", help="ab = the E389 head, a = one attention (no sharp attention B), plain = a without the pair-feature bias")
     ap.add_argument("--cache", help="the cache ROOT (default: the loader's)")
     ap.add_argument("--ident", default="e292_a", help="the frozen head of the cached tokens: e292_a = B', e273_p = plain B")
     ap.add_argument("--K", type=int, help="tokens per frame, only when the root holds more than one K for the seed")
@@ -59,7 +61,8 @@ def check_options(args):
 
 
 def recipe_of(d):
-    return {k: d.get(k) for k in RECIPE}
+    """the recipe keys of a run's args; the args of a run of before the option `attn` have none: that run is the head "ab" """
+    return dict({k: d.get(k) for k in RECIPE}, attn=d.get("attn") or "ab")
 
 
 def check_start(args, folder):
@@ -89,7 +92,7 @@ def to_device(b, inputs, dev):
 
 def build_head(args):
     """the head of a run's args (the one place that builds it, for the trainer and `load_model`)"""
-    return JR.RouteHead(inputs=args.get("inputs") or "full")
+    return JR.RouteHead(inputs=args.get("inputs") or "full", attn=args.get("attn") or "ab")
 
 
 def load_model(run, dev, runs=None, name="model.pt"):
@@ -149,7 +152,7 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
     args["pos_weight"] = [float(w) for w in pw]
     run = T.Run(a.name, root=runs)
     model = build_head(args)
-    run.log(f"jroute arm {a.arm} inputs {a.inputs}: {args['steps']} steps, bs {a.bs}, lr {a.lr}, trainable {sum(p.numel() for p in model.parameters())} parameters, pos_weight road {pw[0]:.3f} lane {pw[1]:.3f}, init seed {init}, "
+    run.log(f"jroute arm {a.arm} inputs {a.inputs} attn {a.attn}: {args['steps']} steps, bs {a.bs}, lr {a.lr}, trainable {sum(p.numel() for p in model.parameters())} parameters, pos_weight road {pw[0]:.3f} lane {pw[1]:.3f}, init seed {init}, "
             + (f"synthetic batches, K {smoke_k}, M {SMOKE_M}" if a.smoke else f"cache {a.cache or 'default root'} (seed {a.seed}), ident {a.ident}, K {a.K or 'auto'}"))
     T.fit(model, make_loss(a.arm, a.inputs, tuple(pw)), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05, ckpt_every=ckpt_every, seed=init, args=args,
           device="cuda" if torch.cuda.is_available() else "cpu", config=dict(design="jroute"))

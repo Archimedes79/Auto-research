@@ -4,10 +4,11 @@
     wsl bash tools/env/_py14.sh test_jroute.py selftests   # the selftest and the trainer tests only
     wsl bash tools/env/_py14.sh test_jroute.py mutants [jroute.py | jroute_train.py]   # the mutants only (of one file)
 
-jroute.py selftest: pinned parameter counts (full, geometry-only), `pair_features` by hand (metre scale, clipping, both heading frames), a float64 loop reference of the head (maps, padding route keys, samples without a map, both input sets), the attention and the
+jroute.py selftest: pinned parameter counts (full, geometry-only; attn ab, a, plain), "a" = "ab" without the columns of attention B, `pair_features` by hand (metre scale, clipping, both heading frames), a float64 loop reference of the head (maps, padding route keys,
+samples without a map, both input sets, the three attn variants), the attention and the
 pooled features by hand (A: one third each; B: the nearest key), a token 1 m and one 6 m from a route polyline, the none key = the no-map arm, the invariances (route-key order, token order, padding tokens), no GT key read, a fifth route key refused, the loss by hand
 (label -1, the weights), the label frequencies, a gradient into every parameter (and none into the route side without a map), K = 512 / M = 160 memory and bf16, the data contract, and the LEARNABILITY tests (the exact-map rule > 0.95 with the route and not without it,
-the straight corridor prior without a map > 0.95, the geometry-only head fits the rule). Trainer tests: options, the keys that reach the device, arm z = the route stripped (the loss is that of the explicit no-map batch and does not see the route content), the log
+the straight corridor prior without a map > 0.95, the geometry-only head and the attn "a" head fit the rule). Trainer tests: options (--attn), a run of before the option counts as "ab", the keys that reach the device, arm z = the route stripped (the loss is that of the explicit no-map batch and does not see the route content), the log
 windows by a scripted loss, the first-batch contract check, the positive weights by hand, the smoke run with files / arms / inputs / init seed, kill + resume = the straight run, the weights of the held config reused, every recipe key refused at a resume, the loader call
 (the cache seed, the mode, the same call for both arms, the first 50 batches for the weights, the data order follows the init seed), a lazy loader import. A mutant = one textual change of the source; the mutated copy runs in a temporary folder, two at a time.
 """
@@ -17,6 +18,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -45,8 +47,8 @@ MUTANTS = [
     (H0, "the none key is missing", "z_none[..., None]], -1).softmax(-1)", "z_none[..., None] * 0 + NEG], -1).softmax(-1)"),
     (H0, "padding route keys are not masked", "torch.cat([z.masked_fill(~rvalid[:, None, None, :], NEG), z_none[..., None]], -1)", "torch.cat([z, z_none[..., None]], -1)"),
     (H0, "the none bias is dropped", "/ math.sqrt(self.dh) + self.none_b[None, :, None]", "/ math.sqrt(self.dh)"),
-    (H0, "the attention is not scaled", "(q @ k.transpose(-1, -2)).float() / math.sqrt(self.dh) + self.bias(g)", "(q @ k.transpose(-1, -2)).float() + self.bias(g)"),
-    (H0, "the geometry bias is missing", "/ math.sqrt(self.dh) + self.bias(g).float().permute(0, 3, 1, 2)", "/ math.sqrt(self.dh)"),
+    (H0, "the attention is not scaled", "z = (q @ k.transpose(-1, -2)).float() / math.sqrt(self.dh)\n", "z = (q @ k.transpose(-1, -2)).float()\n"),
+    (H0, "the geometry bias is missing", "z = z + self.bias(g).float().permute(0, 3, 1, 2)", "z = z + 0.0"),
     (H0, "the none value is left out of the output", "(att[..., :-1].to(v.dtype) @ v + att[..., -1:].to(v.dtype) * vn)", "(att[..., :-1].to(v.dtype) @ v)"),
     (H0, "the route key has no lane count", 'F.one_hot(rt["count"].long(), NCOUNT).float()', "torch.zeros(B, M, NCOUNT)"),
     (H0, "the route position is not scaled in the key", "rf = torch.cat([rpos / HALF, rdir,", "rf = torch.cat([rpos, rdir,"),
@@ -57,7 +59,15 @@ MUTANTS = [
     (H0, "attention B has a high temperature", "HALF, METRE, CLIP, TAU = 50.0, 5.0, 3.0, 0.3", "HALF, METRE, CLIP, TAU = 50.0, 5.0, 3.0, 3.0"),
     (H0, "attention B does not mask padding keys", ".masked_fill(~rvalid[:, None, :], NEG).softmax(-1) * anyv", ".softmax(-1) * anyv"),
     (H0, "attention B is not zeroed without a map", ".masked_fill(~rvalid[:, None, :], NEG).softmax(-1) * anyv", ".masked_fill(~rvalid[:, None, :], NEG).softmax(-1)"),
-    (H0, "A and B are swapped in the output", 'for n in ("x", "attended", "mass", "pm_a", "pm_b", "anyv")', 'for n in ("x", "attended", "mass", "pm_b", "pm_a", "anyv")'),
+    (H0, "A and B are swapped in the output", 'names = ("x", "attended", "mass", "pm_a") + (("pm_b",) if self.attn == "ab" else ()) + ("anyv",)', 'names = ("x", "attended", "mass", "pm_b", "pm_a", "anyv")'),
+    # the attention variants
+    (H0, "the variant a keeps attention B", 'if self.attn == "ab":\n            att_b', 'if self.attn != "plain":\n            att_b'),
+    (H0, "the ab head loses attention B", 'if self.attn == "ab":\n            att_b', 'if self.attn == "zz":\n            att_b'),
+    (H0, "the plain variant keeps the bias module", 'if attn != "plain":\n            self.bias', 'if True:\n            self.bias'),
+    (H0, "the plain variant computes the bias", 'if self.attn != "plain":\n            z = z + self.bias', 'if self.attn != "zz":\n            z = z + self.bias'),
+    (H0, "the a head has the width of the ab head", '(2 if attn == "ab" else 1) * NGEO', "2 * NGEO"),
+    (H0, "an unknown attn is accepted", "assert attn in ATTNS,", "assert True,"),
+    (H0, "the default head is not ab", 'hidden=64, inputs="full", attn="ab"):', 'hidden=64, inputs="full", attn="a"):'),
     # the tokens
     (H0, "the own position has no metre-scale feature", "torch.cat([pos / HALF, (pos / METRE).clamp(-CLIP, CLIP), dirv,", "torch.cat([pos / HALF, pos / HALF, dirv,"),
     (H0, "p_exist is the logit", "e.sigmoid()[..., None], flags.sigmoid()], -1)", "e[..., None], flags.sigmoid()], -1)"),
@@ -65,7 +75,7 @@ MUTANTS = [
     (H0, "the forward reads a label", "b, rt = {k: batch[k] for k in INPUT_SETS[self.inputs]}, batch[\"route\"]", "b, rt = {k: batch[k] for k in INPUT_SETS[self.inputs] + (\"on_road\",)}, batch[\"route\"]"),
     (H0, "the geometry-only head reads tok", 'geo=("pos", "dirv", "e", "flags"))', 'geo=("tok", "pos", "dirv", "e", "flags"))'),
     (H0, "a fifth route key is accepted", "assert set(route) == set(ROUTE_KEYS),", "assert set(ROUTE_KEYS) <= set(route),"),
-    (H0, "the head is narrower", 'def __init__(self, d=D, heads=4, geo_hidden=32, hidden=64, inputs="full"):', 'def __init__(self, d=D, heads=4, geo_hidden=32, hidden=48, inputs="full"):'),
+    (H0, "the head is narrower", 'def __init__(self, d=D, heads=4, geo_hidden=32, hidden=64, inputs="full", attn="ab"):', 'def __init__(self, d=D, heads=4, geo_hidden=32, hidden=48, inputs="full", attn="ab"):'),
     # the loss, the frequencies, the contract
     (H0, "the label -1 is not ignored", "m = y >= 0", "m = y >= -1"),
     (H0, "the weights are swapped", 'zip(("road", "lane"), LABELS, pos_weight)', 'zip(("road", "lane"), LABELS, pos_weight[::-1])'),
@@ -82,8 +92,15 @@ MUTANTS = [
     (T0, "the strip keeps the valid flags", 'route=dict(b["route"], valid=torch.zeros_like(b["route"]["valid"]))', 'route=dict(b["route"], valid=b["route"]["valid"])'),
     (T0, "the positive weights are swapped", "JR.route_loss(m(b), b, pos_weight)", "JR.route_loss(m(b), b, pos_weight[::-1])"),
     (T0, "another recipe is not refused", 'assert c.get("design") == "jroute" and old == recipe_of(args)', 'assert c.get("design") == "jroute" or old == recipe_of(args)'),
-    (T0, "the arm is not part of the recipe", 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs")', 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "inputs")'),
-    (T0, "the inputs are not part of the recipe", 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs")', 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm")'),
+    (T0, "the arm is not part of the recipe", 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs", "attn")', 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "inputs", "attn")'),
+    (T0, "the inputs are not part of the recipe", 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs", "attn")', 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "attn")'),
+    (T0, "attn is not part of the recipe", 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs", "attn")', 'RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs")'),
+    (T0, "an old run without attn is refused", 'attn=d.get("attn") or "ab")', 'attn=d.get("attn"))'),
+    (T0, "an old run without attn is treated as a", 'attn=d.get("attn") or "ab")', 'attn=d.get("attn") or "a")'),
+    (T0, "attn is ignored by build_head", 'JR.RouteHead(inputs=args.get("inputs") or "full", attn=args.get("attn") or "ab")', 'JR.RouteHead(inputs=args.get("inputs") or "full")'),
+    (T0, "an old checkpoint without attn is built as a", 'attn=args.get("attn") or "ab")', 'attn=args.get("attn") or "a")'),
+    (T0, "the start log does not name attn", " inputs {a.inputs} attn {a.attn}: ", " inputs {a.inputs}: "),
+    (T0, "the trainer's default attn is a", 'ap.add_argument("--attn", choices=JR.ATTNS, default="ab",', 'ap.add_argument("--attn", choices=JR.ATTNS, default="a",'),
     (T0, "the init seed is ignored", "init = a.seed if a.init_seed is None else a.init_seed", "init = a.seed"),
     (T0, "the loop is seeded by the cache seed", "seed=init, args=args,", "seed=a.seed, args=args,"),
     (T0, "the weights are re-estimated at a resume", 'pw = held["pos_weight"] if held and held.get("pos_weight") else estimate_pos_weight(first)', "pw = estimate_pos_weight(first)"),
@@ -100,7 +117,7 @@ MUTANTS = [
     (T0, "the loader gets no init seed", "a.workers, init_seed=init, mode", "a.workers, mode"),
     (T0, "the smoke run has 25 steps", "steps=20 if a.smoke else a.steps", "steps=25 if a.smoke else a.steps"),
     (T0, "the labelled share counts the padding", 'nv = max(float(b["valid"].sum()), 1.0)', 'nv = max(float(b["valid"].numel()), 1.0)'),
-    (T0, "the geometry-only head is the full head", 'JR.RouteHead(inputs=args.get("inputs") or "full")', "JR.RouteHead()"),
+    (T0, "the geometry-only head is the full head", 'JR.RouteHead(inputs=args.get("inputs") or "full", attn=args.get("attn") or "ab")', 'JR.RouteHead(attn=args.get("attn") or "ab")'),
     (T0, "an accuracy step without a label enters the window", '            if info[f"n_{k}"] > 0:\n                win[f"acc_{k}"]', '            if True:\n                win[f"acc_{k}"]'),
     (T0, "the positive share is of all tokens", 'win[f"pos_{k}"].append(info[f"pos_{k}"] / info[f"n_{k}"])', 'win[f"pos_{k}"].append(info[f"pos_{k}"] / nv)'),
 ]
@@ -133,10 +150,10 @@ def trainer_tests(T):
     b0 = JR.synthetic_batch(B, K, M, seed=3)
     # options
     a = T.parse_args(["--name", "x"])
-    assert (a.arm, a.inputs, a.steps, a.bs, a.lr, a.seed, a.init_seed, a.ident) == ("m", "full", 3000, 8, 1e-3, 0, None, "e292_a"), a
-    z = T.parse_args(["--name", "x", "--arm", "z", "--inputs", "geo"])
-    assert z.arm == "z" and z.inputs == "geo"
-    for bad in (["--arm", "q"], ["--inputs", "tok"]):
+    assert (a.arm, a.inputs, a.attn, a.steps, a.bs, a.lr, a.seed, a.init_seed, a.ident) == ("m", "full", "ab", 3000, 8, 1e-3, 0, None, "e292_a"), a
+    z = T.parse_args(["--name", "x", "--arm", "z", "--inputs", "geo", "--attn", "plain"])
+    assert z.arm == "z" and z.inputs == "geo" and z.attn == "plain"
+    for bad in (["--arm", "q"], ["--inputs", "tok"], ["--attn", "b"]):
         with contextlib.redirect_stderr(io.StringIO()):
             try:
                 T.parse_args(["--name", "x"] + bad)
@@ -231,6 +248,26 @@ def trainer_tests(T):
             smoke("gg", "--inputs", "geo")
             mg, ag = T.load_model("gg", "cpu", tmp)
             assert ag["inputs"] == "geo" and mg.inputs == "geo" and not any(n.startswith("tok") for n, _ in mg.named_parameters()) and sum(p.numel() for p in mg.parameters()) == 21130
+            assert args["attn"] == "ab" and m.attn == "ab" and sum(p.numel() for p in m.parameters()) == 33738, "the default run is the head ab"
+            for at, n_par in (("a", 33226), ("plain", 32806)):                                                  # the variants: the head, its args, its log line
+                smoke("at_" + at, "--attn", at)
+                m_at, a_at = T.load_model("at_" + at, "cpu", tmp)
+                log = open(os.path.join(tmp, "at_" + at, "log.txt")).read()
+                assert a_at["attn"] == at and m_at.attn == at and sum(p.numel() for p in m_at.parameters()) == n_par and f"attn {at}: " in log and f"trainable {n_par} parameters" in log, (at, a_at, log[:300])
+            # a run of before the option (no attn in its args and in its model.pt) is the head ab: it is resumed with attn ab, refused with another attn, and its model loads as ab
+            shutil.copytree(os.path.join(tmp, "r"), os.path.join(tmp, "old"))
+            cp = os.path.join(tmp, "old", "config.json")
+            c_ = json.load(open(cp))
+            del c_["args"]["attn"]
+            json.dump(c_, open(cp, "w"))
+            ck = torch.load(os.path.join(tmp, "old", "model.pt"), map_location="cpu", weights_only=False)
+            del ck["args"]["attn"]
+            torch.save(ck, os.path.join(tmp, "old", "model.pt"))
+            assert T.check_start(args, os.path.join(tmp, "old"))["pos_weight"] == args["pos_weight"], "an old run is not resumed as ab"
+            refuses(lambda: T.check_start(dict(args, attn="a"), os.path.join(tmp, "old")), "of another run")
+            mo, ao = T.load_model("old", "cpu", tmp)
+            assert "attn" not in ao and mo.attn == "ab" and all(torch.equal(p, q) for p, q in zip(m.state_dict().values(), mo.state_dict().values())), "an old checkpoint is not the head ab"
+            smoke("old")
             smoke("i", "--seed", "0", "--init-seed", "3")
             mi, ai = T.load_model("i", "cpu", tmp)
             assert json.load(open(os.path.join(tmp, "i", "config.json")))["seed"] == 3 and ai["seed"] == 0 and ai["init_seed"] == 3 and cfg["seed"] == 0, "--init-seed is the seed of the loop"
@@ -241,7 +278,7 @@ def trainer_tests(T):
             # every recipe key is refused at a resume
             folder = os.path.join(tmp, "r")
             change = dict(seed=lambda v: v + 1, init_seed=lambda v: v + 1, cache=lambda v: "another_root", ident=lambda v: "e273_p", K=lambda v: 384, bs=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2,
-                          arm=lambda v: "z" if v == "m" else "m", inputs=lambda v: "geo" if v == "full" else "full")
+                          arm=lambda v: "z" if v == "m" else "m", inputs=lambda v: "geo" if v == "full" else "full", attn=lambda v: "a" if v == "ab" else "ab")
             assert set(change) == set(T.RECIPE), f"a recipe key without a refusal test: {set(T.RECIPE) ^ set(change)}"
             assert T.check_start(args, folder)["pos_weight"] == args["pos_weight"], "a held run gives back its args"
             assert T.check_start(args, os.path.join(tmp, "nothing")) is None

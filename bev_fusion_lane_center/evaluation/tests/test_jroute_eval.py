@@ -99,12 +99,13 @@ def test_cost():
     import jroute_eval as E
     torch.set_num_threads(2)
     with tempfile.TemporaryDirectory() as runs:
-        for name, inputs in (("c_full64", "full"), ("c_full160", "full"), ("c_geo160", "geo")):
+        for name, inputs, attn in (("c_full64", "full", "ab"), ("c_full160", "full", "ab"), ("c_geo160", "geo", "ab"), ("c_a160", "full", "a"), ("c_old160", "full", None)):         # None = a run of before the option attn
             os.makedirs(os.path.join(runs, name))
             torch.manual_seed(0)
-            torch.save(dict(args=dict(seed=0, init_seed=0, cache=None, ident="e292_a", K=None, inputs=inputs, arm="m", steps=0), state=JR.RouteHead(inputs=inputs).state_dict()), os.path.join(runs, name, "model.pt"))
-        got = {name: json.load(open(E.cost(E.parse_args(["cost", "--run", name, "--K", "512", "--M", str(m)]), runs))) for name, m in (("c_full64", 64), ("c_full160", 160), ("c_geo160", 160))}
+            torch.save(dict(args=dict(seed=0, init_seed=0, cache=None, ident="e292_a", K=None, inputs=inputs, arm="m", steps=0, **({} if attn is None else dict(attn=attn))), state=JR.RouteHead(inputs=inputs, attn=attn or "ab").state_dict()), os.path.join(runs, name, "model.pt"))
+        got = {name: json.load(open(E.cost(E.parse_args(["cost", "--run", name, "--K", "512", "--M", str(m)]), runs))) for name, m in (("c_full64", 64), ("c_full160", 160), ("c_geo160", 160), ("c_a160", 160), ("c_old160", 160))}
         assert got["c_full64"]["params"] == got["c_full160"]["params"] == 33738 and got["c_geo160"]["params"] == 21130, [g["params"] for g in got.values()]
+        assert got["c_a160"]["params"] == 33226 and got["c_a160"]["attn"] == "a" and got["c_full160"]["attn"] == "ab" and got["c_old160"]["attn"] == "ab" and got["c_old160"]["params"] == 33738, "the cost card names the attn (a run without it is ab)"
         assert 0 < got["c_full64"]["gmacs"] < got["c_full160"]["gmacs"] and got["c_geo160"]["gmacs"] < got["c_full160"]["gmacs"] and got["c_full64"]["M"] == 64 and got["c_full160"]["timed"] is False and got["c_full160"]["clause_6"].startswith("UNVERIFIED") and "NOT a timing" in got["c_full160"]["note"], got
         try:
             E.cost(E.parse_args(["cost", "--run", "c_full64", "--M", "64"]), runs)
@@ -196,7 +197,7 @@ def test_real_cache(n=24):
             pass
         rd = lambda run_, mode: E.read_dump(runs, run_, 0, mode, n)  # noqa: E731
         m_err, m_none, m_ex, z_err, z_none = rd("m_s0", "error"), rd("m_s0", "none"), rd("m_s0", "exact"), rd("z_s0", "error"), rd("z_s0", "none")
-        assert m_err["tokens"] == side["tokens"] and np.array_equal(m_err["valid"], side["valid"]) and m_err["meta"]["autocast"] is False and m_err["meta"]["device"] == "cpu"
+        assert m_err["tokens"] == side["tokens"] and np.array_equal(m_err["valid"], side["valid"]) and m_err["meta"]["autocast"] is False and m_err["meta"]["device"] == "cpu" and m_err["meta"]["attn"] == "ab"
         assert np.isnan(m_err["p_road"][~side["valid"]]).all() and np.isfinite(m_err["p_road"][side["valid"]]).all() and m_err["p_road"].dtype == np.float32
         # arm z reads no route: the same probabilities in every mode; arm m does read it
         assert np.array_equal(z_err["p_road"], z_none["p_road"], equal_nan=True) and np.array_equal(z_err["p_lane"], z_none["p_lane"], equal_nan=True), "arm z depends on the map mode"
@@ -220,7 +221,7 @@ def test_real_cache(n=24):
             f1 = lambda c: 2 * c[0] / (2 * c[0] + c[1] + c[2])  # noqa: E731
             assert abs(nm["route_F1_road"] - f1(road)) < 1e-9 and abs(nm["route_F1_lane"] - f1(lane)) < 1e-9 and abs(nm["fork_F1_road"] - f1(fork)) < 1e-9, (name, nm, road, lane, fork)
             assert nm["eligible_frames"] == elig and nm["success_frames"] == succ, (name, nm["eligible_frames"], elig, nm["success_frames"], succ)
-        assert card["autocast"] is False and card["delivered_used"] == "kept" and card["by_delivered"]["kept"]["numbers"]["nodes"] != card["by_delivered"]["proxy"]["numbers"]["nodes"] and card["data"]["route_cache"]["version"] == LRD.VERSION
+        assert card["attn"] == "ab" and card["autocast"] is False and card["delivered_used"] == "kept" and card["by_delivered"]["kept"]["numbers"]["nodes"] != card["by_delivered"]["proxy"]["numbers"]["nodes"] and card["data"]["route_cache"]["version"] == LRD.VERSION
         # the reference rows (kept before the pairs: the paired card reads them): flag-all is 2p / (1 + p) of the label share of the covered nodes, the geometric rule on a wrong or a shifted map is worse than on the exact one
         rc = __import__("json").load(open(E.rules(args(["rules", "--seed", "0", "--split", "val", "--max", str(n)]), runs)))
         for name in ("kept", "proxy"):
