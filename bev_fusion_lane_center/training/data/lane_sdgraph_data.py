@@ -283,7 +283,7 @@ def perturb(G, rng, count_rate=0.0, unknown_p=0.0, drop=0.0, hide=0.0, sigma=0.0
     oppl_in = [e for e in G["oppl"] if present[e[0]] and present[e[1]]]
     route_in = route_ranks(np.where(hid | ~present, -1, G["route"]))
     pseg = G.get("pseg", np.zeros(0, int))
-    Gin = dict(G, geo=geo, lanes_in=lanes_in, succ=succ_in, oppl=oppl_in, route_in=route_in, present=present, prox=prox, pdir=pdir)
+    Gin = dict(G, geo=geo, lanes_in=lanes_in, succ=succ_in, oppl=oppl_in, route_in=route_in, present=present, prox=prox, pdir=pdir, count_rate=float(count_rate))
     return Gin, dict(lanes=G["lanes"], succ=G["succ"], dropped=[e for e, k in zip(G["succ"], keep) if not k and present[e[0]] and present[e[1]]], kind=G["kind"], route=G["route"],
                      hidden=np.flatnonzero(hid & present), present=present, pseg=np.where(present[pseg] if len(pseg) else np.zeros(0, bool), pseg, -1))
 
@@ -323,7 +323,8 @@ def opp_in(G):
 
 def node_features(G):
     """(N, NODE_F) float32, in the node's OWN frame: length / 50, heading change start -> end (cos, sin), curvature, kind, entries / exits (/ 4, intersections), extent / 20, in / out degree of the INPUT links (/ 4),
-    the number of near nodes (/ 10), on-route flag, route order (/ 20), the input lane class one-hot (4 + unknown), the opposite road's input class one-hot (6), 3 zeros (spare)"""
+    the number of near nodes (/ 10), on-route flag, route order (/ 20), 2 zeros (slot 13: the map's stated count-error rate when `featurize(stated_rate=True)`, card v7; slot 14 spare), the input lane class one-hot
+    (4 + unknown), the opposite road's input class one-hot (6)"""
     N = len(G["kind"])
     deg_in, deg_out = np.zeros(N), np.zeros(N)
     for a, b in G["succ"]:
@@ -458,10 +459,15 @@ def prox_features(G):
     return out
 
 
-def featurize(Gin):
+STATED_F = 13                   # card v7: the node-feature slot (a spare zero before v7) that carries the map's STATED count-error rate when featurize(stated_rate=True)
+
+
+def featurize(Gin, stated_rate=False):
     P = pair_features(Gin)
     pres = Gin.get("present", np.ones(len(Gin["kind"]), bool))
     x = node_features(Gin)
+    if stated_rate:                                                           # card v7: the map's stated count-error rate (one scalar per frame, the quality a map provider states), on every present road
+        x[:, STATED_F] = np.where(Gin["kind"] == 0, Gin.get("count_rate", 0.0), 0.0)
     x[~pres] = 0.0
     P[~pres] = 0.0
     P[:, ~pres] = 0.0

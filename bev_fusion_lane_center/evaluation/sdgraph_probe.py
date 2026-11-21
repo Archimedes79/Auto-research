@@ -42,6 +42,8 @@ LEVELS = {                                                                    # 
     "pose2": dict(count_rate=0.3, drop=0.3, hide=0.3, pose=2.0),
     "pose5": dict(count_rate=0.3, drop=0.3, hide=0.3, pose=5.0),
     "nd": dict(count_rate=0.3, drop=0.3, hide=0.3, node_drop=0.2),           # segments missing from the map: their proxies must stay 'unassigned'
+    "mis_hi": dict(count_rate=0.0, drop=0.3, hide=0.3, stated=0.3),          # card v7 critic (report only, no bar): the map is exact but STATES a 30 % count-error rate
+    "mis_lo": dict(count_rate=0.3, drop=0.3, hide=0.3, stated=0.0),          # card v7 critic (report only, no bar): 30 % count errors but the map STATES 0 (does the head trust the stated rate blindly?)
 }
 MIN_LEN = 10.0
 B_BOOT = 1000
@@ -65,7 +67,11 @@ def train_draw(G, rng):
 def val_draw(G, k, level, rigid=None):
     """the draw of frame k at a level: ONE generator per frame for every level (cards critic v2: paired levels): the count / drop / hide uniforms are drawn first and always (so the levels differ only in the
     thresholds: nested sets), the deformation last"""
-    return SG.perturb(G, np.random.default_rng([390, k]), rigid=rigid, **LEVELS[level])
+    kw = {k: v for k, v in LEVELS[level].items() if k != "stated"}
+    Gin, T = SG.perturb(G, np.random.default_rng([390, k]), rigid=rigid, **kw)
+    if "stated" in LEVELS[level]:                                             # card v7: a misstated rate (only the 7 arms read it)
+        Gin["count_rate"] = LEVELS[level]["stated"]
+    return Gin, T
 
 
 def lengths(G):
@@ -98,8 +104,21 @@ def targets(G, Gin, T, P):
     return out
 
 
+STATED = [False]                                                              # card v7: the arms g7 / n7 read the map's stated count-error rate (`SG.featurize(stated_rate=True)`)
+
+
+def set_arm(arm):
+    STATED[0] = arm.endswith("7")
+
+
+def holdout_scenes(scenes):
+    """card v7: the TRAIN holdout = every 10th TRAIN scene by rank among the sorted distinct scene ids (rank % 10 == 0): left out of the v7 training, read before VAL"""
+    u = np.unique(np.asarray(scenes))
+    return set(u[np.arange(len(u)) % 10 == 0].tolist())
+
+
 def item(G, Gin, T):
-    f = SG.featurize(Gin)
+    f = SG.featurize(Gin, stated_rate=STATED[0])
     f.update(targets(G, Gin, T, f["pair"]))
     return f
 
@@ -376,7 +395,7 @@ def null_rows(graphs, level, fit, lr=None, tau=None, lr6=None):
         tg = targets(G, Gin, T, P)
         m = tg["lane"] >= 0
         c, v = SG.null_p1(Gin)
-        b = bayes_p1(Gin, fit, LEVELS[level].get("count_rate", 0.0))
+        b = bayes_p1(Gin, fit, LEVELS[level].get("stated", LEVELS[level].get("count_rate", 0.0)))      # the naive-Bayes null is given the STATED rate too (card v7 critic)
         for name, pred in (("copy", c), ("vote", v), ("bayes", b)):
             rows[name].p1[k] = (pred[m], tg["lane"][m])
         sel = tg["link"] >= 0
@@ -474,7 +493,14 @@ def train(arm, seed, graphs=None, epochs=None, out=None, log=print):
     """the arm's encoder + heads on the TRAIN draws: one new draw per frame per epoch (a generator seeded by (seed, epoch)); Adam; the final model is kept"""
     out = out or runs_dir(arm, seed)
     assert not os.path.exists(os.path.join(out, "model.pt")), f"never overwritten: {out}"
-    graphs = graphs if graphs is not None else SG.load("train")["graphs"]
+    set_arm(arm)
+    if graphs is None:
+        d = SG.load("train")
+        graphs = d["graphs"]
+        if arm.endswith("7"):                                                  # card v7: the holdout scenes are not trained on
+            ho = holdout_scenes(d["scene"])
+            graphs = [G for G, sc in zip(graphs, d["scene"]) if sc not in ho]
+            log(f"v7: {len(ho)} holdout scenes left out, {len(graphs)} TRAIN frames trained on", flush=True)
     graphs = [G for G in graphs if len(G["kind"]) >= 2]
     enc, heads = build_models(arm, seed)
     opt = torch.optim.Adam(list(enc.parameters()) + list(heads.parameters()), lr=CFG["lr"])
@@ -507,6 +533,7 @@ def train(arm, seed, graphs=None, epochs=None, out=None, log=print):
 
 
 def load_models(arm, seed):
+    set_arm(arm)
     ck = torch.load(os.path.join(runs_dir(arm, seed), "model.pt"), map_location="cpu", weights_only=False)
     enc, heads = build_models(arm, seed)
     enc.load_state_dict(ck["enc"])
@@ -602,11 +629,19 @@ def invcheck(n=None, log=print):
     return f, r
 
 
-def read(arm, seed, log=print):
-    out_path = os.path.join(runs_dir(arm, seed), "probe_card.json")
+def read(arm, seed, log=print, split="val"):
+    """the probe card of an arm on VAL (probe_card.json) or, card v7, on the TRAIN holdout scenes (probe_card_holdout.json: read BEFORE VAL; the nulls' fitted parts are those of nulls_val.json)"""
+    out_path = os.path.join(runs_dir(arm, seed), "probe_card.json" if split == "val" else "probe_card_holdout.json")
     assert not os.path.exists(out_path), f"never overwritten: {out_path}"
     enc, heads = load_models(arm, seed)
-    va = SG.load("val")
+    if split == "val":
+        va = SG.load("val")
+    else:
+        tr = SG.load("train")
+        ho = holdout_scenes(tr["scene"])
+        keep = [k for k, sc in enumerate(tr["scene"]) if sc in ho]
+        va = dict(graphs=[tr["graphs"][k] for k in keep], scene=[tr["scene"][k] for k in keep], tokens=[tr["tokens"][k] for k in keep])
+        log(f"holdout: {len(ho)} TRAIN scenes, {len(keep)} frames", flush=True)
     nul = json.load(open(os.path.join(SG.CACHE, "nulls_val.json")))
     fit, lr, tau, lr6 = nul["bayes_fit"], nul["p2_lr"], nul["p6_tau"]["tau"], nul["p6_lr"]
     sc = va["scene"]
@@ -631,7 +666,8 @@ def read(arm, seed, log=print):
             L["p6_none_minus_lr"] = paired(sc, r, nr["lr6"], "p6_none")
         card["levels"][level] = L
         log(f"{arm}_s{seed} {level}: " + ", ".join(f"{k} {v[0]:+.4f} [{v[1]:+.4f}, {v[2]:+.4f}]" for k, v in L.items() if k != "counts") + f" ({time.time() - t0:.0f} s)", flush=True)
-    card["p4"] = invariance(enc, heads, va["graphs"])
+    card["split"] = split
+    card["p4"] = invariance(enc, heads, va["graphs"], draws=10 if split == "val" else 2)
     card["boot_nan"] = BOOT_NAN[0]
     log(f"P4: {card['p4']}")
     json.dump(card, open(out_path, "w"), indent=1)
@@ -674,6 +710,10 @@ def selftest():
     fit = bayes_fit([G])
     Gc, _ = SG.perturb(G, np.random.default_rng(0))
     assert (bayes_p1(Gc, fit, 0.0)[G["kind"] == 0] == G["lanes"][G["kind"] == 0]).all(), "at error 0 the Bayes ceiling is the input"
+    f7 = SG.featurize(dict(Gc, count_rate=0.3), stated_rate=True)["x"]
+    assert np.allclose(f7[G["kind"] == 0, SG.STATED_F], 0.3) and (f7[G["kind"] != 0, SG.STATED_F] == 0).all() and (SG.featurize(Gc)["x"][:, SG.STATED_F] == 0).all(), "the stated rate (v7)"
+    tr_sc = [1, 1, 2, 3, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    assert holdout_scenes(tr_sc) == {1, 11}, holdout_scenes(tr_sc)
     xl = SG.node_features(Gc)[:, LANE_IN]                                        # card v6 critic: LANE_IN is exactly the input lane one-hot of the known classes
     road = G["kind"] == 0
     assert (xl[road].argmax(1) == Gc["lanes_in"][road]).all() and (xl[road].sum(1) == 1).all() and (xl[~road] == 0).all()
@@ -683,7 +723,8 @@ def selftest():
 def main(argv=None):
     ap_ = argparse.ArgumentParser()
     ap_.add_argument("cmd", choices=("nulls", "train", "read", "clause", "invcheck", "selftest"))
-    ap_.add_argument("--arm", choices=("g", "n", "g6", "n6"))
+    ap_.add_argument("--arm", choices=("g", "n", "g6", "n6", "g7", "n7"))
+    ap_.add_argument("--split", default="val", choices=("val", "holdout"), help="read: VAL or (card v7) the TRAIN holdout scenes")
     ap_.add_argument("--tag", default="", help="clause: the arms g<tag> / n<tag> (card v6: --tag 6)")
     ap_.add_argument("--seed", type=int, default=0)
     a = ap_.parse_args(argv)
@@ -698,7 +739,7 @@ def main(argv=None):
         return clause(a.seed, tag=a.tag)
     if a.cmd == "invcheck":
         return invcheck()
-    return read(a.arm, a.seed)
+    return read(a.arm, a.seed, split=a.split)
 
 
 if __name__ == "__main__":

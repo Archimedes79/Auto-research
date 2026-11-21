@@ -279,12 +279,31 @@ def test_invariance_real():
           f"plain-argmin mutant (pair {rb['pair']:.3f}) caught: ok")
 
 
+def test_stated_rate():
+    """card v7: `featurize(stated_rate=True)` differs from `featurize()` only in column STATED_F of the present roads (a mutant writing another slot, e.g. the route order, is caught); the 7 arms set the flag in
+    `train` and `load_models`; the misstated report levels change only the stated rate, not the draw"""
+    G = SG.toy()
+    a, _ = SG.perturb(G, np.random.default_rng(0), count_rate=0.3)
+    x0, x1 = SG.featurize(a)["x"], SG.featurize(a, stated_rate=True)["x"]
+    diff = np.flatnonzero(np.abs(x0 - x1).max(0) > 0)
+    assert diff.tolist() == [SG.STATED_F] and np.allclose(x1[G["kind"] == 0, SG.STATED_F], 0.3)
+    M = mutant(SG, ("STATED_F = 13 ", "STATED_F = 12 "))
+    m1 = M.featurize(a, stated_rate=True)["x"]
+    assert np.flatnonzero(np.abs(x0 - m1).max(0) > 0).tolist() != [13], "the slot mutant was not caught"
+    import inspect
+    assert "set_arm(arm)" in inspect.getsource(SP.train) and "set_arm(arm)" in inspect.getsource(SP.load_models), "the 7 arms must set the stated-rate flag in train and load_models"
+    g1, t1 = SP.val_draw(G, 2, "mis_lo")
+    g2, t2 = SP.val_draw(G, 2, "base")
+    assert (g1["lanes_in"] == g2["lanes_in"]).all() and g1["count_rate"] == 0.0 and g2["count_rate"] == 0.3
+    print("stated rate: only column 13 changes (the slot mutant caught), set_arm in train / load_models, the misstated level changes only the stated rate: ok")
+
+
 def test_selftests():
     SG.selftest()
     JS.selftest()
 
 
-TESTS = [test_leak, test_invariance, test_bayes, test_errors, test_metrics, test_divider, test_paired_levels, test_p6, test_cut, test_two_intersections, test_invariance_real, test_selftests]
+TESTS = [test_leak, test_invariance, test_bayes, test_errors, test_metrics, test_divider, test_paired_levels, test_p6, test_cut, test_two_intersections, test_invariance_real, test_stated_rate, test_selftests]
 if __name__ == "__main__":
     for t in TESTS:
         t()
