@@ -255,12 +255,36 @@ def test_two_intersections():
     print("two intersections: each holds only its own inner stretch; the nearest rule at tau = inf: unassigned without an aligned segment: ok")
 
 
+def test_invariance_real():
+    """card v6: on the first 150 VAL frames (skipped without the cache) every encoder input is unchanged under joint rigid transforms (largest change <= 1e-6, no relation or present flip); the two P4 defects of
+    the v5 read, re-introduced as mutants, are caught: (a) a node without geometry kept present (its fallback point at the ego origin), (b) the attach choice by plain argmin (exact ties decided by float noise)"""
+    try:
+        va = SG.load("val")
+    except FileNotFoundError as e:                                            # a missing cache skips; a stale one (AssertionError of `load`) fails
+        print(f"invariance_real: skipped ({e})")
+        return
+    graphs = va["graphs"][:150]
+    ok = SP.feature_invariance(graphs, draws=2)
+    assert max(ok["x"], ok["pair"], ok["pa"]) <= 1e-6 and ok["rel_flips"] == 0 and ok["present_flips"] == 0, ok
+    ma = mutant(SG, ('    present = (rng.random(N) >= node_drop) & np.array([any(len(p) >= 2 for p in gs) for gs in G["geo"]], bool)',
+                     '    present = (rng.random(N) >= node_drop) & np.ones(N, bool)'),
+                ('    present &= np.array([any(len(p) >= 2 and np.ptp(p, 0).max() > 1e-6 for p in gs) for gs in geo], bool)',
+                 '    present &= True'))
+    mb = mutant(SG, ("            i1, i2 = first_min(d1), first_min(d2)\n            if d1[i1] <= d2[i2] + TIE_TOL:",
+                     "            i1, i2 = np.unravel_index(int(np.argmin(d1)), d1.shape), np.unravel_index(int(np.argmin(d2)), d2.shape)\n            if d1[i1] <= d2[i2]:"))
+    ra, rb = SP.feature_invariance(graphs, draws=2, mod=ma), SP.feature_invariance(graphs, draws=2, mod=mb)
+    assert max(ra["x"], ra["pair"], ra["pa"]) > 1e-3 or ra["rel_flips"] > 0, ("the empty-node mutant was not caught", ra)
+    assert rb["pair"] > 1e-3, ("the plain-argmin mutant was not caught", rb)
+    print(f"invariance_real: 150 VAL frames x 2 transforms, largest input change {max(ok['x'], ok['pair'], ok['pa']):.1e}, 0 flips; the empty-node mutant (pair {ra['pair']:.3f}, rel flips {ra['rel_flips']}) and the "
+          f"plain-argmin mutant (pair {rb['pair']:.3f}) caught: ok")
+
+
 def test_selftests():
     SG.selftest()
     JS.selftest()
 
 
-TESTS = [test_leak, test_invariance, test_bayes, test_errors, test_metrics, test_divider, test_paired_levels, test_p6, test_cut, test_two_intersections, test_selftests]
+TESTS = [test_leak, test_invariance, test_bayes, test_errors, test_metrics, test_divider, test_paired_levels, test_p6, test_cut, test_two_intersections, test_invariance_real, test_selftests]
 if __name__ == "__main__":
     for t in TESTS:
         t()

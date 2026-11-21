@@ -62,13 +62,16 @@ class ProbeHeads(nn.Module):
     def __init__(self, d, edge_f, n_lane=4, pa_f=8):
         super().__init__()
         self.p1 = mlp(d, d, n_lane)
+        self.copy_w = nn.Parameter(torch.tensor(2.0))                          # card v6: a copy path of the input lane class into the P1 logits (the exact input must survive; the bar 0.99 stays)
         self.p2 = mlp(2 * d + edge_f, d, 1)
         self.p3 = mlp(d, d, 1)
         self.p6 = mlp(d + pa_f, d, 1)                                       # D135: the association score of (proxy, segment) from the segment's embedding and their relative geometry
         self.p6_none = mlp(3, 16, 1)                                        # the 'unassigned' score of a proxy from its nearest present segment (distance, cos, lateral: signed)
 
-    def lanes(self, h):
-        return self.p1(h)
+    def lanes(self, h, lane_in=None):
+        """lane_in (B, N, 4): the input lane class one-hot (zeros when unknown or not a road): added to the logits with a learned weight"""
+        z = self.p1(h)
+        return z if lane_in is None else z + self.copy_w * lane_in
 
     def links(self, h, pair):
         B, N, d = h.shape
@@ -84,7 +87,7 @@ class ProbeHeads(nn.Module):
         z = self.p6(torch.cat([h[:, None].expand(B, M, N, h.shape[-1]), pa], -1))[..., 0]
         z = z.masked_fill(~valid[:, None, :], float("-inf"))
         dist = pa[..., 0].masked_fill(~valid[:, None, :], 1e3)
-        j = dist.argmin(-1, keepdim=True)
+        j = (dist <= dist.min(-1, keepdim=True).values + 1e-5).float().argmax(-1, keepdim=True)   # the first segment within the tie tolerance (card v6)
         near = torch.cat([dist.gather(-1, j), pa[..., 1].gather(-1, j), pa[..., 4].gather(-1, j)], -1)        # signed (the critic of v3: the opposite direction shares the divider line)
         return torch.cat([z, self.p6_none(near)], -1)
 

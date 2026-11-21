@@ -41,6 +41,7 @@ WAVE = 60.0                     # m: the wavelength of the smooth deformation
 PROX_STEP = 8                   # lane points (0.5 m apart) between two perception proxies: one every 4 m
 MAX_PROX = 160                  # proxies per frame kept (the nearest the ego)
 PA_F = 8
+TIE_TOL = 1e-6                  # m: candidates within this of the minimum are a tie, decided by the stored order (card v6: exact ties of the 1.75 m offset were decided by float noise)
 APPROACH = 6.0                  # m: intersection entries (exits) closer than this are one approach (code critic: a count per connector carries the lane counts)
 REL = ("succ", "pred", "opp", "sib", "near")
 NODE_F = 15 + N_LANE + 1 + N_OPP
@@ -211,6 +212,12 @@ def keep_nearest(G, n=MAX_NODES):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the map errors of step 1
+def first_min(d, tol=TIE_TOL):
+    """the index (unravelled) of the FIRST entry within tol of the minimum of d, in d's stored order: rigid-motion stable where float noise would decide an exact tie"""
+    flat = np.asarray(d).ravel()
+    return np.unravel_index(int(np.flatnonzero(flat <= flat.min() + tol)[0]), np.shape(d))
+
+
 def rdp(p, eps):
     """Douglas-Peucker of a polyline (eps m); eps <= 0: unchanged"""
     if eps <= 0 or len(p) < 3:
@@ -219,7 +226,7 @@ def rdp(p, eps):
     ab = b - a
     n = np.linalg.norm(ab)
     d = np.abs(ab[0] * (p[:, 1] - a[1]) - ab[1] * (p[:, 0] - a[0])) / n if n > 1e-9 else np.linalg.norm(p - a, axis=1)
-    k = int(np.argmax(d))
+    k = int(np.flatnonzero(d >= d.max() - TIE_TOL)[0])
     if d[k] <= eps:
         return np.stack([a, b])
     return np.concatenate([rdp(p[: k + 1], eps)[:-1], rdp(p[k:], eps)])
@@ -258,11 +265,12 @@ def perturb(G, rng, count_rate=0.0, unknown_p=0.0, drop=0.0, hide=0.0, sigma=0.0
     lanes_in = np.where(road & (rng.random(N) < unknown_p), N_LANE, lanes_in)
     keep = rng.random(len(G["succ"])) >= drop
     hid = (G["route"] >= 0) & (rng.random(N) < hide)
-    present = rng.random(N) >= node_drop
+    present = (rng.random(N) >= node_drop) & np.array([any(len(p) >= 2 for p in gs) for gs in G["geo"]], bool)   # card v6: a node without geometry is absent
     pang, psgn = rng.uniform(0, 2 * np.pi), (1.0 if rng.random() < 0.5 else -1.0)
     f = smooth_field(rng, sigma)
     geo = [[(f(p) if f else p.copy()) for p in gs] for gs in G["geo"]]
     geo = [[rdp(p, eps) for p in gs] if k == 0 else gs for gs, k in zip(geo, G["kind"])]
+    present &= np.array([any(len(p) >= 2 and np.ptp(p, 0).max() > 1e-6 for p in gs) for gs in geo], bool)    # card v6 critic: a zero-length polyline (e.g. after Douglas-Peucker) has no heading: absent too
     if pose > 0:
         Rp, tp = rot(np.deg2rad(psgn * pose)), pose * np.array([np.cos(pang), np.sin(pang)])
         geo = [[p @ Rp.T + tp for p in gs] for gs in geo]
@@ -403,9 +411,8 @@ def pair_features(G):
             en, eh = E[b][0], E[b][1]
             d1 = np.linalg.norm(en[:, None] - pa[None], axis=-1)                # entries of b against the points of a
             d2 = np.linalg.norm(ex[:, None] - pb[None], axis=-1)                # exits of a against the points of b
-            i1 = np.unravel_index(int(np.argmin(d1)), d1.shape)
-            i2 = np.unravel_index(int(np.argmin(d2)), d2.shape)
-            if d1[i1] <= d2[i2]:
+            i1, i2 = first_min(d1), first_min(d2)
+            if d1[i1] <= d2[i2] + TIE_TOL:
                 gap, oa, h_a, ob, h_b, fr = float(d1[i1]), pa[i1[1]], ha[i1[1]], en[i1[0]], eh[i1[0]], fa[i1[1]]
             else:
                 gap, oa, h_a, ob, h_b, fr = float(d2[i2]), ex[i2[0]], xh[i2[0]], pb[i2[1]], hb[i2[1]], 1.0
@@ -442,7 +449,7 @@ def prox_features(G):
             continue
         pts, fr, hd = _dense(G["geo"][n])
         d = np.linalg.norm(G["prox"][:, None] - pts[None], axis=-1)
-        j = d.argmin(1)
+        j = (d <= d.min(1, keepdims=True) + TIE_TOL).argmax(1)                  # the first point within the tie tolerance (card v6)
         dh = ph - hd[j]
         rel = G["prox"] - pts[j]
         c, s = np.cos(-hd[j]), np.sin(-hd[j])

@@ -434,7 +434,7 @@ def nulls(log=print):
 # ------------------------------------------------------------------------------------------------------------------------------ training and read
 def build_models(arm, seed):
     torch.manual_seed(seed)
-    enc = JS.SDGraphEncoder(SG.NODE_F, SG.EDGE_F, rel=len(SG.REL), d=CFG["d"], heads=CFG["heads"], layers=CFG["layers"] if arm == "g" else 0)
+    enc = JS.SDGraphEncoder(SG.NODE_F, SG.EDGE_F, rel=len(SG.REL), d=CFG["d"], heads=CFG["heads"], layers=CFG["layers"] if arm.startswith("g") else 0)       # g / g6: the graph encoder; n / n6: no relation layer
     heads = JS.ProbeHeads(CFG["d"], SG.EDGE_F)
     return enc, heads
 
@@ -442,7 +442,14 @@ def build_models(arm, seed):
 def forward(enc, heads, b):
     pair = b["pair"].float()
     h = enc(b["x"].float(), b["rel"], pair, b["valid"])
-    return heads.lanes(h), heads.links(h, pair), heads.route(h), heads.assoc(h, b["pa"].float(), b["valid"])
+    return heads.lanes(h, lane_in(b)), heads.links(h, pair), heads.route(h), heads.assoc(h, b["pa"].float(), b["valid"])
+
+
+LANE_IN = slice(15, 15 + SG.N_LANE)                                           # the input lane class one-hot in the node features (`node_features`: 15 geometry / degree / route entries first)
+
+
+def lane_in(b):
+    return b["x"][..., LANE_IN].float()
 
 
 def losses(out, b):
@@ -547,7 +554,7 @@ def invariance(enc, heads, graphs, draws=10):
             b = JS.collate([item(G, Gin, T)])
             pair = b["pair"].float()
             h = enc(b["x"].float(), b["rel"], pair, b["valid"])
-            o = (heads.lanes(h), heads.links(h, pair), heads.route(h), heads.assoc(h, b["pa"].float(), b["valid"]))
+            o = (heads.lanes(h, lane_in(b)), heads.links(h, pair), heads.route(h), heads.assoc(h, b["pa"].float(), b["valid"]))
             if ref is None:
                 ref = (h, o)
                 continue
@@ -561,6 +568,38 @@ def invariance(enc, heads, graphs, draws=10):
             sure6 = (t2[..., 0] - t2[..., 1]) > 1e-4
             flips += int(((o[3].argmax(-1) != ref[1][3].argmax(-1)) & sure6).sum())
     return dict(max_rel_change=worst, flips=flips, frames=len(graphs), draws=draws)
+
+
+def feature_invariance(graphs, draws=3, level="base", mod=SG, seed=3904):
+    """card v6: every encoder input under joint rigid transforms (+-10 m, +-30 deg) of the input of each frame at a level: the largest absolute change per key (node features, pair geometry, proxy-segment
+    geometry) and the number of flipped relation entries and of changed 'present' flags; with mod = a mutant module the same for it"""
+    worst = dict(x=0.0, pair=0.0, pa=0.0, rel_flips=0, present_flips=0, frames=len(graphs), draws=draws)
+    for k, G in enumerate(graphs):
+        a, _ = mod.perturb(G, np.random.default_rng([390, k]), **LEVELS[level])
+        fa = mod.featurize(a)
+        rng = np.random.default_rng([seed, k])
+        for _ in range(draws):
+            b, _ = mod.perturb(G, np.random.default_rng([390, k]), rigid=(rng.uniform(-10, 10), rng.uniform(-10, 10), np.deg2rad(rng.uniform(-30, 30))), **LEVELS[level])
+            fb = mod.featurize(b)
+            for key in ("x", "pair", "pa"):
+                if fa[key].size:
+                    worst[key] = max(worst[key], float(np.abs(fa[key].astype(float) - fb[key].astype(float)).max()))
+            worst["rel_flips"] += int((fa["rel"] != fb["rel"]).sum())
+            worst["present_flips"] += int((fa["present"] != fb["present"]).sum())
+    return worst
+
+
+def invcheck(n=None, log=print):
+    """card v6: `feature_invariance` on the VAL frames (all, or the first n) and the embedding of a FRESH encoder (seed 0, untrained) on the same transforms (`invariance`) -> printed; the bar is P4's (1e-4, no flip)"""
+    va = SG.load("val")
+    graphs = va["graphs"][: n or None]
+    t0 = time.time()
+    f = feature_invariance(graphs)
+    log(f"inputs over {len(graphs)} VAL frames x 3 transforms: {json.dumps(f)} ({time.time() - t0:.0f} s)", flush=True)
+    enc, heads = build_models("g", 0)
+    r = invariance(enc.eval(), heads.eval(), graphs, draws=3)
+    log(f"a fresh encoder (untrained, seed 0): {json.dumps(r)}")
+    return f, r
 
 
 def read(arm, seed, log=print):
@@ -600,13 +639,13 @@ def read(arm, seed, log=print):
     return card
 
 
-def clause(seed, level="base", log=print):
+def clause(seed, level="base", log=print, tag=""):
     """the graph clause: g minus n of the same seed on the same VAL draws, P1 / P2 / P3 at the level -> runs/e390_g_s<S>/clause_vs_n.json (never overwritten)"""
-    out_path = os.path.join(runs_dir("g", seed), f"clause_vs_n_{level}.json")
+    out_path = os.path.join(runs_dir("g" + tag, seed), f"clause_vs_n_{level}.json")
     assert not os.path.exists(out_path), f"never overwritten: {out_path}"
     va = SG.load("val")
-    ra = model_rows(*load_models("g", seed), va["graphs"], level)
-    rb = model_rows(*load_models("n", seed), va["graphs"], level)
+    ra = model_rows(*load_models("g" + tag, seed), va["graphs"], level)
+    rb = model_rows(*load_models("n" + tag, seed), va["graphs"], level)
     res = dict(seed=seed, level=level, **{f"{n}_g_minus_n": paired(va["scene"], ra, rb, n) for n in ("p1", "p2", "p3", "p6")})
     json.dump(res, open(out_path, "w"), indent=1)
     log(json.dumps(res))
@@ -635,13 +674,17 @@ def selftest():
     fit = bayes_fit([G])
     Gc, _ = SG.perturb(G, np.random.default_rng(0))
     assert (bayes_p1(Gc, fit, 0.0)[G["kind"] == 0] == G["lanes"][G["kind"] == 0]).all(), "at error 0 the Bayes ceiling is the input"
+    xl = SG.node_features(Gc)[:, LANE_IN]                                        # card v6 critic: LANE_IN is exactly the input lane one-hot of the known classes
+    road = G["kind"] == 0
+    assert (xl[road].argmax(1) == Gc["lanes_in"][road]).all() and (xl[road].sum(1) == 1).all() and (xl[~road] == 0).all()
     print("sdgraph_probe selftest ok")
 
 
 def main(argv=None):
     ap_ = argparse.ArgumentParser()
-    ap_.add_argument("cmd", choices=("nulls", "train", "read", "clause", "selftest"))
-    ap_.add_argument("--arm", choices=("g", "n"))
+    ap_.add_argument("cmd", choices=("nulls", "train", "read", "clause", "invcheck", "selftest"))
+    ap_.add_argument("--arm", choices=("g", "n", "g6", "n6"))
+    ap_.add_argument("--tag", default="", help="clause: the arms g<tag> / n<tag> (card v6: --tag 6)")
     ap_.add_argument("--seed", type=int, default=0)
     a = ap_.parse_args(argv)
     torch.set_num_threads(2)
@@ -652,7 +695,9 @@ def main(argv=None):
     if a.cmd == "train":
         return train(a.arm, a.seed)
     if a.cmd == "clause":
-        return clause(a.seed)
+        return clause(a.seed, tag=a.tag)
+    if a.cmd == "invcheck":
+        return invcheck()
     return read(a.arm, a.seed)
 
 
