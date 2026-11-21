@@ -17,5 +17,5 @@ route success 0.923 / 0.883 / 0.782 at 1 / 2 / 3 m against 0.640 / 0.305 / 0.153
 ## Data
 
 - `results/`: 56 small files from `e59_d0.1_any`, `e59_d0.1_keep`, `e59_d0.3_any`, `e59_d0.3_keep`, `e59_d0.5_any`, `e59_d0.5_keep`, `e59_nomap`, `e59_old` ...
-- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

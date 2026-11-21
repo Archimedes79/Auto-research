@@ -15,7 +15,7 @@ The checkpoint files stay in `../runs/` (the live code loads them by those paths
 | route head along the edges | `p16_f1m_route_s0/model.pt`, `..._s1`, `p16_f2h_route_s*`, `p16_rc1v_route_s*` | RouteXNet (cross-attention to SD-map tokens), loop 16b | `p10_route_train.py`, `p16_pipeline.py` |
 | planner consumer | `e121_b/model_cons.pt`, `e117_*`, chain consumers `p16_cons_*` | ConsB (route + ego) | `p14_chain_consumer.py` |
 | route head + planner loss | `e119_a/model_joint{0,1}_s{0,1}.pt` | joint training (no gain) | loop 14 |
-| map-conditioned builder | `e123/e17_map_a`, `e17_map_b` (+ `e17_map_c`; `b2`, `c2` = crashed rerun, no model) | SD map raster as 5 extra input channels (loop 17) | `p17_mapnet.py` (its trainer `p17_mapft.py` was removed on 2026-11-21, tag `archive/lane-before-dead-code-2026-11-21`) |
+| map-conditioned builder | `e123/e17_map_a`, `e17_map_b` (+ `e17_map_c`; `b2`, `c2` = crashed rerun, no model) | SD map raster as 5 extra input channels (loop 17) | `p17_mapnet.py` (its trainer `p17_mapft.py` was removed on 2026-11-21, the git history (commit `4c6ddf52`)) |
 | learned gate | `e17/e134_gate/*_gate.pkl`, `e17/e140_gateB` | 12.5 k-parameter stabiliser (spatial memory gate) | `p17_gate.py` |
 
 Rules: a checkpoint is registered here when it supports a number in a report; the run folder keeps `log.txt` and `status.json`. Do not overwrite a checkpoint - new runs get new folders (`CLAUDE.md`). Remove unreferenced checkpoints only via `_to_delete/`.

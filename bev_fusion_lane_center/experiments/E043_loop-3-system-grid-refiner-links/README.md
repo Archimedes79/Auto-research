@@ -24,5 +24,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 10 small files from `e43`, `e43_joint`, `sys_e43_joint`
-- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

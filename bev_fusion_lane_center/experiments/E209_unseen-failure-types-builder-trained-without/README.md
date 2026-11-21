@@ -17,5 +17,5 @@ Failure half, exact map, paired scene bootstrap of F1@1: single frame night S 0.
 
 - `results/e209.md`
 - `figures/p18_e209_unseen.png`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/`

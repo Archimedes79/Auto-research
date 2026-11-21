@@ -25,5 +25,5 @@ Pose error of the map 2.55 m -> 0.82 m (night failure half, sigma 2 m); failure-
 - `results/regis_train_status.json`
 - `figures/p18_registration.png`
 - `figures/p18_arch.png`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/`

@@ -4,7 +4,7 @@
 
 `--joint` also trains the pixel stage (the pyramid, with its own pixel loss kept so that B's maps do not drift; the nodes / links of B no longer match such a pixel stage, so a joint run is judged on the
 maps only); without it the pyramid is frozen and the junction head reads B's own features. Frames: TRAIN through `lane_gt_data.QData(junction=True)` (the paint sidecars of
-`data/prep/junction_paint.py` must exist for TRAIN and VAL); TEST never. Output: `runs/<name>/model.pt` (JModel state + args), scored by `evaluation/jmaps_eval.py` until its removal on 2026-11-21 (kept behind the git tag `archive/lane-before-dead-code-2026-11-21`).
+`data/prep/junction_paint.py` must exist for TRAIN and VAL); TEST never. Output: `runs/<name>/model.pt` (JModel state + args), scored by `evaluation/jmaps_eval.py` until its removal on 2026-11-21 (in the git history (commit `4c6ddf52`)).
 """
 import argparse
 import os

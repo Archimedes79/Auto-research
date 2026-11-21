@@ -11,7 +11,7 @@
 
 ## Result
 
-see the loop-17 report and the loop-17 replay behind git tag archive/pre-cleanup-2026-11-20 (internal E133a, E133b; e17/e133a_ftall, e133b_k0, e133b_k1, dense_*)
+see the loop-17 report and the loop-17 replay in the git history (commit 57b9eab1) (internal E133a, E133b; e17/e133a_ftall, e133b_k0, e133b_k1, dense_*)
 
 ## Data
 

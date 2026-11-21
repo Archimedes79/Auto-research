@@ -16,5 +16,5 @@ TEST (833 frames): f1 + pruning S 0.748, Q 0.718, J 0.422, lanes found 0.653, ro
 ## Data
 
 - `results/test18_table.json`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20` (except `code/_pipeline18b.sh`, which the TEST log names)
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`) (except `code/_pipeline18b.sh`, which the TEST log names)
 - raw outputs (arrays, checkpoints): `../../runs/`

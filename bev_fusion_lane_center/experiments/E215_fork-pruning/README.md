@@ -25,5 +25,5 @@ VAL 873 frames, threshold 0.3: S 0.746 -> 0.769, Q 0.701 -> 0.735, J 0.265 -> 0.
 - `results/asm_grid.log`
 - `figures/p18_forkprune.png`
 - `figures/p18_frames_forkprune.png`
-- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: `../../training/models/p18_*.py`, `../../training/pipeline/p16_infer.py`, `../../evaluation/` (p18_*), launchers `code/`: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/`

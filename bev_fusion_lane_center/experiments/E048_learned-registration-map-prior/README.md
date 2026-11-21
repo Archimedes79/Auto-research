@@ -24,5 +24,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 ## Data
 
 - `results/`: 31 small files from `e48_align`, `e48_chain2`, `e48_clean_s05_corrfine`, `e48_clean_s05_lalign`, `e48_clean_s1_chain`, `e48_clean_s1_corrfine`, `e48_clean_s1_lalign`, `e48_clean_s2_chain` ...
-- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

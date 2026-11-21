@@ -11,7 +11,7 @@
 
 ## Result
 
-see the loop-17 report and the loop-17 replay behind git tag archive/pre-cleanup-2026-11-20 (internal E143; e17/e143_maponly.json)
+see the loop-17 report and the loop-17 replay in the git history (commit 57b9eab1) (internal E143; e17/e143_maponly.json)
 
 ## Data
 

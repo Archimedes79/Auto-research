@@ -26,5 +26,5 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 
 - `results/`: 20 small files from `e79_range`, `e79_range_nt`, `e79_test`, `e79_test_align_odo0`, `e79_test_align_odo1`, `e79_test_nt`, `e79_test_nt_mapfree`, `e79_test_nt_odo03` ...
 - `figures/`: 1 images from the report sources
-- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- code: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`

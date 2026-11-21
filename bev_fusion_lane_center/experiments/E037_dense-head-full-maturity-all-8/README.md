@@ -24,6 +24,6 @@ Sources and paper notes: [../../literature/register.md](../../literature/registe
 
 ## Data
 
-- `results/`: 23 small files from `e37_ens`, `e37_final`, `e37_fold0` ...; the logs of the twelve failed training attempts (lr 2e-3 / 1e-3 / 5e-4, bf16 NaN, stale) were removed in the 2026-11-21 clean-up (git tag `archive/pre-cleanup-2026-11-20`)
-- code: removed in the clean-up of 2026-11-21, kept behind the git tag `archive/pre-cleanup-2026-11-20`
+- `results/`: 23 small files from `e37_ens`, `e37_final`, `e37_fold0` ...; the logs of the twelve failed training attempts (lr 2e-3 / 1e-3 / 5e-4, bf16 NaN, stale) were removed in the 2026-11-21 clean-up (the git history (commit `57b9eab1`))
+- code: removed in the clean-up of 2026-11-21, in the git history (commit `57b9eab1`)
 - raw outputs (arrays, checkpoints): `../../runs/` where still kept, otherwise staged in `../../_to_delete/runs/`
