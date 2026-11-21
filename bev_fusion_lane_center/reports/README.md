@@ -25,9 +25,12 @@ All three weekly reports end with the list of corrected claims and an experiment
 
 ## Removed
 
-Everything older is in `../_to_delete/` (`reports_cleanup_2026-10-24/` and `cleanup_2026-10-24b/`), same relative paths: condensed reports of loops 1 - 14, loop 4 / 5 / 15 / 16 reports, decision and E2E reports, html copies of the PDFs, per-experiment mini reports, loop 1 figures, old builders and text sources. Per-experiment detail is in `../experiments/`.
+Everything older was staged in `../_to_delete/` (`reports_cleanup_2026-10-24/` and `cleanup_2026-10-24b/`, same relative paths; `_to_delete/` was emptied on 2026-11-02, D42, so only what git held is still readable, in the git history): condensed reports of loops 1 - 14, loop 4 / 5 / 15 / 16 reports, decision and E2E reports, html copies of the PDFs, per-experiment mini reports, loop 1 figures, old builders and text sources. Per-experiment detail is in `../experiments/`.
 2026-10-31: the files of `weekly/` that git does not hold (binaries) and the `temp/` scratch were found missing from disk, also not in `../_to_delete/` (cause unknown). The scratch came back from git; the status report after loop 21, the loop-18 report, the results video and the two-week deck were rebuilt from their builders the same day (the video run reproduced the stored `recall` card). The loop-17 draft report (Loop17_DRAFT_Robust_Differentiable_Lane_Graph_Report_EN.pdf, built before the E209 crash) could not be rebuilt and is gone.
-To finish the loop 17 report (open item in HANDOVER.md), move the builder files (`build_loop17_report.py`, `loop17_text*.py`, `fig_p17_*.py`, `build_e2e_condensed.py`, `report_lib.py`, `finish_report6.ps1`) and `source/text|tables|cards|review|build` back from `cleanup_2026-10-24b/reports/`.
+The loop 17 report was not finished: its builder files (`build_loop17_report.py`, `loop17_text*.py`, `fig_p17_*.py`, `build_e2e_condensed.py`, `report_lib.py`, `finish_report6.ps1`) and `source/text|tables|cards|review|build` were staged in `cleanup_2026-10-24b/reports/` and are gone with the emptying of `_to_delete/`; what git held is in the git history.
+
+## Newer reports
+Since 2026-11-12 the reports of the lane project (the Spurmitte reports, the end-to-end report of 2026-11-18, the E389 report of 2026-11-20) are written into `../results/<name>/` (the html page and a code package, which are binary and not in git, and the text parts of the report (`parts/*.md`, `report.json`), which are) by the report tooling of the workspace (`../../reporter/`), not by `build/` here. The numbers of such a report come from the stored cards (`../runs/eval/`, the run folders) and are checked with `autoresearch/tools/check_numbers.py` before the report is final (see `../CLAUDE.md`). The `results/` folder of this `reports/` folder only holds the week-3 records.
 
 ## Rebuild
 ```
