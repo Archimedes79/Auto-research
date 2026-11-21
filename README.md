@@ -11,22 +11,25 @@ One lead agent plans a round and writes the experiment cards. Experiment agents 
 |---|---|
 | [`autoresearch/`](autoresearch/README.md) | the research system: method (`METHOD.md`), agent roles, templates, prompts, tools (launcher with a git tag per run, ledger, schedule, decisions, checks), evaluation and training suites |
 | [`GtGenerator/`](GtGenerator/README.md) | the nuScenes ground-truth suite: BEV ground truth (map layers, objects, velocity) per keyframe, versioned (`autogt/vN` tags) |
-| [`bev_fusion_lane_center/`](bev_fusion_lane_center/README.md) | problem 1: a lane-centre-line graph from camera + radar, attached to an SD map |
+| [`bev_fusion_lane_center/`](bev_fusion_lane_center/README.md) | problem 1: a lane-centre-line graph from camera + radar, attached to an SD map; the system of record is the token champion (`training/architecture.svg`) |
 | [`bev_fusion/`](bev_fusion/README.md) | problem 2: a camera + radar BEV perception system on nuScenes: the five-layer framework and the full network (camera + radar + temporal fusion + motion block) on the current GT version; training, evaluation, experiments, literature |
+| [`winners/`](winners/README.md) | the exported source code of the winning learned systems (one folder each: code, README with the command and the numbers to reproduce, manifest; no weights) |
 | [`data/NuScenes/`](data/NuScenes/README.md) | the nuScenes dataset family: description, manifest, download / check / link tools and the map of where raw data, caches and checkpoints live (the data itself is not in the repository) |
 
 Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).
 
-## Status (2026-11-02, corrected 2026-11-13)
-- **Method and tools** are in place and tested: the launcher with a git tag per run, ledger, decisions, the training suite (`check` / `run` / `status` / `stop` / `compare`, `health` / `watch`), the evaluation suite (frames, videos, numbers, paired comparison, module probe, timing) and the ground-truth suite GtGenerator (v8 release: all 850 trainval sequences, 34,149 keyframes).
-- **Problem 2 (BEV system):** the five-layer framework and the full network are built; the small-set bring-up (timing, module probes, eight findings and fixes) is done; the large baseline run, its matched control and two improvement arms are training or queued. Details and the quick start: [`bev_fusion/README.md`](bev_fusion/README.md), the bring-up log was the card `bev_fusion/experiments/t16_full_network/experiment.md`, now in git history. Live numbers are in the ledgers and cards, not in the READMEs.
-- **Problem 1 (lane centre-line graph):** [`bev_fusion_lane_center/README.md`](bev_fusion_lane_center/README.md) and its `HANDOVER.md`.
+## Status (2026-11-21)
+- **Method and tools** are in place and tested: the launcher (`run.py`: a ledger row, a done flag, the code commit and a git tag per run), the ledger, the decisions record (one neutral table, `bev_fusion_lane_center/experiment_execution/DECISIONS.md`, read by the gates of both problems), the gates (`guard_hook.py`, `testgate.py`), the four suites `GtGenerator`, `Training`, `Runner` and `Evaluation` (a class with a command line each), the job layer `jobrunner`, and the generated architecture drawings (`archdraw.py`). Each problem keeps a small design spec, `DESIGN.md` (the modules of the chain and the rules it obeys).
+- **Problem 1 (lane centre-line graph):** the token champion (D113 - D120): the frozen lane head B' makes tokens, one token head wires and types them end to end; VAL topo F1 0.6682 / 0.6813, 16.2 ms per frame, 2.323 M parameters. The assignment to the SD map is built as a separate stage (E389: the route head reads the map but its gain over the matched no-map head stays below the bar, TIE; E390 builds the map as a logical road graph). Details: [`bev_fusion_lane_center/README.md`](bev_fusion_lane_center/README.md), `PROBLEM.md`, `HANDOVER.md`.
+- **Problem 2 (BEV system):** the five-layer framework and the full network are built on GT release v14 (front v13 + lane l6); the experiments t16 - t26 and their outcomes are in the cards and the ledger; the state is in [`bev_fusion/README.md`](bev_fusion/README.md).
+- **Ground truth:** [`GtGenerator/README.md`](GtGenerator/README.md) (front v13, lane l6, release v14).
 - **Data:** raw nuScenes on D:, caches and checkpoints next to it, reached through links; the map is [`data/NuScenes/README.md`](data/NuScenes/README.md).
+- **Clean-up of 2026-11-20 / 21 (D129):** the decisions record was rewritten in neutral wording and merged into one file (`experiment_execution/DECISIONS.md`, shared by the two problems); clutter and dead code were removed (the removed code is only in the git history); the READMEs and drawings were brought to the current state.
 
 ## Where to start
 - The method and its rules: [`autoresearch/METHOD.md`](autoresearch/METHOD.md) (six hard rules, everything else is a default).
 - The picture and the detail drawing: [`autoresearch/overview.md`](autoresearch/overview.md), [`autoresearch/architecture.md`](autoresearch/architecture.md).
-- A problem: its README, `project.json` (paths), and for the lane problem `HANDOVER.md` (where we are), `PROBLEM.md` (goal) and `experiment_execution/DECISIONS.md` (the decisions of the owner, one neutral table); `bev_fusion/` keeps its plan in `bev_fusion/plan/`.
+- A problem: its README, `project.json` (paths), `DESIGN.md` (the design spec) and, for the lane problem, `HANDOVER.md` (where we are), `PROBLEM.md` (goal) and `experiment_execution/DECISIONS.md` (the decisions of the owner, one neutral table); `bev_fusion/` keeps its plan in `bev_fusion/plan/`.
 - Rules for agents working in this checkout: [`CLAUDE.md`](CLAUDE.md).
 
 ## Reproducing a result
