@@ -166,6 +166,10 @@ def world(tmp):
     headn.set_step(12000)
     os.makedirs(os.path.join(tmp, "hnx"))
     torch.save(dict(state=headn.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=1, wire_weight=0.5, msg="none"), steps=12000), os.path.join(tmp, "hnx", "model.pt"))
+    heads = JK.JTokenHead(rounds=2, msg="self")                                             # E392: a msg self head run "hsx" (the capacity null: the rounds on each token's own features), early-read weight 0.5
+    heads.set_step(12000)
+    os.makedirs(os.path.join(tmp, "hsx"))
+    torch.save(dict(state=heads.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=2, wire_weight=0.5, msg="self"), steps=12000), os.path.join(tmp, "hsx", "model.pt"))
     return dict(b_dir=os.path.join(tmp, "b"), A=LLT.collate(items[:2]), B=LLT.collate(items[2:]))
 
 
@@ -276,6 +280,30 @@ def none_head(T, w, tmp):
         assert "logp_rounds" not in hm(JK.synthetic_batch(2, 48, seed=0)), "the msg none head reads early in eval mode"
     print(f"msg none head through jlive_train: resolve carries rounds / wire weight / msg none from the head run, the champion-shaped head (127131 parameters, no round module) trains one step in training mode (nll1_s {last['nll1_s']:.4f} in the log row), "
           f"model.pt holds msg none, load_model rebuilds it, its eval forward has no early read", flush=True)
+
+
+def self_head(T, w, tmp):
+    """E392 msg self (the capacity null) through the stage-2 trainer: `resolve` carries rounds 2 / wire weight 0.5 / msg self of the head run, the head is built with the two round modules (168603 parameters, the strict load of the run's state), it trains
+    one step through `train` (the log row carries nll1_s and nll2_s), model.pt's args hold msg self, `load_model` rebuilds the head whose eval forward has no early read and whose rounds act"""
+    import torch
+    import jtoken as JK
+    import jtoken_train as JKT
+    a = T.resolve(T.parse_args(cli(w, "d", 1, 1, steps=1, extra=["--head-run", "hsx"])), tmp)
+    assert (a["rounds"], a["wire_weight"], a["msg"]) == (2, 0.5, "self"), a
+    with Built(T, [w["B"]]) as bt:
+        T.train(T.parse_args(cli(w, "sx", 1, steps=1, extra=["--head-run", "hsx"])), runs=tmp, ckpt_every=500)
+    head = bt.joints[0].head
+    assert len(head.rounds) == 2 and head.n_early == 2 and head.msg == "self" and JK.count_params(head) == 168603, "the head of a msg self run is not the two-round head"
+    last = [json.loads(x) for x in open(os.path.join(tmp, "sx", "log.jsonl"))][-1]
+    assert all(math.isfinite(last[k]) for k in ("nll1_s", "nll1_l", "nll2_s", "nll2_l", "head")), last
+    ck = torch.load(os.path.join(tmp, "sx", "model.pt"), weights_only=False)
+    assert (ck["args"]["rounds"], ck["args"]["wire_weight"], ck["args"]["msg"]) == (2, 0.5, "self")
+    hm, _ = JKT.load_model("sx", "cpu", tmp)
+    assert len(hm.rounds) == 2 and hm.msg == "self" and not hm.training and all(torch.equal(hm.state_dict()[k], head.state_dict()[k].cpu()) for k in hm.state_dict()), "load_model does not rebuild the msg self head"
+    with torch.no_grad():
+        assert "logp_rounds" not in hm(JK.synthetic_batch(2, 48, seed=0)), "the msg self head reads early in eval mode"
+    print(f"msg self head through jlive_train: resolve carries rounds 2 / wire weight 0.5 / msg self from the head run, the two-round head (168603 parameters) trains one step (nll1_s {last['nll1_s']:.4f}, nll2_s {last['nll2_s']:.4f} in the log row), "
+          f"model.pt holds msg self, load_model rebuilds it, its eval forward has no early read", flush=True)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the rules by hand
@@ -598,6 +626,7 @@ def selftest(train_path=TRAIN):
         steps_by_hand(T, w, tmp)
         rounds_head(T, w, tmp)
         none_head(T, w, tmp)
+        self_head(T, w, tmp)
         runs(T, w, tmp)
     print("jlive_train selftest ok", flush=True)
 

@@ -1600,12 +1600,13 @@ def test_wire_loss():
           f"mutants ({', '.join(muts)}) fail: ok")
 
 
-RARMS = (("x", ["--rounds", "1"]), ("r1", ["--rounds", "1", "--wire-weight", "0.5"]), ("r2u", ["--rounds", "2", "--wire-weight", "0.5", "--msg", "uniform"]), ("n1", ["--rounds", "1", "--wire-weight", "0.5", "--msg", "none"]))
+RARMS = (("x", ["--rounds", "1"]), ("r1", ["--rounds", "1", "--wire-weight", "0.5"]), ("r2u", ["--rounds", "2", "--wire-weight", "0.5", "--msg", "uniform"]), ("n1", ["--rounds", "1", "--wire-weight", "0.5", "--msg", "none"]),
+         ("s2", ["--rounds", "2", "--wire-weight", "0.5", "--msg", "self"]), ("m2", ["--rounds", "2", "--msg", "self"]))
 
 
 def _rounds_runs(mod, runs):
-    """the smoke runs (20 steps, the champion recipe on synthetic batches) of four E392 arms through `mod` (jtoken_train or a textual mutant): x (--rounds 1), r1 (+ --wire-weight 0.5), r2u (--rounds 2, --msg uniform, --wire-weight 0.5), n1 (--rounds 1, --msg none,
-    --wire-weight 0.5): every step's loss is finite and called with the arm's wire_w; the early info keys exist exactly for W > 0 (nll1_*, nll2_* with two rounds); x starts as the champion (its first loss is CHAMP[0]) and r1's first loss is x's + 0.5 x its early term; n1 has
+    """the smoke runs (20 steps, the champion recipe on synthetic batches) of six E392 arms through `mod` (jtoken_train or a textual mutant): x (--rounds 1), r1 (+ --wire-weight 0.5), r2u (--rounds 2, --msg uniform, --wire-weight 0.5), n1 (--rounds 1, --msg none,
+    --wire-weight 0.5), s2 / m2 (--rounds 2, --msg self, with / without --wire-weight 0.5: the capacity null): every step's loss is finite and called with the arm's wire_w; the early info keys exist exactly for W > 0 (nll1_*, nll2_* with two rounds); x starts as the champion (its first loss is CHAMP[0]) and r1's first loss is x's + 0.5 x its early term; n1 has
     the champion's head (no round module, the champion's state keys) and its first loss is CHAMP[0] + 0.5 x its early term (x untouched); the rounds move off zero; model.pt's args hold the three options and `load_model` rebuilds the head (rounds, msg, strict state);
     the recipe refuses another rounds / wire weight / msg at a resume"""
     real, got, now = JK.jtoken_loss, {}, [None]
@@ -1639,6 +1640,9 @@ def _rounds_runs(mod, runs):
             raise AssertionError(f"a resume of {name} with another {k} accepted")
         mod.check_start(ck["args"], rd)
     assert abs(got["x"][0][0] - CHAMP[0]) < 1e-9, (got["x"][0][0], CHAMP[0])
+    assert abs(got["m2"][0][0] - CHAMP[0]) < 1e-9, ("m2 (msg self, no early loss) does not start as the champion", got["m2"][0][0], CHAMP[0])
+    i3 = got["s2"][0][1]
+    assert abs(got["s2"][0][0] - CHAMP[0] - 0.5 * sum(i3[k] for k in ("nll1_s", "nll1_l", "nll2_s", "nll2_l"))) < 1e-5, "step 1 of s2 is not the champion's loss + W x the two early terms"
     i1 = got["r1"][0][1]
     assert abs(got["r1"][0][0] - got["x"][0][0] - 0.5 * (i1["nll1_s"] + i1["nll1_l"])) < 1e-5, "step 1 of r1 is not x's + W x the early term"
     assert got["r1"][-1][0] != got["x"][-1][0]
@@ -1689,7 +1693,7 @@ def test_rounds_trainer():
     for edits in muts.values():
         with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
             must_fail(_rounds_runs, _mutant(*edits, of=JKT), tmp)
-    print(f"rounds_trainer: defaults (0, 0.0, real) = the champion command line, refusals (--rounds 3, a weight or uniform messages without rounds, a negative weight), a model.pt of before loads as rounds 0; 20 smoke steps of x / r1 / r2u / n1 (msg none): finite, "
+    print(f"rounds_trainer: defaults (0, 0.0, real) = the champion command line, refusals (--rounds 3, a weight or uniform messages without rounds, a negative weight), a model.pt of before loads as rounds 0; 20 smoke steps of x / r1 / r2u / n1 (msg none) / s2 / m2 (msg self): finite, "
           f"the early info keys exactly for W > 0, x starts as the champion (first loss {got['x'][0][0]:.6f}), r1's first loss = x's + 0.5 x the early term ({got['r1'][0][0]:.6f}), n1's = the champion's + 0.5 x its early term ({got['n1'][0][0]:.6f}; the champion's "
           f"parameters, no round module), rounds move off zero, the three options in model.pt and rebuilt by load_model, "
           f"a resume with another rounds / weight / msg refused; textual mutants ({', '.join(muts)}) fail: ok")
@@ -1785,7 +1789,7 @@ def test_msg_none():
     (`_check_none_refusals`, mutant: the weight check dropped)"""
     assert _check_none_head(JK)
     muts = {"x changed by the early read": [("            return x, logp\n", "            return x + 0.01, logp\n")],
-            "early reads in eval mode": [('n_early = self.n_early if self.msg != "none" or self.training else 0', "n_early = self.n_early")],
+            "early reads in eval mode": [('n_early = self.n_early if self.msg not in SUPERVISE or self.training else 0', "n_early = self.n_early")],
             "round modules built": [('range(0 if msg == "none" else rounds)', "range(rounds)")],
             "one early read only": [("            if n <= n_early:", "            if n <= min(n_early, 1):")]}
     for edits in muts.values():
@@ -1808,9 +1812,70 @@ def test_msg_none():
           f"the early loss alone reaches layer 1 (2) and the shared read only; W x the early terms in the loss, an eval-mode output refused; the trainer refuses --msg none without --rounds or --wire-weight: ok")
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ E392: msg 'self', the capacity null of the exchange
+def _check_self_head(mod):
+    """`mod.JTokenHead(rounds=R, msg='self')` (jtoken or a textual mutant), R = 1, 2: the parameters of the real rounds head of the same seed (R x 20736 more than the champion's 127131, the same state keys and seeded values, the rounds built last);
+    a perturbed `Round` called with no weights = called with the identity weights = x + MLP([W_v x ; W_u x]) by hand; EVAL mode: no early read, no `logp_rounds`, one wiring read, and the rounds ACT (the output differs from the head with its rounds
+    off); TRAIN mode: R early reads in the shapes of the final read, and the final loss at wire_w 0 has no gradient on any of them (p_k does not enter x)"""
+    b = _batch(2)
+    for R in (1, 2):
+        torch.manual_seed(0)
+        h = mod.JTokenHead(rounds=R, msg="self")
+        torch.manual_seed(0)
+        real = mod.JTokenHead(rounds=R, msg="real")
+        assert len(h.rounds) == R and mod.count_params(h) == 127131 + R * 20736 == mod.count_params(real), "a msg self head must have the real rounds' parameters"
+        assert list(h.state_dict()) == list(real.state_dict()) and all(torch.equal(v, real.state_dict()[k]) for k, v in h.state_dict().items()), "the state of a msg self head is not the real rounds head's"
+        m = _rounds_head(R, "self", step=JK.SWITCH + 5, perturb=True, mod=mod)
+        r = m.rounds[0]
+        x = torch.randn(2, 48, 64, generator=torch.Generator().manual_seed(5))
+        eye = torch.eye(48)[None].expand(2, 48, 48)
+        by_hand = x + r.mlp(torch.cat([r.wv(x), r.wu(x)], -1))
+        assert torch.equal(r(x, None, None), by_hand) and torch.allclose(r(x, eye, eye), by_hand, atol=1e-6) and not torch.equal(by_hand, x), "the self round is not x + MLP([W_v x ; W_u x])"
+        out = m.eval()(b)
+        assert "logp_rounds" not in out, "an eval-mode msg self head holds an early read"
+        calls, _ = _read_calls(m, b)
+        assert calls == dict(lnw=1, wq=1, wk=1, dest=1, wbias=1), calls
+        off = _rounds_head(R, "self", step=JK.SWITCH + 5, perturb=True, mod=mod).eval()
+        with torch.no_grad():
+            for q in off.rounds:
+                for p in q.mlp[2].parameters():
+                    p.zero_()
+            assert float((off(b)["logp"] - out["logp"]).abs().max()) > 1e-6, "the rounds of an eval-mode msg self head do not act"
+        tr = _rounds_head(R, "self", step=JK.SWITCH + 5, perturb=True, mod=mod).train()(b)
+        assert len(tr["logp_rounds"]) == R and all(lp.shape == tr["logp"].shape for lp in tr["logp_rounds"]), "a msg self head in train mode has no early reads"
+        assert all(torch.equal(tr[k], out[k]) for k in ("logp", "types", "types1", "scale")), "the train-mode and the eval-mode forward of a msg self head differ (a round applied twice, skipped or with another index in one mode)"
+        assert _logp_k_grad(mod, R, "self") == [0.0] * R, "the final loss reaches an early read of a msg self head: p_k enters x"
+    return True
+
+
+def _check_self_refusals(mod):
+    """`mod.parse_args` (jtoken_train or a mutant): --msg self is refused without --rounds, accepted with --rounds 1 / 2 at any non-negative --wire-weight"""
+    assert _refused(mod.parse_args, ["--name", "x", "--msg", "self"]) and _refused(mod.parse_args, ["--name", "x", "--msg", "self", "--wire-weight", "0.5"])
+    assert all(mod.parse_args(["--name", "x", "--rounds", R, "--msg", "self"] + w).msg == "self" for R in ("1", "2") for w in ([], ["--wire-weight", "0.5"]))
+    assert all(_refused(mod.parse_args, ["--name", "x", "--rounds", "2", "--msg", m, "--wire-weight", "0.5", "--noise-pos", "0.1"]) for m in ("self", "none")), "the noise options with an early-read msg and a wire weight crash at the first step: refuse them"
+    return True
+
+
+def test_msg_self():
+    """E392 `msg='self'` (the capacity null: the real rounds' parameters, each token's message is its own features, the early reads only supervise): `_check_self_head`; textual mutants fail: the messages through the real weights, no round in eval mode, early
+    reads in eval mode, round modules not built; the early loss alone reaches the same parameters as the real exchange's (`_check_early_grad`); the trainer accepts it at wire weight 0 (the block alone) and 0.5 and refuses it without --rounds"""
+    assert _check_self_head(JK)
+    muts = {"messages through the real weights": [("            return self.rounds[k](x, None, None), logp\n", "            return self.rounds[k](x, *message_weights(link_prob(logp, cand), cand, \"real\")), logp\n")],
+            "no round in eval mode": [('elif self.msg == "self" and n <= self.n_early:', "elif False:")],
+            "early reads in eval mode": [('n_early = self.n_early if self.msg not in SUPERVISE or self.training else 0', "n_early = self.n_early")],
+            "round modules not built": [('range(0 if msg == "none" else rounds)', 'range(0 if msg in ("none", "self") else rounds)')]}
+    for edits in muts.values():
+        must_fail(_check_self_head, _mutant(*edits))
+    assert _check_early_grad(JK, "self")
+    assert _check_self_refusals(JKT)
+    must_fail(_check_self_refusals, _mutant(('assert args.get("rounds", 0) > 0 or', "assert True or"), of=JKT))
+    print(f"msg_self: rounds 1 / 2 with msg self hold the real rounds' parameters ({JK.count_params(JK.JTokenHead(rounds=1, msg='self'))} / {JK.count_params(JK.JTokenHead(rounds=2, msg='self'))}), the round = x + MLP([W_v x ; W_u x]) = the identity-weight round; eval mode: no early read, "
+          f"the rounds act; train mode: R early reads without a gradient from the final loss; mutants ({', '.join(muts)}) fail; the early loss reaches what the real exchange's does; the trainer accepts it at wire weight 0 and 0.5, refuses it without --rounds: ok")
+
+
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
          test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise,
-         test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none]
+         test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none, test_msg_self]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want

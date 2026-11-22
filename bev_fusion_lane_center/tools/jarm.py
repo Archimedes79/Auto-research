@@ -326,6 +326,12 @@ def selftest():
     global RUNS
     a = parse(["run", "E383", "f_s0", "--seed", "0", "--head-seed", "2", "--ref", "r", "--", "--none-weight", "0.25"])
     assert a.cmd == "run" and a.extra == ["--none-weight", "0.25"] and a.id == "E383" and a.arm == "f_s0" and a.ref == "r" and a.seed == 0 and a.head_seed == 2
+    for late in ("--dry", "--window", "--ref"):         # a jarm flag after `--` is refused (it would reach the trainer; `--dry` there launched real run.py attempts)
+        try:
+            parse(["run", "E383", "f_s0", "--seed", "0", "--head-seed", "2", "--", "--none-weight", "0.25", late] + (["r"] if late == "--ref" else []))
+        except SystemExit:
+            continue
+        raise AssertionError(f"{late} after `--` was accepted")
     assert cell_args(D115) == "--link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.6 --no-none-gate" and cell_args("0.2,0.1,0.5,on") == "--link-thr 0.2 --link-thr-long 0.1 --keep-thr 0.5"
     n = lambda *x: os.path.basename(card_path(*x))  # noqa: E731
     assert n("r", D115) == "token_card_rec_lt0.3_ltl0.2_kt0.6_nng.json"                         # the real names of runs/e373_cb_s0, e376_mx_s0 (evaluator's naming)
@@ -481,8 +487,11 @@ def build_parser():
     return ap
 
 
+JARM_FLAGS = ("--dry", "--window", "--curve", "--ref", "--seed", "--head-seed", "--trainer")      # the flags of `run` that must stand BEFORE the lone `--`
+
+
 def parse(argv):
-    """argv -> namespace; the words after a lone `--` are the trainer's own arguments (`extra`); `--curve` needs `--ref`"""
+    """argv -> namespace; the words after a lone `--` are the trainer's own arguments (`extra`; a flag of jarm itself there is refused); `--curve` needs `--ref`"""
     argv = list(argv)
     extra = []
     if "--" in argv:
@@ -490,6 +499,9 @@ def parse(argv):
         argv, extra = argv[:i], argv[i + 1:]
     a = build_parser().parse_args(argv)
     a.extra = extra
+    own = [w for w in extra if w in JARM_FLAGS]
+    if own:                                             # a flag of jarm itself after `--` is the trainer's (a `--dry` there launched four real run.py attempts on 2026-11-22)
+        raise SystemExit(f"{' '.join(own)} stands after `--`, where every word is the trainer's own: put jarm's flags before `--`")
     if a.cmd == "run" and a.curve is not None and not a.ref:
         raise SystemExit("--curve compares the arm with a reference run: give --ref")
     return a

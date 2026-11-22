@@ -25,6 +25,8 @@ read (`read_wiring`; key weight of layers 2 - 3), p_k = its probability of the l
 weights per round, last layer at zero: a rounds head starts as the champion function; p_k not detached); `types1` / w1 are read BEFORE round 1; the early reads are `out["logp_rounds"]`. msg='uniform' (the content null, `message_weights`): the same degree mass spread uniformly over the allowed pairs. `jtoken_loss(wire_w=W)`: + W x the likelihood of every early read.
 msg='none' (deep supervision without exchange): the same early reads and `out["logp_rounds"]`, but nothing is added to x and no `Round` exists: the parameters, the state keys and their order are the champion's (127131), and the early reads run in TRAINING mode only: in eval mode
 the forward is the champion's bit for bit (no early read, no `logp_rounds`), so a head trained with it is at inference the unchanged champion network.
+msg='self' (the capacity null of the exchange): the same `Round` modules (the parameters of the real rounds) but every token's message is its OWN features, x <- x + MLP([W_v x ; W_u x]): no neighbour is read, the early reads only supervise
+(training mode only, so p_k does not enter x), the rounds act in eval mode too. With wire_w 0 it is the block alone, with wire_w > 0 the block after a supervised read.
 """
 import math
 import os
@@ -50,7 +52,8 @@ INPUTS = ("tok", "pos", "dirv", "e", "e_raw", "flags", "s", "uout", "uin", "vali
 GT_KEYS = ("y", "ylong", "yscale", "ytype")                                 # the keys of the batch that carry GT (the loss reads them, the forward never)
 POS_LOSS = ("sum", "max")                                                   # the likelihood of a source with GT successors (`_source_nll`): -log sum over its group (default) or -log max (E376)
 EXCHANGE = ("real", "uniform")                                              # E392: the weights of a message round (`message_weights`): the early read's own probabilities, or the content null
-MSG = EXCHANGE + ("none",)                                                  # + no exchange: the early reads only supervise (deep supervision, training mode only)
+SUPERVISE = ("none", "self")                                                # the early reads only supervise (training mode only): p_k does not enter x
+MSG = EXCHANGE + SUPERVISE                                                  # + none: no exchange, no round module (deep supervision); self: the round block on the token's own features (the capacity null)
 
 
 def _const(t):
@@ -130,8 +133,9 @@ class Round(nn.Module):
         nn.init.zeros_(self.mlp[2].bias)
 
     def forward(self, x, w_fwd, w_bwd):
+        """w_fwd / w_bwd None (E392 msg 'self', the capacity null): every token's message is its own features, the same as the identity weights"""
         v, u = self.wv(x), self.wu(x)
-        mf, mb = w_fwd.transpose(1, 2).to(v.dtype) @ v, w_bwd.to(u.dtype) @ u
+        mf, mb = (v, u) if w_fwd is None else (w_fwd.transpose(1, 2).to(v.dtype) @ v, w_bwd.to(u.dtype) @ u)
         return x + self.mlp(torch.cat([mf, mb], -1))
 
 
@@ -183,10 +187,12 @@ class JTokenHead(nn.Module):
         return wiring_logp(z, zn, cand), xn
 
     def exchange(self, k, x, wb, logw, cand):
-        """E392 round k: the early read of x (`read_wiring`) and the messages along it (`Round`) -> (the new x, the early log-probabilities); msg 'none': x itself (the read only supervises)"""
+        """E392 round k: the early read of x (`read_wiring`) and the messages along it (`Round`) -> (the new x, the early log-probabilities); msg 'none': x itself (the read only supervises); msg 'self': the round on the token's own features"""
         logp, _ = self.read_wiring(x, wb, logw, cand)
         if self.msg == "none":
             return x, logp
+        if self.msg == "self":
+            return self.rounds[k](x, None, None), logp
         return self.rounds[k](x, *message_weights(link_prob(logp, cand), cand, self.msg)), logp
 
     def forward(self, batch):
@@ -198,7 +204,7 @@ class JTokenHead(nn.Module):
         learned = self._step_py >= SWITCH
         chord = g[..., 2] * 20.0
         cand = torch.stack([allowed & (chord <= SHORT), allowed & (chord > SHORT)], 1)
-        n_early = self.n_early if self.msg != "none" or self.training else 0        # msg 'none': the early reads only supervise, so they exist in training mode only (inference = the champion's forward)
+        n_early = self.n_early if self.msg not in SUPERVISE or self.training else 0     # msg 'none' / 'self': the early reads only supervise, so they exist in training mode only (none: inference = the champion's forward)
         wb = self.wbias(g).float().permute(0, 3, 1, 2) if n_early else None         # bias^c(g_ij), the same for every read (no early read: made at the final read, where the champion made it: the backward order into g stays the champion's)
         feat = torch.cat([pos / JT.HALF, fourier(pos), dirv, b["e"][..., None], b["e_raw"][..., None], b["flags"], b["s"][..., None], b["uout"][..., None], b["uin"][..., None]], -1).float()
         x = self.ln0(self.proj(b["tok"].float()) + self.mlp(feat))
@@ -209,6 +215,8 @@ class JTokenHead(nn.Module):
             if n <= n_early:                                                # a round after layer n, before the next one
                 x, logp_k = self.exchange(n - 1, x, wb, lw(w1 if learned else w_in), cand)
                 early.append(logp_k)
+            elif self.msg == "self" and n <= self.n_early:                  # msg 'self' in eval mode: the round block runs, the read that only supervised does not
+                x = self.rounds[n - 1](x, None, None)
             x = layer(x, g, lw(w1 if learned else w_in), valid)
         types3, w3 = self.read_types(x)
         if wb is None:
