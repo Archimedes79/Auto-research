@@ -23,7 +23,8 @@ batches (`first_batches`) lies in TEACHER_GT.
 N(0, SE^2) draw, an own generator keyed on (head seed, the head's step counter): a resume repeats the draw, the data order is untouched); the label tensors are the clean tokens', but the gate and the pair geometry come from the
 perturbed positions (a GT link can leave the gate: `gt_outside` in the clock line); the first-loss line holds the CLEAN loss of the first batch and its frame tokens, every clock line the mean displacement and mean |noise e|;
 the read-outs (`jtoken_eval.py`) take no noise. In the recipe.
-`--rounds R` (E392 card v3, 0 / 1 / 2; default 0 = the champion bit for bit) / `--msg real|uniform` (the content null) / `--wire-weight W` (default 0): the head's message rounds after layer 1 / 2 (`jtoken.JTokenHead`) and the weight of the likelihood of
+`--rounds R` (E392 card v3, 0 / 1 / 2; default 0 = the champion bit for bit) / `--msg real|uniform|none` (the content null; none = deep supervision without exchange: no round module, the early reads exist in training mode only, so the
+trained head is the champion network at inference; needs --rounds >= 1 and --wire-weight > 0) / `--wire-weight W` (default 0): the head's message rounds after layer 1 / 2 (`jtoken.JTokenHead`) and the weight of the likelihood of
 their early wiring reads (`jtoken.jtoken_loss(wire_w=)`); in the recipe and in model.pt's args, so `build_head` (the trainer, `load_model`, the stage-2 trainer) rebuilds the head with them; absent in an old run's args = the default.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
@@ -80,7 +81,7 @@ def parse_args(argv=None):
     ap.add_argument("--noise-e", type=float, default=ARCH_DEFAULTS["noise_e"], dest="noise_e", help="E381: per training step e and e_raw += the same N(0, SE^2) draw on the valid tokens (logit; 0 = off)")
     ap.add_argument("--rounds", type=int, choices=(0, 1, 2), default=ARCH_DEFAULTS["rounds"], help="E392: message rounds after layer 1 / layer 2 (0 = the champion)")
     ap.add_argument("--wire-weight", type=float, default=ARCH_DEFAULTS["wire_weight"], dest="wire_weight", help="E392: W, + W x the likelihood of every early wiring read (0 = none; needs --rounds)")
-    ap.add_argument("--msg", choices=JK.MSG, default=ARCH_DEFAULTS["msg"], help="E392: the weights of a round: the early read's probabilities (real) or the content null (uniform; needs --rounds)")
+    ap.add_argument("--msg", choices=JK.MSG, default=ARCH_DEFAULTS["msg"], help="E392: the weights of a round: the early read's probabilities (real), the content null (uniform) or no exchange (none: deep supervision only, needs --wire-weight > 0); not real needs --rounds")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
     a = ap.parse_args(argv)
     check_options(vars(a))
@@ -109,7 +110,8 @@ def add_noise(b, sp, se, seed, step):
 
 
 def check_options(args):
-    """before anything is built or loaded: the teachers of --distill-from have a model.pt and the KD weight is >= 0 (not given without teachers); the early-read weight is >= 0 and neither it nor --msg uniform is given without --rounds"""
+    """before anything is built or loaded: the teachers of --distill-from have a model.pt and the KD weight is >= 0 (not given without teachers); the early-read weight is >= 0 and neither it nor --msg uniform / none is given without --rounds;
+    --msg none (the champion network with extra reads, trained only through their loss) needs --wire-weight > 0"""
     if args.get("distill_from") is not None:
         ps = distill_paths(args["distill_from"])
         assert ps and all(os.path.isfile(os.path.join(p, "model.pt")) for p in ps), f"--distill-from {args['distill_from']}: run folders with a model.pt"
@@ -119,6 +121,7 @@ def check_options(args):
     assert args.get("noise_pos", 0.0) >= 0.0 and args.get("noise_e", 0.0) >= 0.0, f"--noise-pos {args.get('noise_pos')} / --noise-e {args.get('noise_e')}: >= 0"
     assert args.get("wire_weight", 0.0) >= 0.0, f"--wire-weight {args.get('wire_weight')}: >= 0"
     assert args.get("rounds", 0) > 0 or (args.get("wire_weight", 0.0) == 0.0 and args.get("msg", "real") == "real"), f"--wire-weight {args.get('wire_weight')} / --msg {args.get('msg')} without --rounds"
+    assert args.get("msg", "real") != "none" or args.get("wire_weight", 0.0) > 0.0, "--msg none without --wire-weight > 0 (it would train the champion with extra reads that no loss sees)"
 
 
 def _abs(p):

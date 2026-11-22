@@ -20,7 +20,7 @@ and on a stub head with a hand y; textual mutants: dup / wrong swapped, false_en
 command on 3 frames, delivered = the decode's long links (keep 0.6 and 0.2), never overwritten), argmax_keep (E376 score --argmax --keep-thr: the rebuilt argmax = the dump's on a real head and a hand frame with ties and
 p_none at the threshold, a winner below the floor refused above the record keep, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring, self-pairs with --ref-run at the rec / argmax / argmax kt0.6 decodes),
 live (E372 dump / score / sweep / anatomy --live, --ref-cache, live-diff, `check_b`: a stub source with the cache's tokens gives the cache's records and read-outs; a joint run's own tokens, frame pairing, B' identity refusals; see its docstring),
-rounds_run (E392, cache: a rounds head run dumps as the champion run at the zero start and times with its parameters, rebuilt from its args).
+rounds_run (E392, cache: a rounds head run dumps as the champion run at the zero start and times with its parameters, rebuilt from its args; a msg none run dumps as the champion run and times the champion's 127131 parameters).
 """
 import contextlib
 import json
@@ -1418,7 +1418,8 @@ def test_live():
 
 def test_rounds_run():
     """E392 (cache): the read-outs rebuild a rounds head from its run's args through `load_model` (`dump`, `timing` here; `dump --live` / `score --live` read the same args): a run of a rounds head at the zero start (the champion's weights at
-    the champion's seed, round modules built last, the rounds the identity) dumps 3 cache frames bit for bit as the champion run does, and `timing` counts its parameters (the champion's + 20736)"""
+    the champion's seed, round modules built last, the rounds the identity) dumps 3 cache frames bit for bit as the champion run does, and `timing` counts its parameters (the champion's + 20736). A msg none run (deep supervision, no exchange: the
+    champion's weights, rounds 1) dumps as the champion run and its timing counts the champion's 127131 parameters (the read-outs run in eval mode: no early read)"""
     if not CACHE_OK or not os.path.exists(SMOKE):
         print("rounds_run: SKIPPED (no cache or no smoke model)")
         return
@@ -1433,14 +1434,20 @@ def test_rounds_run():
         m.set_step(JK.SWITCH)
         ck["state"], ck["args"] = m.state_dict(), dict(ck["args"], seed=0, rounds=1, msg="uniform")
         torch.save(ck, os.path.join(runs, "hr", "model.pt"))
-        for name in ("h", "hr"):
+        _floor_run(runs, "hn", 0, rounds=1, msg="none", wire_weight=0.5)
+        for name in ("h", "hr", "hn"):
             E.dump(E.parse_args(["dump", "--run", name, "--seed", "0", "--cpu", "--max", "3"]), runs)
-        frames = {n: pickle.load(open(os.path.join(runs, n, "token_val_n3.pkl"), "rb"))["frames"] for n in ("h", "hr")}
+        frames = {n: pickle.load(open(os.path.join(runs, n, "token_val_n3.pkl"), "rb"))["frames"] for n in ("h", "hr", "hn")}
         assert len(frames["hr"]) == 3 and pickle.dumps(frames["h"]) == pickle.dumps(frames["hr"]), "a rounds head at the zero start does not dump as the champion"
-        E.timing(E.parse_args(["timing", "--run", "hr", "--cpu", "--frames", "2", "--repeats", "1"]), runs)
-        t = json.load(open(glob.glob(os.path.join(runs, "hr", "token_timing_cpu_*.json"))[0]))
-        assert t["params"] == JK.count_params(JK.JTokenHead(rounds=1)) == JK.count_params(JK.JTokenHead()) + 20736, t["params"]
-    print(f"rounds_run: a rounds head run (rounds 1, uniform messages) is rebuilt by dump and timing from its args: its 3 dumped frames equal the champion run's bit for bit at the zero start, {t['params']} parameters timed: ok")
+        assert len(frames["hn"]) == 3 and pickle.dumps(frames["h"]) == pickle.dumps(frames["hn"]), "a msg none head does not dump as the champion"
+        t = {}
+        for name in ("hr", "hn"):
+            E.timing(E.parse_args(["timing", "--run", name, "--cpu", "--frames", "2", "--repeats", "1"]), runs)
+            t[name] = json.load(open(glob.glob(os.path.join(runs, name, "token_timing_cpu_*.json"))[0]))
+        assert t["hr"]["params"] == JK.count_params(JK.JTokenHead(rounds=1)) == JK.count_params(JK.JTokenHead()) + 20736, t["hr"]["params"]
+        assert t["hn"]["params"] == JK.count_params(JK.JTokenHead(rounds=1, msg="none")) == JK.count_params(JK.JTokenHead()) == 127131, t["hn"]["params"]
+    print(f"rounds_run: a rounds head run (rounds 1, uniform messages) is rebuilt by dump and timing from its args: its 3 dumped frames equal the champion run's bit for bit at the zero start, {t['hr']['params']} parameters timed; a msg none run "
+          f"(rounds 1) dumps as the champion run bit for bit and times {t['hn']['params']} parameters: ok")
 
 
 TESTS = [test_keep_rule, test_decode_fork, test_decode_variant, test_decode_perclass, test_dump_roundtrip, test_writer_no_gt, test_drop, test_readout_dump, test_numbers, test_timing, test_sweep, test_every, test_score_max,

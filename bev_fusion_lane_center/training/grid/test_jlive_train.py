@@ -162,6 +162,10 @@ def world(tmp):
         headr.rounds[0].mlp[2].weight.normal_(std=0.1)
     os.makedirs(os.path.join(tmp, "hr"))
     torch.save(dict(state=headr.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=1, wire_weight=0.5, msg="uniform"), steps=12000), os.path.join(tmp, "hr", "model.pt"))
+    headn = JK.JTokenHead(rounds=1, msg="none")                                             # E392: a msg none head run "hnx" (deep supervision, the champion's parameters), early-read weight 0.5
+    headn.set_step(12000)
+    os.makedirs(os.path.join(tmp, "hnx"))
+    torch.save(dict(state=headn.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=1, wire_weight=0.5, msg="none"), steps=12000), os.path.join(tmp, "hnx", "model.pt"))
     return dict(b_dir=os.path.join(tmp, "b"), A=LLT.collate(items[:2]), B=LLT.collate(items[2:]))
 
 
@@ -246,6 +250,32 @@ def rounds_head(T, w, tmp):
     refuses(lambda: T.check_start(cfg, os.path.join(tmp, "oldcfg")), "of another run")
     print(f"rounds head through jlive_train: resolve carries rounds / wire weight / msg from the head run (a head run without them: 0 / 0 / real), the step's loss = the head's loss with the early read ({float(lh):.4f} against {float(lh0):.4f} without) + B''s, "
           f"one step trains (nll1_s {last['nll1_s']:.4f} in the log row), the three options in the recipe, config and model.pt, load_model rebuilds the head, a config of before resumes as the defaults", flush=True)
+
+
+def none_head(T, w, tmp):
+    """E392 msg none (deep supervision without exchange) through the stage-2 trainer: `resolve` carries rounds 1 / wire weight 0.5 / msg none of the head run, the head is built with no round module and the champion's parameters (the strict load of the run's
+    state), it trains one step through `train` (in training mode: the log row carries nll1_s of the early read), model.pt's args hold msg none, `load_model` rebuilds the champion-shaped head whose eval forward has no early read"""
+    import torch
+    import jtoken as JK
+    import jtoken_train as JKT
+    a = T.resolve(T.parse_args(cli(w, "d", 1, 1, steps=1, extra=["--head-run", "hnx"])), tmp)
+    assert (a["rounds"], a["wire_weight"], a["msg"]) == (1, 0.5, "none"), a
+    with Built(T, [w["B"]]) as bt:
+        T.train(T.parse_args(cli(w, "nx", 1, steps=1, extra=["--head-run", "hnx"])), runs=tmp, ckpt_every=500)
+    head = bt.joints[0].head
+    assert len(head.rounds) == 0 and head.n_early == 1 and head.msg == "none" and JK.count_params(head) == 127131, "the head of a msg none run is not the champion-shaped head with one early read"
+    last = [json.loads(x) for x in open(os.path.join(tmp, "nx", "log.jsonl"))][-1]
+    assert math.isfinite(last["nll1_s"]) and math.isfinite(last["nll1_l"]) and math.isfinite(last["head"]) and "nll2_s" not in last, last
+    ck = torch.load(os.path.join(tmp, "nx", "model.pt"), weights_only=False)
+    assert (ck["args"]["rounds"], ck["args"]["wire_weight"], ck["args"]["msg"]) == (1, 0.5, "none")
+    hm, _ = JKT.load_model("nx", "cpu", tmp)
+    h0 = torch.load(os.path.join(tmp, "hnx", "model.pt"))["state"]
+    assert len(hm.rounds) == 0 and hm.n_early == 1 and hm.msg == "none" and list(hm.state_dict()) == list(JK.JTokenHead().state_dict()) and not hm.training, "load_model does not rebuild the msg none head"
+    assert any(not torch.equal(hm.state_dict()[k], h0[k]) for k in h0 if k != "step"), "the msg none head did not train"
+    with torch.no_grad():
+        assert "logp_rounds" not in hm(JK.synthetic_batch(2, 48, seed=0)), "the msg none head reads early in eval mode"
+    print(f"msg none head through jlive_train: resolve carries rounds / wire weight / msg none from the head run, the champion-shaped head (127131 parameters, no round module) trains one step in training mode (nll1_s {last['nll1_s']:.4f} in the log row), "
+          f"model.pt holds msg none, load_model rebuilds it, its eval forward has no early read", flush=True)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the rules by hand
@@ -567,6 +597,7 @@ def selftest(train_path=TRAIN):
         w = world(tmp)
         steps_by_hand(T, w, tmp)
         rounds_head(T, w, tmp)
+        none_head(T, w, tmp)
         runs(T, w, tmp)
     print("jlive_train selftest ok", flush=True)
 
