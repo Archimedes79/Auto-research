@@ -122,7 +122,8 @@ def dump_cut(path):
 
 
 class Arm:
-    def __init__(self, eid, arm, seed, head_seed, ref=None, trainer="jtoken_train.py", extra="", window=False, dry=False, texts=None, curve_check=None):
+    def __init__(self, eid, arm, seed, head_seed, ref=None, trainer="jtoken_train.py", extra="", window=False, dry=False, texts=None, curve_check=None, change_card=False):
+        self.change_card = change_card
         self.eid, self.arm, self.seed, self.head_seed, self.ref, self.trainer, self.extra, self.window, self.dry = eid, arm, seed, head_seed, ref, trainer, extra, window, dry
         self.curve_check = curve_check
         assert not arm.startswith(("vs_", "cell", "d115", "dump", "sweep", "choose")), f"arm name {arm}: it would make run ids of another arm's steps"
@@ -173,7 +174,7 @@ class Arm:
         h, p, r = self.texts
         rid = self.rid(step)
         line = ["python3", os.path.join(AR, "run.py"), "--id", rid, "--seed", str(self.seed), "--retries", str(retries), "--require-card", "--split", "val", "--timeout", str(timeout), "--hyp", h, "--pred", p, "--rule", r]
-        line += (["--gpu", "--ram-mb", "6000"] if gpu else []) + ["--", "bash", "-c", cmd]
+        line += (["--change-card"] if self.change_card else []) + (["--gpu", "--ram-mb", "6000"] if gpu else []) + ["--", "bash", "-c", cmd]
         self.say(f"{step or 'train'}: {cmd[:150]}")
         return 0 if self.dry else subprocess.call(line, cwd=ROOT, env=dict(os.environ, BFLC_SIG="1.0"))
 
@@ -326,7 +327,8 @@ def selftest():
     global RUNS
     a = parse(["run", "E383", "f_s0", "--seed", "0", "--head-seed", "2", "--ref", "r", "--", "--none-weight", "0.25"])
     assert a.cmd == "run" and a.extra == ["--none-weight", "0.25"] and a.id == "E383" and a.arm == "f_s0" and a.ref == "r" and a.seed == 0 and a.head_seed == 2
-    for late in ("--dry", "--window", "--ref"):         # a jarm flag after `--` is refused (it would reach the trainer; `--dry` there launched real run.py attempts)
+    assert parse(["run", "E383", "f_s0", "--seed", "0", "--head-seed", "2", "--change-card"]).change_card and not a.change_card
+    for late in ("--dry", "--window", "--ref", "--change-card"):         # a jarm flag after `--` is refused (it would reach the trainer; `--dry` there launched real run.py attempts)
         try:
             parse(["run", "E383", "f_s0", "--seed", "0", "--head-seed", "2", "--", "--none-weight", "0.25", late] + (["r"] if late == "--ref" else []))
         except SystemExit:
@@ -471,6 +473,7 @@ def build_parser():
     r.add_argument("--trainer", default="jtoken_train.py")
     r.add_argument("--window", action="store_true")
     r.add_argument("--dry", action="store_true")
+    r.add_argument("--change-card", action="store_true", dest="change_card", help="a repeat of an id whose earlier attempt (failed before any result) carried an older card text: run.py takes the card as it is now and notes the old text (a deliberate act, written in the card)")
     r.add_argument("--curve", nargs="?", const="", default=None, metavar="BAND", help="a speed-change arm: after training run `curve` against --ref (data-order fingerprint + loss band, optionally STEP:DIFF,... as `curve --band`); a fired check stops the arm before any read-out step")
     i = sub.add_parser("ids", help="the run ids an arm launches (for the card's run_ids)")
     i.add_argument("id")
@@ -487,7 +490,7 @@ def build_parser():
     return ap
 
 
-JARM_FLAGS = ("--dry", "--window", "--curve", "--ref", "--seed", "--head-seed", "--trainer")      # the flags of `run` that must stand BEFORE the lone `--`
+JARM_FLAGS = ("--dry", "--change-card", "--window", "--curve", "--ref", "--seed", "--head-seed", "--trainer")      # the flags of `run` that must stand BEFORE the lone `--`
 
 
 def parse(argv):
@@ -523,7 +526,7 @@ def main():
         ok, text = curve(a.run, a.ref, parse_band(a.band))
         print(text)
         sys.exit(0 if ok else 1)
-    arm = Arm(a.id, a.arm, a.seed, a.head_seed, a.ref, a.trainer, " ".join(a.extra), a.window, a.dry, curve_check=a.curve)
+    arm = Arm(a.id, a.arm, a.seed, a.head_seed, a.ref, a.trainer, " ".join(a.extra), a.window, a.dry, curve_check=a.curve, change_card=a.change_card)
     arm.check_ids(card_run_ids(a.id))
     if not a.dry and not arm.lock():
         arm.say("another jarm runs this arm (lock /tmp/jarm_" + arm.run + ".lock): nothing to do")
