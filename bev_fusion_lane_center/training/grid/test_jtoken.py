@@ -21,6 +21,7 @@ dumps and the twin of E373 (2 loader workers) on the real cache when they are th
 noise (E381 card v2 `--noise-pos` / `--noise-e`: `add_noise` on valid tokens only, e / e_raw one draw, the labels the same objects, the global stream untouched, keyed on (seed, step), the logged statistics; textual mutants;
 0 = the champion's 20 smoke steps bit for bit; the noise in the args and the log, the clean first loss; another noise at a resume refused; kill / resume repeats the draws by the restored step counter; no noise in the read-outs).
 """
+import copy
 import json
 import math
 import os
@@ -683,7 +684,7 @@ def test_live_inputs():
         must_fail(_live_ok, _mutant(*edits), before)
     fd = _live_fd_ok(_mutant(double=True))
     fd_mutants = {"the geometry path cut": [("JT.pair_geometry(pos, dirv, valid, e=w_in)", "JT.pair_geometry(pos.detach(), dirv.detach(), valid, e=w_in.detach())")],
-                  "the key weight of layers 2 - 3 cut before the switch": [("lw(w1 if learned else w_in)", "lw(w1 if learned else w_in.detach())")]}
+                  "the key weight of layers 2 - 3 cut before the switch": [("x = layer(x, g, lw(w1 if learned else w_in), valid)", "x = layer(x, g, lw(w1 if learned else w_in.detach()), valid)")]}
     for edits in fd_mutants.values():
         must_fail(_live_fd_ok, _mutant(*edits, double=True))
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
@@ -1115,7 +1116,7 @@ def test_distill_trainer():
                    "the autocast-off of the teachers removed": [('with torch.no_grad(), torch.autocast(b["valid"].device.type, dtype=torch.bfloat16, enabled=amp):', "with torch.no_grad():")],
                    "the start check on the first batch only": [("for v in tl.mean(1))", "for v in tl[:, 0])")],
                    "the cache root out of the teacher key": [('x.get("K"), x.get("cache"))', 'x.get("K"))')],
-                   "the sha256 out of the recipe": [('"distill_from", "distill_weight", "distill_sha256", "noise_pos", "noise_e")', '"distill_from", "distill_weight", "noise_pos", "noise_e")')]}
+                   "the sha256 out of the recipe": [('"distill_from", "distill_weight", "distill_sha256", "noise_pos", "noise_e", "rounds"', '"distill_from", "distill_weight", "noise_pos", "noise_e", "rounds"')]}
         for edits in mutants.values():
             with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
                 must_fail(_check_distill_runs, _mutant(*edits, of=JKT), tmp, td, sha, band)
@@ -1247,8 +1248,439 @@ def test_noise():
           f"the log, another noise at a resume refused; kill / resume: draws at steps {steps[0]}..{steps[10]} then {steps[11]}..{steps[-1]}, the final weights = the uninterrupted run's bit for bit; no noise in the read-outs: ok")
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ E392: message rounds and the early wiring loss
+def _champ_numbers(mod, head):
+    """forward + loss (none weight 0.25) + backward of `head` (a `mod.JTokenHead` in train mode, its step as set) on a synthetic batch (3 frames, K 48) -> (sum |x| in float64 of logp, scale, types, types1; the loss; sum |grad| of every parameter)"""
+    b = mod.synthetic_batch(3, 48, seed=0)
+    out = head(b)
+    loss = mod.jtoken_loss(out, b, none_weight=0.25)[0]
+    loss.backward()
+    s = lambda t: float(t.double().abs().sum())  # noqa: E731
+    return tuple(s(out[k]) for k in ("logp", "scale", "types", "types1")) + (float(loss), sum(s(p.grad) for p in head.parameters()))
+
+
+# `_champ_numbers` of the champion head of git HEAD before E392 (recorded from that code in this test's process: 2 threads, CPU): a seeded head (torch seed 0) at head step 0 and SWITCH + 5, and the stored E373 head `runs/e373_cb_s0` (train mode)
+CHAMP_HEAD = {0: (118588089.77677026, 9123.041142880917, 503.1498308633454, 525.4964824039489, 4.633667469024658, 928.3080354075339),
+              JK.SWITCH + 5: (118588330.5475591, 9126.07040989399, 496.1637700991705, 525.4964824039489, 4.695507526397705, 921.0818347715707),
+              "e373": (118604369.3126266, 6105.978199899197, 2566.0501022301614, 2319.9599598338827, 5.47215461730957, 4672.238252198448)}
+RS = ("lnw.", "wq.", "wk.", "wbias.", "dest.", "none_k", "none_b")                    # the parameters of the wiring read: shared by the early reads and the final one
+
+
+def _rounds_head(rounds, msg="real", step=0, perturb=False, mod=JK):
+    """a seeded rounds head of `mod`; perturb: the zero last layer of every round moved off zero (at the zero start the messages are exactly 0: a gradient test needs them live)"""
+    torch.manual_seed(0)
+    m = mod.JTokenHead(rounds=rounds, msg=msg)
+    m.set_step(step)
+    if perturb:
+        g = torch.Generator().manual_seed(11)
+        with torch.no_grad():
+            for r in m.rounds:
+                for p in r.mlp[2].parameters():
+                    p.copy_(torch.randn(p.shape, generator=g) * 0.1)
+    return m
+
+
+def test_rounds_zero():
+    """E392 `rounds` 0 (the default) is the champion bit for bit: a seeded head at two head steps and the stored E373 head (`load_model`: its args hold no rounds; skipped when the run is not there) give the forward, the loss and the gradient sums recorded from
+    the code of git HEAD before the option (`CHAMP_HEAD`); no extra parameter or state key (127131 parameters); the output dict has the champion's keys. And the round modules are built LAST and start at zero: a rounds head of the same seed has the champion's
+    parameters bit for bit, its keys come after the champion's, and its forward and loss are the champion's bit for bit (arm x starts as the control c), for both message modes"""
+    keys = ["chord", "cand", "logp", "scale", "types", "types1", "valid"]
+    for step in (0, JK.SWITCH + 5):
+        torch.manual_seed(0)
+        h = JK.JTokenHead()
+        h.set_step(step)
+        assert JK.count_params(h) == 127131 and len(h.rounds) == 0 and not any(k.startswith("rounds") for k in h.state_dict())
+        assert sorted(h(_batch(2))) == sorted(keys), "the champion's output keys"
+        torch.manual_seed(0)
+        h = JK.JTokenHead()
+        h.set_step(step)
+        got = _champ_numbers(JK, h)
+        assert all(abs(g - w) <= 1e-9 * abs(w) for g, w in zip(got, CHAMP_HEAD[step])), (step, got, CHAMP_HEAD[step])
+    note = "stored E373 head SKIPPED (run not there)"
+    if os.path.exists(os.path.join(JKT.T.RUNS, "e373_cb_s0", "model.pt")):
+        m, args = JKT.load_model("e373_cb_s0", "cpu")
+        assert "rounds" not in args and len(m.rounds) == 0
+        got = _champ_numbers(JK, m.train())
+        assert all(abs(g - w) <= 1e-9 * abs(w) for g, w in zip(got, CHAMP_HEAD["e373"])), (got, CHAMP_HEAD["e373"])
+        note = f"the stored E373 head (step {m._step_py - 1}) too"
+    for R in (1, 2):
+        for msg in JK.MSG:
+            for step in (0, JK.SWITCH + 5):
+                torch.manual_seed(0)
+                ch = JK.JTokenHead()
+                ch.set_step(step)
+                rh = _rounds_head(R, msg, step)
+                assert list(rh.state_dict())[:len(ch.state_dict())] == list(ch.state_dict()) and all(k.startswith("rounds.") for k in list(rh.state_dict())[len(ch.state_dict()):])
+                assert all(torch.equal(v, rh.state_dict()[k]) for k, v in ch.state_dict().items() if k != "step"), "a round module changed the init of an old parameter"
+                assert all(float(p.abs().sum()) == 0.0 for r in rh.rounds for p in r.mlp[2].parameters()), "the last layer of a round starts at zero"
+                b = _batch(3)
+                o1, o2 = ch(b), rh(b)
+                assert set(o2) == set(o1) | {"logp_rounds"} and all(torch.equal(o1[k], o2[k]) for k in o1), "a rounds head does not start as the champion function"
+                assert torch.equal(JK.jtoken_loss(o1, b, none_weight=0.25)[0], JK.jtoken_loss(o2, b, none_weight=0.25)[0])
+    print(f"rounds_zero: rounds 0 = the champion of git HEAD (the forward, the loss and the gradient sums of a seeded head at head step 0 / {JK.SWITCH + 5} to 1e-9, {note}); 127131 parameters, the champion's keys; a rounds head "
+          f"(1 / 2 rounds, both message modes, both key-weight modes) has the champion's parameters bit for bit, its round keys last, and starts as the champion function (outputs, loss): ok")
+
+
+def _trace(m, b):
+    """one forward of head m with its events in call order: (name, the input x, the output x) of every layer ('layer<i>') and round ('round<k>'), ('read', the x read, None) of every wiring read -> (events, out)"""
+    ev, hs = [], []
+    for i, layer in enumerate(m.layers):
+        hs.append(layer.register_forward_hook(lambda mod, inp, o, i=i: ev.append((f"layer{i + 1}", inp[0], o))))
+    for k, r in enumerate(m.rounds):
+        hs.append(r.register_forward_hook(lambda mod, inp, o, k=k: ev.append((f"round{k + 1}", inp[0], o))))
+    real = m.read_wiring
+    m.read_wiring = lambda x, *a: (ev.append(("read", x, None)), real(x, *a))[1]
+    try:
+        out = m(b)
+    finally:
+        del m.read_wiring
+        for h in hs:
+            h.remove()
+    return ev, out
+
+
+def test_rounds_head():
+    """E392 `JTokenHead(rounds=R)` (R = 1, 2; perturbed rounds): the order inside the head by the identity of the tensors (layer 1 -> early read of its output -> round 1 on it -> layer 2 on the round's output -> [early read -> round 2] ->
+    layer 3 -> the final read of its output); the early reads and the final read call the SAME modules (`lnw`, `wq`, `wk`, `dest` R + 1 times, `wbias` once) and the head has no parameter but the champion's and the rounds' (20736 each); the early reads
+    have the shape, the masks and the normalisation of the final one (a padding source has p(none) 1); they run in eval mode too, and the rounds act (a head without them differs); the head stays a function of the SET (token order, padding)"""
+    b = _batch(3)
+    K = b["pos"].shape[1]
+    champ = {n for n, _ in JK.JTokenHead().named_parameters()}
+    for R in (1, 2):
+        m = _rounds_head(R, step=JK.SWITCH + 5, perturb=True)
+        extra = {n: p for n, p in m.named_parameters() if n not in champ}
+        assert all(n.startswith("rounds.") for n in extra) and sum(p.numel() for p in extra.values()) == 20736 * R and {n.split(".")[1] for n in extra} == {str(i) for i in range(R)}
+        ev, out = _trace(m, b)
+        names = [e[0] for e in ev]
+        l1, l2, l3 = (next(e for e in ev if e[0] == f"layer{i}") for i in (1, 2, 3))
+        if R == 1:
+            assert names == ["layer1", "read", "round1", "layer2", "layer3", "read"], names
+            ok = ev[1][1] is l1[2] and ev[2][1] is l1[2] and l2[1] is ev[2][2] and l3[1] is l2[2] and ev[5][1] is l3[2]
+        else:
+            assert names == ["layer1", "read", "round1", "layer2", "read", "round2", "layer3", "read"], names
+            ok = ev[1][1] is l1[2] and ev[2][1] is l1[2] and l2[1] is ev[2][2] and ev[4][1] is l2[2] and ev[5][1] is l2[2] and l3[1] is ev[5][2] and ev[7][1] is l3[2]
+        assert ok, "the rounds are not between the layers as the card says (the next layer runs on the updated x, each read reads the x before its round)"
+        calls = {n: 0 for n in ("lnw", "wq", "wk", "dest", "wbias")}
+        hs = [getattr(m, n).register_forward_hook(lambda mod, i, o, n=n: calls.__setitem__(n, calls[n] + 1)) for n in calls]
+        out = m(b)
+        for h in hs:
+            h.remove()
+        assert calls == dict(lnw=R + 1, wq=R + 1, wk=R + 1, dest=R + 1, wbias=1), calls
+        assert len(out["logp_rounds"]) == R and all(lp.shape == out["logp"].shape and lp.dtype == torch.float32 for lp in out["logp_rounds"])
+        nv = ~b["valid"]
+        for lp in out["logp_rounds"] + [out["logp"]]:
+            assert float((lp.exp().sum(-1) - 1).abs().max()) < 1e-5 and float(lp[..., :K].exp()[~out["cand"]].max()) == 0.0, "an early read is not a softmax over the gate + none"
+            assert float((lp.exp()[..., -1][nv[:, None, :].expand(-1, 2, -1)] - 1).abs().max()) < 1e-6, "a padding source has p(none) = 1"
+        m.eval()
+        with torch.no_grad():
+            o_eval = m(b)
+            m_off = copy.deepcopy(m)
+            m_off.rounds = torch.nn.ModuleList([])
+            o_off = m_off(b)
+        assert len(o_eval["logp_rounds"]) == R and all(torch.equal(x, y) for x, y in zip(o_eval["logp_rounds"], out["logp_rounds"])) and torch.equal(o_eval["logp"], out["logp"]), "eval mode differs from train mode"
+        assert "logp_rounds" not in o_off and not torch.equal(o_off["logp"], o_eval["logp"]), "the rounds do not act"
+        m_u = copy.deepcopy(m)                                                                                # the `msg` option acts: uniform messages (the content null u) give another head than the real ones
+        m_u.msg = "uniform"
+        with torch.no_grad():
+            o_u = m_u(b)
+        assert torch.equal(o_u["logp_rounds"][0], o_eval["logp_rounds"][0]) and not torch.equal(o_u["logp"], o_eval["logp"]), "`msg` does not change the exchange (the null arm u would be the real arm)"
+        n_rt, read_types = [], m.read_types                                                                   # w1 is read once after layer 1 and is stale at round 2 (the card): read_types runs exactly twice
+        m.read_types = lambda x: (n_rt.append(1), read_types(x))[1]
+        with torch.no_grad():
+            m(b)
+        del m.read_types
+        assert len(n_rt) == 2, f"the key weight is read {len(n_rt)} times (after layer 1 and after layer 3 only)"
+    m = _rounds_head(2, step=JK.SWITCH + 5, perturb=True).eval()                                           # a function of the set: the order of the tokens, padding
+    torch.manual_seed(1)
+    perm = torch.randperm(K)
+    inp = {k: v for k, v in b.items() if k in JK.INPUTS}
+    with torch.no_grad():
+        o1 = m(inp)
+        o2 = m({k: (v[:, perm] if v.dim() >= 2 and v.shape[1] == K else v) for k, v in inp.items()})
+        junk = {k: (torch.where(b["valid"].view(*b["valid"].shape, *[1] * (v.dim() - 2)), v, torch.randn_like(v) * 5) if v.is_floating_point() else v) for k, v in inp.items()}
+        o3 = m(junk)
+        vv = b["valid"]
+        for lp1, lp2, lp3 in zip(o1["logp_rounds"] + [o1["logp"]], o2["logp_rounds"] + [o2["logp"]], o3["logp_rounds"] + [o3["logp"]]):
+            assert float((lp2[..., :K] - lp1[..., :K][:, :, perm][:, :, :, perm]).abs().max()) < 1e-4, "the token order reaches an early read"
+            rows = vv[:, None, :, None].expand(-1, 2, -1, K)
+            assert float((lp3[..., :K][rows] - lp1[..., :K][rows]).abs().max()) < 1e-4, "a padding token changes an early read of the valid tokens"
+    print("rounds_head: R = 1, 2: the rounds sit between the layers (layer 1, early read, round 1, layer 2, [read, round 2], layer 3, final read: by tensor identity), the early reads call the final read's modules (R + 1 times, wbias once), "
+          "the only extra parameters are the rounds' (20736 each), the early reads are softmaxes over the gate + none with p(none) = 1 for padding, run in eval mode, the rounds act; token order and padding leave the reads alone: ok")
+
+
+def _early_grad(mod, R, step):
+    """the gradient of the early term alone (the final read's outputs cut from the graph, wire_w 1) of a seeded rounds head of `mod` with live rounds -> {parameter: sum |grad|}"""
+    m = _rounds_head(R, step=step, perturb=True, mod=mod)
+    b = mod.synthetic_batch(2, 48, seed=1)
+    out = m(b)
+    cut = dict(out, logp=out["logp"].detach(), types=out["types"].detach(), types1=out["types1"].detach(), scale=out["scale"].detach())
+    loss = mod.jtoken_loss(cut, b, type_w=0.0, scale_w=0.0, none_weight=0.25, wire_w=1.0)[0]
+    gs = torch.autograd.grad(loss, list(m.parameters()), allow_unused=True)
+    return {n: 0.0 if g is None else float(g.abs().sum()) for (n, _), g in zip(m.named_parameters(), gs)}
+
+
+def _check_early_grad(mod):
+    """the early loss reaches the layers below its read, the rounds below it and the shared wiring read, and nothing else: R 1: layer 1 (and, after the switch, the type reading whose p_none is the key weight) + the wiring read; not layers 2 - 3, not
+    round 1 (its read comes before it), not the scale branch; R 2: also round 1 and layer 2; not layer 3, round 2, the scale branch"""
+    low = ("ln0.", "proj.", "mlp.", "layers.0.")
+    for R, step, live, dead in ((1, 0, low + RS, ("layers.1.", "layers.2.", "rounds.", "sc_", "tnorm.", "types.")),
+                                (1, JK.SWITCH + 1, low + RS + ("tnorm.", "types."), ("layers.1.", "layers.2.", "rounds.", "sc_")),
+                                (2, 0, low + RS + ("layers.1.", "rounds.0."), ("layers.2.", "rounds.1.", "sc_", "tnorm.", "types."))):
+        g = _early_grad(mod, R, step)
+        for pre in live:
+            assert sum(v for n, v in g.items() if n.startswith(pre)) > 0, (R, step, pre, "the early loss does not reach it")
+        for pre in dead:
+            assert all(v == 0.0 for n, v in g.items() if n.startswith(pre)), (R, step, pre, "the early loss reaches what it must not")
+        assert all(any(n.startswith(p) for p in live + dead) for n in g), [n for n in g if not any(n.startswith(p) for p in live + dead)]
+    return True
+
+
+def _logp_k_grad(mod, R, msg):
+    """the final loss only (wire_w 0) of a seeded rounds head with live rounds -> the sum |grad| on the log-probabilities of every early read"""
+    m = _rounds_head(R, msg, step=JK.SWITCH + 1, perturb=True, mod=mod)
+    b = mod.synthetic_batch(2, 48, seed=1)
+    out = m(b)
+    for lp in out["logp_rounds"]:
+        lp.retain_grad()
+    mod.jtoken_loss(out, b, none_weight=0.25)[0].backward()
+    return [0.0 if lp.grad is None else float(lp.grad.abs().sum()) for lp in out["logp_rounds"]]
+
+
+def test_rounds_grad():
+    """E392 gradients: (1) the early loss alone reaches layer 1, the shared wiring read (`lnw`, `wq`, `wk`, `wbias`, `dest`, `none_k`, `none_b`: the early read shares the final read's weights) and only what lies below its read (`_check_early_grad`);
+    mutant: an early read on a COPY of the weights fails. (2) The final loss (wire_w 0) reaches every early read's log-probabilities through the messages, for both message modes (the uniform one through the degrees); mutant: p_k detached fails.
+    (3) At the zero start the messages are 0: the gradient on logp_k is exactly 0 and the last layer of the round gets one; after ONE optimiser step the gradient reaches logp_k"""
+    assert _check_early_grad(JK)
+    must_fail(_check_early_grad, _mutant(("logp, _ = self.read_wiring(x, wb, logw, cand)", "logp, _ = __import__(\"copy\").deepcopy(self).read_wiring(x, wb, logw, cand)")))
+    g = {(R, msg): _logp_k_grad(JK, R, msg) for R in (1, 2) for msg in JK.MSG}
+    assert all(len(v) == R and all(x > 0 for x in v) for (R, _), v in g.items()), g
+    detached = _mutant(("message_weights(link_prob(logp, cand), cand, self.msg)", "message_weights(link_prob(logp.detach(), cand), cand, self.msg)"))
+    assert all(x == 0.0 for x in _logp_k_grad(detached, 1, "real")), "the detached mutant still has a gradient on logp_k"
+    m = _rounds_head(1)
+    b = _batch(2)
+    out = m(b)
+    out["logp_rounds"][0].retain_grad()
+    JK.jtoken_loss(out, b, none_weight=0.25)[0].backward()
+    last = m.rounds[0].mlp[2]
+    assert float(out["logp_rounds"][0].grad.abs().sum()) == 0.0 and float(last.weight.grad.abs().sum()) > 0 and float(m.rounds[0].wv.weight.grad.abs().sum()) == 0.0, "the zero start: no gradient on logp_k yet, the last layer learns first"
+    torch.optim.SGD(m.parameters(), lr=0.1).step()
+    m.zero_grad()
+    out = m(b)
+    out["logp_rounds"][0].retain_grad()
+    JK.jtoken_loss(out, b, none_weight=0.25)[0].backward()
+    assert float(out["logp_rounds"][0].grad.abs().sum()) > 0 and float(m.rounds[0].wv.weight.grad.abs().sum()) > 0, "after one optimiser step the gradient does not reach logp_k"
+    print(f"rounds_grad: the early loss alone reaches layer 1, the shared wiring read and what lies below its read, not layers above, the rounds below nor the scale branch (R 1 before / after the switch, R 2; the copied-weights mutant fails); the final "
+          f"loss reaches every early read through the messages (sum |grad| on logp_k {', '.join(f'R{R} {msg} {min(v):.1e}' for (R, msg), v in g.items())}; the p_k-detached mutant gets 0); at the zero start the gradient on logp_k is 0 and the last "
+          f"layer learns first, after one optimiser step it reaches logp_k: ok")
+
+
+def _msg_case():
+    """4 tokens, short gate 0 -> 1, 0 -> 2, 1 -> 2, 3 -> 2, long gate 0 -> 3, with the early probabilities p"""
+    cand = torch.zeros(1, 2, 4, 4, dtype=torch.bool)
+    p = torch.zeros(1, 4, 4)
+    for c, i, j, v in ((0, 0, 1, .5), (0, 0, 2, .3), (0, 1, 2, .6), (0, 3, 2, .2), (1, 0, 3, .7)):
+        cand[0, c, i, j], p[0, i, j] = True, v
+    return p, cand
+
+
+def _check_msg(mod):
+    """`mod.message_weights` by hand on `_msg_case`: 'real' = p for both directions; 'uniform' = the gate normalised per column (w_fwd) / per row (w_bwd), times the soft in-degree / out-degree of p; an empty gate gives 0, no NaN"""
+    p, cand = _msg_case()
+    assert mod.message_weights(p, cand)[0] is p and mod.message_weights(p, cand, "real")[1] is p
+    wf, wb = mod.message_weights(p, cand, "uniform")
+    third = 1.1 / 3                                                           # token 2: three allowed predecessors, soft in-degree .3 + .6 + .2
+    want_f, want_b = torch.zeros(1, 4, 4), torch.zeros(1, 4, 4)
+    for i, j, v in ((0, 1, .5), (0, 2, third), (1, 2, third), (3, 2, third), (0, 3, .7)):
+        want_f[0, i, j] = v
+    for i, j, v in ((0, 1, .5), (0, 2, .5), (0, 3, .5), (1, 2, .6), (3, 2, .2)):                  # token 0: three allowed successors, soft out-degree .5 + .3 + .7
+        want_b[0, i, j] = v
+    assert torch.allclose(wf, want_f, atol=1e-6) and torch.allclose(wb, want_b, atol=1e-6), (wf, wb)
+    assert torch.allclose(wf.sum(1), p.sum(1), atol=1e-6) and torch.allclose(wb.sum(2), p.sum(2), atol=1e-6), "the degrees are not kept"
+    e = mod.message_weights(torch.zeros(1, 4, 4), torch.zeros(1, 2, 4, 4, dtype=torch.bool), "uniform")
+    assert all(bool(torch.isfinite(x).all()) and float(x.abs().sum()) == 0.0 for x in e), "an empty gate"
+    return True
+
+
+def _check_round(mod):
+    """`mod.Round` by hand (explicit sums, asymmetric weights, a live last layer): mf_j = sum_i w_fwd[i, j] W_v x_i, mb_i = sum_j w_bwd[i, j] W_u x_j, x + MLP([mf ; mb]) (no LayerNorm); at the zero start the identity"""
+    torch.manual_seed(3)
+    r = mod.Round(8)
+    x, wf, wb = torch.randn(1, 4, 8), torch.rand(1, 4, 4), torch.rand(1, 4, 4)
+    assert torch.equal(r(x, wf, wb), x), "a new round is not the identity"
+    with torch.no_grad():
+        for p in r.mlp[2].parameters():
+            p.copy_(torch.randn(p.shape) * 0.5)
+    v, u = r.wv(x)[0], r.wu(x)[0]
+    mf = torch.stack([sum(wf[0, i, j] * v[i] for i in range(4)) for j in range(4)])
+    mb = torch.stack([sum(wb[0, i, j] * u[j] for j in range(4)) for i in range(4)])
+    assert torch.allclose(r(x, wf, wb)[0], x[0] + r.mlp(torch.cat([mf, mb], -1)), atol=1e-5)
+    return True
+
+
+def test_message_weights():
+    """E392 `message_weights` and `Round` by hand (`_check_msg`, `_check_round`); textual mutants fail: the degree scale left out, the in-degree used for the backward weights, the column normalisation used for the backward weights, no empty-sum guard, the
+    forward message summed over the wrong index, the backward over the wrong one, a LayerNorm-free residual left out"""
+    assert _check_msg(JK) and _check_round(JK)
+    muts = {"no degree scale": [("clamp_min(1) * p.sum(1, keepdim=True), gate", "clamp_min(1), gate")],
+            "backward scaled by the in-degree": [("gate.sum(2, keepdim=True).clamp_min(1) * p.sum(2, keepdim=True)", "gate.sum(2, keepdim=True).clamp_min(1) * p.sum(1, keepdim=True)")],
+            "backward normalised per column": [("gate / gate.sum(2, keepdim=True)", "gate / gate.sum(1, keepdim=True)")],
+            "no empty-sum guard": [("gate.sum(1, keepdim=True).clamp_min(1)", "gate.sum(1, keepdim=True)"), ]}
+    for edits in muts.values():
+        must_fail(_check_msg, _mutant(*edits))
+    rmuts = {"forward message summed over the successors": [("w_fwd.transpose(1, 2).to(v.dtype) @ v", "w_fwd.to(v.dtype) @ v")],
+             "backward message summed over the predecessors": [("w_bwd.to(u.dtype) @ u", "w_bwd.transpose(1, 2).to(u.dtype) @ u")],
+             "no residual": [("return x + self.mlp(", "return 0.0 * x + self.mlp(")],
+             "the last layer not at zero": [("nn.init.zeros_(self.mlp[2].weight)", "pass")]}
+    for edits in rmuts.values():
+        must_fail(_check_round, _mutant(*edits))
+    print(f"message_weights: 'real' = p, 'uniform' = the column / row normalised gate x the soft in- / out-degree on a 4-token case by hand (degrees kept, an empty gate gives 0), `Round` by hand (the forward message from the predecessors, the "
+          f"backward from the successors, a residual, no LayerNorm, the identity at the zero start); mutants ({', '.join(list(muts) + list(rmuts))}) fail: ok")
+
+
+def _wire_out(frames=(F1, F2)):
+    """the hand frames with a final read and two early reads on leaf logits -> (out, batch, frames, [(z, zn) of each early read])"""
+    out, b, frames = _hand(frames)
+    out = _with_logp(out)
+    g = torch.Generator().manual_seed(5)
+    K, B = frames[0]["K"], len(frames)
+    zs = [(torch.randn(B, 2, K, K, generator=g).requires_grad_(), torch.randn(B, 2, K, generator=g).requires_grad_()) for _ in range(2)]
+    out["logp_rounds"] = [JK.wiring_logp(z, zn, out["cand"]) for z, zn in zs]
+    return out, b, frames, zs
+
+
+def _check_wire(mod, pos="sum", w=0.5):
+    """`mod.jtoken_loss(wire_w=w, none_weight=0.25, pos_loss=pos)` on `_wire_out` against the hand likelihood of each early read (per frame, the sources of the class, then the frames that have one: `_hand_loss`): info nll<k>_s / nll<k>_l and the loss
+    = the loss without the early term + w x the sum over the reads"""
+    out, b, frames, zs = _wire_out()
+    base, _ = mod.jtoken_loss(out, b, none_weight=0.25, pos_loss=pos)
+    loss, info = mod.jtoken_loss(out, b, none_weight=0.25, pos_loss=pos, wire_w=w)
+    t1, t3 = out["types1"].detach().tolist(), out["types"].detach().tolist()
+    tot = 0.0
+    for k, (z, zn) in enumerate(zs, 1):
+        per = [_hand_loss(f, z.detach().tolist()[n], zn.detach().tolist()[n], t1[n], t3[n], 0.25, pos) for n, f in enumerate(frames)]
+        s, l = (sum(p[c] for p in per if p[c] is not None) / sum(p[c] is not None for p in per) for c in range(2))
+        assert f"nll{k}_s" in info and f"nll{k}_l" in info, sorted(info)
+        assert abs(info[f"nll{k}_s"] - s) < 1e-5 and abs(info[f"nll{k}_l"] - l) < 1e-5, (k, info, s, l)
+        tot += s + l
+    assert abs(float(loss) - float(base) - w * tot) < 1e-5, (float(loss), float(base), w * tot)
+    return tot
+
+
+def test_wire_loss():
+    """E392 `jtoken_loss(wire_w=)`: the early term by hand on the two hand frames and two early reads (none weight 0.25, both `pos_loss` modes, W 0.5): info nll1_s / nll1_l / nll2_s / nll2_l and loss = the loss without it + W x the sum; wire_w 0 (the default)
+    adds nothing, reads no `logp_rounds` (the same loss without the key, no early info key); wire_w > 0 on an output without early reads is refused; textual mutants fail: no none weight on the early reads, a global mean over the sources, the final read in
+    place of the early one, the weight W ignored, only the first read"""
+    tot = {pos: _check_wire(JK, pos) for pos in JK.POS_LOSS}
+    assert tot["max"] > tot["sum"] + 1e-3, tot
+    out, b, frames, zs = _wire_out()
+    plain = {k: v for k, v in out.items() if k != "logp_rounds"}
+    l0, i0 = JK.jtoken_loss(out, b, none_weight=0.25)
+    assert torch.equal(l0, JK.jtoken_loss(plain, b, none_weight=0.25)[0]) and not any(k.startswith("nll1") or k.startswith("nll2") for k in i0), "wire_w 0 must add nothing and read nothing"
+    must_fail(JK.jtoken_loss, plain, b, none_weight=0.25, wire_w=0.5)
+    muts = {"no none weight on the early reads": [("nk = _source_nll(lpk, G, none_weight, pos_loss)", "nk = _source_nll(lpk, G, 1.0, pos_loss)")],
+            "a global mean": [("s_k, l_k = (_frame_mean(nk[:, c], rows[:, c]) for c in range(2))", "s_k, l_k = ((nk[:, c] * rows[:, c]).sum() / rows[:, c].sum() for c in range(2))")],
+            "the final read instead of the early one": [("nk = _source_nll(lpk, G, none_weight, pos_loss)", 'nk = _source_nll(out["logp"], G, none_weight, pos_loss)')],
+            "W ignored": [("loss = loss + wire_w * (s_k + l_k)", "loss = loss + (s_k + l_k)")],
+            "only the first read": [('enumerate(out["logp_rounds"], 1)', 'enumerate(out["logp_rounds"][:1], 1)')]}
+    for edits in muts.values():
+        must_fail(_check_wire, _mutant(*edits))
+    print(f"wire_loss: the early term by hand on two early reads of the two hand frames (W 0.5, none weight 0.25; sum {tot['sum']:.5f}, max {tot['max']:.5f}); wire_w 0 adds nothing and reads nothing, W > 0 without early reads is refused; "
+          f"mutants ({', '.join(muts)}) fail: ok")
+
+
+RARMS = (("x", ["--rounds", "1"]), ("r1", ["--rounds", "1", "--wire-weight", "0.5"]), ("r2u", ["--rounds", "2", "--wire-weight", "0.5", "--msg", "uniform"]))
+
+
+def _rounds_runs(mod, runs):
+    """the smoke runs (20 steps, the champion recipe on synthetic batches) of three E392 arms through `mod` (jtoken_train or a textual mutant): x (--rounds 1), r1 (+ --wire-weight 0.5), r2u (--rounds 2, --msg uniform, --wire-weight 0.5): every step's loss is finite and
+    called with the arm's wire_w; the early info keys exist exactly for W > 0 (nll1_*, nll2_* with two rounds); x starts as the champion (its first loss is CHAMP[0]) and r1's first loss is x's + 0.5 x its early term; the rounds move off zero; model.pt's args hold the three
+    options and `load_model` rebuilds the head (rounds, msg, strict state); the recipe refuses another rounds / wire weight / msg at a resume"""
+    real, got, now = JK.jtoken_loss, {}, [None]
+
+    def recording(out, batch, **k):
+        r = real(out, batch, **k)
+        got[now[0]].append((float(r[0]), dict(r[1]), k.get("wire_w", 0.0)))
+        return r
+    for name, extra in RARMS:
+        now[0], got[name] = name, []
+        patched(JK, "jtoken_loss", recording, mod.train, mod.parse_args(["--name", name] + BASE + extra), runs, 500, 48)
+    for name, extra in RARMS:
+        R, W, msg = int(extra[1]), (float(extra[extra.index("--wire-weight") + 1]) if "--wire-weight" in extra else 0.0), (extra[extra.index("--msg") + 1] if "--msg" in extra else "real")
+        steps = got[name]
+        assert len(steps) == 20 and all(math.isfinite(s[0]) and s[2] == W for s in steps), (name, [s[0] for s in steps][:3], {s[2] for s in steps})
+        assert all(("nll1_s" in s[1]) == (W > 0) and ("nll2_s" in s[1]) == (W > 0 and R == 2) for s in steps), (name, sorted(steps[0][1]))
+        ck = torch.load(os.path.join(runs, name, "model.pt"), map_location="cpu", weights_only=False)
+        assert (ck["args"]["rounds"], ck["args"]["wire_weight"], ck["args"]["msg"]) == (R, W, msg), ck["args"]
+        m, a = mod.load_model(name, "cpu", runs)
+        assert len(m.rounds) == R and m.msg == msg and all(torch.equal(v, m.state_dict()[k]) for k, v in ck["state"].items()), "load_model does not rebuild the head of the run"
+        assert all(float(r.mlp[2].weight.abs().sum()) > 0 for r in m.rounds), "the rounds did not move off zero"
+        rows = [json.loads(x) for x in open(os.path.join(runs, name, "log.jsonl"))]
+        assert ("nll1_s" in rows[-1]) == (W > 0), rows[-1]
+        rd = os.path.join(runs, name)
+        for k, v in (("rounds", (R + 1) % 3), ("wire_weight", W + 0.25), ("msg", "uniform" if msg == "real" else "real")):
+            try:
+                mod.check_start(dict(ck["args"], **{k: v}), rd)
+            except AssertionError:
+                continue
+            raise AssertionError(f"a resume of {name} with another {k} accepted")
+        mod.check_start(ck["args"], rd)
+    assert abs(got["x"][0][0] - CHAMP[0]) < 1e-9, (got["x"][0][0], CHAMP[0])
+    i1 = got["r1"][0][1]
+    assert abs(got["r1"][0][0] - got["x"][0][0] - 0.5 * (i1["nll1_s"] + i1["nll1_l"])) < 1e-5, "step 1 of r1 is not x's + W x the early term"
+    assert got["r1"][-1][0] != got["x"][-1][0]
+    return got
+
+
+def test_rounds_trainer():
+    """E392 in the trainer (`_rounds_runs`): the flags, ARCH_DEFAULTS, RECIPE, `build_head` / `load_model`, `make_loss`; the defaults (0, 0.0, real) = the champion command line; refused: --rounds 3, --wire-weight or --msg uniform without --rounds, a negative weight; a model.pt of
+    before (no rounds in its args) loads as rounds 0, one of a rounds head needs its args (strict load); textual mutants of jtoken_train.py fail: the weight not passed to the loss, rounds / msg not built, the recipe without wire_weight"""
+    d = vars(JKT.parse_args(["--name", "x"]))
+    assert (d["rounds"], d["wire_weight"], d["msg"]) == (0, 0.0, "real") and all(JKT.ARCH_DEFAULTS[k] == d[k] for k in ("rounds", "wire_weight", "msg")) and {"rounds", "wire_weight", "msg"} <= set(JKT.RECIPE)
+    for bad in (["--wire-weight", "0.5"], ["--msg", "uniform"], ["--rounds", "1", "--wire-weight", "-0.5"]):
+        must_fail(JKT.parse_args, ["--name", "x"] + bad)
+    try:
+        JKT.parse_args(["--name", "x", "--rounds", "3"])
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("--rounds 3 accepted")
+    h = JKT.build_head(vars(JKT.parse_args(["--name", "x", "--rounds", "2", "--msg", "uniform", "--wire-weight", "0.5"])))
+    assert len(h.rounds) == 2 and h.msg == "uniform" and len(JKT.build_head({}).rounds) == 0 and JKT.build_head({}).msg == "real"
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        for name, args, state in (("before", dict(seed=0), JK.JTokenHead().state_dict()), ("rr", dict(seed=0, rounds=2, msg="uniform", wire_weight=0.5), h.state_dict()), ("rr_noargs", dict(seed=0), h.state_dict())):
+            os.makedirs(os.path.join(runs, name))
+            torch.save(dict(state=state, args=args, steps=0), os.path.join(runs, name, "model.pt"))
+        assert len(JKT.load_model("before", "cpu", runs)[0].rounds) == 0 and (len(JKT.load_model("rr", "cpu", runs)[0].rounds), JKT.load_model("rr", "cpu", runs)[0].msg) == (2, "uniform"), "load_model"
+        try:
+            JKT.load_model("rr_noargs", "cpu", runs)
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("a rounds state loaded into a champion head")
+    for R, W in ((2, 0.5), (1, 0.0)):                                                                      # the clock line (call 50) names the early reads exactly when W > 0
+        lines, hd, bt = [], JKT.build_head(dict(rounds=R)), JK.synthetic_batch(2, 48, seed=0)
+        fn = JKT.make_loss(types.SimpleNamespace(log=lines.append), 0.25, wire_w=W)
+        for _ in range(50):
+            fn(hd, bt)
+        clock = [x for x in lines if x.startswith("clock:")]
+        assert len(clock) == 1 and ("early reads (E392) nll1_s" in clock[0]) == (W > 0) and ("nll2_s" in clock[0]) == (W > 0 and R == 2), clock
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        got = _rounds_runs(JKT, runs)
+    muts = {"the wire weight is not passed to the loss": [("hs, a.wire_weight), run,", "hs), run,")],
+            "the rounds are not built": [('rounds=int(args.get("rounds", ARCH_DEFAULTS["rounds"])), msg=', "rounds=0, msg=")],
+            "the messages are not built": [('msg=args.get("msg", ARCH_DEFAULTS["msg"]))', 'msg="real")')],
+            "the recipe lacks wire_weight": [('"noise_e", "rounds", "wire_weight", "msg")', '"noise_e", "rounds", "msg")')]}
+    for edits in muts.values():
+        with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
+            must_fail(_rounds_runs, _mutant(*edits, of=JKT), tmp)
+    print(f"rounds_trainer: defaults (0, 0.0, real) = the champion command line, refusals (--rounds 3, a weight or uniform messages without rounds, a negative weight), a model.pt of before loads as rounds 0; 20 smoke steps of x / r1 / r2u: finite, "
+          f"the early info keys exactly for W > 0, x starts as the champion (first loss {got['x'][0][0]:.6f}), r1's first loss = x's + 0.5 x the early term ({got['r1'][0][0]:.6f}), rounds move off zero, the three options in model.pt and rebuilt by load_model, "
+          f"a resume with another rounds / weight / msg refused; textual mutants ({', '.join(muts)}) fail: ok")
+
+
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
-         test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise]
+         test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise,
+         test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want

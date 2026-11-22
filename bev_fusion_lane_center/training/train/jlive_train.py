@@ -5,7 +5,7 @@
 Arms (card section 0): z = `--train-nodes 0` (B' frozen, the head's loss only), s4 = `--train-nodes 1` (B''s node head trains on the head's loss + b_weight x its own node loss `lane_live_tok.b_loss`), b = `--train-nodes 1 --live-inputs 0` (the same trainer, the head cuts its inputs:
 B''s node head trains on its own loss only). `--seed` = B''s seed (the default `--b-run` runs/e292_a_s<S>, the frame order of the E365 cache; the head run must be of the same seed), `--head-seed` = the data order (default: the head run's).
 One step: `no, tk = src.tokens(x)`; the head on `head_inputs(tk)` (queued before the labels: the overlap of lane_live_tok's PLAN); `src.labelled(tk, ..., token_drop=0, gate=False)`; loss = `jtoken.jtoken_loss` with the head run's options (none weight, pos loss, none weight near;
-`--none-weight` / `--pos-loss` override) + b_weight x B''s node loss (s4, b; computed in float32 outside the autocast, logged in every arm, under no_grad in z). The head runs in fit's bf16 autocast as in S1, B' in float32 (LiveSource); no cudnn / TF32 flag is set.
+`--none-weight` / `--pos-loss` override; the E392 options rounds / msg / wire weight are the head run's, no flag: the head is built with them, in the recipe and in model.pt's args) + b_weight x B''s node loss (s4, b; computed in float32 outside the autocast, logged in every arm, under no_grad in z). The head runs in fit's bf16 autocast as in S1, B' in float32 (LiveSource); no cudnn / TF32 flag is set.
 `trainer.fit` trains `Joint` (the head + the LiveSource): its optimiser gets the head and B''s node head (the frozen tensors are left out), one cosine schedule (5 % warm-up), the same lr for both; its checkpoint holds both (resume, roll-back) and the record of the kill rules (extra state).
 fit's joint clip is OFF (clip=0: it only measures, `grad_norm` of the log); the CLIP IS PER GROUP: the head's gradients at 3.0 on their own, the node head's at 3.0 on their own (B''s node gradient is 8.7 - 17.6 against the head's ~0.5: one clip would scale the head's step
 by ~0.17 in s4 only), done in `StepHook`, torch's global optimiser pre-step hook (fit keeps its optimiser to itself: the hook runs after fit's backward, right before AdamW's step). The kill rules (card), each stops the run with `Kill` (non-zero exit):
@@ -45,7 +45,7 @@ import lane_live_tok as LLT  # noqa: E402
 import qgraph as QG  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "pos_loss", "head_seed", "bs", "steps", "lr")
+RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "pos_loss", "head_seed", "bs", "steps", "lr", "rounds", "wire_weight", "msg")
 K = 512                     # tokens per frame, as the cache
 CLIP = 3.0                  # the clip of each group (the head, the node head)
 LOG_EVERY = 100             # fit's logged steps
@@ -91,7 +91,8 @@ def _abs(p):
 
 
 def resolve(a, runs):
-    """the run's args: the CLI + the head run's loss options (its removed options checked: `jtoken_train.check_removed`; `build_head` builds the champion architecture) + the paths and sha256 of both start checkpoints"""
+    """the run's args: the CLI + the head run's loss options and its E392 head options (rounds, wire_weight, msg: the head of the run is built and its early-read loss is added as the head run's; its removed options checked: `jtoken_train.check_removed`;
+    `build_head` builds the champion architecture) + the paths and sha256 of both start checkpoints"""
     h = torch.load(os.path.join(runs, a.head_run, "model.pt"), map_location="cpu", weights_only=False)["args"]
     g = lambda k: h[k] if h.get(k) is not None else JKT.ARCH_DEFAULTS.get(k)  # noqa: E731   (a key stored as None means the default, as `jtoken_train.arch` reads it)
     assert h.get("seed") == a.seed, f"--seed {a.seed}: the head run {a.head_run} learned on the tokens of B' seed {h.get('seed')}"
@@ -101,6 +102,7 @@ def resolve(a, runs):
     return dict(vars(a), ident=h.get("ident") or "e292_a", cache=h.get("cache"), K=K,
                 none_weight=g("none_weight") if a.none_weight is None else a.none_weight, pos_loss=g("pos_loss") if a.pos_loss is None else a.pos_loss,
                 head_seed=a.head_seed if a.head_seed is not None else (h["seed"] if h.get("head_seed") is None else h["head_seed"]),
+                rounds=g("rounds"), wire_weight=g("wire_weight"), msg=g("msg"),
                 b_run=b_run, head_sha256=JKT.file_sha256(os.path.join(runs, a.head_run, "model.pt")), b_sha256=JKT.file_sha256(os.path.join(_abs(b_run), "model.pt")))
 
 
@@ -111,7 +113,7 @@ def check_start(args, folder):
     held = [f for f in ("config.json", "ckpt.pt", "model.pt") if os.path.exists(os.path.join(folder, f))]
     if held:
         c = json.load(open(os.path.join(folder, "config.json"))) if "config.json" in held else {}
-        old = {k: (c.get("args") or {}).get(k) for k in RECIPE}
+        old = {k: (c.get("args") or {}).get(k, JKT.ARCH_DEFAULTS.get(k)) for k in RECIPE}                    # a run of before an option has its default
         assert c.get("design") == "jlive" and old == {k: args.get(k) for k in RECIPE}, f"{folder} holds {held} of another run ({c.get('design')}, {old}): use another --name"
 
 
@@ -272,7 +274,7 @@ def flag(run, key, step, text):
 
 def make_loss(run, joint, args, hook):
     """the loss of one step (module docstring) with the kill rules and the log; the head's loss and its log lines (first loss, clock, peak memory) are `jtoken_train.make_loss`'s"""
-    base = JKT.make_loss(run, none_weight=args["none_weight"], pos_loss=args["pos_loss"])
+    base = JKT.make_loss(run, none_weight=args["none_weight"], pos_loss=args["pos_loss"], wire_w=args["wire_weight"])
     tn, live, w, steps = bool(args["train_nodes"]), bool(args["live_inputs"]), args["b_weight"], args["steps"]
     nodes, win, st = joint.src.trainable(), collections.deque(maxlen=LOG_EVERY), dict(last=None, checked=False)      # win: the label numbers of the last 100 steps of the process
 
