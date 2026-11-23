@@ -295,6 +295,30 @@ steps_logged = [json.loads(ln)["step"] for ln in open(os.path.join(tmp, "e_last"
 assert steps_logged == [20, 40, 45], steps_logged
 print("the last step is logged:", steps_logged)
 
+# (8c) E393: a group's lr_mult scales its rate in every step (AdamW groups through `params`); a group with lr_mult 1.0 is the run without it, bit for bit
+from torch.optim.optimizer import register_optimizer_step_pre_hook  # noqa: E402
+
+
+def grouped(mult, key=True):
+    m = make_model()
+    return m, [dict(params=list(m[0].parameters())), dict(params=list(m[2].parameters()), **({"lr_mult": mult} if key else {}))]
+
+
+seen_lr = []
+hk = register_optimizer_step_pre_hook(lambda opt, a, k_: seen_lr.append([g["lr"] for g in opt.param_groups]))
+try:
+    mm, ps = grouped(0.1)
+    T.fit(mm, loss_fn, T.Run("g_mult", tmp), **dict(kw, steps=30, ckpt_every=0, sched="cosine", warmup=0.1, params=ps))
+finally:
+    hk.remove()
+assert len(seen_lr) == 30 and all(abs(a - T._lr_at(i, 30, kw["lr"], 0.1, "cosine")) < 1e-15 and abs(b - 0.1 * a) < 1e-15 for i, (a, b) in enumerate(seen_lr)), seen_lr[:3]
+m1, p1 = grouped(1.0)
+m0, p0 = grouped(None, key=False)
+for m_, p_, n_ in ((m1, p1, "g_one"), (m0, p0, "g_none")):
+    T.fit(m_, loss_fn, T.Run(n_, tmp), **dict(kw, steps=30, ckpt_every=0, params=p_))
+assert all(torch.equal(a, b) for a, b in zip(m1.parameters(), m0.parameters())), "lr_mult 1.0 changed the run"
+print("lr_mult: the group's rate = the schedule's x its multiplier in every step (0.1 on the second group); lr_mult 1.0 = the run without it, bit for bit:", True)
+
 # (9) a checkpoint loaded onto the GPU (map_location=cuda, as fit does on a resume) restores the RNG states (reported 2026-11-03: set_rng_state refused the CUDA tensors, every GPU resume failed)
 if torch.cuda.is_available():
     torch.save(T._rng_state(), os.path.join(tmp, "rng.pt"))

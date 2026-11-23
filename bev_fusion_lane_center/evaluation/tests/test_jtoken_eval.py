@@ -1247,8 +1247,8 @@ def test_live():
         stub, real = CacheB(shift), E.live_source
         return stub, ((E, "live_source", lambda path, ck, kw, K: (stub, real(path, ck, kw, K)[1])), (E, "live_data", lambda split, seed, ident: frames()))
 
-    def joint(runs, name, b_state, train_nodes=1, b_sha256=base_sha):                                         # a run of jlive_train's format: args train_nodes, live_inputs, b_sha256; b_state
-        _floor_run(runs, name, 0, train_nodes=train_nodes, live_inputs=True, b_sha256=b_sha256)
+    def joint(runs, name, b_state, train_nodes=1, b_sha256=base_sha, **extra):                                # a run of jlive_train's format: args train_nodes, live_inputs, b_sha256 (+ E393's b_state_from, b_state_sha256, train_pyr); b_state
+        _floor_run(runs, name, 0, train_nodes=train_nodes, live_inputs=True, b_sha256=b_sha256, **extra)
         p = os.path.join(runs, name, "model.pt")
         ck = torch.load(p, map_location="cpu", weights_only=False)
         if b_state is not None:
@@ -1400,6 +1400,26 @@ def test_live():
             joint(runs, "j5", trained, b_sha256="0" * 64)                                                    # a joint run that started from another B' file
             dump_live(runs, "j5", 1.0)
             refused("j5", "not the B' the run started from")
+            # E393: a run started with --b-state-from is proven against the START run's b_state (here a start whose pyramid differs from the B' file); train_pyr: the pyramid moved, the rest outside the node head as at the start
+            pk = next(k for k in sorted(trained) if k.startswith("pyr.") and trained[k].is_floating_point())
+            ok_ = next(k for k in sorted(trained) if not k.startswith(("nodes.", "pyr.")) and trained[k].is_floating_point())
+            start = dict(trained, **{pk: trained[pk] + 0.02, ok_: trained[ok_] + 0.02})                       # the start differs from the B' file in the pyramid AND outside node head and pyramid
+            joint(runs, "s0", start)
+            s_sha = E._file_id(os.path.join(runs, "s0", "model.pt"))["sha256"]
+            st_args = dict(b_state_from="s0", b_state_sha256=s_sha)
+            nodes_on = dict(start, **{key: start[key] + 0.01})                                               # the node head moved from the start
+            for name, sd, extra in (("c1", nodes_on, {}), ("p1", dict(nodes_on, **{pk: nodes_on[pk] + 0.01}), dict(train_pyr=1))):
+                joint(runs, name, sd, **st_args, **extra)
+                dump_live(runs, name, 1.0)
+                assert E.score(E.parse_args(["score", "--run", name, "--live"] + base_args), runs, out)["rec"]["info"]["b_source"]["kind"] == "b_state", name
+            for name, sd, extra, why in (("c2", dict(nodes_on, **{pk: nodes_on[pk] + 0.01}), {}, "outside its node head are not those of the start run s0"),
+                                         ("c3", start, {}, "ran the node head of the start run s0"),
+                                         ("c4", nodes_on, dict(b_state_sha256="0" * 64), "not the start run's file"),
+                                         ("p2", nodes_on, dict(train_pyr=1), "ran the pyramid of the start run s0"),
+                                         ("p3", dict(nodes_on, **{pk: nodes_on[pk] + 0.01, ok_: nodes_on[ok_] + 0.01}), dict(train_pyr=1), "outside its node head and pyramid are not those of the start run s0")):
+                joint(runs, name, sd, **dict(st_args, **extra))
+                dump_live(runs, name, 1.0)
+                refused(name, why)
             joint(runs, "z", None, train_nodes=0)                                                            # a frozen-B' run read with a trained node head
             d = pickle.load(open(os.path.join(runs, "j", "token_val_live_n3.pkl"), "rb"))
             d["meta"]["run"] = "z"
@@ -1413,7 +1433,8 @@ def test_live():
           f"with the live meta (topo F1 {c1['rec']['metrics']['topo_F1']:.4f}), the parity read with diff 0; the joint run (pos + 1 m, reversed, chunks 2 1): tokens_exact 0, scored on its own tokens (topo F1 {cj['metrics']['topo_F1']:.4f}; "
           f"the cache-token mutant caught), sweep and anatomy = a rebuild from its records, refused against a run of another B' batch, paired with one of the same, live-diff by hand (|delta pos| sqrt 2 over {nv} cells); a z run with "
           "a base b_state accepted; refused: a joint run on the cache path (dump, score, graphs), a fall-back to runs/e292_a_s0 (live_source mutant), a node head that did not move, a moved pyramid, another b_sha256, a frozen "
-          "run with a trained head, the cache dump under the live name: ok")
+          "run with a trained head, the cache dump under the live name; E393 (--b-state-from): the start run's b_state is the proof base (c and p accepted although the start's pyramid is not the B' file's), refused: a c run whose "
+          "pyramid moved, a node head of the start, another start file, a p run whose pyramid did not move, a p run with a tensor outside node head and pyramid moved: ok")
 
 
 def test_rounds_run():

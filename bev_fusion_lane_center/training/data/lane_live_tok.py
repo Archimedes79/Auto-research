@@ -67,6 +67,7 @@ PLAN for the joint trainer (the head's trainer is `train/jtoken_train.py`; the j
               The B' forward time, the node-head backward time and the sum are ESTIMATES until the first GPU smoke; so is the memory sum above except its measured parts (the head's 2.12 GB, the node head's saved activations by hooks, the label step on the CPU)
 """
 import argparse
+import contextlib
 import json
 import os
 import re
@@ -239,17 +240,22 @@ def live_batch(tk, tables, token, row, K, token_drop=0.0, seed=0, gate=True):
 
 
 class LiveSource(nn.Module):
-    """B' as a live token source. `run`: a run folder (relative to the project folder; `qpredict.load_model`, on the CPU: move the module with .to) or a `QGraph`. Everything is frozen except `model.nodes.*` (nothing when `train_nodes` is False); the pyramid is
-    always in eval mode and under no_grad (`train()` of this module does not change that), the node head follows the module's mode. K = the tokens per frame (512 as the cache)"""
+    """B' as a live token source. `run`: a run folder (relative to the project folder; `qpredict.load_model`, on the CPU: move the module with .to) or a `QGraph`. Everything is frozen except `model.nodes.*` (nothing when `train_nodes` is False) and,
+    with `train_pyr` (E393, needs `train_nodes`), `model.pyr.*`; the pyramid is always in eval mode (GroupNorm only: the mode changes nothing) and under no_grad unless `train_pyr` (`train()` of this module does not change that), the node head follows
+    the module's mode. K = the tokens per frame (512 as the cache). `node_params` / `pyr_params` = the trained tensors of each part (`trainable` = both)"""
 
-    def __init__(self, run, K=512, train_nodes=True):
+    def __init__(self, run, K=512, train_nodes=True, train_pyr=False):
         super().__init__()
+        assert train_nodes or not train_pyr, "train_pyr needs train_nodes (the pyramid's gradient reaches it through the node head)"
         self.model = run if isinstance(run, nn.Module) else QP.load_model(run if os.path.isabs(run) else os.path.join(ROOT, run), "cpu")
-        self.K = K
+        self.K, self.train_pyr = K, bool(train_pyr)
         for p in self.model.parameters():
             p.requires_grad_(False)
         if train_nodes:
             for p in self.model.nodes.parameters():
+                p.requires_grad_(True)
+        if self.train_pyr:
+            for p in self.model.pyr.parameters():
                 p.requires_grad_(True)
         self.train()
 
@@ -262,11 +268,17 @@ class LiveSource(nn.Module):
     def trainable(self):
         return [p for p in self.parameters() if p.requires_grad]
 
+    def node_params(self):
+        return [p for p in self.model.nodes.parameters() if p.requires_grad]
+
+    def pyr_params(self):
+        return [p for p in self.model.pyr.parameters() if p.requires_grad]
+
     def tokens(self, x):
-        """pyramid + node stage + `live_tokens` -> (no, tk): the node-stage outputs and the live tokens, all with the graph of the node head. Device work only (asynchronous on a GPU: nothing is read back to the host)"""
+        """pyramid + node stage + `live_tokens` -> (no, tk): the node-stage outputs and the live tokens, all with the graph of the node head (and of the pyramid with `train_pyr`). Device work only (asynchronous on a GPU: nothing is read back to the host)"""
         dev = next(self.model.parameters()).device
         with torch.autocast(device_type=dev.type, enabled=False):         # float32, as the cache was made, also inside the trainer's autocast
-            with torch.no_grad():
+            with contextlib.nullcontext() if self.train_pyr else torch.no_grad():
                 P = self.model.pyr(x.to(dev).float())
             no = self.model.node_stage(P)
             return no, live_tokens(no, self.K)
@@ -758,6 +770,35 @@ def _t_vs_cache():
     assert _vs_cache(got, Fake(), [0, 1])[1] == 1, "the label counts are compared with the cache's"
 
 
+def _t_pyr():
+    """E393 `train_pyr`: the pyramid trains with the node head (nothing else of B'), the tokens are the frozen source's bit for bit, a loss on the live tokens reaches every pyramid tensor the node head reads (`lines05` and the rows 1 - 5 of
+    `centre1` get nothing), no graph under an outer no_grad; without `train_pyr` the pyramid holds no gradient; `train_pyr` without `train_nodes` is refused"""
+    K = 64
+    x = torch.randn(2, 39, 200, 200).half()
+    sp, s0 = LiveSource(_toy_model(), K=K, train_pyr=True), LiveSource(_toy_model(), K=K)
+    names = {n for n, p in sp.named_parameters() if p.requires_grad}
+    assert names == {"model.pyr." + n for n, _ in sp.model.pyr.named_parameters()} | {"model.nodes." + n for n, _ in sp.model.nodes.named_parameters()}, "train_pyr: the pyramid and the node head train, nothing else"
+    assert len(sp.pyr_params()) == len(list(sp.model.pyr.parameters())) and len(sp.node_params()) == len(list(sp.model.nodes.parameters())) and len(sp.trainable()) == len(sp.pyr_params()) + len(sp.node_params())
+    assert not s0.pyr_params() and len(s0.node_params()) == len(s0.trainable())
+    refuses(lambda: LiveSource(_toy_model(), K=K, train_nodes=False, train_pyr=True), "train_pyr needs train_nodes")
+    sp.train()
+    assert not any(mm.training for mm in sp.model.pyr.modules()), "the pyramid stays in eval mode"
+    got = {}
+    for src in (sp, s0):
+        no, tk = src.tokens(x)
+        sum(tk[k].float().sum() for k in GRAPH_KEYS).backward()
+        got[src is sp] = tk
+    assert all(torch.equal(got[True][k].detach(), got[False][k].detach()) for k in GRAPH_KEYS + ("valid", "cell")), "train_pyr changes the tokens"
+    held = {n for n, p in sp.model.pyr.named_parameters() if p.grad is not None and bool(p.grad.ne(0).any())}
+    assert held == {n for n, _ in sp.model.pyr.named_parameters() if not n.startswith("lines05.")}, f"the loss on the tokens does not reach every pyramid tensor the node head reads: {sorted(set(n for n, _ in sp.model.pyr.named_parameters()) - held)}"
+    cw, cb = sp.model.pyr.centre1.weight.grad.flatten(1), sp.model.pyr.centre1.bias.grad
+    read = [0] + list(range(6, 12))
+    assert bool(cw[1:6].eq(0).all()) and bool(cb[1:6].eq(0).all()) and bool(cw[read].ne(0).any(1).all()), "centre1: only the channels 0 and 6 - 11 are read"
+    assert all(p.grad is None for p in s0.model.pyr.parameters()), "without train_pyr the pyramid holds no gradient"
+    with torch.no_grad():
+        assert not sp.tokens(x)[1]["tok"].requires_grad, "train_pyr under an outer no_grad: no graph"
+
+
 def _t_guards():
     refuses(lambda: fixture(n=0), "nothing to compare")                                                          # no vacuous PASS
     refuses(lambda: fixture(seeds=()), "nothing to compare")
@@ -774,6 +815,7 @@ def selftest():
     _t_vs_cache()
     _t_guards()
     _t_source()
+    _t_pyr()
     print("lane_live_tok selftest ok")
 
 

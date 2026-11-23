@@ -87,7 +87,7 @@ def dump(a, runs=None):
             lb = src.labelled(tk, b["table"], b["token"], b["row"], token_drop=0.0, gate=True)
             frames += label_frames(E.run_head(m, lb, dev), lb, E.KEEP_P)
     meta = dict(run=a.run, seed=a.seed, split=a.split, every=a.every, idx=[int(i) for i in idx], tokens=[ds.tokens[i] for i in idx], live=True, b_source=b_source, device=dev, keep_p=E.KEEP_P, steps=args.get("steps"))
-    E.check_b(meta, ck, kw)
+    E.check_b(meta, ck, kw, runs)
     with open(path, "wb") as fh:
         pickle.dump(dict(meta=meta, frames=frames), fh)
     n_c, n_g = np.mean([len(f["cand"]["src"]) for f in frames]), np.mean([len(f["gt"]["src"]) for f in frames])

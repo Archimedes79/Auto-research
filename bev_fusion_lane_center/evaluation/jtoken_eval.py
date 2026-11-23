@@ -244,20 +244,34 @@ def live_source(path, ck, kw, K):
     return LT.LiveSource(mb, K, train_nodes=False).eval(), src
 
 
-def check_b(meta, ck, kw):
+def check_b(meta, ck, kw, runs=RUNS):
     """the B' a live dump ran (`b_shas` in its b_source) is the one its run demands: `base_b`'s model.pt is the file the run started from (args b_sha256, when the run records it) and every tensor outside the node head that ran is
-    `base_b`'s (only `nodes.*` may train); a run that trained the node head (args train_nodes) ran its own `b_state`, whose node head differs from `base_b`'s; every other run (train_nodes 0, also with a b_state; a cache-trained head:
-    the parity read) ran the node head of `base_b` (and its `b_state` when it has one)"""
+    the START's (only `nodes.*` may train); a run that trained the node head (args train_nodes) ran its own `b_state`, whose node head differs from the start's; every other run (train_nodes 0, also with a b_state; a cache-trained head:
+    the parity read) ran the node head of the start (and its `b_state` when it has one). The start = `base_b`'s state, or (E393: a run started with args b_state_from) the b_state of that run under `runs` (its model.pt the file
+    of args b_state_sha256). E393 train_pyr: the pyramid (`pyr.*`) ran moved from the start, every tensor outside the node head and the pyramid as at the start"""
     got, path = meta["b_source"], os.path.join(_abs(base_b(kw)), "model.pt")
     assert "b_sha256" not in ck["args"] or ck["args"]["b_sha256"] == _file_id(path)["sha256"], f"{base_b(kw)}/model.pt is not the B' the run started from (args b_sha256)"
-    base = b_shas(torch.load(path, map_location="cpu")["state"])
-    assert got["sha_frozen"] == base["sha_frozen"], f"the tensors of B' outside its node head are not those of {base_b(kw)}"
+    frm = ck["args"].get("b_state_from")
+    if frm:
+        sp = os.path.join(runs, frm, "model.pt")
+        assert _file_id(sp)["sha256"] == ck["args"].get("b_state_sha256"), f"{sp} is not the start run's file the run started from (args b_state_sha256)"
+        start_sd, start_name = torch.load(sp, map_location="cpu", weights_only=False)["b_state"], f"the start run {frm}"
+    else:
+        start_sd, start_name = torch.load(path, map_location="cpu")["state"], base_b(kw)
+    base = b_shas(start_sd)
     if "b_state" in ck:
         assert {k: got[k] for k in B_SHAS} == b_shas(ck["b_state"]), "the live dump did not run the run's own B' (b_state)"
-    if ck["args"].get("train_nodes"):
-        assert "b_state" in ck and got["sha_nodes"] != base["sha_nodes"], f"a run that trained B''s node head ran the node head of {base_b(kw)} (or carries no b_state)"
+    if ck["args"].get("train_pyr"):
+        assert "b_state" in ck, "a run that trained B''s pyramid carries no b_state"
+        rest = lambda sd: state_sha({k: v for k, v in sd.items() if not k.startswith(("nodes.", "pyr."))})  # noqa: E731
+        assert rest(ck["b_state"]) == rest(start_sd), f"the tensors of B' outside its node head and pyramid are not those of {start_name}"
+        assert state_sha(ck["b_state"], "pyr.") != state_sha(start_sd, "pyr."), f"a run that trained B''s pyramid ran the pyramid of {start_name}"
     else:
-        assert got["sha_nodes"] == base["sha_nodes"], f"a run with B''s node head frozen did not run the node head of {base_b(kw)}"
+        assert got["sha_frozen"] == base["sha_frozen"], f"the tensors of B' outside its node head are not those of {start_name}"
+    if ck["args"].get("train_nodes"):
+        assert "b_state" in ck and got["sha_nodes"] != base["sha_nodes"], f"a run that trained B''s node head ran the node head of {start_name} (or carries no b_state)"
+    else:
+        assert got["sha_nodes"] == base["sha_nodes"], f"a run with B''s node head frozen did not run the node head of {start_name}"
 
 
 def live_data(split, seed, ident):
@@ -623,7 +637,7 @@ def read_dump(a, runs, n_max):
         and bool(meta.get("live")) == live, "the dump is not the dump of this read-out (run, model, frames, drop, live)"
     assert live or not joint_run(ck), "a joint run is read only with --live"
     if live:
-        check_b(meta, ck, kw)
+        check_b(meta, ck, kw, runs)
     toks = [f["tokens_np"] for f in fr] if live else [ds[int(i)]["tokens_np"] for i in idx]          # live: the tokens this run's B' made for its head (the cache's are another B''s or another device's)
     assert all(np.array_equal(f["cell"], t["cell"]) for f, t in zip(fr, toks)), "the dump's cells are not its tokens_np's" if live else "the dump's tokens are not the cache's (a stale dump or cache)"
     valid = [np.asarray(t["valid"], bool) & (JV.keep_nodes(f["token"], ds.K, a.drop, a.drop_seed) if a.drop > 0 else True) for t, f in zip(toks, fr)]     # the tokens the head saw

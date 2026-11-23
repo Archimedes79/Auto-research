@@ -9,7 +9,7 @@
 What it adds to a plain loop (each of these was missing in a run that was lost):
   * checkpoint every `ckpt_every` steps (model, optimiser, scaler, schedule, step, RNG states, loss history), written atomically; `resume=True` continues from it after a crash or a kill
   * `model.pt` + status.json + the `.done` flag only after the last step succeeded; an exception writes status "failed" with the traceback and leaves the checkpoint for the next start
-  * AMP (bf16 or fp16 with GradScaler), gradient clipping, AdamW with warm-up + one-cycle / cosine schedule
+  * AMP (bf16 or fp16 with GradScaler), gradient clipping, AdamW with warm-up + one-cycle / cosine schedule; `params` may be AdamW's groups, a group's key `lr_mult` multiplies the schedule's rate for that group in every step (default 1.0)
   * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of optimizer steps made
   * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
@@ -198,8 +198,8 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                     batch = batch_fn(step) if batch_fn else next(it)
             else:
                 batch = batch_fn(step) if batch_fn else next(it)
-            for g in opt.param_groups:
-                g["lr"] = _lr_at(step, steps, lr, warmup, sched) * lr_scale
+            for g in opt.param_groups:                                   # a group's `lr_mult` (default 1.0: a run without it is unchanged bit for bit) scales its rate (E393: the pyramid at 0.1 x)
+                g["lr"] = _lr_at(step, steps, lr, warmup, sched) * lr_scale * g.get("lr_mult", 1.0)
             with torch.autocast(device_type="cuda", dtype=dtype, enabled=use_amp):
                 loss, info = loss_fn(model, batch)
             last_info = info or {}
