@@ -74,7 +74,7 @@
 ## Permissions and safety
 - protected files (project.json "protected": PROBLEM.md, project.json, the TEST log, evaluation/golden.json, the champion / control entries of models/registry.json, the champion config card, ../autoresearch/tools/guard_hook.py, ../.claude/settings.json and settings.local.json; since D21 the other tools and METHOD.md are covered by git, selftest.py and an ar-reviewer pass instead): the gate hook `../autoresearch/tools/guard_hook.py` refuses Write / Edit unless a grant names a decided D<n> (`guard_hook.py grant <path> --decision D<n> --hours 8 --note "..."`; `grants` lists them); a refusal means: write the question into the Open table of experiment_execution/DECISIONS.md, never go around the hook through the shell
 - no downloads / installs without asking; never kill another chat's jobs (ListAgents)
-- mail and shutdown only if the loop prompt says so (mail: to the owner's address mirko.meuter@aptiv.com via web.de in Chrome, confirm in Sent); check no other chat runs before a shutdown
+- mail and shutdown only if the loop prompt says so (mail: to the owner's address (given in the loop prompt, not stored in git) via web.de in Chrome, confirm in Sent); check no other chat runs before a shutdown
 - rollback hazard: a conversation rollback deletes files its session created with Write / Edit (it destroyed the loop-17 code); cp new code and results when they matter, update HANDOVER.md
 
 ## Pitfalls

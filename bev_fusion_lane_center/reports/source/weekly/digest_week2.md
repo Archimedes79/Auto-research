@@ -48,7 +48,7 @@ ID caveat: loop 17 used internal run names E130-E144; they are catalogued as E19
 
 ### Loop 10 - the learned trace network and the registration-free route head (2026-10-17 20:15 -> 2026-10-18 01:45)
 
-**Dates and request.** User re-invoked /loop with the E2E task and gave no answers to the three open decisions, so defaults: arm A first, rings 12.5 m, steps {2, 4, 6}; matching the rule pipeline acceptable [ST l.94]. Based on `Proposal_Sparse_Graph_Extraction.pdf` (2026-10-17), which measured where the rule pipeline loses accuracy (F1@1 0.957 in the first 10 m, 0.874 at 30-40 m, 0.800 at 40-50 m) [T10a sec.7.16]. A later user message asked to mail the report to mirko.meuter@aptiv.com and zip the best code (bundle v3 light) [ST l.96]. Week-2 boundary note: loop 10 started on 10-17 evening.
+**Dates and request.** User re-invoked /loop with the E2E task and gave no answers to the three open decisions, so defaults: arm A first, rings 12.5 m, steps {2, 4, 6}; matching the rule pipeline acceptable [ST l.94]. Based on `Proposal_Sparse_Graph_Extraction.pdf` (2026-10-17), which measured where the rule pipeline loses accuracy (F1@1 0.957 in the first 10 m, 0.874 at 30-40 m, 0.800 at 40-50 m) [T10a sec.7.16]. A later user message asked to mail the report to <owner address> and zip the best code (bundle v3 light) [ST l.96]. Week-2 boundary note: loop 10 started on 10-17 evening.
 
 **Hypotheses** [T10a sec.7.16-7.20; T10b]: (a) one learned network can replace tracer + assembler (+ key-point cut + Bezier connectors) at equal F1; (b) growing the graph near to far, conditioned on the finished near graph, reduces far errors; (c) far steps need a range-aware threshold; (d) wrong-direction training teaches orientation; (e) the existing assignment network (E87) works on the learned graph; (f) the navigation attribute can be produced inside the network without a hand-built registration; (g) cross-attention beats sampling for reading the SD map.
 
@@ -132,7 +132,7 @@ ID caveat: loop 17 used internal run names E130-E144; they are catalogued as E19
 
 ### Loop 13 - junction topology, verifiers, chain under failure, learned consumer (2026-10-19 00:45 - 06:00)
 
-**Dates and request.** User: /loop with "work till 6 am, then send a mail to mirko.meuter@aptiv.com, shutdown the computer upstairs" and, mid-loop, "look only for E2E differentiable solutions; shutdown the computer after finishing" [ST l.103; I13]. Mail with two PDFs sent 2026-10-19 04:45; report loops 1-13 (209 p, short 118 p, decision report 12 p), bundle v6 light (179 files, 19.1 MB zip), two review rounds [I13; ST l.103].
+**Dates and request.** User: /loop with "work till 6 am, then send a mail to <owner address>, shutdown the computer upstairs" and, mid-loop, "look only for E2E differentiable solutions; shutdown the computer after finishing" [ST l.103; I13]. Mail with two PDFs sent 2026-10-19 04:45; report loops 1-13 (209 p, short 118 p, decision report 12 p), bundle v6 light (179 files, 19.1 MB zip), two review rounds [I13; ST l.103].
 
 **Hypotheses.** (E113) the weak junctions of the learned graph are a missing-link problem (H1) - rejected; actually precision; (E116) small learned verifiers make the graph shorter and truer; (E114) the chain keeps a route under failure with the spatial hold and its confidence is a trust signal; (E115) a learned consumer can use trust inputs / ego motion [T13c sec.7.39-7.41].
 
@@ -344,7 +344,7 @@ User asked for all experiments in good order focused on fully differentiable use
 - Modular reference still best on accuracy in loops 10-14 terms: system A (final graph F1 0.875 TEST, junction split/merge F1 0.714 / 0.637, route success ensemble 0.876 / 0.879 / 0.876 / 0.858) [DEC sec.1, T13c]; note A is not S-scored (S exists from loop 16 on).
 - Honest E2E status: B/champion is "the closest candidate, not a completely end-to-end system": frozen foundation, dense head trained separately and cached, assembly/relocation/threshold are inference rules, route head and consumer trained separately (joint E202 inconclusive), no planner loss in the loop-17 chain, exact ego poses [E2E box; R16 sec.10; R17 sec.1].
 
-**Main open issues and next steps** (PROG / Loop_Prompt_Next_EN.md; R16 sec.11; R17 sec.6). The prompt is NOT started: STOP_AT Sunday 11:20, SHUTDOWN yes only if no other chat runs, MAIL yes (report PDF to mirko.meuter@aptiv.com via web.de), TEST OK once [PROG l.7].
+**Main open issues and next steps** (PROG / Loop_Prompt_Next_EN.md; R16 sec.11; R17 sec.6). The prompt is NOT started: STOP_AT Sunday 11:20, SHUTDOWN yes only if no other chat runs, MAIL yes (report PDF to <owner address> via web.de), TEST OK once [PROG l.7].
 1. Finish loop 17: rerun E209 (unseen failure types) with checkpoints, evals, report text, one fresh numbers reviewer, PDF to `reports/` [PROG WP1].
 2. TEST evaluation once of route head along the edges + fast configs (j1 192/96 as deployment setting) + gate + map builder; suggested go criterion: failure-half S within 0.08 of clean half and route success > 0.7 without a map [R17 sec.6; TUL].
 3. Map trust/abstain output (dustbin column) before the map chain may be used; differentiable rough registration of the sparse graph to the SD map (target: benefit at 1-2 m error) [PROG WP3; R17 sec.6].

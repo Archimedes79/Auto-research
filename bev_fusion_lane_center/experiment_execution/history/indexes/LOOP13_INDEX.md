@@ -1,7 +1,7 @@
 # Loop 13 (2026-10-19): junction topology of the learned graph, verifier blocks, the chain under failure with the spatial hold, a learned consumer with trust and ego-motion inputs
 
 Report: `reports/LaneGraph_Condensed_Report_EN.pdf` sections 3.19, 7.37 - 7.41, cards E113, E116, E114, E115, section 8.9; decision report `reports/Decision_Report_EN.pdf` (updated). Bundle: `bundles/E2E_LaneGraph_Bundle_v6_light_2026-10-19(.zip)`. Reviews: `report_final/review13/` (two rounds: review_a / review_b / review_c, then review_a2 / review_b2).
-User instruction of 2026-10-19 (mid-loop): look only for end-to-end differentiable solutions; shut the computer down after the loop (mail to mirko.meuter@aptiv.com was part of the original request).
+User instruction of 2026-10-19 (mid-loop): look only for end-to-end differentiable solutions; shut the computer down after the loop (mail to <owner address> was part of the original request).
 
 | experiment | scripts | results (out/loop2/) |
 |---|---|---|

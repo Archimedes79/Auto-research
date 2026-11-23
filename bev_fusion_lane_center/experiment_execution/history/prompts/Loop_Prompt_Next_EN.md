@@ -4,7 +4,7 @@ Paste as: `/loop <text below>` (self-paced, 20-25 min wake-ups)
 
 ---
 
-STOP_AT: Sunday 11:20 | SHUTDOWN: yes, only if no other chat runs (ListAgents) | MAIL: yes, report PDF to mirko.meuter@aptiv.com via web.de in Chrome (as loops 10 / 13) | TEST (21 scenes): OK, once
+STOP_AT: Sunday 11:20 | SHUTDOWN: yes, only if no other chat runs (ListAgents) | MAIL: yes, report PDF to <owner address> via web.de in Chrome (as loops 10 / 13) | TEST (21 scenes): OK, once
 
 ## Goal
 - Best fully differentiable chain: perception -> centre lines -> sparse lane graph -> temporal fusion -> map assignment -> navigation attribute -> planner.
