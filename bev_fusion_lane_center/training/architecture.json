@@ -513,7 +513,7 @@
     "training/grid/jsdgraph.py",
     "evaluation/sdgraph_probe.py"
    ],
-   "note": "roads with logical lanes per direction and their connections, encoded first, then fusion, then error models (R9); card v7 of 2026-11-21: step 1 SOUND by its written rule; the association of the champion's tokens to it is E391 (draft, not run); not in the champion",
+   "note": "roads with logical lanes per direction and their connections, encoded first, then fusion, then error models (R9); card v7 of 2026-11-21: step 1 SOUND by its written rule; the association of the champion's tokens to it is E391 (the box below: NO FUSION); not in the champion",
    "w": 2,
    "hpx": 52,
    "sub": "jsdgraph.py +2"
@@ -686,6 +686,39 @@
    "w": 2,
    "hpx": 52,
    "sub": "jthresh.py +1"
+  },
+  {
+   "id": "e391",
+   "label": "E391 step 2: association of the champion's tokens to the road graph (NO FUSION)",
+   "kind": "alt",
+   "col": 0,
+   "row": 10,
+   "w": 2,
+   "hpx": 52,
+   "code": [
+    "training/data/lane_mapassoc_data.py",
+    "training/grid/jmapassoc.py",
+    "evaluation/mapassoc_probe.py",
+    "training/grid/test_mapassoc.py"
+   ],
+   "note": "the champion's delivered tokens are assigned to the E390 road-graph segments (or 'unassigned') by a learned cross-attention (arms P, F1, F2, F3 on the frozen E390 encoder; every token input detached, so the map cannot change the delivered graph); result of card v2.1 (2026-11-21): NO FUSION by its written rule: association accuracy 0.822 / 0.823 below the bars 0.843 / 0.840, 13 % of the true tokens left unassigned; the lanes per direction read through the map 0.948 / 0.952 against 0.891 / 0.873 without it; not in the champion",
+   "sub": "jmapassoc.py +3"
+  },
+  {
+   "id": "e394",
+   "label": "E394 step 3 of the SD-map line: map-error catalogue and trust (saved, not run)",
+   "kind": "alt",
+   "col": 0,
+   "row": 11,
+   "w": 2,
+   "hpx": 52,
+   "code": [
+    "training/data/lane_maperror_data.py",
+    "evaluation/maperror_probe.py",
+    "training/grid/test_maperror.py"
+   ],
+   "note": "the catalogue of map errors as nested, calibrated draws on the E390 road graph (pure shift and turn, bigger count errors, ghost segments, spurious or swapped links, an outdated map, a wrong route, the map of another scene) and the TRAIN mix with wrong maps; the step-0 probe measures how each error degrades the E391 association and the lanes read through it (nulls and headroom first); a wrong map must not be worse than no map (R9); saved, not run (D138 pauses new experiments); not in the champion",
+   "sub": "lane_maperror_data.py +2"
   }
  ],
  "edges": [
@@ -853,6 +886,14 @@
    "from": "route_train",
    "to": "route_head",
    "dashed": true
+  },
+  {
+   "from": "e390",
+   "to": "e391"
+  },
+  {
+   "from": "e391",
+   "to": "e394"
   }
  ],
  "groups": [

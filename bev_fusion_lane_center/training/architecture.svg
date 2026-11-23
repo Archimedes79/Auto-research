@@ -46,6 +46,8 @@
 <path d="M804.0,1028.0 C824.0,1028.0 824.0,1028.0 844.0,1028.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
 <path d="M1004.0,1028.0 C1024.0,1028.0 1024.0,1028.0 1044.0,1028.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
 <path d="M724.0,1097.0 C724.0,1078.0 724.0,1078.0 724.0,1059.0" fill="none" stroke="#94a3b8" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+<path d="M224.0,1054.0 C224.0,1078.0 224.0,1078.0 224.0,1102.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
+<path d="M224.0,1154.0 C224.0,1178.0 224.0,1178.0 224.0,1202.0" fill="none" stroke="#94a3b8" stroke-width="1.4" marker-end="url(#ah)"/>
 <g><title>in_sens: training/data/prep/gcar_tools.py</title><rect x="44" y="97.0" width="160" height="62" rx="7" fill="#fef9c3" stroke="#ca8a04" stroke-width="2.2"/>
 <text x="124.0" y="111.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">6 cameras + radar</text>
 <text x="124.0" y="126.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(nuScenes, one frame,</text>
@@ -278,6 +280,16 @@
 <text x="1224.0" y="1418.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Measured, not adopted: learned thresholds (E388),</text>
 <text x="1224.0" y="1433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ensemble cost (E379)</text>
 <text x="1224.0" y="1447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jthresh.py +1</text>
+</g>
+<g><title>e391: training/data/lane_mapassoc_data.py; training/grid/jmapassoc.py; evaluation/mapassoc_probe.py; training/grid/test_mapassoc.py</title><rect x="44" y="1102.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="224.0" y="1118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E391 step 2: association of the champion&#x27;s tokens to</text>
+<text x="224.0" y="1133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the road graph (NO FUSION)</text>
+<text x="224.0" y="1147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jmapassoc.py +3</text>
+</g>
+<g><title>e394: training/data/lane_maperror_data.py; evaluation/maperror_probe.py; training/grid/test_maperror.py</title><rect x="44" y="1202.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<text x="224.0" y="1218.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E394 step 3 of the SD-map line: map-error catalogue</text>
+<text x="224.0" y="1233.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">and trust (saved, not run)</text>
+<text x="224.0" y="1247.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_maperror_data.py +2</text>
 </g>
 <text x="442.0" y="88.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">B&#x27; = frozen lane head B + soft Matrix-NMS layer (E273, E292): stage 2 trains its node head</text>
 <text x="842.0" y="193.0" font-size="11" font-weight="600" fill="#64748b" stroke="#f8fafc" stroke-width="4" paint-order="stroke">token head JTokenHead, 0.127 M parameters (stage 1, then stage 2)</text>
