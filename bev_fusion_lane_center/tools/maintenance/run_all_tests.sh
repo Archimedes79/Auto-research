@@ -101,5 +101,13 @@ run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.p
 run "jthresh: learned decode thresholds (E388): soft F1 by hand, a known optimum, mutants" jthresh.py selftest
 run "lane suite of the evaluation (5 checks, about 9 minutes)" test_lane_suite.py
 run "simplify_stat: the simplification table of a report from git" tools/simplify_stat.py selftest
+run "qual_frames: the qualitative frame pictures (colour bands, one picture through render and the command line; CPU, no dataset needed)" tools/viz/qual_frames.py --selftest
+runsh() {                                                                  # a shell tool's selftest (bash instead of _py14.sh)
+  name="$1"; shift
+  out=$(bash "$@" 2>&1); rc=$?
+  last=$(echo "$out" | tail -1 | cut -c1-110)
+  if [ $rc -eq 0 ]; then echo "PASS  $name  | $last"; npass=$((npass+1)); else echo "FAIL  $name  | $last"; fail=1; nfail=$((nfail+1)); fi
+}
+runsh "head_check: the clean-copy check of a commit (syntax + one real import; the full check: head_check.sh <ref>)" "$R/tools/maintenance/head_check/head_check.sh" --selftest
 echo "== $npass passed, $nskip skipped (need data that is not in git: bev_fusion_lane_center/data/README.md and data/rebuild.json say how it is made), $nfail failed"
 exit $fail
