@@ -175,8 +175,8 @@ def draw_panel(ax, title, pos, cls, seg, drawn, links, colours, bands, labels, g
     ax.set_ylim(*yl)
     ax.set_aspect("equal", adjustable="box")
     ax.grid(alpha=0.2)
-    ax.set_title(title, fontsize=11, linespacing=1.2)
-    ax.tick_params(labelsize=9)
+    ax.set_title(title, fontsize=12.5, linespacing=1.2)
+    ax.tick_params(labelsize=10.5)
     for q in gt_lines:
         ax.plot(q[:, 0], q[:, 1], color="#c9c9c9", lw=3.0, solid_capstyle="round", zorder=1)
         for m in range(10, len(q) - 1, 24):
@@ -188,7 +188,7 @@ def draw_panel(ax, title, pos, cls, seg, drawn, links, colours, bands, labels, g
             m = arrow_index(poly, xl, yl)
             if m is not None:
                 ax.annotate("", xy=poly[m + 1], xytext=poly[m], arrowprops=dict(arrowstyle="-|>", color=c, lw=2.0, mutation_scale=13), zorder=2.5)
-        ax.text(lx, ly, str(k + 1), fontsize=8, color="white", weight="bold", ha="center", va="center", zorder=7, bbox=dict(boxstyle="circle,pad=0.2", fc=c, ec="white", lw=0.8))
+        ax.text(lx, ly, str(k + 1), fontsize=9, color="white", weight="bold", ha="center", va="center", zorder=7, bbox=dict(boxstyle="circle,pad=0.2", fc=c, ec="white", lw=0.8, alpha=0.78))
     for s, t, cv in links:
         if not (drawn[s] and drawn[t]):
             continue
@@ -204,7 +204,7 @@ def draw_panel(ax, title, pos, cls, seg, drawn, links, colours, bands, labels, g
         else:
             ax.scatter(pos[i, 0], pos[i, 1], s=st["size"], facecolors="white", edgecolors=st["color"], linewidths=1.6, alpha=st["alpha"], marker=st["marker"], zorder=5)
     ax.plot([0], [0], marker="^", c="k", ms=8, ls="none", zorder=8)
-    ax.set_xlabel("x (m)", fontsize=10)
+    ax.set_xlabel("x (m)", fontsize=11)
 
 
 def draw_frame(path, title, sub, cam, table_rows, panels, gt_lines, xl, yl, bands, colours):
@@ -213,8 +213,8 @@ def draw_frame(path, title, sub, cam, table_rows, panels, gt_lines, xl, yl, band
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.lines import Line2D
-    fig = plt.figure(figsize=(11.0, 8.0), dpi=110)
-    gs = fig.add_gridspec(2, 3, height_ratios=[0.8, 1.0], hspace=0.28, wspace=0.12, left=0.06, right=0.99, top=0.86, bottom=0.2)
+    fig = plt.figure(figsize=(11.0, 9.0), dpi=110)
+    gs = fig.add_gridspec(2, 3, height_ratios=[0.8, 1.0], hspace=0.26, wspace=0.12, left=0.06, right=0.99, top=0.87, bottom=0.235)
     sub_gs = gs[0, :].subgridspec(1, 2, width_ratios=[1.75, 1.25], wspace=0.05)
     axc = fig.add_subplot(sub_gs[0, 0])
     axc.axis("off")
@@ -222,13 +222,13 @@ def draw_frame(path, title, sub, cam, table_rows, panels, gt_lines, xl, yl, band
         axc.imshow(cam)
     else:
         axc.text(0.5, 0.5, "kein Kamerabild verfügbar", ha="center", va="center", fontsize=11)
-    axc.set_title("Frontkamera mit GT-Spurgraph (nicht das Ergebnis; Kamerafarben ohne Bedeutung)", fontsize=8.5, pad=2)
+    axc.set_title("Frontkamera mit GT-Spurgraph (nicht das Ergebnis; Kamerafarben ohne Bedeutung)", fontsize=9.5, pad=2)
     axt = fig.add_subplot(sub_gs[0, 1])
     axt.axis("off")
     nc = len(table_rows[0])
     tb = axt.table(cellText=table_rows, cellLoc="center", loc="center", bbox=[0.0, 0.0, 1.0, 1.0], colWidths=[0.58] + [0.42 / (nc - 1)] * (nc - 1))
     tb.auto_set_font_size(False)
-    tb.set_fontsize(8.5)
+    tb.set_fontsize(8.6)
     for (r, c), cell in tb.get_celld().items():
         cell.set_edgecolor("#cccccc")
         if r == 0 or c == 0:
@@ -240,18 +240,25 @@ def draw_frame(path, title, sub, cam, table_rows, panels, gt_lines, xl, yl, band
         if j:
             ax.set_yticklabels([])
         else:
-            ax.set_ylabel("y (m, nach vorn)", fontsize=10)
-    fig.text(0.5, 0.985, title, fontsize=13, weight="bold", ha="center", va="top")
-    fig.text(0.5, 0.944, sub, fontsize=9.5, ha="center", va="top", color="#333333", linespacing=1.4)
+            ax.set_ylabel("y (m, nach vorn)", fontsize=11)
+    fig.text(0.5, 0.988, title, fontsize=14, weight="bold", ha="center", va="top")
+    fig.text(0.5, 0.95, sub, fontsize=10.5, ha="center", va="top", color="#333333", linespacing=1.4)
     sw = [Line2D([0], [0], marker="o", ls="none", c=PALETTE[0], ms=8, label="richtig zugeordnet: Farbe des Segments (Verbindung im selben Segment ebenso)"),
           Line2D([0], [0], marker="X", ls="none", c=AMBER, ms=8, label="falschem Segment zugeordnet (auch ein falsches Token mit Segment)"),
           Line2D([0], [0], marker="o", ls="none", mfc="white", mec=PALETTE[0], mew=1.6, ms=8, alpha=0.75, label="Segment da, Token nicht zugeordnet (Farbe des wahren Segments, blass, hohl)"),
           Line2D([0], [0], marker="o", ls="none", c=BLUEGREY, ms=5, label="Segment fehlt in der Karte, richtig nicht zugeordnet"),
           Line2D([0], [0], marker="o", ls="none", c=GREY, ms=3, label="falsches Token, richtig nicht zugeordnet"),
           Line2D([0], [0], marker="o", ls="none", mfc="white", mec=DARK, mew=1.6, ms=7, label="nur Wahrheit: Segment des Tokens fehlt in der Karte"),
-          Line2D([0], [0], c=PALETTE[1], lw=8, alpha=0.30, label="Segment der Karte (Nummer nach Abstand zum Ego, Pfeil = Richtung)"),
-          Line2D([0], [0], c=GREY, lw=1.2, label="übrige Verbindung des gelieferten Graphen")]
-    fig.legend(handles=sw, loc="lower left", bbox_to_anchor=(0.02, 0.0), ncol=2, fontsize=7.8, frameon=False, columnspacing=1.2, handletextpad=0.5, labelspacing=0.4)
+          tuple(Line2D([0], [0], c=PALETTE[k], lw=8, alpha=0.30) for k in (0, 1, 2)),
+          Line2D([0], [0], c="#c9c9c9", lw=3.0),
+          Line2D([0], [0], c=GREY, lw=1.2)]
+    names = ["richtig zugeordnet: Farbe des Segments (Verbindung im selben Segment ebenso)", "falschem Segment zugeordnet (auch ein falsches Token mit Segment)",
+             "Segment da, Token nicht zugeordnet (Farbe des wahren Segments, blass, hohl)", "Segment fehlt in der Karte, richtig nicht zugeordnet", "falsches Token, richtig nicht zugeordnet",
+             "nur Wahrheit: Segment des Tokens fehlt in der Karte", "Segment der Karte (Nummer, Pfeil; Farben wiederholen sich)",
+             "GT-Spuren (grau, Pfeil = Richtung)", "übrige Verbindung des gelieferten Graphen"]
+    from matplotlib.legend_handler import HandlerTuple
+    fig.legend(handles=sw, labels=names, loc="lower left", bbox_to_anchor=(0.02, 0.0), ncol=2, fontsize=9.2, frameon=False, columnspacing=1.0, handletextpad=0.5, labelspacing=0.4,
+               handler_map={tuple: HandlerTuple(ndivide=None, pad=0.2)})
     fig.savefig(path)
     plt.close(fig)
 
@@ -293,10 +300,11 @@ def perturbed_map(data, i, level="dec"):
 def table_of(st_z, st_f):
     def frac(k, d):
         return [f"{s[k]} von {s[d]}" for s in (st_z, st_f)]
-    return [["", "Null-Schuss\nE390", "E391 F1"], ["Zuordnungsgenauigkeit", *[f"{s['acc']:.3f}" for s in (st_z, st_f)]],
-            ["falsches Segment\n(Segment in der Karte)", *frac("wrong_present", "n0")], ["Segment in der Karte,\nnicht zugeordnet", *frac("unassigned_present", "n0")],
-            ["Segment fehlt,\ntrotzdem zugeordnet", *frac("wrong_absent", "n1")], ["falsche Token\nzugeordnet", *frac("false_assigned", "n2")],
-            ["gelieferte Token\nmit Label", *[str(s["n"]) for s in (st_z, st_f)]]]
+    right = [f"{s['n0'] - s['wrong_present'] - s['unassigned_present']} von {s['n0']}" for s in (st_z, st_f)]
+    return [["", "Null-Schuss\nE390", "E391 F1"], ["Zuordnung insgesamt\n(mehr = besser)", *[f"{s['acc']:.3f}" for s in (st_z, st_f)]],
+            ["wahre Token, Segment da:\nrichtig zugeordnet (mehr = besser)", *right], ["... falschem Segment\nzugeordnet (weniger = besser)", *frac("wrong_present", "n0")],
+            ["... nicht zugeordnet\n(weniger = besser)", *frac("unassigned_present", "n0")], ["Segment fehlt, trotzdem\nzugeordnet (weniger = besser)", *frac("wrong_absent", "n1")],
+            ["falsche Token zugeordnet\n(weniger = besser)", *frac("false_assigned", "n2")], ["gelieferte Token mit Label", *[str(s["n"]) for s in (st_z, st_f)]]]
 
 
 def main(a):
@@ -335,7 +343,7 @@ def main(a):
         xl, yl = limits(pos[drawn] if drawn.any() else pos[kept])
         fn = f"e391_frame_{case}.png"
         sub = (f"Szene {int(scene[i])}, Frame {i} (VAL, Seed 0), {len(nodes)} Segmente der Karte gezeigt, {int(drawn.sum())} gelieferte Token mit Label\n"
-               "Karte mit Fehlern (Stufe dec): Lage 1 m, Spuranzahl 10 %, Verbindungen 10 %, Route 30 % verborgen, Segmente 10 % fehlen")
+               "Karte mit Fehlern: Lage 1 m, je 10 % Spurzahlen / Verbindungen / Segmente falsch bzw. fehlend, 30 % Route verborgen")
         draw_frame(os.path.join(a.out, fn), titles[case], sub, camera_of(tok, g), table_of(stats["z"][i], stats["f1"][i]), panels, gt_lines, xl, yl, bands, colours)
         info["cases"][case] = dict(frame=i, scene=int(scene[i]), token=tok, nodes_drawn=len(nodes), file=fn, kept_agree=bool((np.asarray(dkept) == kept)[valid].all()),
                                    acc_z=stats["z"][i]["acc"], acc_f1=stats["f1"][i]["acc"], gain=stats["f1"][i]["acc"] - stats["z"][i]["acc"], z=stats["z"][i], f1=stats["f1"][i])

@@ -20,8 +20,8 @@ BLUE, BLUE2, GREY = "#0072B2", "#56B4E9", "#9a9a9a"
 ARMS = [("x", "x: Austausch ohne frühes Loss", "e392_c_s{S}"), ("r1", "r1: eine Runde + frühes Loss", "e392_c_s{S}"), ("r2", "r2: zwei Runden + frühes Loss", "e392_c_s{S}"),
         ("a1", "a1: nur frühes Loss (1 Lesen)", "e392_c_s{S}"), ("a2", "a2: nur frühes Loss (2 Lesen)", "e392_c_s{S}"), ("u", "u2: r2 mit gleichen Nachrichten", "e392_c_s{S}"),
         ("n", "n: Block + frühes Loss, kein Austausch", "e392_c_s{S}"), ("m0", "m0: Block allein", "e392_c_s{S}"),
-        ("ct", "ct: Zwilling von c (andere Kopf-Seeds)", "e392_c_s{S}"), ("ctb", "ctb: Zwilling von c (andere Kopf-Seeds)", "e392_c_s{S}"),
-        ("r2t", "r2t: r2 gegen ct (gleiche Kopf-Seeds)", "e392_ct_s{S}"), ("r2tb", "r2tb: r2 gegen ctb (gleiche Kopf-Seeds)", "e392_ctb_s{S}")]
+        ("ct", "ct: Zwilling von c (Kopf-Seeds A)", "e392_c_s{S}"), ("ctb", "ctb: Zwilling von c (Kopf-Seeds B)", "e392_c_s{S}"),
+        ("r2t", "r2t: r2 gegen ct (Kopf-Seeds A)", "e392_ct_s{S}"), ("r2tb", "r2tb: r2 gegen ctb (Kopf-Seeds B)", "e392_ctb_s{S}")]
 
 
 def owner_rows(cards, nulls):
@@ -31,7 +31,7 @@ def owner_rows(cards, nulls):
     return [
         ("Spuren pro Richtung bei 30 % falschen Zählungen", [("Kopie der Eingabe", nl["base"]["p1_copy"][0], "null"), ("Bayes aus der Fehlerrate", nl["base"]["p1_bayes"][0], "null"),
                                                               ("Encoder, Seed 0", L0["base"]["p1"][0], "s0"), ("Encoder, Seed 1", L1["base"]["p1"][0], "s1")]),
-        ("Elemente fehlender Segmente nicht zugeordnet (20 % der Segmente fehlen)", [("nächste-Segment-Regel", nl["nd"]["p6_none_rule"][0], "null"), ("Encoder, Seed 0", L0["nd"]["p6_none"][0], "s0"),
+        ("Elemente fehlender Segmente richtig nicht zugeordnet (20 % der Segmente fehlen)", [("nächste-Segment-Regel", nl["nd"]["p6_none_rule"][0], "null"), ("Encoder, Seed 0", L0["nd"]["p6_none"][0], "s0"),
                                                                                     ("Encoder, Seed 1", L1["nd"]["p6_none"][0], "s1")]),
         ("Zuordnung bei 2 m Lagefehler der Karte", [("nächste-Segment-Regel", nl["pose2"]["p6_rule"][0], "null"), ("logistisches Modell", nl["pose2"]["p6_lr"][0], "null"),
                                                     ("Encoder, Seed 0", L0["pose2"]["p6"][0], "s0"), ("Encoder, Seed 1", L1["pose2"]["p6"][0], "s1")]),
@@ -48,22 +48,23 @@ def draw_owner(rows, path):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     col = dict(null=GREY, s0=BLUE, s1=BLUE2)
-    fig, axs = plt.subplots(len(rows), 1, figsize=(6.4, 1.15 * sum(len(r[1]) for r in rows) + 1.6), gridspec_kw=dict(height_ratios=[len(r[1]) for r in rows], hspace=0.55))
+    fig, axs = plt.subplots(len(rows), 1, figsize=(7.2, 1.25 * sum(len(r[1]) for r in rows) + 2.4), gridspec_kw=dict(height_ratios=[len(r[1]) for r in rows], hspace=0.7))
     for ax, (title, bars) in zip(axs, rows):
         n = len(bars)
         for i, (lab, v, kind) in enumerate(bars):
             y = n - 1 - i
             ax.barh(y, v, color=col[kind], height=0.7)
-            ax.text(min(v + 0.012, 0.93), y, f"{v:.3f}", va="center", ha="left", fontsize=10.5)
+            ax.text(min(v + 0.012, 0.93), y, f"{v:.3f}", va="center", ha="left", fontsize=12)
         ax.set_yticks(range(n))
-        ax.set_yticklabels([b[0] for b in bars][::-1], fontsize=10)
+        ax.set_yticklabels([b[0] for b in bars][::-1], fontsize=11.5)
         ax.set_xlim(0, 1.0)
-        ax.set_title(title, fontsize=11.5, loc="left")
+        ax.set_title(title, fontsize=12, loc="left")
         ax.tick_params(axis="x", labelsize=9.5)
         ax.grid(axis="x", alpha=0.25)
         for sp in ("top", "right"):
             ax.spines[sp].set_visible(False)
-    axs[-1].set_xlabel("Anteil richtig (VAL, 873 Frames)", fontsize=10)
+    for ax in axs:
+        ax.set_xlabel("Anteil (VAL, 873 Frames; mehr = besser)", fontsize=10.5)
     fig.savefig(path, dpi=130, bbox_inches="tight")
     plt.close(fig)
 
@@ -72,9 +73,9 @@ def draw_arms(rows, path):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
-    col = {0: BLUE, 1: "#E69F00"}
+    col = {0: BLUE, 1: BLUE2}
     n = len(rows)
-    fig, ax = plt.subplots(figsize=(6.6, 0.62 * n + 1.5))
+    fig, ax = plt.subplots(figsize=(7.4, 0.62 * n + 1.5))
     for i, (lab, pts) in enumerate(rows):
         y = n - 1 - i
         for s, d, lo, hi in pts:
@@ -83,13 +84,13 @@ def draw_arms(rows, path):
             ax.plot([d], [yy], "o", color=col[s], ms=6.5, label=f"Seed {s}" if i == 0 else None, zorder=3)
     ax.axvline(0, color="#444", lw=1.0)
     ax.axvline(0.010, color="#444", lw=0.9, ls=(0, (4, 3)))
-    ax.text(0.0103, n - 0.45, "Band +0.010", fontsize=8.5, color="#444", va="bottom")
+    ax.text(0.0103, n - 0.45, "Hürde +0.010", fontsize=10, color="#444", va="bottom")
     ax.set_yticks(range(n))
-    ax.set_yticklabels([r[0] for r in rows][::-1], fontsize=9.5)
-    ax.set_xlabel("Unterschied topo F1 zur Kontrolle (95-%-Intervall)", fontsize=10)
+    ax.set_yticklabels([r[0] for r in rows][::-1], fontsize=11)
+    ax.set_xlabel("Unterschied topo F1 zur Kontrolle (95-%-Intervall); rechts = besser", fontsize=10.5)
     ax.grid(axis="x", alpha=0.25)
     h, l = ax.get_legend_handles_labels()
-    fig.legend(h, l, loc="lower center", ncol=2, fontsize=9.5, frameon=False)
+    fig.legend(h, l, loc="lower center", ncol=2, fontsize=11, frameon=False)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     fig.tight_layout(rect=(0, 0.05, 1, 1))

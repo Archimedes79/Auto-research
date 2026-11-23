@@ -1,0 +1,1854 @@
+{
+ "title": "Spurmitte-Projekt, Abschlussbericht 2026-11-23: die SD-Karte als logischer Straßengraph (E390 SOUND, E391 NO FUSION), das frühe Verdrahtungs-Loss (E392) und der Stand des Systems",
+ "subtitle": "Bericht auf Wunsch von Mirko (D138) | seit dem Bericht vom 2026-11-20 | E388 NO, E381 TIE, E389 / E389b, E390, E391, E392, E393 und E394 (Entwürfe) | VAL 873 Frames / 22 Szenen, TEST von keinem Experiment gelesen | Champion unverändert (D120)",
+ "abstract": "Seit dem Bericht vom 2026-11-20 sind zwei Fragen am Champion negativ geschlossen (E388: gelernte Dekodier-Schwellen NO; E381: Rauschen auf Trainings-Token TIE), E389 / E389b (Zuordnung der Token zur Route einer SD-Karte: TIE, eine Attention genügt) sind eingeordnet, und die **Kartenlinie** auf Mirkos Wort (D130: die Karte als logischer Straßengraph mit Spuren pro Richtung und Verbindungen, Schritt für Schritt) hat zwei Schritte hinter sich. **E390 (Schritt 1, die Kodierung): SOUND** nach drei Blicken auf dieselben VAL-Frames: die Spuren pro Richtung bleiben bei 30 % falschen Zählungen mit {{e390_p1b_s0}} / {{e390_p1b_s1}} richtig (Kopie der Eingabe 0.696), Elemente fehlender Segmente bleiben zu {{e390_p6nd_none_s0}} / {{e390_p6nd_none_s1}} unzugeordnet (nächste-Segment-Regel 0.189), bei 2 m Lagefehler der Karte werden {{e390_p6pose2_s0}} / {{e390_p6pose2_s1}} richtig zugeordnet. **E391 (Schritt 2, die gelieferten Token den Segmenten zuordnen): NO FUSION**: die Spuren pro Richtung gewinnen durch die Karte ({{e391_val_lanes_s0}} / {{e391_val_lanes_s1}} gegen {{e391_val_zlanes_s0}} / {{e391_val_zlanes_s1}} ohne Karte), die gelernte Zuordnung verfehlt ihre Hürde ({{e391_val_assoc_s0}} / {{e391_val_assoc_s1}} gegen 0.8427 / 0.8397); die Lücke ist die Entscheidung über falsche Token. **E392 (frühes Verdrahtungs-Loss und Nachrichtenaustausch im Token-Kopf, nur Wahrnehmung):** r2 gewinnt etwa +0.010 topo F1 gegen c und repliziert mit anderen Kopf-Seeds bei etwa +0.007; die Annahme hängt an der Kostenmessung von D138. E393 (die Pyramide mittrainieren), E391b (die Zuordnung verbessern) und Schritt 3 (E394: Fehlermodelle der Karte und Vertrauen) liegen als Entwurf und Code bereit, sind aber nicht gelaufen (D138). Die Karte ist überall simuliert; ohne Fehlermodelle und Vertrauen ist ihr Gewinn nicht belastbar.",
+ "teaser": {
+  "image": "parts/figures/e391_frame_typical.png",
+  "caption": "Ein echter VAL-Frame (Szene {{e391fr_typical_scene}}, Frame {{e391fr_typical_frame}}), der **Median-Frame** der Zuordnung (E391: die mittlere Zuordnung von F1 unter den Kandidaten; er hat mehr falsche Token als im Durchschnitt): links die Wahrheit, in der Mitte der Null-Schuss-Kopf von E390, rechts der Fusionskopf F1. Die Karte besteht aus nummerierten Segmenten (eigene Farbe, Pfeil = Fahrtrichtung); ein gelieferter Token, der dem richtigen Segment zugeordnet wird, hat die Farbe dieses Segments. Zum Lesen: in der Mitte viele orange Kreuze, der Null-Schuss-Kopf ordnet {{e391fr_typical_z_fa}} von {{e391fr_typical_n2}} falschen Token einem Segment zu; rechts bei F1 nur {{e391fr_typical_f_fa}}, aber {{e391fr_typical_f_up}} von {{e391fr_typical_n0}} wahren Token bleiben unzugeordnet (hohle, blasse Kreise): das ist der Tausch, an dem NO FUSION hängt: die wahren Token mit Segment sind bei F1 in diesem Frame schlechter zugeordnet als beim Null-Schuss-Kopf (Tabelle), und gegen den Null mit Tor gegen falsche Token ist F1 über alle VAL-Frames nur um {{e391_val_dgate_s0}} / {{e391_val_dgate_s1}} besser (Kapitel 6.4). Die Zuordnung insgesamt ({{e391fr_typical_acc_z}} gegen {{e391fr_typical_acc_f1}}) wird von den falschen Token getragen. Der Frame hat die mittlere Zuordnung von F1 unter den {{e391fr_candidates}} Kandidaten-Frames (Regel in Kapitel 6.5)."
+ },
+ "sections": [
+  {
+   "id": "intro",
+   "title": "1. Einleitung und Stand",
+   "part": "01_intro.md"
+  },
+  {
+   "id": "gt",
+   "title": "2. Ground Truth: wie sie aussehen muss, und was die Kartenlinie braucht",
+   "part": "02_gt.md"
+  },
+  {
+   "id": "night",
+   "title": "3. E388 und E381, kurz",
+   "part": "03_nacht.md"
+  },
+  {
+   "id": "e389",
+   "title": "4. E389 und E389b, kurz",
+   "part": "04_e389.md"
+  },
+  {
+   "id": "e390",
+   "title": "5. SD-Karte, Schritt 1 (E390): SOUND",
+   "part": "05_e390.md"
+  },
+  {
+   "id": "e391",
+   "title": "6. SD-Karte, Schritt 2 (E391): NO FUSION",
+   "part": "06_e391.md"
+  },
+  {
+   "id": "e392",
+   "title": "7. E392: frühes Verdrahtungs-Loss und Nachrichtenaustausch",
+   "part": "07_e392.md"
+  },
+  {
+   "id": "paused",
+   "title": "8. E393 (Entwurf) und die pausierten Karten (E391b, E394)",
+   "part": "08_pausiert.md"
+  },
+  {
+   "id": "open",
+   "title": "9. Was offen ist und was der Eigentümer entscheiden kann",
+   "part": "09_offen.md"
+  },
+  {
+   "id": "git",
+   "title": "10. Was in git liegt und was nicht",
+   "part": "10_git.md"
+  },
+  {
+   "id": "repeat",
+   "title": "A. Wie man es wiederholt",
+   "part": "A1_wiederholung.md"
+  }
+ ],
+ "values": {
+  "e390_p1b_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p1.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1b_lo_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p1.1",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1ce0_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.ce0.p1.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1ce01_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.ce01.p1.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p2b_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p2.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p3b_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p3.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6b_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p6.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6pose2_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.pose2.p6.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.nd.p6.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_seg_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.nd.p6_seg.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_none_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.nd.p6_none.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_fn_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.nd.p6_false_none.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_dcopy_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p1_minus_copy.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_dbayes_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p1_minus_bayes.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_drule2_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.pose2.p6_minus_rule.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_dp3rule_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.base.p3_minus_rule.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1b_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p1.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1b_lo_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p1.1",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1ce0_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.ce0.p1.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p1ce01_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.ce01.p1.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p2b_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p2.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p3b_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p3.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6b_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p6.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6pose2_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.pose2.p6.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.nd.p6.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_seg_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.nd.p6_seg.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_none_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.nd.p6_none.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_p6nd_fn_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.nd.p6_false_none.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_dcopy_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p1_minus_copy.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_dbayes_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p1_minus_bayes.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_drule2_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.pose2.p6_minus_rule.0",
+   "fmt": "{:.3f}"
+  },
+  "e390_dp3rule_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.base.p3_minus_rule.0",
+   "fmt": "{:.3f}"
+  },
+  "e391_val_assoc_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_assoc_lo_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.assoc_acc.1",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_assoc_hi_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.assoc_acc.2",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_dgate_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.assoc_acc_minus_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_dzero_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.assoc_acc_minus_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_fu_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_fa_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.false_assign.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_nonfalse_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.nonfalse_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_dnonfalse_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.nonfalse_acc_minus_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_route_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_exact_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.exact.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_nd2_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.nd2.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_pose2_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.pose2.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_zlanes_s0": {
+   "file": "../../runs/e391_z_s0/card_val.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_zroute_s0": {
+   "file": "../../runs/e391_z_s0/card_val.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_assoc_s0": {
+   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "key": "levels.dec.assoc_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_lanes_s0": {
+   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "key": "levels.dec.lanes_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_fa_s0": {
+   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "key": "levels.dec.false_assign_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_near_assoc_s0": {
+   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "key": "levels.dec.assoc_acc_nearest.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_gate_assoc_s0": {
+   "file": "../../runs/e391_assoc/nulls_gate_val_s0.json",
+   "key": "levels.dec.assoc_acc_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_nonfalse_s0": {
+   "file": "../../runs/e391_assoc/nulls_gate_val_s0.json",
+   "key": "levels.dec.nonfalse_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_gate_fu_s0": {
+   "file": "../../runs/e391_assoc/nulls_gate_val_s0.json",
+   "key": "levels.dec.false_unassigned_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_assoc_s0": {
+   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_fu_s0": {
+   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_lanes_s0": {
+   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_route_s0": {
+   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_assoc_s0": {
+   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_fu_s0": {
+   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_lanes_s0": {
+   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_route_s0": {
+   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_assoc_s0": {
+   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_fu_s0": {
+   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_lanes_s0": {
+   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_route_s0": {
+   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_assoc_s0": {
+   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_fu_s0": {
+   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_lanes_s0": {
+   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_route_s0": {
+   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_z_lanes_s0": {
+   "file": "../../runs/e391_z_s0/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_z_route_s0": {
+   "file": "../../runs/e391_z_s0/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_gate_assoc_s0": {
+   "file": "../../runs/e391_assoc/nulls_gate_holdout_s0.json",
+   "key": "levels.dec.assoc_acc_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_assoc_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_assoc_lo_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.assoc_acc.1",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_assoc_hi_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.assoc_acc.2",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_dgate_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.assoc_acc_minus_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_dzero_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.assoc_acc_minus_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_fu_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_fa_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.false_assign.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_nonfalse_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.nonfalse_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_dnonfalse_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.nonfalse_acc_minus_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_route_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_exact_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.exact.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_nd2_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.nd2.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_lanes_pose2_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.pose2.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_zlanes_s1": {
+   "file": "../../runs/e391_z_s1/card_val.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_val_zroute_s1": {
+   "file": "../../runs/e391_z_s1/card_val.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_assoc_s1": {
+   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "key": "levels.dec.assoc_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_lanes_s1": {
+   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "key": "levels.dec.lanes_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_fa_s1": {
+   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "key": "levels.dec.false_assign_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_near_assoc_s1": {
+   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "key": "levels.dec.assoc_acc_nearest.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_gate_assoc_s1": {
+   "file": "../../runs/e391_assoc/nulls_gate_val_s1.json",
+   "key": "levels.dec.assoc_acc_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_zero_nonfalse_s1": {
+   "file": "../../runs/e391_assoc/nulls_gate_val_s1.json",
+   "key": "levels.dec.nonfalse_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_gate_fu_s1": {
+   "file": "../../runs/e391_assoc/nulls_gate_val_s1.json",
+   "key": "levels.dec.false_unassigned_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_assoc_s1": {
+   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_fu_s1": {
+   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_lanes_s1": {
+   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_P_route_s1": {
+   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_assoc_s1": {
+   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_fu_s1": {
+   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_lanes_s1": {
+   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F1_route_s1": {
+   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_assoc_s1": {
+   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_fu_s1": {
+   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_lanes_s1": {
+   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F2_route_s1": {
+   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_assoc_s1": {
+   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "key": "levels.dec.assoc_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_fu_s1": {
+   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "key": "levels.dec.false_unassigned.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_lanes_s1": {
+   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_F3_route_s1": {
+   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_z_lanes_s1": {
+   "file": "../../runs/e391_z_s1/card_holdout.json",
+   "key": "levels.dec.lanes_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_z_route_s1": {
+   "file": "../../runs/e391_z_s1/card_holdout.json",
+   "key": "levels.dec.route_f1.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_hold_gate_assoc_s1": {
+   "file": "../../runs/e391_assoc/nulls_gate_holdout_s1.json",
+   "key": "levels.dec.assoc_acc_p6gate.0",
+   "fmt": "{:.4f}"
+  },
+  "e392_c_f1_s0": {
+   "file": "../../runs/e392_c_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_c_f1_s1": {
+   "file": "../../runs/e392_c_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_x_f1_s0": {
+   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_x_d_s0": {
+   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_lo_s0": {
+   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_hi_s0": {
+   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_gl_s0": {
+   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_gj_s0": {
+   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_f1_s1": {
+   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_x_d_s1": {
+   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_lo_s1": {
+   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_hi_s1": {
+   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_gl_s1": {
+   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_x_gj_s1": {
+   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_f1_s0": {
+   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r1_d_s0": {
+   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_lo_s0": {
+   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_hi_s0": {
+   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_gl_s0": {
+   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_gj_s0": {
+   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_f1_s1": {
+   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r1_d_s1": {
+   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_lo_s1": {
+   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_hi_s1": {
+   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_gl_s1": {
+   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r1_gj_s1": {
+   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_f1_s0": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r2_d_s0": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_lo_s0": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_hi_s0": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_gl_s0": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_gj_s0": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_f1_s1": {
+   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r2_d_s1": {
+   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_lo_s1": {
+   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_hi_s1": {
+   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_gl_s1": {
+   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_gj_s1": {
+   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_f1_s0": {
+   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_u_d_s0": {
+   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_lo_s0": {
+   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_hi_s0": {
+   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_gl_s0": {
+   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_gj_s0": {
+   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_f1_s1": {
+   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_u_d_s1": {
+   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_lo_s1": {
+   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_hi_s1": {
+   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_gl_s1": {
+   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_u_gj_s1": {
+   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_f1_s0": {
+   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_a1_d_s0": {
+   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_lo_s0": {
+   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_hi_s0": {
+   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_gl_s0": {
+   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_gj_s0": {
+   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_f1_s1": {
+   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_a1_d_s1": {
+   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_lo_s1": {
+   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_hi_s1": {
+   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_gl_s1": {
+   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a1_gj_s1": {
+   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_f1_s0": {
+   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_a2_d_s0": {
+   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_lo_s0": {
+   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_hi_s0": {
+   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_gl_s0": {
+   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_gj_s0": {
+   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_f1_s1": {
+   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_a2_d_s1": {
+   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_lo_s1": {
+   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_hi_s1": {
+   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_gl_s1": {
+   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_a2_gj_s1": {
+   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_f1_s0": {
+   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_ct_d_s0": {
+   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_lo_s0": {
+   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_hi_s0": {
+   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_gl_s0": {
+   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_gj_s0": {
+   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_f1_s1": {
+   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_ct_d_s1": {
+   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_lo_s1": {
+   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_hi_s1": {
+   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_gl_s1": {
+   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ct_gj_s1": {
+   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_f1_s0": {
+   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r2t_d_s0": {
+   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_lo_s0": {
+   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_hi_s0": {
+   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_gl_s0": {
+   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_gj_s0": {
+   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_f1_s1": {
+   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r2t_d_s1": {
+   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_lo_s1": {
+   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_hi_s1": {
+   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_gl_s1": {
+   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2t_gj_s1": {
+   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_f1_s0": {
+   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_ctb_d_s0": {
+   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_lo_s0": {
+   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_hi_s0": {
+   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_gl_s0": {
+   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_gj_s0": {
+   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_f1_s1": {
+   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_ctb_d_s1": {
+   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_lo_s1": {
+   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_hi_s1": {
+   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_gl_s1": {
+   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_ctb_gj_s1": {
+   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_f1_s0": {
+   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r2tb_d_s0": {
+   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_lo_s0": {
+   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_hi_s0": {
+   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_gl_s0": {
+   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_gj_s0": {
+   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_f1_s1": {
+   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_r2tb_d_s1": {
+   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_lo_s1": {
+   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_hi_s1": {
+   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_gl_s1": {
+   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2tb_gj_s1": {
+   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_f1_s0": {
+   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_n_d_s0": {
+   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_lo_s0": {
+   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_hi_s0": {
+   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_gl_s0": {
+   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_gj_s0": {
+   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_f1_s1": {
+   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_n_d_s1": {
+   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_lo_s1": {
+   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_hi_s1": {
+   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_gl_s1": {
+   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_n_gj_s1": {
+   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_f1_s0": {
+   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_m0_d_s0": {
+   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_lo_s0": {
+   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_hi_s0": {
+   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_gl_s0": {
+   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_gj_s0": {
+   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_f1_s1": {
+   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "metrics.topo_F1",
+   "fmt": "{:.4f}"
+  },
+  "e392_m0_d_s1": {
+   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_lo_s1": {
+   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.lo",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_hi_s1": {
+   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.topo_F1.hi",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_gl_s1": {
+   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.lanes_found.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_m0_gj_s1": {
+   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "key": "info.paired_vs_ref_run.junction_F1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e392_r2_params": {
+   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "key": "info.head_params",
+   "fmt": "{:,}"
+  },
+  "e392_c_params": {
+   "file": "../../runs/e392_c_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s0.json",
+   "key": "info.head_params",
+   "fmt": "{:,}"
+  },
+  "e389_d0": {
+   "file": "../../runs/eval/e389_verdict.json",
+   "key": "m_minus_z_road_error.0.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e389_z0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.z.error",
+   "fmt": "{:.4f}"
+  },
+  "e389_wrong0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.wrong_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e389b_da0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.a.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e389b_dm0": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.0.m.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e389_d1": {
+   "file": "../../runs/eval/e389_verdict.json",
+   "key": "m_minus_z_road_error.1.diff",
+   "fmt": "{:+.4f}"
+  },
+  "e389_z1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.z.error",
+   "fmt": "{:.4f}"
+  },
+  "e389_wrong1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.wrong_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e389b_da1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.a.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e389b_dm1": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "seeds.1.m.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e389b_dp": {
+   "file": "../../runs/eval/e389b_verdict.json",
+   "key": "plain_s0.error_minus_z",
+   "fmt": "{:+.4f}"
+  },
+  "e394_smoke_f1": {
+   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "key": "levels.wrong_scene+dec.heads.F1.lanes_all",
+   "fmt": "{:.2f}"
+  },
+  "e394_smoke_z": {
+   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "key": "levels.wrong_scene+dec.heads.z.lanes_all",
+   "fmt": "{:.2f}"
+  },
+  "e394_smoke_p6": {
+   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "key": "levels.wrong_scene+dec.heads.p6zero.lanes_all",
+   "fmt": "{:.2f}"
+  },
+  "e394_smoke_f1_exact": {
+   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "key": "levels.exact.heads.F1.lanes_all",
+   "fmt": "{:.2f}"
+  },
+  "e394_smoke_frames": {
+   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "key": "levels.exact.frames",
+   "fmt": "{}"
+  },
+  "e391fr_typical_frame": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.frame",
+   "fmt": "{}"
+  },
+  "e391fr_typical_scene": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.scene",
+   "fmt": "{}"
+  },
+  "e391fr_typical_acc_z": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.acc_z",
+   "fmt": "{:.3f}"
+  },
+  "e391fr_typical_acc_f1": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.acc_f1",
+   "fmt": "{:.3f}"
+  },
+  "e391fr_typical_n": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.n",
+   "fmt": "{}"
+  },
+  "e391fr_typical_n0": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.n0",
+   "fmt": "{}"
+  },
+  "e391fr_typical_n1": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.n1",
+   "fmt": "{}"
+  },
+  "e391fr_typical_n2": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.n2",
+   "fmt": "{}"
+  },
+  "e391fr_typical_z_fa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.false_assigned",
+   "fmt": "{}"
+  },
+  "e391fr_typical_f_fa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.f1.false_assigned",
+   "fmt": "{}"
+  },
+  "e391fr_typical_z_wp": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.wrong_present",
+   "fmt": "{}"
+  },
+  "e391fr_typical_f_wp": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.f1.wrong_present",
+   "fmt": "{}"
+  },
+  "e391fr_typical_f_up": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.f1.unassigned_present",
+   "fmt": "{}"
+  },
+  "e391fr_typical_z_wa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.z.wrong_absent",
+   "fmt": "{}"
+  },
+  "e391fr_typical_f_wa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.typical.f1.wrong_absent",
+   "fmt": "{}"
+  },
+  "e391fr_gain_frame": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.frame",
+   "fmt": "{}"
+  },
+  "e391fr_gain_scene": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.scene",
+   "fmt": "{}"
+  },
+  "e391fr_gain_acc_z": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.acc_z",
+   "fmt": "{:.3f}"
+  },
+  "e391fr_gain_acc_f1": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.acc_f1",
+   "fmt": "{:.3f}"
+  },
+  "e391fr_gain_n": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.n",
+   "fmt": "{}"
+  },
+  "e391fr_gain_n0": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.n0",
+   "fmt": "{}"
+  },
+  "e391fr_gain_n1": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.n1",
+   "fmt": "{}"
+  },
+  "e391fr_gain_n2": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.n2",
+   "fmt": "{}"
+  },
+  "e391fr_gain_z_fa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.false_assigned",
+   "fmt": "{}"
+  },
+  "e391fr_gain_f_fa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.f1.false_assigned",
+   "fmt": "{}"
+  },
+  "e391fr_gain_z_wp": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.wrong_present",
+   "fmt": "{}"
+  },
+  "e391fr_gain_f_wp": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.f1.wrong_present",
+   "fmt": "{}"
+  },
+  "e391fr_gain_f_up": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.f1.unassigned_present",
+   "fmt": "{}"
+  },
+  "e391fr_gain_z_wa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.z.wrong_absent",
+   "fmt": "{}"
+  },
+  "e391fr_gain_f_wa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.gain.f1.wrong_absent",
+   "fmt": "{}"
+  },
+  "e391fr_loss_frame": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.frame",
+   "fmt": "{}"
+  },
+  "e391fr_loss_scene": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.scene",
+   "fmt": "{}"
+  },
+  "e391fr_loss_acc_z": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.acc_z",
+   "fmt": "{:.3f}"
+  },
+  "e391fr_loss_acc_f1": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.acc_f1",
+   "fmt": "{:.3f}"
+  },
+  "e391fr_loss_n": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.n",
+   "fmt": "{}"
+  },
+  "e391fr_loss_n0": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.n0",
+   "fmt": "{}"
+  },
+  "e391fr_loss_n1": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.n1",
+   "fmt": "{}"
+  },
+  "e391fr_loss_n2": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.n2",
+   "fmt": "{}"
+  },
+  "e391fr_loss_z_fa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.false_assigned",
+   "fmt": "{}"
+  },
+  "e391fr_loss_f_fa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.f1.false_assigned",
+   "fmt": "{}"
+  },
+  "e391fr_loss_z_wp": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.wrong_present",
+   "fmt": "{}"
+  },
+  "e391fr_loss_f_wp": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.f1.wrong_present",
+   "fmt": "{}"
+  },
+  "e391fr_loss_f_up": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.f1.unassigned_present",
+   "fmt": "{}"
+  },
+  "e391fr_loss_z_wa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.z.wrong_absent",
+   "fmt": "{}"
+  },
+  "e391fr_loss_f_wa": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "cases.loss.f1.wrong_absent",
+   "fmt": "{}"
+  },
+  "e391fr_candidates": {
+   "file": "parts/figures/e391_frames.json",
+   "key": "candidates",
+   "fmt": "{}"
+  },
+  "e391_val_seg_s0": {
+   "file": "../../runs/e391_F1_s0/card_val.json",
+   "key": "levels.dec.seg_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_seg_s0": {
+   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "key": "levels.dec.seg_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_fu_s0": {
+   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "key": "levels.dec.false_unassigned_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e390_dlr2_s0": {
+   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "key": "levels.pose2.p6_minus_lr.0",
+   "fmt": "{:.3f}"
+  },
+  "e391_val_seg_s1": {
+   "file": "../../runs/e391_F1_s1/card_val.json",
+   "key": "levels.dec.seg_acc.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_seg_s1": {
+   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "key": "levels.dec.seg_acc_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e391_null_fu_s1": {
+   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "key": "levels.dec.false_unassigned_p6zero.0",
+   "fmt": "{:.4f}"
+  },
+  "e390_dlr2_s1": {
+   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "key": "levels.pose2.p6_minus_lr.0",
+   "fmt": "{:.3f}"
+  },
+  "cost_c1": {
+   "file": "../../runs/e392_c_s0/token_timing_20261123T073611Z.json",
+   "key": "median_ms.whole",
+   "fmt": "{:.2f}"
+  },
+  "cost_c1h": {
+   "file": "../../runs/e392_c_s0/token_timing_20261123T073611Z.json",
+   "key": "median_ms.head",
+   "fmt": "{:.2f}"
+  },
+  "cost_c2": {
+   "file": "../../runs/e392_c_s0/token_timing_20261123T074440Z.json",
+   "key": "median_ms.whole",
+   "fmt": "{:.2f}"
+  },
+  "cost_c2h": {
+   "file": "../../runs/e392_c_s0/token_timing_20261123T074440Z.json",
+   "key": "median_ms.head",
+   "fmt": "{:.2f}"
+  },
+  "cost_r2": {
+   "file": "../../runs/e392_r2_s0/token_timing_20261123T073935Z.json",
+   "key": "median_ms.whole",
+   "fmt": "{:.2f}"
+  },
+  "cost_r2h": {
+   "file": "../../runs/e392_r2_s0/token_timing_20261123T073935Z.json",
+   "key": "median_ms.head",
+   "fmt": "{:.2f}"
+  }
+ },
+ "sources": [
+  "../../experiments/E388_*/experiment.md",
+  "../../experiments/E381_*/experiment.md",
+  "../../experiments/E389_*/experiment.md",
+  "../../experiments/E389b_*/experiment.md",
+  "../../experiments/E390_*/experiment.md",
+  "../../experiments/E391_*/experiment.md",
+  "../../experiments/E392_*/experiment.md",
+  "../../experiments/E393_*/experiment.md",
+  "../../experiments/E394_*/experiment.md",
+  "../../experiments/E372_*/experiment.md",
+  "../../experiments/E373_*/experiment.md",
+  "../../experiments/E374_*/experiment.md",
+  "../../experiments/E283_*/experiment.md",
+  "../../experiments/E285_*/experiment.md",
+  "../../experiments/E346_*/experiment.md",
+  "../../HANDOVER.md",
+  "../../experiment_execution/DECISIONS.md",
+  "../E2E_Report_E389_2026-11-20/parts/05_ergebnis.md",
+  "../E2E_Report_E389_2026-11-20/parts/08_nacht.md",
+  "../E2E_Report_E389_2026-11-20/parts/03_gt.md",
+  "../../runs/e390_g7_s*/probe_card.json",
+  "../../runs/e390_g7_s*/clause_vs_n_base.json",
+  "../../runs/e390_sdgraph/nulls_val.json",
+  "../../runs/e391_*/card_*.json",
+  "../../runs/e391_assoc/nulls_*.json",
+  "../../runs/e392_*/token_card_rec_*.json",
+  "../../runs/e392_*/token_timing_*.json",
+  "../../runs/eval/e389_verdict.json",
+  "../../runs/eval/e389b_verdict.json",
+  "../../runs/e394_step0/degrade_holdout_s0_smoke.json"
+ ],
+ "utilities": [
+  {
+   "path": "../../tools/map_assoc_fig.py",
+   "usage": "bash tools/env/_py14.sh map_assoc_fig.py --seed 0 --out <abs dir>   (the example frames of the association by the written rule; --selftest)"
+  },
+  {
+   "path": "../../tools/report_charts.py",
+   "usage": "bash tools/env/_py14.sh report_charts.py --out <abs dir>   (the charts of chapters 5 and 7 from the cards; --selftest)"
+  },
+  {
+   "path": "../../evaluation/maperror_probe.py",
+   "usage": "bash tools/env/_py14.sh maperror_probe.py degrade --seed 0 --split holdout --modes all --every 2   (E394 step 0, paused)"
+  },
+  {
+   "path": "../../../reporter/reporter.py",
+   "usage": "python reporter.py build results/E2E_Report_2026-11-23 --strict"
+  }
+ ],
+ "output": "E2E_Bericht_2026-11-23.html",
+ "package": "E2E_Code_Paket_2026-11-23.zip",
+ "pack": {
+  "limit": 2000000,
+  "include_report": false,
+  "code": [
+   "../../training/data/lane_sdgraph_data.py",
+   "../../training/grid/jsdgraph.py",
+   "../../evaluation/sdgraph_probe.py",
+   "../../training/grid/test_sdgraph.py",
+   "../../training/data/lane_mapassoc_data.py",
+   "../../training/grid/jmapassoc.py",
+   "../../evaluation/mapassoc_probe.py",
+   "../../training/grid/test_mapassoc.py",
+   "../../training/data/lane_maperror_data.py",
+   "../../evaluation/maperror_probe.py",
+   "../../training/grid/test_maperror.py",
+   "../../training/grid/jtoken.py",
+   "../../training/train/jtoken_train.py",
+   "../../evaluation/jtoken_eval.py",
+   "../../tools/jarm.py",
+   "../../training/train/jlive_train.py",
+   "../../training/trainer.py",
+   "../../training/grid/jroute.py",
+   "../../training/train/jroute_train.py",
+   "../../training/data/lane_route_data.py",
+   "../../evaluation/jroute_eval.py",
+   "../../tools/map_assoc_fig.py",
+   "../../tools/report_charts.py",
+   "../../tools/route_frames_fig.py",
+   "../../../reporter/**/*"
+  ],
+  "strip": "../..",
+  "require_clean_git": false,
+  "readme": "Final report 2026-11-23, code package (the report is the separate html file).\n\ncode/ = the sources that made the numbers, repository-relative paths: the SD-map line (E390: training/data/lane_sdgraph_data.py, training/grid/jsdgraph.py, evaluation/sdgraph_probe.py; E391: training/data/lane_mapassoc_data.py, training/grid/jmapassoc.py, evaluation/mapassoc_probe.py; E394, paused: training/data/lane_maperror_data.py, evaluation/maperror_probe.py), their tests, the token heads of E392 (training/grid/jtoken.py, training/train/jtoken_train.py, evaluation/jtoken_eval.py, tools/jarm.py), the E393 options (training/train/jlive_train.py, training/trainer.py), the route association of E389 (jroute*, lane_route_data, jroute_eval), the figure and chart tools of this report, and code/../reporter (the documentation system that built the report; it imports nothing from the project). No weights, no caches (derived data and checkpoints stay in the repository run folders, see chapter 10 of the report); copy code/ over bev_fusion_lane_center/ and run from there.\nStatus: see the report; TEST untouched by every experiment named in it."
+ }
+}
