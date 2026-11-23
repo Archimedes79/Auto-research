@@ -87,9 +87,8 @@
 **/literature/topics/*/table*.csv
 # scratch: never in an ordinary commit (`git add -A` does not sweep it in; autoresearch/tools/check_git.py refuses it before a push); a run's tag and clean_temp.py keep the scripts,
 # because the launcher's snapshot adds the .py / .sh files of the scratch folder by force (run.py scratch_scripts)
-!/bev_fusion_lane_center/temp/
-/bev_fusion_lane_center/temp/**
-!/bev_fusion_lane_center/temp/README.md
+# D139 (2) / D140 (2026-11-23): temp folders are not in git at all (no README placeholder either)
+/bev_fusion_lane_center/temp/
 
 # not in git: wsl/ (the WSL disk image) and the raw data itself (nuScenes is on D:). In git: data/NuScenes = description, manifest and download / check / link tools of the nuScenes data family
 !/data/

@@ -20,7 +20,7 @@ An arm is the base config with the fields changed (a new file or a preset, never
 | file | what | status |
 |---|---|---|
 | `e271_grid.json` | E271 arm a (grid head 1 m + sparsification, single frame, 4000 steps) | arms a_s0 / a_s1 ran by the command line of `grid_train.py` before configs existed (their `runs/<name>/config.json` holds the same values) |
-| `e273_head.json` | the lane head of E273 = baseline B (design `qgraph_head`: phases 2 - 7 of `qgraph_train.py`, a gate after each; later arms add the flags of their card, key = flag) | `e273_p_s0` / `e273_p_s1` ran by the command line of `qgraph_train.py` (`temp/e273/start_p.sh`); the config reproduces that command |
+| `e273_head.json` | the lane head of E273 = baseline B (design `qgraph_head`: phases 2 - 7 of `qgraph_train.py`, a gate after each; later arms add the flags of their card, key = flag) | `e273_p_s0` / `e273_p_s1` ran by the command line of `qgraph_train.py` (temp/e273/start_p.sh (scratch, removed by D140; in the git history)); the config reproduces that command |
 | `jobs/e273_head_example.json` | the same as a job file of the Training class (`Training.run`), a smoke as a diagnostic | `Training.check` ok on 2026-11-10; not run (GPU window) |
 | `presets/smoke.json` | 40 steps, 24 evaluation frames: the end-to-end smoke of a new `grid_head` version | |
 | `presets/smoke_qgraph.json` | the smoke of a `qgraph_head` run (the trainer's own few steps per phase; `steps` of that design is a list) | |

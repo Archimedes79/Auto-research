@@ -7,7 +7,7 @@
 - The problem: PROBLEM.md (goal, chain, metrics, current best, gaps, problem groups, foundation topics); paths for the tools: project.json
 - The design spec: DESIGN.md (the modules of the chain and the rules it obeys, small; the code is the detail spec); the coder is given it with the card's Design delta
 - The research system around it: `../autoresearch/` (METHOD.md, agents, templates, prompts, tools); rules for an AI session: CLAUDE.md
-- Folder tree with sizes on demand: `tools/maintenance/make_structure.py` (writes `temp/STRUCTURE.md`); structure and document check: `../autoresearch/tools/check_structure.py`
+- Folder tree with sizes on demand: `tools/maintenance/make_structure.py` (writes temp/STRUCTURE.md, scratch, not in git); structure and document check: `../autoresearch/tools/check_structure.py`
 
 ![lane-centre system architecture: the token champion, from the frozen foundation and the lane head B' through the token head to the lane graph, with the E389 route head and the reference systems](training/architecture.svg)
 
