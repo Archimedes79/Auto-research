@@ -19,3 +19,7 @@ DOES NOT RUN AS IS: the code predates D76 and imports autogt (renamed GtGenerato
 ## Weights
 
 bev_fusion/runs/t21_ctl_s0/ckpt_00001500.pt (455,747,229 B) and runs/t21_ctl_s1/ckpt_00001500.pt (455,747,357 B), sha256 in records/keep3.json; warm-start parent runs/t20_base_s0/ckpt_00006000.pt; not in git
+
+## The composed job configs
+
+`compose/` holds the three composed configs that the runs started from (`t20_base_s0.json`, the warm-start parent; `t21_ctl_s0.json`; `t21.ctl_s1.json`), copied from the scratch folder `temp/compose/` before D140 removed it; the full config of each run is also in its `runs/<run>/config.json`.
