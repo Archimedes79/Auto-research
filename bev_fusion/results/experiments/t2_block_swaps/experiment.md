@@ -56,7 +56,7 @@ an arm that diverges (NaN / grad norm > 500 for 100 steps) is cut and reported a
 of `t1_r4_soa`, so ranking favours fast-converging blocks (pre-trained, simple) over blocks that need a long schedule; 428 scenes,
 front camera; effects found here are effects on this data and schedule, not general laws.
 
-## 4 Phase 2 plan: the ladder (added 2026-10-29 on Mirko's advice: start from a good vision BEV network, add one step at a time, test as you go)
+## 4 Phase 2 plan: the ladder (added 2026-10-29 on the owner's advice: start from a good vision BEV network, add one step at a time, test as you go)
 
 The block swaps above are the subtractive view of one chain; phase 2 reads and extends them as an ADDITIVE ladder with a fallback at every rung.
 Rung 0 is the good vision network: pre-trained DualBEV (R50) image backbone + neck + depth head + BEV encoder (all pre-trained, only the lift, the

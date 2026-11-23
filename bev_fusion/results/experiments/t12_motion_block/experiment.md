@@ -1,4 +1,4 @@
-# t12 motion block on a frozen base - does a two-frame + Doppler velocity field beat the base's own velocity? (card written 2026-11-01, before the runs; Mirko: "use an existing training and just train this block if it improves anything")
+# t12 motion block on a frozen base - does a two-frame + Doppler velocity field beat the base's own velocity? (card written 2026-11-01, before the runs; the owner: "use an existing training and just train this block if it improves anything")
 
 Context: plan 7.4 (fused flow pyramid, `tests/test_flow_fused.py`): on GROUND-TRUTH maps the pyramid without correlation reached
 0.93 / 0.99 m/s on moving vehicles (2 seeds, 48 held-out frames), the real radar Doppler halved the radial error. In the model today

@@ -1,4 +1,4 @@
-# Lane project: the BEV system's way of working, copied and adapted (Mirko, 2026-11-03)
+# Lane project: the BEV system's way of working, copied and adapted (the owner, 2026-11-03)
 
 His order: use a system similar to the BEV system's, the same suites, copy what is project-specific from `bev_fusion/` into this folder and adapt it, take out what is not needed, and go on building the head (the grid chain, card E271). The shared toolchain stays in `../autoresearch/` (`run.py`, `trainsuite`, `evalsuite`, `ledger`, `decide`, `keep3`, `package`, `archdraw`, `commit_paths`); nothing of it is copied. Tag of the state before: `lcr/pre-restructure-2026-11-03` (everything removed below stays reachable through it and through git history).
 
@@ -41,5 +41,5 @@ Each step is one commit of its own paths (`commit_paths.py`), tests green before
 - Step 3 (configs, `startable.py`, `run_config.py`, project.json `trainsuite` block) done: 54ebc03; the oracle (G0) is the experiments chat's `training/grid/test_oracle.py`, so no `lane_gtcheck.py` is written.
 - Open: steps 4 - 6 (gates are in place; board / module probe / timing / freeze wait for two trained heads), and the alignment with the BEV chat's plan of the same day (trainkit, manifests, split lists): messages sent; lane `trainer.py` stays a subset of the trainkit contract.
 
-## 5. D50 (Mirko, 2026-11-03)
+## 5. D50 (the owner, 2026-11-03)
 The lane project is a separate codebase from the BEV system (a head on the frozen GaussianCaR features; the BEV system is not its trunk). What was copied from `bev_fusion/` stays as this project's own tooling; the alignment with the BEV chat's plan (trainkit contract, split fields, a shared lane_graph layer) is void, and the holdout-names file was removed again.

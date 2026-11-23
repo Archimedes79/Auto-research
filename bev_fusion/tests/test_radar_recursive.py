@@ -1,4 +1,4 @@
-"""One radar sweep per step and the radar past in the feature state: `ModelConfig.radar_per_frame` (card t25, Mirko's D91); tiny cached model, CPU, no data, about 3 min.
+"""One radar sweep per step and the radar past in the feature state: `ModelConfig.radar_per_frame` (card t25, the owner's D91); tiny cached model, CPU, no data, about 3 min.
 
   A  stream = batch: three one-frame stream steps from cold = the batch unroll of the three frames, and across key frames (a batch that gets the previous batch's state and
      the keyframe gap step) = the stream over the same six frames, each frame with its own sweep (radar_seq); output, features, radar state and buffer to 1e-5. The

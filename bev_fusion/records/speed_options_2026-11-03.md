@@ -1,6 +1,6 @@
 # Training speed: where the host-bound step spends its launches, and the levers (CPU analysis, 2026-11-03)
 
-Asked by Mirko ("find options to improve training speed"). Nothing was run on the GPU and no code was changed: the box trained `t20.base_s0` (4.09 s per step at step 4480 of 6000) and the frame is frozen except what D48 lifted. Every number below is labelled: **measured on CPU** (torch.profiler / dynamo on the t20 chain, B = 1, 15 synthetic boxes per sample, a warm keyframe, the small grid; scratch scripts in `bev_fusion/temp/speed_cpu/`, not kept), **read from code**, or **guessed**. The earlier GPU facts (33 % kernel busy, 691 `.item()`, 1,283 syncs, 1,779 copies per step at B = 3 on the old chain; `speed.a3` 2.66 s per step, `speed.b`, `speed.c2`) are in `autoresearch/trainsuite/README.md` section 8 and the ledger rows `speed.*`.
+Asked by the owner ("find options to improve training speed"). Nothing was run on the GPU and no code was changed: the box trained `t20.base_s0` (4.09 s per step at step 4480 of 6000) and the frame is frozen except what D48 lifted. Every number below is labelled: **measured on CPU** (torch.profiler / dynamo on the t20 chain, B = 1, 15 synthetic boxes per sample, a warm keyframe, the small grid; scratch scripts in `bev_fusion/temp/speed_cpu/`, not kept), **read from code**, or **guessed**. The earlier GPU facts (33 % kernel busy, 691 `.item()`, 1,283 syncs, 1,779 copies per step at B = 3 on the old chain; `speed.a3` 2.66 s per step, `speed.b`, `speed.c2`) are in `autoresearch/trainsuite/README.md` section 8 and the ledger rows `speed.*`.
 
 ## 1. Operators per keyframe-batch (measured on CPU)
 Leaf aten operators with view-only operators dropped, as a proxy for kernel launches. One training step is 6 keyframe-batches (accumulation 2 x clip length 3): about 43-50 thousand operators, about 85 microseconds each at 4.09 s per step. The same method on the old 3-keyframe `t10` step gives about 20 thousand, which matches the measured launch count.
@@ -34,7 +34,7 @@ The whole forward gives 35 graphs and 34 breaks (`lift_pd` `.tolist()` x 9, rada
 | 3 | the bit-for-bit sync removals of section 2 | about -35 of 44 per keyframe | yes | open files (`flip` and `isfinite` are frozen) | syncs per step in `profile.txt` |
 | 4 | stack the GT on the host, one copy per key | -140 copies per keyframe | yes | `losses.py` (open) | same run |
 | 5 | `torch.compile` of the zero-break parts | guess -15 to -20 % of the operators | no (fusion) | model builders | compile time + 70 steps |
-| 6 | the 3 dts as one batch of 3B | about -40 % | no: BatchNorm statistics over dt (open finding #5) | `model.py`, loss | needs Mirko's word; a new baseline |
+| 6 | the 3 dts as one batch of 3B | about -40 % | no: BatchNorm statistics over dt (open finding #5) | `model.py`, loss | needs the owner's word; a new baseline |
 
 Not worth it while the step is host-bound: fused AdamW (below 1 %), `cudnn_benchmark`, TF32 (risky for the coordinates); a loader lever is capped by the data wait (6-7 %; targets in the workers: at most 4 %, blocked because `w_obj` depends on the splat mass); a larger micro-batch is blocked by memory (8.8-9.3 GB of 11 GB) and by BatchNorm.
 

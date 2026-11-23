@@ -1,4 +1,4 @@
-"""Level D of the radar encoding gate (Mirko, 2026-10-26): which CODEC of the stored fields keeps more information?
+"""Level D of the radar encoding gate (the owner, 2026-10-26): which CODEC of the stored fields keeps more information?
 
 Same probe as level C (slot raster K = 3, two 3x3 convs, 1x1 decoder, held-out scenes vs train scenes, tolerance-weighted
 loss), but the raster stores the detection fields in different codes and the physical fields are decoded from them:

@@ -165,18 +165,18 @@ def selftest():
         # the ledger: a note is appended to the row, a run without a row gets none
         with open(f"{T}/LEDGER.csv", "w", newline="", encoding="utf-8") as f:
             f.write("id,status,notes\nR1,stopped,old note\n")
-        h = clear(d, "Mirko: resume it")
+        h = clear(d, "the owner: resume it")
         assert read(d) is None and h["who"] == "chat B" and len([f for f in os.listdir(d) if f.startswith("HOLD.cleared.")]) == 1
         assert note_in_ledger("R1", "hold cleared on the person's words") is True and note_in_ledger("R9", "x") is False
         notes = open(f"{T}/LEDGER.csv", encoding="utf-8").read()
         assert "old note; hold cleared on the person's words" in notes, notes
         write(d, "chat A", "again")                      # a second hold and a second clear: the records of the first stay
-        clear(d, "Mirko: ok")
+        clear(d, "the owner: ok")
         assert len([f for f in os.listdir(d) if f.startswith("HOLD.cleared.")]) == 2
         # the command line
         assert main(["set", "R5", "--by", "chat C", "--reason", "waiting for the person", "--words", "relayed by chat C: stay stopped"]) == 0 and read(os.path.join(T, "runs", "R5"))
         assert main(["show"]) == 0 and main(["show", "R5"]) == 0
-        assert main(["clear", "R5", "--words", "Mirko: go"]) == 0 and read(os.path.join(T, "runs", "R5")) is None
+        assert main(["clear", "R5", "--words", "the owner: go"]) == 0 and read(os.path.join(T, "runs", "R5")) is None
         print("hold selftest passed")
     finally:
         if old is None:

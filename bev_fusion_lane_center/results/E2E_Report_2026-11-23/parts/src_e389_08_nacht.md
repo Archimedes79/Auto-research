@@ -4,7 +4,7 @@
 
 ## 8.0 Nachtrag E389b: eine Attention statt zwei: GENÜGT (Regel erfüllt)
 
-**Frage (Mirko, 2026-11-21: „kann man da nicht einfach nur 1x attention nehmen?“, und: bei Vereinfachung mit gleicher Leistung ist die Vereinfachung gut).** Der Kopf aus Kapitel 2 hat zwei Attentions: die gelernte A und die feste, parameterlose B. B war nie ohne A geprüft. Die Karte `experiments/E389b_one-attention-route-head` (Regel vor dem Lauf geschrieben) misst den Kopf **nur mit A** (Arm `a`, 33,226 statt 33,738 Parameter; dieselben Daten, Labels, 3000 Schritte, Seeds 0 und 1) und den Kopf mit einer **gewöhnlichen** Attention ohne den Bias aus den Paarmerkmalen (Arm `p`, 32,806 Parameter, Seed 0, nur Zahlen). Referenzen ohne neuen Lauf: der Kopf ohne Karte z und der Kopf mit A und B (m) aus E389.
+**Frage (the owner, 2026-11-21: „kann man da nicht einfach nur 1x attention nehmen?“, und: bei Vereinfachung mit gleicher Leistung ist die Vereinfachung gut).** Der Kopf aus Kapitel 2 hat zwei Attentions: die gelernte A und die feste, parameterlose B. B war nie ohne A geprüft. Die Karte `experiments/E389b_one-attention-route-head` (Regel vor dem Lauf geschrieben) misst den Kopf **nur mit A** (Arm `a`, 33,226 statt 33,738 Parameter; dieselben Daten, Labels, 3000 Schritte, Seeds 0 und 1) und den Kopf mit einer **gewöhnlichen** Attention ohne den Bias aus den Paarmerkmalen (Arm `p`, 32,806 Parameter, Seed 0, nur Zahlen). Referenzen ohne neuen Lauf: der Kopf ohne Karte z und der Kopf mit A und B (m) aus E389.
 
 **Ergebnis nach der Regel: EINE ATTENTION GENÜGT.** F1 Fahrbahn bei Kartenfehler (Modus *error*), gegen z desselben Seeds:
 

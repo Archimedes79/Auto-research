@@ -1,5 +1,5 @@
 {
- "_about": "t23 (lane marking, Mirko 2026-11-07): t21_ctl.json (the equal-budget fine-tune of the finished baseline runs/t20_base_s0: 1500 steps, lr 1e-4, window path; its run t21.ctl_s0 is the control) with ONE change: arm C: + a tolerance-aware BCE on the lane / road divider presence (loss.line_bce 10, positives x3, cells within 1 m of a GT line ignored), added to the lines group. Nothing else differs from t21_ctl.json (seed 0, data, steps, schedule).",
+ "_about": "t23 (lane marking, the owner 2026-11-07): t21_ctl.json (the equal-budget fine-tune of the finished baseline runs/t20_base_s0: 1500 steps, lr 1e-4, window path; its run t21.ctl_s0 is the control) with ONE change: arm C: + a tolerance-aware BCE on the lane / road divider presence (loss.line_bce 10, positives x3, cells within 1 m of a GT line ignored), added to the lines group. Nothing else differs from t21_ctl.json (seed 0, data, steps, schedule).",
  "name": "t23_lane_bce",
  "out_root": "runs",
  "data_root": "~/data/nuscenes_full",

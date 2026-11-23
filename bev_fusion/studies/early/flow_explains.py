@@ -1,4 +1,4 @@
-"""Does the velocity field EXPLAIN the motion, or is the next frame only predicted well? (Mirko, 2026-10-26)
+"""Does the velocity field EXPLAIN the motion, or is the next frame only predicted well? (The owner, 2026-10-26)
 
 Sequence of BEV maps with moving boxes (tests/support/synthetic_world.py: cars, trucks, pedestrians with ground velocities,
 lane lines, exact ego motion; frames F0, F1, F2 dt apart, like consecutive nuScenes GT keyframes). A small model of

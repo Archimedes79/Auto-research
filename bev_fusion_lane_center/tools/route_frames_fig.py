@@ -6,7 +6,7 @@
 Per frame one png: the front camera with the GT lane graph projected (the old helper `tools/viz/qgraph_view.py`), a small table of the frame, and below the BEV panels side by side with shared axes: the head WITHOUT the map (z),
 the head WITH the map (m), and for the wrong-map case the head with the WRONG route. In a panel with a map the SD route is drawn as its PIECES (in driving order, the map error applied piece by piece as the
 loader does): a thick translucent band in its own colour, the number of the piece at its start, an arrow for the direction of travel. The PERCEPTION RESULT is the delivered graph of the champion (the nodes at p_none < 0.6 and
-the links of the E375 decode of the E373 dump: link 0.3 short / 0.2 long, no none gate; Hermite curves as the scorer reads them). COLOUR RULE (Mirko's): a delivered node the head flags as on the route whose GT node IS on the
+the links of the E375 decode of the E373 dump: link 0.3 short / 0.2 long, no none gate; Hermite curves as the scorer reads them). COLOUR RULE (the owner's): a delivered node the head flags as on the route whose GT node IS on the
 route ('tp') has the colour of the route piece it belongs to (the nearest piece of the exact route); a link between two such nodes of the same piece has that colour too. Flagged but not on the route ('fp') = amber with a
 cross; on the route but not flagged ('fn') = the piece colour, pale, hollow marker, dashed link; not flagged and not on the route ('tn') = thin grey. No red. The head without the map sees no pieces: they are drawn thin and dashed
 as the TRUE route (not seen by it), so that the colours still mean something.

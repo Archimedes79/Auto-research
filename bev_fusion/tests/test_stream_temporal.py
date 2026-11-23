@@ -1,4 +1,4 @@
-"""One buffered frame instead of the window: `ModelConfig.cam_buffer` 'pair' / 'recurrent' (card t21, Mirko's D51); CPU, about 2 min, no data.
+"""One buffered frame instead of the window: `ModelConfig.cam_buffer` 'pair' / 'recurrent' (card t21, the owner's D51); CPU, about 2 min, no data.
 
   A  pair: one stream step (ONE frame + state["buf"]["raw"] of the previous call, the ego chain as `step`) = the batch of the two frames, 1e-5,
      for dt -0.5 / 0 / +0.5, also with the motion block (it reads the two raw BEVs).

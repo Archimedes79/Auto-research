@@ -38,7 +38,7 @@
   "step 60: total 13.2877 lr 1.80e-04 grad 12.76",
   "step 80: total 15.5806 lr 2.07e-04 grad 14.51",
   "step 100: total 17.0993 lr 2.33e-04 grad 12.81",
-  "step 113: stop requested (Mirko in the tools chat, 2026-11-01: create a checkpoint and stop training (queue, no swapping); allowed explicitly: Yes, stop it), checkpoint saved, exit 75",
+  "step 113: stop requested (the owner in the tools chat, 2026-11-01: create a checkpoint and stop training (queue, no swapping); allowed explicitly: Yes, stop it), checkpoint saved, exit 75",
   "r2_rad_raster64_s0 exit 75 22:48:34"
  ]
 }

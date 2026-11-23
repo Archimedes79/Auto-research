@@ -104,7 +104,7 @@ step costs the moving cells and does not remove the static noise. The static noi
 the 400-step small set the card was motivated by), so the prediction was built on an early-training number. `t16.full_s0` stays the base.
 The hygiene flags are not separated from the lr by this run; their visible effect is the small gain on the maps and the vehicle IoU,
 inside the guards' bands. Next arm by the card: a lower output gain of M (it changes `motion_block.py` and t12's equivalence), not a smaller
-lr. Not started: Mirko ordered all BEV system trainings stopped after `t18.fix` (2026-11-02).
+lr. Not started: The owner ordered all BEV system trainings stopped after `t18.fix` (2026-11-02).
 
 **Against the baseline `t16.full_s0`** (same frames, paired bootstrap `temp/t16/compare_t18_vs_base.txt`; read by the numbers critic of the report, 2026-11-03):
 the bundle is worse on velocity (moving box-centre EPE 1.112 -> 1.204 m/s [+0.061, +0.121], static cells 0.189 -> 0.241 [+0.032, +0.068]) and its

@@ -1,6 +1,6 @@
 # t5_lane_probe - do the frozen image features contain the lane lines?
 
-Started 2026-10-30 (Mirko: "Run the probe", after the finding that lane dividers are far behind the state of the art:
+Started 2026-10-30 (the owner: "Run the probe", after the finding that lane dividers are far behind the state of the art:
 mask IoU 0.27, zero-crossing F1 0.03 in `../t1_r4_soa/report.md`, against divider IoU 38.7 / 50.1 of GaussianLSS / GaussianCaR).
 Code: `studies/recipes/t5/lane_probe.py` (self-test `python studies/recipes/t5/lane_probe.py selftest`).
 
@@ -106,7 +106,7 @@ recall as the pre-registered measures, (3) longer training (50 epochs) so that t
 current ones shaped the post-hoc metric), (5) the control must beat the prior by a margin before any feature is ranked. The 9 GB of
 features in `temp/t5/feats/` are kept for v2 (the TRAIN part is reusable).
 
-## 4 Probe v2 - card (written 2026-10-30 before the v2 run; Mirko: "Run probe v2")
+## 4 Probe v2 - card (written 2026-10-30 before the v2 run; the owner: "Run probe v2")
 
 - **Question, hypothesis, arms, heads, TRAIN frames:** as in section 1 (the same 600 TRAIN keyframes and their features).
 - **Changes against v1, all fixed before the run:**

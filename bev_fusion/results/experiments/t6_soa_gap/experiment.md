@@ -1,4 +1,4 @@
-# t6 maps-only test - does detection competition hold the maps back? (card written 2026-10-30, before the run; Mirko: "Yes, maps-only")
+# t6 maps-only test - does detection competition hold the maps back? (card written 2026-10-30, before the run; the owner: "Yes, maps-only")
 
 Context: `report.md` (same folder). Our maps reach 17 - 85 % of GaussianCaR's IoU on the same frames and underfit (train ~ val). Two
 candidates remain that the earlier arms cannot separate: (M6) the frozen, detection-trained stride-16 image features hold too little map

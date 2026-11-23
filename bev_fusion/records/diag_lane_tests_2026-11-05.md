@@ -1,6 +1,6 @@
 # Lane-marking diagnostics, 2026-11-05 / 06 (paint vs label, overfit on 8 scenes)
 
-Mirko's order (2026-11-05): run both tests after the lane (Spurmitte) work, then shut down. Diagnostics only: no verdict, no TEST, rules "by hand: diagnostic" with the reading bands written before the run (in the ledger rows).
+The owner's order (2026-11-05): run both tests after the lane (Spurmitte) work, then shut down. Diagnostics only: no verdict, no TEST, rules "by hand: diagnostic" with the reading bands written before the run (in the ledger rows).
 Question: why is the lane-marking IoU weak (val 0.43 at 0.5 m for lane_divider)? Hypotheses: (a) the labels do not lie on the visible paint (noise / registration), (b) loss or representation cannot carry a 1.3 % thin class.
 
 ## 1. Paint vs label (diag.paint_val, CPU, 16 s, tag bf/diag.paint_val)
@@ -40,4 +40,4 @@ Together with section 1: the train IoU ceiling is not obviously capped by label 
 ## Deviations
 - The overfit training was planned pinned to the code of bf/t21.ctl_s0; `run.py` refuses `--pin` for a first attempt of an id, so it ran unpinned on the working tree (snapshot tag bf/diag.overfit8_s0), which holds the t22 stage-B change (commit eebd9640: `camera_student`, off by default, not set in this config). The first chain pass (chain2.sh) lost the training and the evaluation after it to that refusal; chain3.sh repeated both (ledger rows of this record are the second pass of the "after" id).
 - The GPU part waited for the lane chat's E275 scoring (flag SCORED); its first scoring failed (E275.n_s0), the flag never came, and the fallback after 01:30 started this chain at 02:54 on a free GPU.
-- The shutdown after the tests was Mirko's explicit order.
+- The shutdown after the tests was the owner's explicit order.

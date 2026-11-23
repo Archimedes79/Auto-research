@@ -4,7 +4,7 @@ STOP_AT: 2026-10-26 04:00 (a work window: keep going until then) | SHUTDOWN: no 
 
 Problem folder: bev_fusion_lane_center/. Loop 19. Plan, schedule, ledger, decisions: as named in `HANDOVER.md`. Method: `autoresearch/METHOD.md` P3 and P4. This chat (the data chat "BEV Fusion Spurmitte") is the lead and owns the code of the loop and HANDOVER / PLAN / schedule; the tools chat ("BEV Fusion Spurmitte Experiments") owns `autoresearch/tools`, the evaluation tool code and cleanup, and starts no GPU job without telling the lead. Do not re-plan; a change of direction goes through `ar-planner` as a new schedule version.
 
-Mirko's instruction (chat, 2026-10-25 about 21:09, /loop): "Run the full test suite on lane center detection till 4 o clock in the morning. Use past loop descriptions but the new system. Use existing BEV networks here. Generate experiment and fix data. What needs to be improved in the system. What results do we get?"
+The owner's instruction (chat, 2026-10-25 about 21:09, /loop): "Run the full test suite on lane center detection till 4 o clock in the morning. Use past loop descriptions but the new system. Use existing BEV networks here. Generate experiment and fix data. What needs to be improved in the system. What results do we get?"
 
 Reading of it:
 - full test suite = `tools/maintenance/run_all_tests.sh` at the start and at the end (layer 0-1), then the cycle-19 experiments (layers 3-4: VAL 873, 2 seeds, paired scene bootstrap)
@@ -19,6 +19,6 @@ Every wake-up (when a run record changes, else every 20-25 min)
 
 At STOP_AT (P4)
 - end-of-loop section of the plan; report from the experiment summaries; `check_numbers.py`; `ar-reviewer` mode numbers
-- the system-improvement list (tools, data, method) as a section of the plan and as DECISIONS entries where a decision is Mirko's
+- the system-improvement list (tools, data, method) as a section of the plan and as DECISIONS entries where a decision is the owner's
 - commit the code and records, `clean_temp.py loop19 --move` only if the scratch is filed; `check_structure.py`; `run_all_tests.sh`
 - HANDOVER rewritten

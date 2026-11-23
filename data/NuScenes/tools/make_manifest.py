@@ -408,7 +408,7 @@ def build(root, home=None, repo=REPO, deep=True, scanner="auto", hash_files=True
     apply_checks(archives, occ["files"], checks)
     m = {"schema": SCHEMA, "about": ABOUT,
          "root": {"windows": "D:\\Auto-research\\NuScenes", "wsl": "/mnt/d/Auto-research/NuScenes"},
-         "licence": "nuScenes is for non-commercial use (the LICENSE of the data is under files); downloads only with Mirko's OK",
+         "licence": "nuScenes is for non-commercial use (the LICENSE of the data is under files); downloads only with the owner's OK",
          "source": {"bucket": "motional-nuscenes", "listing": "data/NuScenes/tools/list_nuscenes_bucket.py", "etag_check": "data/NuScenes/tools/verify_s3_etag.py"},
          "datasets": ds, "files": files, "file_lists": file_lists(root, hash_files), "archives": archives, "data_markers": data_markers(root),
          "occ3d": occ, "views": views(home, root, repo), "links": LINKS, "generated": today}

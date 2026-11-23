@@ -1,6 +1,6 @@
 # RaCFormer - code extraction, FUSION sections only (radar BEV, camera BEV, ConvGRU over radar BEV)
 
-Scope (Mirko's brief 2026-10-25): where the radar BEV meets the camera features and the implicit dynamic catcher (ConvGRU over radar BEV across frames). Extracted by the fusion scout (deep mode), 2026-10-25, from GitHub raw files only, no clone.
+Scope (the owner's brief 2026-10-25): where the radar BEV meets the camera features and the implicit dynamic catcher (ConvGRU over radar BEV across frames). Extracted by the fusion scout (deep mode), 2026-10-25, from GitHub raw files only, no clone.
 
 Reliability note: the raw files were read through the page-fetch tool, which summarises with a small model and cannot give verbatim blocks longer than a sentence; line numbers below are the tool's counts and may be off by a few lines, shapes marked "derived" are inferred from constructor arguments. Treat this note as a map to verify against a checkout before any port; the unresolved points are listed in section 7.
 

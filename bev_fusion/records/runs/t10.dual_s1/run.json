@@ -2,7 +2,7 @@
  "id": "t10.dual_s1",
  "hypothesis": "seed twin of t10.dual_s0 (its rule E1 held: maps of t8_bevfeat kept, front mAP2 0.33 >= ctl - 0.054); resumed after the OOM kill at step 760 (00:09, RAM)",
  "prediction": "cold VAL 1000 within the t10 bands of s0: lane divider@0.5 0.34, drivable 0.80, walkway 0.33, front mAP2 0.33",
- "rule": "s1 agrees with s0 (E1 again) -> the dual-feature chain is the new reference (board base proposal; promotion stays Mirko's); s1 fails E1 -> t10 is seed luck, keep t8_bevfeat / t8_ctl",
+ "rule": "s1 agrees with s0 (E1 again) -> the dual-feature chain is the new reference (board base proposal; promotion stays the owner's); s1 fails E1 -> t10 is seed luck, keep t8_bevfeat / t8_ctl",
  "split": "train",
  "basis": "",
  "seed": "",

@@ -28,7 +28,7 @@
     }
    ],
    "since": "2026-11-01",
-   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the best quality we can deliver today, the prototype of loop 22 (E265 KEEP, spurs kept): Q on VAL 0.7424 (0.0003 below the highest of any name, all inside the band), lanes found 0.781 (the largest of the three; gap 1 of PROBLEM.md), 10.9 nodes delivered per 100 m (card vert100 with the DP stage; the budget count is on the per-piece basis, D25), the one TEST use E268.p (lanes found 0.740, Q 0.727 against the control 0.762 / 0.712). Assembly time on its card is 27.9 ms against 12-13 ms for the other two: look at the cost before relying on it for speed"
+   "evidence": "by hand: 2026-11-01, chosen by Claude on the owner's request: the best quality we can deliver today, the prototype of loop 22 (E265 KEEP, spurs kept): Q on VAL 0.7424 (0.0003 below the highest of any name, all inside the band), lanes found 0.781 (the largest of the three; gap 1 of PROBLEM.md), 10.9 nodes delivered per 100 m (card vert100 with the DP stage; the budget count is on the per-piece basis, D25), the one TEST use E268.p (lanes found 0.740, Q 0.727 against the control 0.762 / 0.712). Assembly time on its card is 27.9 ms against 12-13 ms for the other two: look at the cost before relying on it for speed"
   },
   {
    "name": "fast_recall",
@@ -49,7 +49,7 @@
     }
    ],
    "since": "2026-11-01",
-   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the fast leg of 'very good and very fast': the 192/96 recipe j1rc, Q 0.7392 inside the band of the top, lanes found 0.736, 20-22 ms per frame against 24 for the champion; its seed twins e24_j1rc_s1..s3 (Q 0.735-0.743) are replicates of this recipe and take no slot of their own"
+   "evidence": "by hand: 2026-11-01, chosen by Claude on the owner's request: the fast leg of 'very good and very fast': the 192/96 recipe j1rc, Q 0.7392 inside the band of the top, lanes found 0.736, 20-22 ms per frame against 24 for the champion; its seed twins e24_j1rc_s1..s3 (Q 0.735-0.743) are replicates of this recipe and take no slot of their own"
   },
   {
    "name": "champion",
@@ -70,7 +70,7 @@
     }
    ],
    "since": "2026-11-01",
-   "evidence": "by hand: 2026-11-01, chosen by Claude on Mirko's request: the promoted champion and the reference of every comparison; its checkpoint is named by the protected champion entry and by the golden numbers, so it stays whatever the ranking says (Q 0.7350, TEST S 0.748 in E230)"
+   "evidence": "by hand: 2026-11-01, chosen by Claude on the owner's request: the promoted champion and the reference of every comparison; its checkpoint is named by the protected champion entry and by the golden numbers, so it stays whatever the ranking says (Q 0.7350, TEST S 0.748 in E230)"
   }
  ],
  "left": []

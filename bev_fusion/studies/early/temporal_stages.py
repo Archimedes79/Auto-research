@@ -1,4 +1,4 @@
-"""Simple-first ladder of the temporal block (plan.md 7.3, Mirko 2026-10-26: "build it simple, debug it well, prove it
+"""Simple-first ladder of the temporal block (plan.md 7.3, the owner 2026-10-26: "build it simple, debug it well, prove it
 works in theory"): each stage must measurably improve on the one before, without velocity labels.
 
 World (40 x 40 cells at 0.5 m, x 0..20, y -10..10): objects of two types with fixed world velocities A = (8, 2) and

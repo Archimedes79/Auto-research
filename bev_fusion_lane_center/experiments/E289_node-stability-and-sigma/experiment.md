@@ -1,6 +1,6 @@
 # E289 Unstable points: shift stability of the node read-out, then a position spread per node (D82, thread: "die Punkte sind instabil")
 
-Card of 2026-11-11 (a plan card: the diagnostic runs first, the training arms only if it says so), written by the lane chat on Mirko's remark that the points are unstable and on the literature scan of the day (`scan_2026-11-11_pruning_uncertainty_time.md`, ideas 3 and 4: beta-NLL position spread with an uncertainty-weighted read-out; the shift-stability diagnostic of anti-aliased CNNs / DISK). E285 measured that the lines are stable frame to frame (E283 section 10: 93.6 % re-found within 1 m) but the vertex phase along the line was not measured: a max-pool peak on a 2 m grid aliases, so a node may jump by a cell when the scene moves by half a metre.
+Card of 2026-11-11 (a plan card: the diagnostic runs first, the training arms only if it says so), written by the lane chat on the owner's remark that the points are unstable and on the literature scan of the day (`scan_2026-11-11_pruning_uncertainty_time.md`, ideas 3 and 4: beta-NLL position spread with an uncertainty-weighted read-out; the shift-stability diagnostic of anti-aliased CNNs / DISK). E285 measured that the lines are stable frame to frame (E283 section 10: 93.6 % re-found within 1 m) but the vertex phase along the line was not measured: a max-pool peak on a 2 m grid aliases, so a node may jump by a cell when the scene moves by half a metre.
 
 ## 0. The card (what the tools run)
 ```json card

@@ -1,5 +1,5 @@
 @@@ lead
-For Mirko, 2026-11-02 / 03. What was tried, what came out, the lane markings, the comparison with the state of the art, quantitative and qualitative, with videos. Repository state <code>@@head@@</code>; numbers come from the stored evaluation files of the runs (VAL, 1000 frames, GT v8) and from the experiment cards, never typed by hand; every comparison is single seed unless it says otherwise.
+For the owner, 2026-11-02 / 03. What was tried, what came out, the lane markings, the comparison with the state of the art, quantitative and qualitative, with videos. Repository state <code>@@head@@</code>; numbers come from the stored evaluation files of the runs (VAL, 1000 frames, GT v8) and from the experiment cards, never typed by hand; every comparison is single seed unless it says otherwise.
 
 @@@ summary
 
@@ -47,7 +47,7 @@ fused, passed through a trunk and decoded by heads at any time offset dt (-0.5 /
 <p>VAL: 1000 frames spread over the 82 validation scenes, cold memory per frame, GT v8 (store <code>c643a7539d</code>, the trainer's cache key <code>0.5_4_6a7aa7864a</code>), map layers (seg_fov) scored on the cells the front camera sees, detection (detf) on the fusion area (cells that camera and radar both observe). The small number beside a value is the difference to the first column; green = better, red = worse, one seed per run, so the seed spread of this recipe is not measured; differences below about 0.01 are treated as noise because earlier recipe families (3000 steps, ground truth v5) spread by 0.003 to 0.010 between seeds.</p>
 
 @@@ results_warn
-<div class=warn><b>No matched control.</b> A control run (the old chain's recipe on the same 428 scenes and the same 6000 steps) was planned to show what the new blocks add, but no further training was started after t18.fix (Mirko's order of 2026-11-02, evening). The only matched old-chain references are the small-set control of the t16 card (400 steps, 77 frames: velocity at moving centres 1.40 m/s against 1.92, static cells 1.26 against 0.51) and the older chains t8 / t10 (section 2), which used GT v5. So how much of the result the new blocks add over the old chain at equal budget is not measured at large-set scale; the evidence is the small-set pair and the stage-by-stage experiments of section 2.</div>
+<div class=warn><b>No matched control.</b> A control run (the old chain's recipe on the same 428 scenes and the same 6000 steps) was planned to show what the new blocks add, but no further training was started after t18.fix (the owner's order of 2026-11-02, evening). The only matched old-chain references are the small-set control of the t16 card (400 steps, 77 frames: velocity at moving centres 1.40 m/s against 1.92, static cells 1.26 against 0.51) and the older chains t8 / t10 (section 2), which used GT v5. So how much of the result the new blocks add over the old chain at equal budget is not measured at large-set scale; the evidence is the small-set pair and the stage-by-stage experiments of section 2.</div>
 
 @@@ results_cov_note
 <p class=small>Reading: this is a recall ceiling (nearest prediction to each true box, every score counts), not recall at an operating point, and the rows are different subsets of the ground-truth boxes (seen by both sensors, by one, by neither), not an ablation. Some subsets are small (pedestrians seen only by the radar hold under 100 boxes in the evaluation files), so differences of a few hundredths there are a handful of boxes.</p>
@@ -150,7 +150,7 @@ with OUR metric on OUR frames (the only like-for-like facts), 6.3 is the new re-
 
 
 @@@ folder_readme
-BEV camera + radar system - result report (made 2026-11-02 / 03 by the BEV system chat for Mirko)
+BEV camera + radar system - result report (made 2026-11-02 / 03 by the BEV system chat for the owner)
 
 Open report.html in a browser (Chrome / Edge). It needs the folder videos/ next to it for the video players; fonts come from the internet if available, otherwise the browser's default fonts are used.
 

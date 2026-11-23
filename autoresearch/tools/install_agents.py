@@ -28,7 +28,7 @@ BAD = [
     (re.compile(r"[A-Za-z]:\\|/mnt/[a-z]/|/home/|~/|\b[\w.-]+@[\w-]+\.\w+"), "an absolute or personal path or a mail address"),
     (re.compile(r"<<<<<<<|>>>>>>>|^=======$|\bTODO\b|\bFIXME\b|\bXXX\b", re.M), "a merge or edit marker, a TODO"),
     (re.compile(r"\b20\d\d-\d\d-\d\d\b|\b[tE]\d+\.[A-Za-z0-9_]+\b"), "a date or a run id (state goes stale: it belongs in a record)"),
-    (re.compile(r"\bMirko\b"), "a person's name (write: the person)"),
+    (re.compile(r"\bthe owner\b"), "a person's name or 'the owner' (a role text names no person; write: the person)"),
 ]
 
 
@@ -98,7 +98,7 @@ def selftest():
         assert lint(put(good.replace("\n", "\r\n")), ar) == [], "CRLF files are fine"
         for text, word in ((good.replace("name: ar-x", "name: ar-y"), "not the file name"), (good.replace("tools: Read, Grep", "tools: Read, Fly"), "unknown"),
                            (good.replace("Use", "Gr\u00fc\u00dfe: use"), "non-ASCII"), (good + "see C:\\Users\\x\\notes.txt\n", "absolute"), (good + "mail me@web.de\n", "absolute"),
-                           (good + "Mirko wants this\n", "person's name"), (good + "TODO later\n", "marker"), (good + "since 2026-11-01\n", "date or a run id"), (good + "run t10.dual_s0\n", "date or a run id"),
+                           (good + "the owner wants this\n", "person's name"), (good + "TODO later\n", "marker"), (good + "since 2026-11-01\n", "date or a run id"), (good + "run t10.dual_s0\n", "date or a run id"),
                            (good + "ask ar-scout\n", "removed role"), (good + "see `autoresearch/gone.md`\n", "does not exist"), (good + "call `nothing.py`\n", "none of tools"),
                            (good + "x" * 7000, "characters"), ("no frontmatter here\n", "no frontmatter")):
             got = lint(put(text), ar)

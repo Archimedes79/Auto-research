@@ -1,6 +1,6 @@
 # E340 - a still narrower junction maps head, width 32 instead of 40 (simplification arm S4c, the follow-up that E333 names)
 
-**Status 2026-11-14: WITHDRAWN, never run (D92: Mirko does not want the width narrowed).** No code was written for it beyond the existing `--d` flag.
+**Status 2026-11-14: WITHDRAWN, never run (D92: The owner does not want the width narrowed).** No code was written for it beyond the existing `--d` flag.
 
 Card of 2026-11-14 12:40, written by the lane chat (D84 point 4: simplify; D86 weights: simple, little compute). E333 names this arm in its own card: "if it passes, width 32 (1.629 GMACs, -50 % of the head) is the follow-up card". **It runs only when E333 (width 40) is adopted** (rule executed by `temp/day17/day17.sh`, below); when E333 is not adopted the fallback E339 (width 40 taught by the wide head) runs instead. No new code: `jmaps_train.py --d 32` exists (E333's CPU smoke ran the flag at 40; 32 is a multiple of 8 for the group norms). The context blocks at 2 m and the 1 m branch shrink with the width; the 0.5 m paint branch has its own fixed width of 32 and is 1.108 of the 1.629 GMACs at d = 32: the width cut cannot go below about half of the head's MACs (E332 removes the branch, and failed through the evidence it feeds).
 

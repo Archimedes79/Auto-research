@@ -20,7 +20,7 @@ Result record of experiment E276 (card `experiments/E276_gt-tiers-sparse-nodes-t
 | assignment p - g, exact map / error 1-2 m | -0.0072 / +0.0722, -0.0061 / +0.0706 | -0.0044 / +0.0778, -0.0058 / +0.0731 | guards held |
 Arm s diagnostic (CPU, 60 frames, the phase-3 checkpoint against the sparse GT; cards `runs/e276diag/`): delivered nodes per 100 m 3.6 at e >= 0.5 (recall 0.146), 50.0 at e >= 0.3 (recall 0.910, precision 0.310), 71.8 at e >= 0.2; target 14.4. The head knows where the nodes are but not which of about three cells along a straight lane carries the node (a hypothesis; section 7b of the card).
 
-## CPU analyses of Mirko's eight video notes (card section 7a; full dumps of B `temp/e276/predfull_e273_p_s<k>.pkl`)
+## CPU analyses of the owner's eight video notes (card section 7a; full dumps of B `temp/e276/predfull_e273_p_s<k>.pkl`)
 P1 sparse target keeps the oracle geometry (56 % fewer nodes, vertices per 100 m 11.4 for a perfect network under any node target); P2 labels (tier 1 16 %, tier 2 7 % of the lane length); P3 B per tier; P4 map-extension rule recall 0.92 - 0.95; P5 / P5b flicker (nodes: 5.3 % near intersections against 1.7 %; links: long links persist 64 - 65 % against 98 % in the GT); P6 endpoints; P7 intersection polygon covers 77 % of the in-intersection connectors; P8 / P8b assignment (97.6 % per node, 88 % of map lanes claimed or shared, 4.6 % misassigned); P9 link calibration (over-confident, long links precision 0.17 - 0.19); P10 link thresholds on the graph numbers (a trade, no gain; without the long links topo F1 -0.12).
 
 ## How the numbers were made

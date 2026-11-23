@@ -1,6 +1,6 @@
 # E274 Node recall and long-link matching on the pyramid head: arm r (recall weights where the nodes are weak) and arm p (r + a dual-softmax loss over the long links), against the E273 checkpoints
 
-Card of 2026-11-05, revised after the critic pass of the same day (blocking findings B1-B5 fixed before any run). E273 is CUT (topo F1 0.596 and F1@1.0 0.827 against the best graph so far d = recall_sp0_dp 0.7405 / 0.8781, guards -0.03; the assignment gain +0.071 holds). The E273 rule sends the work back to the nodes and links; the diagnostics below changed the scope of the link arm, so the new numbers get a card of their own. Priority: D57 (2026-11-05), Spurmitte work first. GPU only inside Mirko's windows (nights 22:00-07:00, Monday-Friday 08:30-17:30).
+Card of 2026-11-05, revised after the critic pass of the same day (blocking findings B1-B5 fixed before any run). E273 is CUT (topo F1 0.596 and F1@1.0 0.827 against the best graph so far d = recall_sp0_dp 0.7405 / 0.8781, guards -0.03; the assignment gain +0.071 holds). The E273 rule sends the work back to the nodes and links; the diagnostics below changed the scope of the link arm, so the new numbers get a card of their own. Priority: D57 (2026-11-05), Spurmitte work first. GPU only inside the owner's windows (nights 22:00-07:00, Monday-Friday 08:30-17:30).
 
 ## 0. The card (what the tools run)
 ```json card
@@ -69,7 +69,7 @@ Two definitions of node recall appear below and must not be mixed: the **scorer'
 | 3 | score r and c_thr on VAL 873, pictures, verdict r against c | rule of section 0 | 0.5 GPU h |
 | 4 | p_s0 and p_s1 from r's phase-3 models (ledger E274.p_s0, E274.p_s1) | phases 4-7 | about 1.1 GPU h per seed |
 | 5 | score p, verdict p against r, videos, report | rule of section 0 | 0.3 GPU h |
-Estimate 8-9 GPU h in all, budget 10; replaced by measured values after step 2. **A job starts only if it ends inside Mirko's window:** the launcher (`temp/e274/launch_window.sh`) checks start + estimate (r 2.7 h, p 1.4 h with margin) against the end of the window, for the p jobs too, the GPU is free, and no other chat's job runs (D57: a waiting lane job goes first; running jobs are never touched).
+Estimate 8-9 GPU h in all, budget 10; replaced by measured values after step 2. **A job starts only if it ends inside the owner's window:** the launcher (`temp/e274/launch_window.sh`) checks start + estimate (r 2.7 h, p 1.4 h with margin) against the end of the window, for the p jobs too, the GPU is free, and no other chat's job runs (D57: a waiting lane job goes first; running jobs are never touched).
 
 ## 5. Risks and fallbacks
 | risk | effect | what we do |
@@ -82,7 +82,7 @@ Estimate 8-9 GPU h in all, budget 10; replaced by measured values after step 2. 
 | the sparsification is missing | both arms deliver about twice the vertex budget | named; arm s of a later card |
 
 ## 6. Assumptions I chose
-1. Weights 3 / 2 and 0.5 are first guesses; no tuning on VAL before the run (the numbers of section 1 are diagnostics on the E273 checkpoints, not selections). 2. The topo F1 band is 0.02. 3. TEST is not used; a TEST check of a finished design needs Mirko's recorded OK. 4. The map is the lane-level map of E273 (lane GT with simulated errors). 5. Out of this card: the sparsification (arm s), temporal fusion by cross-attention to earlier nodes, the route attribute, the query-decoder reference (CGNet), the GT additions discussed in the report (events with or without painted evidence, occlusion by boxes), an ablation of the two node weights. 6. The scripts of section 1 (`diag_nodes.py`, `diag_nodes2.py`, `pixel_eval.py`, `thr_sweep.py`, `thr_sweep_nms.py`) are scratch kept in the git tag `lcr/e274-scratch`; they are promoted into a code folder with a test when a second card uses them.
+1. Weights 3 / 2 and 0.5 are first guesses; no tuning on VAL before the run (the numbers of section 1 are diagnostics on the E273 checkpoints, not selections). 2. The topo F1 band is 0.02. 3. TEST is not used; a TEST check of a finished design needs the owner's recorded OK. 4. The map is the lane-level map of E273 (lane GT with simulated errors). 5. Out of this card: the sparsification (arm s), temporal fusion by cross-attention to earlier nodes, the route attribute, the query-decoder reference (CGNet), the GT additions discussed in the report (events with or without painted evidence, occlusion by boxes), an ablation of the two node weights. 6. The scripts of section 1 (`diag_nodes.py`, `diag_nodes2.py`, `pixel_eval.py`, `thr_sweep.py`, `thr_sweep_nms.py`) are scratch kept in the git tag `lcr/e274-scratch`; they are promoted into a code folder with a test when a second card uses them.
 
 ## 7. Summary (2026-11-05; VAL 873 frames, TEST untouched; numbers from `runs/e273/` and `runs/e274/` cards, ledger rows E274.*)
 **Verdicts (by hand, the rule of section 0, `verdict274`): arm r against c = CUT, arm p against r = CUT, arm p against c = CUT.** Baseline B (= c) stays the baseline of the lane head (D58); nothing of r or p is adopted.

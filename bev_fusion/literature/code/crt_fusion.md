@@ -105,9 +105,9 @@ Standard nuScenes detection evaluation through mmdet3d (`--eval bbox`); nothing 
 
 ## 6. Port plan
 
-Comparison with Mirko's design (three BEV maps with their own times, pull into camera time, static = ego only, moving = ego + flow, confidence gate):
+Comparison with the owner's design (three BEV maps with their own times, pull into camera time, static = ego only, moving = ego + flow, confidence gate):
 
-| aspect | CRT-Fusion | Mirko's design |
+| aspect | CRT-Fusion | The owner's design |
 |---|---|---|
 | direction | forward push (scatter) of the past into the present | backward pull with `grid_sample` into camera time |
 | ego vs velocity | separate: velocity shift in the old ego frame first, then rigid ego transform, one 4x4 | separate, same physics; see the corrected formula below |
@@ -118,9 +118,9 @@ Comparison with Mirko's design (three BEV maps with their own times, pull into c
 | gating | sparse occupancy mask + sigmoid channel gate | confidence gate |
 | holes / collisions | present (non-deterministic) | none (pull gives a value for every target cell) |
 
-**Answer to "shift or pull, ego separate?"**: CRT-Fusion shifts (pushes), does not pull; ego motion is a separate 4x4 applied after the velocity offset in pixel coordinates. Static content (|v| < 1 m/s) gets the ego transform only, so this part of Mirko's rule is the same as CRT's.
+**Answer to "shift or pull, ego separate?"**: CRT-Fusion shifts (pushes), does not pull; ego motion is a separate 4x4 applied after the velocity offset in pixel coordinates. Static content (|v| < 1 m/s) gets the ego transform only, so this part of the owner's rule is the same as CRT's.
 
-**Physics check for the pull formula** (derived here, not from the repo). Let `v_c` be the ground velocity of the content expressed in the axes of the camera-time ego frame (what the GT recipe of 2.5 produces), `T_{s<-c}` the rigid transform from camera-time ego coordinates to the ego coordinates at time `t_s`, `R` its rotation, `dt = t_c - t_s`. A cell at `x` at `t_c` was at `x_s = T_{s<-c}(x - v_c dt) = T_{s<-c}(x) - R v_c dt` at `t_s`. Mirko's `x_s = T x - v dt` is therefore exact only if `v` is expressed in the `t_s` axes (or `R = I`); over 0.5 s the heading change of the ego is a few degrees so the error is `|v| dt * yaw` (about 0.3 m at 15 m/s and 0.04 rad) - harmless in the model, but the spec test must use the exact form. Also `v` must be sampled where the content is at `t_c`; if the velocity field belongs to the past state, evaluate it at `x_0 = T x` and optionally iterate once (`x_s = T x - R v(x_0) dt`, then re-sample `v` at `x_s`): at 10-30 m/s and dt 0.5 s the displacement is 5-15 m, many cells, so one fixed-point iteration is not a luxury. Make the number of iterations a parameter.
+**Physics check for the pull formula** (derived here, not from the repo). Let `v_c` be the ground velocity of the content expressed in the axes of the camera-time ego frame (what the GT recipe of 2.5 produces), `T_{s<-c}` the rigid transform from camera-time ego coordinates to the ego coordinates at time `t_s`, `R` its rotation, `dt = t_c - t_s`. A cell at `x` at `t_c` was at `x_s = T_{s<-c}(x - v_c dt) = T_{s<-c}(x) - R v_c dt` at `t_s`. The owner's `x_s = T x - v dt` is therefore exact only if `v` is expressed in the `t_s` axes (or `R = I`); over 0.5 s the heading change of the ego is a few degrees so the error is `|v| dt * yaw` (about 0.3 m at 15 m/s and 0.04 rad) - harmless in the model, but the spec test must use the exact form. Also `v` must be sampled where the content is at `t_c`; if the velocity field belongs to the past state, evaluate it at `x_0 = T x` and optionally iterate once (`x_s = T x - R v(x_0) dt`, then re-sample `v` at `x_s`): at 10-30 m/s and dt 0.5 s the displacement is 5-15 m, many cells, so one fixed-point iteration is not a luxury. Make the number of iterations a parameter.
 
 | item | decision |
 |---|---|

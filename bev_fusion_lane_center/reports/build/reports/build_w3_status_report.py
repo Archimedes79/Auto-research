@@ -34,7 +34,7 @@ def svg(d, path, caption):
 
 d = W.Doc("Spurmitte on frozen GaussianCaR: where we are", "Lane-centre graph from camera + radar, built on the cached, frozen GaussianCaR BEV features: results of the week, the prototype, the limits of the design",
           "Research report - week 3 (27 October - 2 November 2026)",
-          "Mirko Meuter  |  prepared with Claude  |  numbers from stored result files, split and denominator named in every table. Continues the earlier "
+          "the project owner  |  prepared with Claude  |  numbers from stored result files, split and denominator named in every table. Continues the earlier "
           "<i>Week3_Loops18-20</i> (27 October) and the <i>Status after loop 21</i> (31 October).")
 
 d.h1("Contents", new_page=False, toc=False)
@@ -141,7 +141,7 @@ d.p("Each of these has a differentiable stand-in listed in the project's gap tab
 
 # ------------------------------------------------------------------ 7
 d.h1("7  Open and next", new_page=False)
-d.h2("For Mirko")
+d.h2("For the owner")
 d.ul(["<b>D4:</b> promote <code>recall_sp0_dp</code> as the lane prototype of record? (after route success on spur-kept graphs and idle timing in the next lane loop)",
       "<b>D25:</b> the vertex-count basis of the 14.3 budget (node ids against per-piece Douglas-Peucker); <b>D18:</b> per-metric noise bands",
       "<b>Is Douglas-Peucker (D20) the accepted sparsification</b> of the delivered graph, or must the vertex budget come out of the network?"])

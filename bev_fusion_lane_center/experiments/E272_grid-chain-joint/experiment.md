@@ -1,6 +1,6 @@
 # E272 The grid chain as ONE differentiable function: blocks fitted from the E271 head, then a joint fine-tune
 
-Card of 2026-11-03. Mirko's instruction after E271: "do not create multiple cards, try to establish an E2E differentiable function once, start with where you are and refine the blocks for a joint fine tune." This is that one card: the chain frames -> head -> sparsify -> hold -> assignment to the SD map as a single module (`training/grid/chain.py`) with a single loss, trained in two phases (the blocks with the E271 head frozen, then everything jointly). Follow-up work (the delivered lane graph with lane ends and edges, degraded-frame tests, TEST) is not a card of its own here: it is named as a gap in the summary when this one is judged.
+Card of 2026-11-03. The owner's instruction after E271: "do not create multiple cards, try to establish an E2E differentiable function once, start with where you are and refine the blocks for a joint fine tune." This is that one card: the chain frames -> head -> sparsify -> hold -> assignment to the SD map as a single module (`training/grid/chain.py`) with a single loss, trained in two phases (the blocks with the E271 head frozen, then everything jointly). Follow-up work (the delivered lane graph with lane ends and edges, degraded-frame tests, TEST) is not a card of its own here: it is named as a gap in the summary when this one is judged.
 
 ## 0. The card (what the tools run)
 ```json card

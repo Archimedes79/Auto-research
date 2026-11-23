@@ -1,6 +1,6 @@
 # Lane runs archive, 2026-11-01
 
-C: was full (4.1 GB free). On Mirko's instruction ("condense into the most important experiments, results and code; controlled delete; lane-centre system only") the heavy files of the old run folders in `bev_fusion_lane_center/runs/` were **moved to D:, not deleted**; the permanent delete is Mirko's step (agents never delete for good).
+C: was full (4.1 GB free). On the owner's instruction ("condense into the most important experiments, results and code; controlled delete; lane-centre system only") the heavy files of the old run folders in `bev_fusion_lane_center/runs/` were **moved to D:, not deleted**; the permanent delete is the owner's step (agents never delete for good).
 
 | item | value |
 |---|---|
@@ -16,7 +16,7 @@ Stays on C: the registered systems (`models/registry.json`), the D7 lineage and 
 Moved: everything else of 20 MB or more: the loop 1 - 15 runs (CRN, dense-head variants, failure sweeps e57 / e65 / e59p, route-head and token caches of old loops, rule-graph system A), the loop-17 intermediate arrays (`e17/dense_e37`, `dense_ftall`, `e139_*`, `e18_r21*`, ...). Their metrics, logs, cards and the experiment summaries stay, so old numbers can be quoted but no moved run can be re-evaluated from a checkpoint.
 
 ## Known leftovers
-- Four registry names point to run folders that have no `model.pt` and no card (they were already like that before the move): `e24_j1phd_s0` (the run was cut at 3200 of 4800 iterations), `e24_j1phd_s1`, `e24_j1cl8_s1`, `e25_j1phd2_s1`. `evaluate.py` on those names fails; the entries could be removed from the registry in a decision of Mirko (registry is protected for champion / control only).
+- Four registry names point to run folders that have no `model.pt` and no card (they were already like that before the move): `e24_j1phd_s0` (the run was cut at 3200 of 4800 iterations), `e24_j1phd_s1`, `e24_j1cl8_s1`, `e25_j1phd2_s1`. `evaluate.py` on those names fails; the entries could be removed from the registry in a decision of the owner (registry is protected for champion / control only).
 - Legacy drivers in `training/legacy/` and `training/data/prep/` still name moved folders in their defaults (`e60_main`, `e27_gcar`, `e32_main`, `e44_nodes`, `e37_ens`, `e113_a`, `e43`). They serve finished experiments E19 - E72 and fail unless the folder is restored.
 
 ## Restore
@@ -29,14 +29,14 @@ One folder, e.g. `e60_main`:
 robocopy D:\Auto-research\lane_archive_2026-11-01\runs\e60_main C:\Auto-research\bev_fusion_lane_center\runs\e60_main /E /MOV
 ```
 
-## Permanent delete (Mirko, when the condensed record and the kept set are accepted)
+## Permanent delete (the owner, when the condensed record and the kept set are accepted)
 ```
 Remove-Item -Recurse -Force D:\Auto-research\lane_archive_2026-11-01
 ```
 That frees 19.4 GB on D:. Nothing on C: depends on it.
 
 ## Status
-Kept set accepted by Mirko in chat on 2026-11-01 ("Accept, I delete"); the deletion of the D: archive is Mirko's step and had not been run when this was written. The second wave of the WSL purge (13.25 GB, explicit list) is prepared in `tools/maintenance/wsl_second_wave_2026-11-01.sh`.
+Kept set accepted by the owner in chat on 2026-11-01 ("Accept, I delete"); the deletion of the D: archive is the owner's step and had not been run when this was written. The second wave of the WSL purge (13.25 GB, explicit list) is prepared in `tools/maintenance/wsl_second_wave_2026-11-01.sh`.
 
 ## Condensed record
 `reports/source/Condensed_Record_2026-11-01.md`: the key experiments (K1 - K26) with their numbers, what was dropped, sources.

@@ -1,4 +1,4 @@
-"""Synthetic check of the window splat (training/splat.py: chain_positions + splat_window, Mirko 2026-10-25):
+"""Synthetic check of the window splat (training/splat.py: chain_positions + splat_window, the owner 2026-10-25):
 each of the last K original frames is brought into the current time with ONE splat, its coordinates chained
 analytically over the per-frame ego steps (speed and yaw rate may change every frame). Compared with chaining the
 resampled maps frame by frame.

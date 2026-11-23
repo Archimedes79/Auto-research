@@ -1,6 +1,6 @@
 # T1 First whole-chain training on nuScenes (camera + radar BEV, three time offsets) and two refinement rounds
 
-Loop task of Mirko (2026-10-26): "build the network together and train on nuScenes; try 2 additional refinement rounds, build
+Loop task of the owner (2026-10-26): "build the network together and train on nuScenes; try 2 additional refinement rounds, build
 result images, summarise results qualitatively and quantitatively and generate a report". The chain is `training/model.py`
 (plan.md 1-8) trained by `training/train.py` with `training/losses.py`; numbers from `evaluation/evaluate_run.py`
 (`evaluation/metrics.py`). Runs: `runs/<name>/` (not in git), metric cards: `runs/<name>/eval/metrics.json`, copied
@@ -92,7 +92,7 @@ into this folder as `results/<name>_metrics.json` (text, in git).
   (dt 0) 0.307, dt +0.5 0.189, dt -0.5 0.236. Pre-registered predictions: drivable >= 0.60 and vehicle AP@2 >= 0.25 hold;
   "dt +0.5 s within 0.05 IoU of dt 0" is checked in the report.
 
-### 2b. Change of plan (Mirko, 2026-10-26 08:40: "create a combined system, fix all issues, train one time, send results, shut down")
+### 2b. Change of plan (the owner, 2026-10-26 08:40: "create a combined system, fix all issues, train one time, send results, shut down")
 The two separate round-1 arms are cancelled. t1_r0 (window-only, 5000 steps) finishes as the labelled baseline; ONE combined
 run `t1_r3_combined` (training/configs/t1_r3_combined.json, code pinned to commit 04a7de9) replaces rounds 1 and 2.
 Defects found and what the combined run does about each (an honest list: no ablation separates them, the run is one shot):

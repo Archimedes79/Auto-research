@@ -1,4 +1,4 @@
-"""Chained temporal splat with coordinates as appended channels (Mirko, 2026-10-25) against chained map splats.
+"""Chained temporal splat with coordinates as appended channels (the owner, 2026-10-25) against chained map splats.
 
 Idea tested: where a stage needs positions (the splat), append an x, y map to the feature map, splat features and
 coordinates together, use the splatted coordinates as the exact source positions of the next step, and strip x, y again

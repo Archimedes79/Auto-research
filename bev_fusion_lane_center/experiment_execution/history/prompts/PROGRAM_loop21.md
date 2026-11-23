@@ -4,7 +4,7 @@ STOP_AT: none; the loop ends when the planned iterations are done and written up
 
 Problem folder: bev_fusion_lane_center/. Loop 21. State: HANDOVER.md, PLAN.md, schedule, ledger, DECISIONS. Method: `autoresearch/METHOD.md` P3 / P4, D16 tools.
 
-Mirko's instruction (chat): a general loop to improve performance (quality and speed), freedom to choose the questions, bullet style; "can you create a card and then run the loop?"
+The owner's instruction (chat): a general loop to improve performance (quality and speed), freedom to choose the questions, bullet style; "can you create a card and then run the loop?"
 
 Reading:
 - goal: make the lane-graph system better and faster by any route; look at the whole chain; few solid results over many weak ones
@@ -15,4 +15,4 @@ Reading:
 
 Fixed rules (unchanged): decide by the written rule through `decide.py`, `run.py` for runs, fresh numbers reviewer before a report, optimisations reproduce the reference graphs, honest negatives, nothing deleted, commit by path, no pushes, no downloads.
 
-End: tests (`run_all_tests.sh`), `check_structure.py`, handover, commit; a short report (HTML builder + PDF) only if Mirko asks.
+End: tests (`run_all_tests.sh`), `check_structure.py`, handover, commit; a short report (HTML builder + PDF) only if the owner asks.

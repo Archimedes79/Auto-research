@@ -11,7 +11,7 @@ Report only: nothing selected, tuned or re-read on this split. Control c = E312 
 | 0 | +0.015736 | +0.008701 | +0.023268 | hold | +0.0035 (ok / ok) |
 | 1 | +0.014629 | +0.009505 | +0.019614 | hold | -0.0034 (ok / ok) |
 
-Recommendation: E324 s may become the system of record in PROBLEM.md and the registry (Mirko's decision, with the D94 / D95 grants)
+Recommendation: E324 s may become the system of record in PROBLEM.md and the registry (the owner's decision, with the D94 / D95 grants)
 
 ## every arm against E312 snapped (D = arm - E312, paired 95 % scene bootstrap when E312's per-frame counts reproduced)
 

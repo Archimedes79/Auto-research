@@ -1,4 +1,4 @@
-# What the observability report of t1_r4_soa showed (2026-10-30, main BEV session, at Mirko's request)
+# What the observability report of t1_r4_soa showed (2026-10-30, main BEV session, at the owner's request)
 
 Tool: `evaluation/observe_run.py` + `evaluation/video_encode.py` (see evaluation/README.md). Frames: middle keyframe of 30 val scenes
 (frozen parts 1-6 scene lists), run cold-to-warm through the clip, EMA weights of step 7000, CPU. Probes in this folder

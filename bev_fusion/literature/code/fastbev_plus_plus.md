@@ -98,7 +98,7 @@ Same BEVDet pipeline as DualBEV: `PrepareImageInputs` (image RGB, mean `[123.675
 ## 5. Evaluation code
 Standard nuScenes detection through mmdet3d; not relevant for the lift. FPS in the paper is for the whole network under TensorRT (see paper note).
 
-## 2.5 Pre-trained checkpoints and the front camera (Mirko, 2026-10-25)
+## 2.5 Pre-trained checkpoints and the front camera (the owner, 2026-10-25)
 
 **Released checkpoints** (README "Model Zoo", Google Drive folders; nothing downloaded):
 | zoo name | weights | size |

@@ -1,6 +1,6 @@
 """The radar encoder MODULE (training/radar_encoder.py) on real nuScenes mini: does it keep the detections, and what does the TASK do to that?
 
-Mirko, 2026-10-26: use the reconstruction as a side loss to help first, but the side loss is not the goal. So three trainings of the
+The owner, 2026-10-26: use the reconstruction as a side loss to help first, but the side loss is not the goal. So three trainings of the
 same module (2000 steps, 8 train scenes, 2 held-out scenes, C = 64), each followed by the same honest measurement:
   aux only         side loss alone (what studies/early/radar_codecs.py measured; the information ceiling of the module)
   task only        a proxy task alone: "does the cell hold a moving detection (|vr| > 1 m/s)?" - 1 x 1 head on the features

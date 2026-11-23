@@ -34,7 +34,7 @@
     }
    ],
    "since": "2026-11-10",
-   "evidence": "by hand: 2026-11-10, Mirko in chat: 'Ja, neu waehlen' (the three of 2026-11-01 are pre-D48 and cannot run through the Runner, the new line is on GT v8 0.5_4_6a7aa7864a). board7 on val: the nine best arms lie within 0.011 (band 0.02), a tie by the metric, so one slot each by role, two-seed arms first: t21_ctl = the best arm by value (0.4549, two seeds), the control of the temporal-fusion line"
+   "evidence": "by hand: 2026-11-10, the owner in chat: 'Ja, neu waehlen' (the three of 2026-11-01 are pre-D48 and cannot run through the Runner, the new line is on GT v8 0.5_4_6a7aa7864a). board7 on val: the nine best arms lie within 0.011 (band 0.02), a tie by the metric, so one slot each by role, two-seed arms first: t21_ctl = the best arm by value (0.4549, two seeds), the control of the temporal-fusion line"
   },
   {
    "name": "t23_C",
@@ -61,7 +61,7 @@
     }
    ],
    "since": "2026-11-10",
-   "evidence": "by hand: 2026-11-10, Mirko in chat: 'Ja, neu waehlen' (the three of 2026-11-01 are pre-D48 and cannot run through the Runner, the new line is on GT v8 0.5_4_6a7aa7864a). board7 on val: the nine best arms lie within 0.011 (band 0.02), a tie by the metric, so one slot each by role, two-seed arms first: t23_C = the newest recipe (tolerance-aware lane BCE) on two seeds (0.4497, TIE with its control by the card)"
+   "evidence": "by hand: 2026-11-10, the owner in chat: 'Ja, neu waehlen' (the three of 2026-11-01 are pre-D48 and cannot run through the Runner, the new line is on GT v8 0.5_4_6a7aa7864a). board7 on val: the nine best arms lie within 0.011 (band 0.02), a tie by the metric, so one slot each by role, two-seed arms first: t23_C = the newest recipe (tolerance-aware lane BCE) on two seeds (0.4497, TIE with its control by the card)"
   },
   {
    "name": "t20_base",
@@ -82,7 +82,7 @@
     }
    ],
    "since": "2026-11-10",
-   "evidence": "by hand: 2026-11-10, Mirko in chat: 'Ja, neu waehlen' (the three of 2026-11-01 are pre-D48 and cannot run through the Runner, the new line is on GT v8 0.5_4_6a7aa7864a). board7 on val: the nine best arms lie within 0.011 (band 0.02), a tie by the metric, so one slot each by role, two-seed arms first: t20_base = the accepted reference baseline of the line (D48; 0.4465, one seed), the network the Runner tests and the comparisons stand on"
+   "evidence": "by hand: 2026-11-10, the owner in chat: 'Ja, neu waehlen' (the three of 2026-11-01 are pre-D48 and cannot run through the Runner, the new line is on GT v8 0.5_4_6a7aa7864a). board7 on val: the nine best arms lie within 0.011 (band 0.02), a tie by the metric, so one slot each by role, two-seed arms first: t20_base = the accepted reference baseline of the line (D48; 0.4465, one seed), the network the Runner tests and the comparisons stand on"
   }
  ],
  "left": [
@@ -91,7 +91,7 @@
    "key": "t11_vel_hurdle_acc2",
    "value": 0.3640875282772365,
    "left": "2026-11-10",
-   "replaced_by": "re-pick on GT v8 (Mirko 2026-11-10: 'Ja, neu waehlen')",
+   "replaced_by": "re-pick on GT v8 (the owner 2026-11-10: 'Ja, neu waehlen')",
    "checkpoints": [
     "runs/t11_vel_hurdle_acc2/ckpt_00001000.pt"
    ],
@@ -102,7 +102,7 @@
    "key": "t10_dual",
    "value": 0.36137263003151204,
    "left": "2026-11-10",
-   "replaced_by": "re-pick on GT v8 (Mirko 2026-11-10: 'Ja, neu waehlen')",
+   "replaced_by": "re-pick on GT v8 (the owner 2026-11-10: 'Ja, neu waehlen')",
    "checkpoints": [
     "runs/t10_dual_s0/ckpt_00003000.pt",
     "runs/t10_dual_s1/ckpt_00003000.pt"
@@ -114,7 +114,7 @@
    "key": "t8_ctl",
    "value": 0.24527722603845503,
    "left": "2026-11-10",
-   "replaced_by": "re-pick on GT v8 (Mirko 2026-11-10: 'Ja, neu waehlen')",
+   "replaced_by": "re-pick on GT v8 (the owner 2026-11-10: 'Ja, neu waehlen')",
    "checkpoints": [
     "runs/t8_ctl_s0/ckpt_00003000.pt",
     "runs/t8_ctl_s1/ckpt_00003000.pt"

@@ -1,6 +1,6 @@
 # E286 Junction pixel maps: entry / exit heat with heading, junction zone and conflict core, painted stop lines and crossings (D82, step 2 of the thread)
 
-Card of 2026-11-11, written by the lane chat on Mirko's word (D82: "Dann sehr gute PixelMaps ... Und bleibe differenzierbar."). Needs the GT layer of E285 (`jgt.py`, `qjunction.py`, the paint sidecars). Everything on the training path is a soft map (BCE + dice, a cosine loss for the heading); the keypoint extraction (3 x 3 peaks, soft-argmax) is the one hard step and is a READ-OUT for scoring and the delivered output, named here and in the report.
+Card of 2026-11-11, written by the lane chat on the owner's word (D82: "Dann sehr gute PixelMaps ... Und bleibe differenzierbar."). Needs the GT layer of E285 (`jgt.py`, `qjunction.py`, the paint sidecars). Everything on the training path is a soft map (BCE + dice, a cosine loss for the heading); the keypoint extraction (3 x 3 peaks, soft-argmax) is the one hard step and is a READ-OUT for scoring and the delivered output, named here and in the report.
 
 ## 0. The card (what the tools run)
 ```json card

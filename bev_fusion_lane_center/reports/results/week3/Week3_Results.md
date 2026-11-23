@@ -23,5 +23,5 @@ Decided by their written rules this week: **KEEP** E257 (output DP: 14.98 to 9.8
 ## Limits of the design
 Frozen features: no lane gradient reaches GaussianCaR or the dense head; foundation effect +0.24 F1 and a flat builder fidelity curve from 2 units (E122) mean the features set the level. Rule steps: fork pruning is the largest measured gain (J 0.265 to 0.409, Q 0.701 to 0.735, with vertices 13.5 to 14.8), relocation off costs Q -0.011 / J -0.054, anchoring off Q -0.0004 / J -0.0042 (the first rule to drop), the time recursion costs +6.1 ms.
 
-## Open for Mirko
+## Open for the owner
 D4 (promote `recall_sp0_dp`, after route success on spur-kept graphs and idle timing in the next lane loop), D25 (vertex-count basis of the 14.3 budget), D18 (per-metric noise bands); is Douglas-Peucker (D20) the accepted sparsification of the delivered graph, or must the vertex budget come out of the network? Next: lane loop 23, a precision step at range.

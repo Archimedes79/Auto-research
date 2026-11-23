@@ -168,7 +168,7 @@ The fixes the first review reported as done are in HEAD (124 exit code, `wait_af
 8. **Speed (ms per frame):**
    - the time mover runs once per head per dt: 6 calls for 3 dts, two of them identity splats at dt 0, plus a third motion pass for `v_hat`;
    - `cam_temporal: none` still lifts and reduces all 3 frames.
-9. **Metric decisions for Mirko** (filed 2026-10-31 in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`):
+9. **Metric decisions for the owner** (filed 2026-10-31 in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`):
    - C5, D30: keep the full image as the headline and add the intersection of the compared pipelines' views when their crops differ;
    - C6, D31: limit the detection wedge to the grid;
    - withdrawn after measuring: one moving threshold (C7: the metric already uses the GT's 0.5 m/s) and taking `lane_divider:zc` out of the headline (not degenerate; see "Measured for the decisions" in section 2).
@@ -181,5 +181,5 @@ The fixes the first review reported as done are in HEAD (124 exit code, `wait_af
   - proposals 2-8.
 - **Owner of the uncommitted tools work:** D1, D2 (and the selftest that asserts the wrong KEEP), D4, D6, D7, the `experiment.py` `KeyError: 'no card for Q'` in the work in progress, and its `code_drift` step: it runs while nothing updates the heartbeat, and it flags drift on every bev_fusion run although `run_ar.sh` trains from the snapshot.
 - **evalsuite owner:** D8; C2 on the evalsuite side (in progress).
-- **Mirko:** decisions D29 (proposal 2, the GT measuring stick: it changes how old runs are scored), D30 (C5) and D31 (C6) in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`; finding D10 (protected `guard_hook.py`), not filed yet.
+- **The owner:** decisions D29 (proposal 2, the GT measuring stick: it changes how old runs are scored), D30 (C5) and D31 (C6) in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`; finding D10 (protected `guard_hook.py`), not filed yet.
 - **Overnight lead of 2026-10-31 (D28):** the t7 re-evaluation (`bev_fusion/temp/t7/finish4.sh`, stopped before it ran so that it cannot share the GPU with the overnight trainings) and the `run_ar.sh` fixes above, handed over at 23:45.

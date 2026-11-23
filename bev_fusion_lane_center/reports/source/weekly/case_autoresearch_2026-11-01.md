@@ -54,7 +54,7 @@ the tool read one written miss there).
 
 ### 2.1 The maps of the BEV system
 
-- **Question** (Mirko, 30 Oct): "Look exactly why performance is not SOA, find out." The gap was measured like for like first: the published map model GaussianCaR (6 cameras + radar, trained for
+- **Question** (the owner, 30 Oct): "Look exactly why performance is not SOA, find out." The gap was measured like for like first: the published map model GaussianCaR (6 cameras + radar, trained for
   maps, 40 epochs on 4 x A100) scored with our metric on 400 of our frames reached 0.84 / 0.59 / 0.66 / 0.54 / 0.69 / 0.63 IoU (drivable, walkway, carpark, crossing, lane divider, road divider);
   our chain of that day (7000 x 2 steps) reached 17 - 55 % of that on everything except the drivable area (85 %) (`t6_soa_gap`).
 - **The loop removed candidates one at a time, each with a control**: not the range (the gap is as large at 0 - 20 m), not the threshold (best threshold moves ours by <= 0.04), not over-fitting
@@ -199,7 +199,7 @@ Every lever below has a measured effect size from this repository; the sums are 
 | 2 | stride-4 detail branch on top | on the old features: lane divider +0.065 / +0.042, road divider IoU@1 +0.119 / +0.096 (two seeds) | 2 GPU hours per seed | whether the thin classes add up |
 | 3 | velocity: first step DONE (moving / static gate: skill 0.470 at batch 3, 0.566 with accumulation 2); next the seed twin of B2, a from-scratch run (the 6000-step run of lever 1 stopped at 84 % and is not resumed for now), then a Doppler read-out for the moving error | closed-form bound 0.79 against 0.566 now | 1 - 3 GPU hours | whether the fix is robust, and where the rest of the moving error sits |
 | 4 | a SOA camera + radar detector (CRN) on our frames | the checkpoint is on disk | half a day of porting | turns "no number" into a number |
-| 5 | bridge the lane graph to OpenLane-V2 subset B (DET_l, TOP_ll) | nothing yet; needs the annotation files and the official evaluator (a download: needs Mirko's OK) | 1 day for a feasibility check | the first number a stranger can compare |
+| 5 | bridge the lane graph to OpenLane-V2 subset B (DET_l, TOP_ll) | nothing yet; needs the annotation files and the official evaluator (a download: needs the owner's OK) | 1 day for a feasibility check | the first number a stranger can compare |
 | 6 | a confirm evaluation on the 68 official val scenes never used for a decision (if their caches exist) | - | 1 GPU hour | removes the selection effect of reusing the same 82 scenes |
 
 **Compute reality.** GaussianCaR was trained for 40 epochs with an effective batch of 16 on 4 x A100 80 GB. For the old features the remaining gap needed 4 - 10 more doublings of the steps
@@ -258,7 +258,7 @@ LLM service reads the code), before any of this is used there.
 4. A six-week pilot with a second team, designed so that it can fail: two weeks measuring that team's current process first (experiments per week, wrong-number findings per 100 claims), then four
    weeks with the loop. Stop rule: no gain in experiments per week, or more wrong numbers than the baseline = stop and report. Budget: one GPU, one reviewer day a week.
 5. Before any company use: clearance of IP, company time, data governance and the external agent tool.
-6. (Mirko's own decision) permission for two downloads (OpenLane-V2 annotations and its evaluator) to build the first public lane number.
+6. (The owner's own decision) permission for two downloads (OpenLane-V2 annotations and its evaluator) to build the first public lane number.
 
 **Success criteria, written now, checked at the next review**: (a) every map layer at 50 % or more of the SOA like for like and the drivable area at 90 % (today 26 - 94 % on identical frames, both systems at
 the 0.5 threshold: drivable 94, road divider 72 - 76, walkway 57 - 62, lane divider 50 - 52, carpark 31 - 34, crossing 26 - 31); (b) box velocity with skill 0.5 or more on moving vehicles (today 0.566
@@ -276,12 +276,12 @@ graph: equal Q at 26 x (2.3), with its gaps. 6. What the checks caught, and wher
 - DONE since version 3: the like-for-like maps (section 4; GPU scoring, a few minutes per model, checked against the stored CPU run), the velocity arms (section 2.2), the lane prototype with its one
   TEST use (section 2.3). OPEN: the 6000-step run (below): stopped at 84 %, not resumed for now.
 - Lever 1 (the 6000-step dual run in the lead's version, with the velocity fix and accumulation 2): STARTED at 09:01 on 1 November, after the restructured autoresearch was merged (08:19) and its smoke
-  test passed, by Mirko's decision; **STOPPED at 14:38 at step 5030 of 6000 (84 %) on Mirko's request and NOT resumed for now** (trainsuite stop: a full checkpoint was saved at the next step, exit 75; no steps lost; it had been stopped once before at step 4773 and was restarted at 14:20 by the GT chat on Mirko's order, then stopped again on Mirko's later word).
-  Asked later whether to finish it before the new long run, Mirko answered no: the next step is a complete network (card t13 in preparation, the framework first). Consequences: no cold-VAL number and no verdict by the rule of card 3c, the slope of the dual features with training budget is NOT measured,
-  and the claim that the SOA is reachable on this hardware is neither confirmed nor dropped by it (the rule drops it only with an equal-budget arm without the hurdle). What exists: the checkpoint at step 5030 (unannealed: the learning rate was 2.2e-05, about 7 % of the peak; unscored, as Mirko decided),
-  the in-training validation (at step 4000 the moving / static logit had learned from scratch: cross entropy 0.34 against 0.75 at the start; a proxy of 50 batches, no verdict), the pinned code and its own copy of autogt v5, so it can be resumed in about 1.3 h on Mirko's word; it is also the natural matched-budget control for a long run of the complete network.
+  test passed, by the owner's decision; **STOPPED at 14:38 at step 5030 of 6000 (84 %) on the owner's request and NOT resumed for now** (trainsuite stop: a full checkpoint was saved at the next step, exit 75; no steps lost; it had been stopped once before at step 4773 and was restarted at 14:20 by the GT chat on the owner's order, then stopped again on the owner's later word).
+  Asked later whether to finish it before the new long run, the owner answered no: the next step is a complete network (card t13 in preparation, the framework first). Consequences: no cold-VAL number and no verdict by the rule of card 3c, the slope of the dual features with training budget is NOT measured,
+  and the claim that the SOA is reachable on this hardware is neither confirmed nor dropped by it (the rule drops it only with an equal-budget arm without the hurdle). What exists: the checkpoint at step 5030 (unannealed: the learning rate was 2.2e-05, about 7 % of the peak; unscored, as the owner decided),
+  the in-training validation (at step 4000 the moving / static logit had learned from scratch: cross entropy 0.34 against 0.75 at the start; a proxy of 50 batches, no verdict), the pinned code and its own copy of autogt v5, so it can be resumed in about 1.3 h on the owner's word; it is also the natural matched-budget control for a long run of the complete network.
   A CUDA error at step 3200 (12:09) had been resumed once by the launcher, so a finished run would be a run resumed three times (fresh data order each time), named so in every table; card 3b / 3c revision 2 and the log 3d of `t10_dual_features`.
-- Decisions that wait for Mirko: D4, D17, D29, D30, D31 (D18, D19, D25 and D33 were answered this morning); permission for the two downloads (section 8, item 6).
+- Decisions that wait for the owner: D4, D17, D29, D30, D31 (D18, D19, D25 and D33 were answered this morning); permission for the two downloads (section 8, item 6).
 
 ## 11 Sources
 
@@ -309,7 +309,7 @@ shares are conservative), the "29 experiments, 18 by rule" counts (18 verdict ev
 "queued, not run" (B' trained, B2 running), stale counts (now dated). Mixed sets: "17 - 55 %" is the 7000 x 2-step chain on 400 frames; "inside the 0.015 seed spread" (that is the older t2 pair; the
 dual seeds are 0.003 - 0.007 below the controls); the control's second seed was also resumed after a crash; dual seed 1 added; drivable at 0 m against 0.5 m labelled; the Doppler bound's frame set;
 the poster shows the `recall` variant; latency is the 7000 x 2 start recipe; "wins on S" (S rewards sparsity). Stronger than the source: "maps x1.8 - 1.9" (lane divider, walkway, road divider;
-drivable x1.1, carpark x1.5), "camera detection equals the SOA port" (-0.009, interval excludes 0), the prediction hit count (four of five), "needs Mirko's go" (decided), "fixed judge" (reviewed),
+drivable x1.1, carpark x1.5), "camera detection equals the SOA port" (-0.009, interval excludes 0), the prediction hit count (four of five), "needs the owner's go" (decided), "fixed judge" (reviewed),
 "two-wheelers lost" (noise), "single seeds" (two for BEV), "none of nine" (none of the LLM-era ones), TEST numbers of loops 1 - 15, the t11 timing (card header, one commit), "36 GB free" (67 GB now),
 "twelve" corrections (fourteen), dangling references.
 

@@ -66,7 +66,7 @@ d.ul([
     "a single pair cannot see anything below about 0.01.",
     "<b>The recall weight is a recall lever, not a quality lever.</b> Lanes found +0.05 to +0.07 and R@1 far +0.04 to +0.05 in every one of four pairs; Q +0.006 +- 0.002 (standard error), positive in all pairs but below the 0.010 band (TIE by the rule, not shown to be zero). Compared at the same vertex budget the "
     "recall variant's Q edge over the champion shrinks from +0.0054 to +0.0025 (E236): <b>every Q comparison must state vertices per 100 m</b>, because Q falls by about 0.0025 per 0.25 vertices.",
-    "<b>A damaged training target (TF32 distance map, 51 % of the frames) cost the fine-tune nothing measurable</b> (E237); Mirko's rule is still to train on the exact map from now on, without retraining the foundation (D14).",
+    "<b>A damaged training target (TF32 distance map, 51 % of the frames) cost the fine-tune nothing measurable</b> (E237); the owner's rule is still to train on the exact map from now on, without retraining the foundation (D14).",
     "<b>The map benefit is not an artefact of one error draw</b> (E238): +0.018 … +0.042 F1@1 on two new draws of the 2 m map error, intervals above zero.",
     "<b>Four loss and threshold ideas of the cycle were killed or tied</b> (clamp, per-range thresholds, soft targets not trained, the Poisson set loss): the far-recall gap is not a threshold or a clamp problem. The Poisson set likelihood looked fine at its own 18.7 vertices per 100 m and lost 0.073 Q once held to the same 14.3 vertices as the controls (E255): <b>the matched vertex budget decides such verdicts</b>.",
     "<b>The map offsets that other work found on dividers do not show on our lane centrelines</b> (E252): Boston scores higher than Singapore, correct predictions sit closer to the ground truth in Boston, per-line medians are small.",
@@ -128,7 +128,7 @@ d.h2("4.2  Equal vertex budget (E236)")
 d.p(f"The tau sweep showed that the validity threshold does not set the vertex budget; the vertex radius <code>vtx_r</code> does, and Q falls by about 0.0025 for every 0.25 vertices per 100 m removed. "
     f"At 14.3 ± 0.15 vertices and pruning 0.4 the recall variant rc1 beats the champion by only Q +0.0025 (seed twin +0.0003) instead of the registered +0.0054, while lanes found (+0.068) and R@1 far (+0.060) survive. {TIE('TIE')} "
     "For the fast pair, j1rc over j1 holds at matched vertices (Q +0.0149 on one pair). PROBLEM.md and decision D4 now quote Q with its vertex budget.")
-d.h2("4.3  The damaged distance map (E251, E237) and Mirko's rule (D14)")
+d.h2("4.3  The damaged distance map (E251, E237) and the owner's rule (D14)")
 a0, a1, c0_, c1_ = card("e24_j1ex_s0"), card("e24_j1ex_s1"), card("e24_j1eq_s0"), card("e24_j1eq_s1")
 d.p("The stored b123 distance map was made in an old environment whose matrix products run in TF32 on the RTX 3060; it breaks its own 0.5 m bound in 4,315 of 8,414 train frames and 861 of 1,706 val frames. "
     "A CPU rebuild is exact (E251). Fine-tuning the fast variant on the exact map instead gives:")
@@ -136,7 +136,7 @@ d.table([["stored map (E240 seeds 0 / 1)", f3(c0_["Q"]), f3(c1_["Q"]), f3(c0_["F
          ["exact map (E237 arm a)", f3(a0["Q"]), f3(a1["Q"]), f3(a0["F1@1.0"]), f3(a1["F1@1.0"])]],
         header=["j1eq fine-tune", "Q seed 0", "Q seed 1", "F1@1.0 seed 0", "F1@1.0 seed 1"], num=range(1, 5), hl=(1,))
 d.p(f"{TIE('TIE')} (Q a - c -0.0017, inside the band). 25.7 % of the train frames and 8.7 % of the supervised pixels are off by more than 0.25 m between the two maps. "
-    "Mirko's answer (D14): a defective map is not used for training; the foundation network is not retrained. The loader default was switched to the exact map; runs after the switch need a fresh equal-budget control on the same map.")
+    "The owner's answer (D14): a defective map is not used for training; the foundation network is not retrained. The loader default was switched to the exact map; runs after the switch need a fresh equal-budget control on the same map.")
 d.h2("4.4  The map benefit on new error draws (E238)")
 d.fig(F + "w3_registration.png", "E238: F1@1 gain of registration + trust over the unregistered map, failure half of the failure series (154 frames, 22 scenes), three draws of the 2 m scene-constant map error.")
 d.p(f"{OK('KEEP')} Draw 1 +0.019 / +0.022 / +0.025, draw 2 +0.029 / +0.018 / +0.042 (night / blur / three cameras off), stored draw +0.027 / +0.028 / +0.030; registered minus no map +0.029 … +0.043. "
@@ -156,7 +156,7 @@ d.p("The first timing repeat was not valid (machine 2 - 3 ms above the stored va
 
 # ------------------------------------------------------------------ 5 loop 20
 d.h1("5  Loop 20: four iterations (26 - 27 October)", new_page=True)
-d.p("Mirko's request: when the other training is ready, do four iterations of automatic research here, test the methodology and the framework, improve the framework, and report. The t1 training of the BEV-system chats had finished, "
+d.p("the owner's request: when the other training is ready, do four iterations of automatic research here, test the methodology and the framework, improve the framework, and report. The t1 training of the BEV-system chats had finished, "
     "so the loop started at once. Each iteration is a card with a written decision rule and a summary; the cards of E252, E255 and E253 went through a referee before their runs, the E256 card (a CPU follow-up that cannot change a model) did not.")
 d.table([
     ["1", "E252", "Does the map offset of the ground truth cap the metric by city?", "CPU, 10 min", "see 5.1"],
@@ -247,7 +247,7 @@ d.table([
     ["control (E94 trace network)", "0.737", "0.763", "0.800", "0.811", "0.408", "628"]],
     header=["system (registry name)", "Q", "topo F1", "lanes found", "R@1 far", "J", "ms per frame"], num=range(1, 7))
 d.p("VAL 873, <code>evaluate.py</code>, stated at each system's own operating point (14.8 - 15.5 vertices per 100 m; the control sits at 21.8, so its row is not at the same budget); at a matched 14.3 the champion has Q 0.7306 and rc1 0.7331 (E236). Nothing was promoted this week: "
-    "decision D4 (which fast variant to deploy) stays with Mirko, now with the seed floor and the matched budget as evidence; D5 (purge) and D17 (the loop list in <code>project.json</code>) are open too.")
+    "decision D4 (which fast variant to deploy) stays with the owner, now with the seed floor and the matched budget as evidence; D5 (purge) and D17 (the loop list in <code>project.json</code>) are open too.")
 
 # ------------------------------------------------------------------ 8 failed, limits, next
 d.h1("8  What failed, limits, next steps")

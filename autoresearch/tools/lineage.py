@@ -1,5 +1,5 @@
 """Lineage of a network: network -> training run -> code -> data -> evaluations, every link VERIFIED, not only listed (design:
-autoresearch/reproducibility.md; Mirko asked for a general traceability approach for code, data and network). Read-only except `record`. Standard library only.
+autoresearch/reproducibility.md; the owner asked for a general traceability approach for code, data and network). Read-only except `record`. Standard library only.
 
     python3 lineage.py show <name | run id | slotN | checkpoint path | run folder name> [--json]    the chain of one network, one line per check
     python3 lineage.py verify [NAME ...] [--all] [--strict]     every network of keep3.json (its best three), with --all also the registry's champion /

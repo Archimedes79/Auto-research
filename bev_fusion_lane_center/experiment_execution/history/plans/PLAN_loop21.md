@@ -3,7 +3,7 @@
 The loop-20 plan with all statuses is in `history/plans/PLAN_loop20.md` (N1 - N15 open list); loop 19 in `history/plans/PLAN_loop19.md`.
 
 ## Question of the loop
-Mirko (2026-10-30, chat): a general loop to improve performance (quality and speed), freedom to choose the questions; "create a card and run the loop". Prompt and reading: `history/prompts/PROGRAM_loop21.md`. The GPU is held by the BEV-system chat's t2 lane (12 GB, 100 %), so the iterations are CPU-only on cached raw outputs and timing is relative.
+The owner (2026-10-30, chat): a general loop to improve performance (quality and speed), freedom to choose the questions; "create a card and run the loop". Prompt and reading: `history/prompts/PROGRAM_loop21.md`. The GPU is held by the BEV-system chat's t2 lane (12 GB, 100 %), so the iterations are CPU-only on cached raw outputs and timing is relative.
 
 ## Tree
 Each node: card -> (referee when it can change a decision) -> run through `run.py` -> decision by the written rule -> summary. VAL 873 unless stated. Ids E257 ff. are not yet in `project.json` "loops" (D17).
@@ -14,7 +14,7 @@ Each node: card -> (referee when it can change a decision) -> run through `run.p
 | I2 | E258 assembly profile and speed-up | the assembly (7.5 - 8.9 ms) has a stage above 15 % whose change saves >= 1.0 ms with identical graphs | CUT if no stage > 15 %; KEEP >= 1.0 ms relative, identical on 873 | CPU 30 min | done (E258): profile (relocation 21 %, anchoring 16 %); relocation stays (J -0.05); anchoring off holds on 4 of 4 j1rc seeds (dQ -0.0011 .. +0.0005, dJ -0.007 .. 0) -> registry `fast_recall_na`, saving ~1.3 - 2 ms estimated, idle repeat pending |
 | I4 | E259 clean-up ablation, CPU time | the spur / bubble clean-up and the stage costs | drop only if guards hold on seven models | CPU | done (E259): clean-up stays (vert100 +0.4 .. +0.7 without it); timing unusable at load 4 - 15, CPU time does not help; anchoring off and relocation off show about 25 % of the assembly each, the dp stage costs ~1 ms loaded |
 | I5 | E260 dead options of assemble() | 11 options and ~150 lines are unused | graph hashes identical | CPU | done (E260): identical on 6 names, golden, tests, review; 31 -> 24 parameters |
-| I3 | results video of the best system (Mirko's request) | - | no rule (presentation) | CPU | done: `reports/weekly/Lane_graph_recall_val.mp4` (recall, 2 median scenes, 80 frames) |
+| I3 | results video of the best system (the owner's request) | - | no rule (presentation) | CPU | done: `reports/weekly/Lane_graph_recall_val.mp4` (recall, 2 median scenes, 80 frames) |
 
 ## Candidates for I3 and for the next GPU window (not started)
 - re-spend the freed vertex budget: after E257, is Q at 8 - 10 vertices per 100 m at the level of 15 (the curve moves left)? (secondary output of E257)
@@ -37,4 +37,4 @@ Each node: card -> (referee when it can change a decision) -> run through `run.p
 
 ## End of loop (P4)
 - per node: result and decision (one line each) in the summaries; HANDOVER; `run_all_tests.sh`; `check_structure.py`; commit by path
-- a report only if Mirko asks (week 4 report later)
+- a report only if the owner asks (week 4 report later)

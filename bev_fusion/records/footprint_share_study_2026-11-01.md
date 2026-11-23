@@ -1,6 +1,6 @@
 # Footprint share of the GT objects in the fusion area: the threshold study for D38 (b) (2026-11-01)
 
-Question: D38 (b) (`sensor_coverage_2026-11-01.md`) decides that an object counts as observed by the share f of its footprint inside the fusion area, with two thresholds that "come from the data (histogram of f over the objects, a sensitivity table)". This is that study, made by the BEV system chat on stored data (no GPU, no model, no change of any code). Status: a proposal for Mirko; nothing is decided or built.
+Question: D38 (b) (`sensor_coverage_2026-11-01.md`) decides that an object counts as observed by the share f of its footprint inside the fusion area, with two thresholds that "come from the data (histogram of f over the objects, a sensitivity table)". This is that study, made by the BEV system chat on stored data (no GPU, no model, no change of any code). Status: a proposal for the owner; nothing is decided or built.
 
 ## Method
 
@@ -104,10 +104,10 @@ exactly 0 or exactly 1: 10520 of 18700 (56.3 %); strictly between: 8180 (43.7 %)
 - **Evaluation:** the headline counts care objects only, scored on the fusion area (D37); the partial band is reported next to it, never inside; a detection is ignored when half or more of its own footprint lies in a don't-care area (the same f computed on the detection); the stored numbers keep their camera-field-of-view label and are not mixed with new ones.
 - **Training, simple version:** objects with f < 0.5 get no loss (neither positive nor negative), as unobserved boxes already do today; the fused map and object heads get no loss on cells outside the fusion area (D38: neither positive nor negative); the aux heads keep their own sensor area and become switchable (D38 reading a). That is a change of regime: the model never sees a label for lanes outside the camera wedge, so it needs a matched control (arm A today's loss, arm B this hard rule, same budget, two seeds, scored on the fusion area).
 - **Later, as decided:** the soft weight in f, the radar class prior, the three-arm test.
-- **Order of work after Mirko's go:** (1) the footprint-share helper in autogt (the GT chat's v6) reproduces these tables; (2) evaluation: the three states in `metrics.py` and the two-sided ignore, the headline on the fusion area; (3) training: loss masks as an option of `LossConfig` (default off, so every existing run is reproduced), then the matched pair of arms at the 3000-step recipe.
+- **Order of work after the owner's go:** (1) the footprint-share helper in autogt (the GT chat's v6) reproduces these tables; (2) evaluation: the three states in `metrics.py` and the two-sided ignore, the headline on the fusion area; (3) training: loss masks as an option of `LossConfig` (default off, so every existing run is reproduced), then the matched pair of arms at the 3000-step recipe.
 - **Before the thresholds are frozen (not done):** the recall of a trained model as a function of f, a GPU diagnostic run over the cold VAL frames, about 15 minutes. If a model already finds most objects at f = 0.3, the care threshold is too high; if it finds almost none at f = 0.7, too low.
 
-## Open for Mirko
+## Open for the owner
 
 1. Accept (0.1, 0.5) as the first thresholds, or first the recall-by-f check?
 2. Keep autogt's 2D occlusion rule (unlimited box height) in the fusion area, or soften it for low boxes?

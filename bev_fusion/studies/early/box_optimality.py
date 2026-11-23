@@ -1,4 +1,4 @@
-"""Is the box head optimal on the simplest question? And if not, why? (Mirko, 2026-10-26)
+"""Is the box head optimal on the simplest question? And if not, why? (The owner, 2026-10-26)
 
 The simplest question: boxes of a synthetic scene are rendered into a pixel map (vehicle / pedestrian coverage, lane lines, all
 objects 0.5 s earlier, as studies/early/object_head_synth.py), a trunk + the object head must give the boxes back. With a perfect input the

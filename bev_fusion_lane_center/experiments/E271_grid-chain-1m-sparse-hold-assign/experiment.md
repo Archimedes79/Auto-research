@@ -1,6 +1,6 @@
 # E271 Grid chain, first card: a 1 m centre-lane head with a differentiable sparsification reaches the vertex coverage of the prototype at the same vertex budget (stages 1 + 2), and the oracle of the whole chain
 
-Card of 2026-11-03, **revised once after the critic pass of 2026-11-03 (REVISE)**. Mirko's wish of 2026-11-02: "a grid output in 1 m res to output centre lane pixels, then a sparsification, then temporal fusion, then assignment of sparse lanes to map lanes ... E2E differentiable only ... copy and adapt, no complex structures". Design, parts and self-tests: `training/grid/README.md`; picture of the assignment: `tools/viz/assign_view.py`. (removed 2026-11-13, in git history)
+Card of 2026-11-03, **revised once after the critic pass of 2026-11-03 (REVISE)**. The owner's wish of 2026-11-02: "a grid output in 1 m res to output centre lane pixels, then a sparsification, then temporal fusion, then assignment of sparse lanes to map lanes ... E2E differentiable only ... copy and adapt, no complex structures". Design, parts and self-tests: `training/grid/README.md`; picture of the assignment: `tools/viz/assign_view.py`. (removed 2026-11-13, in git history)
 
 **Scope after the revision.** One card = one question that `decide.py` can judge. E271 asks only whether stages 1 + 2 (head and sparsification) work against the system of record, plus the oracle gate of the whole chain (G0: GT through stages 1, 2 and 4 must reproduce itself). The hold (stage 3), the assignment trained jointly (stage 4) and the delivered lane graph are **follow-up cards, written after E271 has a verdict** (their requirements are collected in section 4 so that they are not lost). The critic's points on the hold and on `road_acc` live there.
 
@@ -60,7 +60,7 @@ The code critic found that the ground truth is clipped to |x|, |y| < 48 m while 
 ## 1. Card
 | | |
 |---|---|
-| lens | system review (rule steps in the delivered graph, `training/architecture.md`) + simplification (Mirko 2026-11-02) |
+| lens | system review (rule steps in the delivered graph, `training/architecture.md`) + simplification (the owner 2026-11-02) |
 | group | A3 sparse lane graph, A4 differentiable selection |
 | sources | `training/grid/README.md`, BEV `plan/head_design.md` 8.5 (D26) and `extract.py` (`soft_line_map`, copied), E31 / E32 / E37 (dense head + tracer, F1 0.885 VAL picture level, weak forks), E44, E265 / E267 (prototype), E269 (gradient measurements), `sd_lib.py`, `assoc_lib.py` |
 | status | done 2026-11-03: KEEP by hand (section 3) |
@@ -113,7 +113,7 @@ A critic pass (mode code) on `losses.py`, `vertex_eval.py` and `measures.py` add
 - **Speed:** head + sparsify 3.0 ms (head alone 2.0 ms), batch 1, fp32, idle GPU (1.7 GB desktop baseline), without the frozen trunk and without the read-out; r's assembly is 27.9 ms (excludes the trunk too).
 - **Rule steps still on the path to a delivered graph (named every time):** the read-out threshold + 3 x 3 maximum at inference; the lane ends and lane-level edges (E272); nothing on the training path (no top-k, no threshold, no argmax, no matching).
 - **Pictures:** `runs/grid_view/e271_a_s0/` (scene 7 and scene 23: heat, vertices against GT and prototype, assignment, camera; `tools/viz/grid_view.py` (removed on 2026-11-21, git history)). Assignment there is the untrained START-value assigner.
-- **Open for Mirko:** a `headline_metrics` override per card in `card.validate` (project.json is protected: needs a D<n>) would let `decide.py` judge vertex-level cards; until then these verdicts are by hand.
+- **Open for the owner:** a `headline_metrics` override per card in `card.validate` (project.json is protected: needs a D<n>) would let `decide.py` judge vertex-level cards; until then these verdicts are by hand.
 - **Next cards:** hold with a chain loader (control: a with the same sequence batches), trained assignment on top of the SD map (control: START-value assigner), kernel sharpness / peaky budget, delivered graph (E272). Section 4 holds the requirements.
 
 ## 4. Requirements kept for the follow-up cards (from the critic pass; each is a card of its own, written after E271)

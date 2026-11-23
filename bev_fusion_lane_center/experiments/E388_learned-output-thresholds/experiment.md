@@ -1,6 +1,6 @@
 # E388 learned output thresholds (the champion's three hand-tuned decode numbers fitted by gradient on TRAIN)
 
-Card of 2026-11-19 (system clock), D125 (Mirko: "Mach das und dann fahre den Computer runter", the lead's question 'can the hard output steps be made learnable'). Owner: Fable (the token code). **Version 2.1 at 01:25 (the second look: code ACCEPT; the card's three short points taken in: the JSON rule as max_loss, the precedence of NO over a label, tau_long < 0.15 named a fit label; INVALID and the kill's action written). Version 2 at 01:05, after the first critic pass (fresh ar-critic, cards: REVISE, G2 no; 3 blocking + 9 should-fix + 1 nit, all taken in, listed in section 1 'Referee').**
+Card of 2026-11-19 (system clock), D125 (the owner: "Mach das und dann fahre den Computer runter", the lead's question 'can the hard output steps be made learnable'). Owner: Fable (the token code). **Version 2.1 at 01:25 (the second look: code ACCEPT; the card's three short points taken in: the JSON rule as max_loss, the precedence of NO over a label, tau_long < 0.15 named a fit label; INVALID and the kill's action written). Version 2 at 01:05, after the first critic pass (fresh ar-critic, cards: REVISE, G2 no; 3 blocking + 9 should-fix + 1 nit, all taken in, listed in section 1 'Referee').**
 
 ## 0. The card (what the tools run)
 ```json card

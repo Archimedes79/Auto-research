@@ -1,6 +1,6 @@
 # CRN - code extraction, FUSION sections only (camera BEV + radar BEV + past frames)
 
-Scope (Mirko's brief 2026-10-25): only where camera BEV, radar BEV and past BEVs are fused. Backbones, lift internals and heads are not covered except where they decide the fusion inputs. Extracted by the fusion scout (deep mode), 2026-10-25. Fact status: `checked` = read in the local clone files named; derived statements are marked.
+Scope (the owner's brief 2026-10-25): only where camera BEV, radar BEV and past BEVs are fused. Backbones, lift internals and heads are not covered except where they decide the fusion inputs. Extracted by the fusion scout (deep mode), 2026-10-25. Fact status: `checked` = read in the local clone files named; derived statements are marked.
 
 | field | value |
 |---|---|

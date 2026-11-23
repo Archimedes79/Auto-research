@@ -31,7 +31,7 @@ n_tensors = sum(x["tensors"] for x in f1["params"])
 
 d = W.Doc("Week 3: the framework behind Spurmitte", "The camera + radar BEV system, the road to an end-to-end lane chain, the research tools and the disk work",
           "Research report - week 3, part 2 (27 October - 2 November 2026)",
-          "Mirko Meuter  |  prepared with Claude  |  numbers from stored result files, split and denominator named. The Spurmitte results of the week are in the separate "
+          "the project owner  |  prepared with Claude  |  numbers from stored result files, split and denominator named. The Spurmitte results of the week are in the separate "
           "<i>Week3_Status_Report_EN</i>; nothing here was run for this report.")
 
 d.h1("Contents", new_page=False, toc=False)
@@ -52,7 +52,7 @@ d.ul([
     "For an <b>end-to-end lane chain</b> a set-up was prepared and measured: a contract for the builder, a gradient report, and an experiment card (E269) that went through three critic passes; no model was trained for it.",
     "The measurement overturned an assumption: the route loss <b>does</b> reach the builder (through the node tokens), strongly and almost at right angles to the builder's own objective; node positions, validity and links get exactly zero.",
     "The <b>research tools</b> were simplified (run state derived from run records), the gate hook narrowed to the truth files, and a layered restructuring started.",
-    "The disk was full: 19.4 GB of old lane run files were archived to D:, a purge and compaction script waits for Mirko, and main was pushed on 26 October.",
+    "The disk was full: 19.4 GB of old lane run files were archived to D:, a purge and compaction script waits for the owner, and main was pushed on 26 October.",
 ])
 
 d.h1("2  The BEV system (camera + radar)", new_page=True)
@@ -81,7 +81,7 @@ d.fig(FIG + "w3_bev_frame.png", "A frame of the BEV dashboard video (<code>video
 d.callout("Honest limits", "The +0.5 s forecast of the prototype uses the true ego motion from the ground truth; boxes are decoded from score 0.05; pedestrian velocity is still near zero (skill 0.014); the velocity fix was trained for 1000 steps from one checkpoint. The numbers are front camera + all radars only.", "warn")
 
 d.h1("3  Toward an end-to-end lane chain", new_page=True)
-d.p("Mirko's target: the lane chain must become network-only. The BEV system's design points the way: a dense, differentiable output interface with hard selection only for the metric. The two systems side by side:")
+d.p("the owner's target: the lane chain must become network-only. The BEV system's design points the way: a dense, differentiable output interface with hard selection only for the metric. The two systems side by side:")
 d.table([["main path", "24 stages: 8 learned, 2 fixed-differentiable, 2 frozen, <b>12 rule steps</b>", "14 stages: 8 learned, 2 fixed-differentiable, 4 frozen, <b>0 rule steps</b>"],
          ["rule steps", "seed selection, child choice, beam top-M, time-recursion match, alive filter, path union, clean-up, anchoring, relocation, fork pruning, piece cut, Douglas-Peucker", "only outside the main path: line-cell threshold, box selection (metric side)"],
          ["training", "builder, dense head, route head and consumer trained in separate pieces; the one joint attempt (route loss through the builder) was negative three times", "one trainer for the whole chain, Kendall task balancing, sequence training with a carried memory"],
@@ -122,7 +122,7 @@ d.h1("5  Operations: disk and repository", new_page=False)
 d.table([["C: free space", "4.1 GB at the start of the clean-up, 36.4 GB after the move below, 55.5 GB at the last check (other chats cleaned too)"],
          ["lane run folders", "19.4 GB (615 files of 92 run folders) moved to <code>D:\\Auto-research\\lane_archive_2026-11-01</code>, verified by size, nothing deleted; 7.85 GB stay on C: (registered systems, the D7 lineage, control, live inputs). Record: <code>experiment_execution/history/lane_archive_2026-11-01/</code>"],
          ["golden check", "all six cached entries reproduced after the move (champion, champion_noprune, control, fast, fast_recall, recall; tolerance 0.0005); the one uncached entry needs the GPU"],
-         ["WSL image", "<code>ext4.vhdx</code> 318 GB on C: for 279 GB used inside; compaction alone returns about 40 GB; one script prepared for Mirko (<code>purge_and_compact_2026-11-01.ps1</code>): delete the archive (19.4 GB), the D5 caches (32 GB) and the second-wave list (13.25 GB), then compact; needs an administrator shell and a quiet WSL"],
+         ["WSL image", "<code>ext4.vhdx</code> 318 GB on C: for 279 GB used inside; compaction alone returns about 40 GB; one script prepared for the owner (<code>purge_and_compact_2026-11-01.ps1</code>): delete the archive (19.4 GB), the D5 caches (32 GB) and the second-wave list (13.25 GB), then compact; needs an administrator shell and a quiet WSL"],
          ["repository", "main (183 commits) and the 25 <code>lcr/*</code> run tags were pushed on 26 October; later commits are local; the push rule of 1 November asks for a reviewed state first"]],
         header=["", "state"], idcol=0)
 

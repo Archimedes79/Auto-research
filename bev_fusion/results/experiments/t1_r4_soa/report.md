@@ -92,7 +92,7 @@ detail path -> time mover (velocity splat) -> semantic and CenterPoint-style obj
 - Single seed; differences of about 0.02 are inside what a second seed could move; no ablation separating mirror, encoder and velocity weight.
 - Radar smear and the 428-scene training set are unsolved.
 
-## 7 What would move the numbers (needs Mirko's decision where marked)
+## 7 What would move the numbers (needs the owner's decision where marked)
 
 1. More data: nuScenes parts 7-10 (the remaining 272 scenes) and the other cameras - **download, needs permission**. Directly attacks
    the detection overfit (train 0.45 vs val 0.31).

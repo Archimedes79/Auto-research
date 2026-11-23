@@ -1,6 +1,6 @@
 # E293 How far into the junction can points be placed? Evidence and interpolation error along the connectors by depth (D83)
 
-Card of 2026-11-11, written by the lane chat on Mirko's request ("Gucke, wie weit man Punkte in die Kreuzung legen kann", D83). CPU analysis on the stored lane GT and B's pixel stage; no training, no change of the GT definition before the numbers (D83 item 3). It extends E283 (section 9: the GT entry point is the painted stop line, connector points inside the intersection have no painted marker within 1 m).
+Card of 2026-11-11, written by the lane chat on the owner's request ("Gucke, wie weit man Punkte in die Kreuzung legen kann", D83). CPU analysis on the stored lane GT and B's pixel stage; no training, no change of the GT definition before the numbers (D83 item 3). It extends E283 (section 9: the GT entry point is the painted stop line, connector points inside the intersection have no painted marker within 1 m).
 
 ## 0. The card (what the tools run)
 ```json card

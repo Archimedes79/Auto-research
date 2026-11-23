@@ -1,5 +1,5 @@
 """Velocity at keyframe k from TWO frames + ego motion + real radar Doppler, fused by networks in a small pyramid
-(Mirko, 2026-10-31: "use them [two frames] and ego motion and doppler comparison together to form a flow field hypothesis.
+(The owner, 2026-10-31: "use them [two frames] and ego motion and doppler comparison together to form a flow field hypothesis.
 Maybe doing that in a pyramid, but small. Loss could be equal for both. velocity gt, boxes from future and past, all this
 could build an intermediate loss for first training before training E2E. Other loss terms may make sense as well, test it.
 Make sure that you use networks").
@@ -12,7 +12,7 @@ Model (all learned except the fixed geometry: ego alignment, backward warp, ray 
               (u . v - vr at the cells with a detection)
         v_l = v_up + net_l([E(F_k), W, v_up, R, ray / range of the cell])
     --corr (off since 2026-10-31: a tie with it, 0.93 / 0.99 vs 0.96 / 1.04 m/s on moving vehicles, so the cheaper one;
-    Mirko: "Yes, drop it") replaces W by the local correlation C of E(F_k) with W (+-4 / 2 / 1 cells) and its soft frame
+    The owner: "Yes, drop it") replaces W by the local correlation C of E(F_k) with W (+-4 / 2 / 1 cells) and its soft frame
     hypothesis h = v_up - sum softmax(beta C) d / dt (no argmax), with the Doppler comparison of h added to R.
 The same loss is applied to the velocity of EVERY level (upsampled to 0.5 m, weight 1 each: "equal for both").
 Loss terms (--loss a,b,..., and --then x,y --pre f: switch to the second set after the fraction f of the steps, the

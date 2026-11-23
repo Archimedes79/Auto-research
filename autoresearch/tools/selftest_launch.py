@@ -281,11 +281,11 @@ def test_snapshot():
 def test_notes():
     """6: the words that cleared a hold stay in the notes when the resumed run writes its final row"""
     assert go("L.stop", ["bash", "-c", "exit 75"], "--no-git").returncode == 75
-    c = subprocess.run([sys.executable, f"{HERE}/hold.py", "clear", "L.stop", "--words", "Mirko: go on"], capture_output=True, text=True, env=env)
-    assert c.returncode == 0 and "Mirko: go on" in rows()["L.stop"]["notes"], c.stdout + c.stderr
+    c = subprocess.run([sys.executable, f"{HERE}/hold.py", "clear", "L.stop", "--words", "the owner: go on"], capture_output=True, text=True, env=env)
+    assert c.returncode == 0 and "the owner: go on" in rows()["L.stop"]["notes"], c.stdout + c.stderr
     assert go("L.stop", ["bash", "-c", "echo again"], "--no-git").returncode == 0
     notes = rows()["L.stop"]["notes"]
-    assert "Mirko: go on" in notes and "attempt after stopped" in notes and "ON HOLD" in notes and rows()["L.stop"]["status"] == "ok", notes
+    assert "the owner: go on" in notes and "attempt after stopped" in notes and "ON HOLD" in notes and rows()["L.stop"]["status"] == "ok", notes
 
 
 def test_card_fields():

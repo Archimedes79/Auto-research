@@ -1,4 +1,4 @@
-"""Information preservation of the radar encoder (Mirko, 2026-10-26): how much of the detection cloud survives encoding?
+"""Information preservation of the radar encoder (the owner, 2026-10-26): how much of the detection cloud survives encoding?
 
 Three levels, cheap first:
   A  unit tests with known answers (no learning): the rasters are exact where they claim to be - one detection per cell

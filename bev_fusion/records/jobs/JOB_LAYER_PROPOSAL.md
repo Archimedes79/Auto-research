@@ -1,10 +1,10 @@
 # Job layer on top of the existing suites - proposal (2026-11-10)
 
-**Status (2026-11-10, later the same day):** Mirko ordered it built ("create a directory for a JobRunner ... and generate the code there"). Version 1 is `autoresearch/jobrunner/` in the thin form of the revised recommendation below (no planner, no store of its own, run.py is the queue); its `README.md` is the reference, this text is the design history. What the sections below promise beyond version 1 (priorities, `stop` / `hold` / `resume`, a CPU gate, the GT suite in the catalogue) is not built.
+**Status (2026-11-10, later the same day):** The owner ordered it built ("create a directory for a JobRunner ... and generate the code there"). Version 1 is `autoresearch/jobrunner/` in the thin form of the revised recommendation below (no planner, no store of its own, run.py is the queue); its `README.md` is the reference, this text is the design history. What the sections below promise beyond version 1 (priorities, `stop` / `hold` / `resume`, a CPU gate, the GT suite in the catalogue) is not built.
 
-Asked by Mirko: how a job is defined and how it is built on top of the system, "without redefining" what exists. This is a proposal for his reading; it is not a decision (no D<n>) and not a card. D74 holds all experiments until he says the rebuild is complete; this layer is rebuild work, so it starts only on his word. Written from the READMEs and the `run.py` docstring, not from a full read of the code (see "Not checked").
+Asked by the owner: how a job is defined and how it is built on top of the system, "without redefining" what exists. This is a proposal for his reading; it is not a decision (no D<n>) and not a card. D74 holds all experiments until he says the rebuild is complete; this layer is rebuild work, so it starts only on his word. Written from the READMEs and the `run.py` docstring, not from a full read of the code (see "Not checked").
 
-## Revised recommendation (same day, after Mirko asked "what is the best architecture?")
+## Revised recommendation (same day, after the owner asked "what is the best architecture?")
 The sections below describe the larger variant with a Planner. On a second look the Planner duplicates `run.py`: a launcher already waits for its `--after` ids, for a GPU slot (one FIFO ticket line shared by both problems), the RAM gate and the machine lock, and `hold.py` can stop a waiting launcher. A job layer without a daemon is therefore enough and has fewer ways to fail (the review's 14 findings in the Training queue were all in a layer that starts and orders runs on top of `run.py`):
 - **Spec + catalogue** (new knowledge: what is a job, what does it need, `launch` or `process`),
 - **`submit`**: validate, write `job.json`, start `run.py` in the background (it waits in its own line), return the id,
@@ -73,7 +73,7 @@ Verbs follow the suites' common core (`autoresearch/README.md` rule 6): `check` 
 ## Who builds what (suggestion)
 Training chat: steps 1, 3, 4 (it owns `run.py`, the queue and the training job files). Each suite's chat: its catalogue entries (step 2). Evaluation chat: the `needs` of `Evaluation.run`. GT chat: `AutoGT.generate`. Me: this text, the review of the spec, the comparison rule between trainer versions stays as written in memory.
 
-## Where the classes sit (Mirko, 2026-11-10: "a job can also contain these classes, it just has to execute them somehow")
+## Where the classes sit (the owner, 2026-11-10: "a job can also contain these classes, it just has to execute them somehow")
 Composition, not inheritance: a job names a suite class and a method, the job layer holds a registry `suite name -> class` and builds the instance when it needs one (`Training(project)`, `Evaluation(project)`). Two uses of the instance:
 - `check` runs in the planner's own process (cheap, no GPU): validation of the arguments and the proposed `needs`.
 - `run` has two forms, declared per catalogue entry: `launch` (the method itself starts a `run.py` run and returns, as `Training.run` does) or `process` (the planner starts `python -m <suite> Class.method` through `run.py`; for long or GPU methods such as `Evaluation.run`, so that a crash or an out-of-memory does not take the planner down and the slots, ledger row and gates apply). An in-process call of a long method is not offered.
@@ -98,7 +98,7 @@ A job is ONE call. A chain such as GT -> train -> evaluate is several jobs joine
 ## Not checked
 `run.py` was read only in its docstring (1308 lines): that it accepts any command (not only training) with `--gpu`, `--ram-mb`, `--after` and the card gate is taken from there. `suitecli.py` was read as an outline. Nothing was run. The step estimates are mine and untested.
 
-## Decisions for Mirko (nothing written to `decisions/` yet)
+## Decisions for the owner (nothing written to `decisions/` yet)
 1. Is this layer wanted at all, or is B (a load helper) enough until an incident?
 2. New suite `jobsuite` (recommended, `runsuite` is the Training's `RunJobs`) or inside `runsuite`?
 3. Is the CPU gate (step 5) wanted now?

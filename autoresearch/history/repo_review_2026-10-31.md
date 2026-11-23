@@ -2,7 +2,7 @@
 
 Second pass of the same evening (architecture, code, cleanup; bev_fusion in depth, the autoresearch launch and decision path): `repo_review_2026-10-31_pass2.md`.
 
-The whole repository was reviewed read-only: `autoresearch/` file by file, then `bev_fusion_lane_center/`, `bev_fusion/` and `datasets/NuScenes/`. The review answers Mirko's six questions. Three sub-reviews (evalsuite + trainsuite, the lane project, bev_fusion + datasets) ran in parallel, and their high-severity claims were re-checked in the code. A claim marked "confirmed" was reproduced with a throw-away script or traced line by line; "by reading" means it was not executed. Line numbers are those of 2026-10-31.
+The whole repository was reviewed read-only: `autoresearch/` file by file, then `bev_fusion_lane_center/`, `bev_fusion/` and `datasets/NuScenes/`. The review answers the owner's six questions. Three sub-reviews (evalsuite + trainsuite, the lane project, bev_fusion + datasets) ran in parallel, and their high-severity claims were re-checked in the code. A claim marked "confirmed" was reproduced with a throw-away script or traced line by line; "by reading" means it was not executed. Line numbers are those of 2026-10-31.
 
 The cleanup moves and doc fixes of this review were committed at the same time (section 4 and section 6). No tool, metric or protected file was changed.
 
@@ -116,7 +116,7 @@ bev_fusion and datasets: section 7.
 
 ## 5. Recommendation: cut along trust, not along topic
 
-Mirko's point is the key: a well-checked old evaluator is worth more than a new one an agent writes from scratch. The repository already protects truth (golden numbers, TEST log, champion), but not the code that produces it. The new evalsuite re-implements metrics that the lane project has golden-checked for 20 loops, and nothing stops a fresh implementation from becoming the source of a headline number.
+The owner's point is the key: a well-checked old evaluator is worth more than a new one an agent writes from scratch. The repository already protects truth (golden numbers, TEST log, champion), but not the code that produces it. The new evalsuite re-implements metrics that the lane project has golden-checked for 20 loops, and nothing stops a fresh implementation from becoming the source of a headline number.
 
 The concrete recommendation is three layers with one rule each.
 
@@ -199,7 +199,7 @@ These jobs were running during the review and were not touched:
   - `data/cache/gt` is per sample, so each keyframe is stored about 3 times, without atomic writes: 11 GB on C:, 10 signatures.
   - `data/autogt/<sig>/` is per keyframe and atomic.
 
-  C: has 5.7 GB free. A dry run of `python -m autogt clean --stale-caches data/cache/gt` shows what the old signatures hold. They are what an exact re-evaluation of t2 / t3 needs, so purging them is Mirko's decision.
+  C: has 5.7 GB free. A dry run of `python -m autogt clean --stale-caches data/cache/gt` shows what the old signatures hold. They are what an exact re-evaluation of t2 / t3 needs, so purging them is the owner's decision.
 - **Off-chain training modules:** `temporal.py`, `s1_camera.py`, `train_s1.py`, `dualbev_front.py`, `light_encoder.py`, `distill_light_encoder.py`, `camera_decoder.py`, `radar_decoder.py` are imported only by tests / temp. They are candidates for `training/legacy/`, not for deletion.
 - **Every new eval still writes the legacy `scene_records.pkl`,** only for four temp readers.
 - **Gaps in the gate scripts:** `tests/run_gates.sh` does not run the selftests of model / losses / train / dataset or `autogt selftest`; `tests/run_after_t1.sh` is stale.
@@ -236,19 +236,19 @@ These jobs were running during the review and were not touched:
   - remove the dead `assemble_cluster`;
   - move the loop-16/18 drivers into `loops/`;
   - move the two rebuild scripts out of `temp/loop19`, then `clean_temp.py loop19` / `loop20` when loop 21 is filed.
-- **Mirko:**
+- **The owner:**
   - D17: loop ranges;
   - D18: metric directions in `project.json`;
   - D23: bev_fusion under `run.py`;
   - the truth-kit pin of section 5, as a new decision if wanted.
 
 ## 8. What was done (D23, D24, same day)
-Mirko's answer (recorded as D23 and D24 in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`): fix the bugs first, move the lane-specific code out of `autoresearch/`, keep one paired scene bootstrap, run bev_fusion inside `run.py`, remove unnecessary code. Commits 144fb94, 1db792f, 423f093, a3ea642, eae2ff4, a41df85; a fresh `ar-reviewer` pass over the tools and one over the evaluation code, their findings fixed.
+The owner's answer (recorded as D23 and D24 in `bev_fusion_lane_center/experiment_execution/DECISIONS.md`): fix the bugs first, move the lane-specific code out of `autoresearch/`, keep one paired scene bootstrap, run bev_fusion inside `run.py`, remove unnecessary code. Commits 144fb94, 1db792f, 423f093, a3ea642, eae2ff4, a41df85; a fresh `ar-reviewer` pass over the tools and one over the evaluation code, their findings fixed.
 - Fixed: T1, S1-S8 (S2 / S3 already by the trainsuite chat), L2, L3, F1-F5, the small evalsuite items; the reviewer's later finds (compare refused the t8 feature swap, `--force` not passed, legacy pickle name, tensors in the reset check, the exception line of a crash, `n_valid`).
 - L1: the fixed cut is in `graph_from_vertices`, but the product path keeps the old cut (`legacy_cut=True`) until route success and the consumer are re-measured on the GPU; no golden number changed.
 - Moved out of `autoresearch/`: `evalsuite/lanes` -> `bev_fusion_lane_center/evaluation/lane_task/`; the lane metric names of `decide.py` go to `project.json` "lower_is_better" (the lane problem's key waits for a grant: the session's permission check refused the grant command, so `decide.py` keeps the lane names as a fallback for tag prefix lcr).
 - One bootstrap: `autoresearch/evalsuite/stats.py` (`scene_picks`); the lane intervals byte-identical; `topo_metrics`, `boot_eval`, `bev_legacy` use it.
 - bev_fusion: `project.json`, `records/`, `temp/train/run_ar.sh` (trains from the run's snapshot commit, exits with the trainer's code); GPU slots shared with the lane problem.
 - Removed / moved: dead p16 code and loop-16/18 drivers, off-chain bev_fusion modules (`training/legacy/`, `_to_delete/off_chain_2026-10-31/`), the `evaluate_run.py` stub.
-- Metric directions (Mirko, later the same day): every card declares them in a `"better"` map written by its evaluator (lane: `sparse_metrics.LOWER_IS_BETTER`, 8722a94; bev_fusion: each metric's `direction()`, written by `bev_suite.py eval`, which now also writes `eval/card<tag>.json` in the card contract, because its `metrics.json` is not a contract card and `decide.py` could not read it), and `decide.py` reads them there. The prior-map baseline of `eval --prior` overwrote the model's box numbers with its own (older bug, found by the reviewer); it now adds only its map numbers. The fallback for older cards is only project.json `lower_is_better` (the lane key written under a D24 grant; `decide.py`'s built-in lane list removed), matched by the key's last part, because bev_fusion's path-like keys (`det/dt+0.00/vehicle/all/ate`) never matched its list before. Two wrong directions in `bev_task.py` fixed: `field_mae` and the loss terms are lower-is-better.
+- Metric directions (the owner, later the same day): every card declares them in a `"better"` map written by its evaluator (lane: `sparse_metrics.LOWER_IS_BETTER`, 8722a94; bev_fusion: each metric's `direction()`, written by `bev_suite.py eval`, which now also writes `eval/card<tag>.json` in the card contract, because its `metrics.json` is not a contract card and `decide.py` could not read it), and `decide.py` reads them there. The prior-map baseline of `eval --prior` overwrote the model's box numbers with its own (older bug, found by the reviewer); it now adds only its map numbers. The fallback for older cards is only project.json `lower_is_better` (the lane key written under a D24 grant; `decide.py`'s built-in lane list removed), matched by the key's last part, because bev_fusion's path-like keys (`det/dt+0.00/vehicle/all/ate`) never matched its list before. Two wrong directions in `bev_task.py` fixed: `field_mae` and the loss terms are lower-is-better.
 - Open: route-success measurement for L1, `training/augment.py` selftest fails (radar mirror, older than this work), the gained-key tolerance hides a GT change of a store that predates the GT signature (warning only), one intermittent failure of the autoresearch selftest seen once under full load (`S.slowA/run.log` missing; not reproduced in six runs).

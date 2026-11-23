@@ -1,4 +1,4 @@
-"""Can ground truth at OTHER times generate the velocity? (Mirko, 2026-10-30: "build it simpler", "allow for training by
+"""Can ground truth at OTHER times generate the velocity? (The owner, 2026-10-30: "build it simpler", "allow for training by
 predicting bounding boxes and images into future and past frames with positive and negative delta t")
 
 The simple recurrent model (plan 7.1 T2 again): a carried feature state h, moved to the next keyframe by the splat

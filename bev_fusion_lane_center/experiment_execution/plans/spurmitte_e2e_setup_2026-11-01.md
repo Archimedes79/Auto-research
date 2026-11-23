@@ -1,6 +1,6 @@
 # Spurmitte (lane centre) E2E set-up - what is pulled over from the BEV system (2026-11-01)
 
-Asked by Mirko: prepare a Spurmitte experiment in a prepared set-up, take over what the BEV system (`bev_fusion/`) does that helps, differentiable E2E designs only. Basis: `bev_fusion/training/architecture.md` (five layers), `bev_fusion/plan.md` 8.5 (the BEV chat's Spurmitte plan: dense head first, D26), `training/architecture.md` of this project (24 stages on the main path: 8 learned, 2 fixed-differentiable, 2 frozen, 12 rule steps; BEV: 14 stages, 0 rule steps).
+Asked by the owner: prepare a Spurmitte experiment in a prepared set-up, take over what the BEV system (`bev_fusion/`) does that helps, differentiable E2E designs only. Basis: `bev_fusion/training/architecture.md` (five layers), `bev_fusion/plan.md` 8.5 (the BEV chat's Spurmitte plan: dense head first, D26), `training/architecture.md` of this project (24 stages on the main path: 8 learned, 2 fixed-differentiable, 2 frozen, 12 rule steps; BEV: 14 stages, 0 rule steps).
 
 ## What is pulled over, by E2E value
 | # | BEV concept | use here | state |
@@ -32,6 +32,6 @@ The route loss reaches the builder strongly through the node tokens `h` (seeds g
 ## Not taken over
 The BEV refiner (GT matching inside the network), the frozen cached camera heads as a design goal, `select_boxes` / `decode` as part of a main path.
 
-## Open for Mirko
+## Open for the owner
 1. The E2E lane work in the BEV code (CentreHead on S, plan 8.5, decided D26) and the lane builder on S later are one ladder: confirm that this project prepares the contract, the gradient report and the route experiment, and the BEV chat the dense head.
 2. Is Douglas-Peucker (D20) the accepted layer-5 sparsification, or must the vertex budget come out of the network?

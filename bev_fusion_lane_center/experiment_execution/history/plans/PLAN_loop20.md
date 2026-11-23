@@ -3,7 +3,7 @@
 The loop-19 plan with all statuses is in `history/plans/PLAN_loop19.md` (its section "What the system still needs", N1 - N12, is still the open list).
 
 ## Question of the loop
-Mirko (2026-10-26, chat): when the other training is ready, do four iterations of automatic research here, test the methodology and the framework, improve the framework where necessary, report the week, then shut down. Prompt and reading: `history/prompts/PROGRAM_loop20.md`. The BEV-system chats' training (t1_r3) had finished, so the loop started at once.
+The owner (2026-10-26, chat): when the other training is ready, do four iterations of automatic research here, test the methodology and the framework, improve the framework where necessary, report the week, then shut down. Prompt and reading: `history/prompts/PROGRAM_loop20.md`. The BEV-system chats' training (t1_r3) had finished, so the loop started at once.
 
 ## Tree
 Four iterations, each: card -> referee (G2) -> run through `run.py` -> decision by the written rule -> summary. All numbers VAL 873, `evaluate.py`; the ids E252 ff. are not yet in `project.json` "loops" (D17), the loop table counts them under loop 19.

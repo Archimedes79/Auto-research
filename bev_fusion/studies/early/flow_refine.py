@@ -1,4 +1,4 @@
-"""Motion flow field with iterative refinement (plan.md 7.3; Mirko 2026-10-26: "get a good motion flow field, try 4
+"""Motion flow field with iterative refinement (plan.md 7.3; the owner 2026-10-26: "get a good motion flow field, try 4
 refinements"). World of studies/early/temporal_stages.py: objects A (8, 2) m/s and B (-2, -6) m/s, static stripes,
 random ego motion over 0.5 s. Trained on the warp MSE only (no velocity label).
 Arms:

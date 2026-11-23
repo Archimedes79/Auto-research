@@ -175,13 +175,13 @@ try:
     nowords = hold_cmd("clear", "S.stop")
     assert nowords.returncode != 0 and os.path.exists(f"{T}/runs/S.stop/HOLD") and hold_cmd("clear", "S.stop", "--words", "  ").returncode != 0
     assert "S.stop: since" in hold_cmd("show").stdout and "no holds" in hold_cmd("show", "S.afterstop").stdout
-    cleared = hold_cmd("clear", "S.stop", "--words", "Mirko: resume it")
-    assert cleared.returncode == 0 and not os.path.exists(f"{T}/runs/S.stop/HOLD") and "Mirko: resume it" in rows()["S.stop"]["notes"] and "hold cleared" in rows()["S.stop"]["notes"], (cleared.stdout, rows()["S.stop"])
+    cleared = hold_cmd("clear", "S.stop", "--words", "the owner: resume it")
+    assert cleared.returncode == 0 and not os.path.exists(f"{T}/runs/S.stop/HOLD") and "the owner: resume it" in rows()["S.stop"]["notes"] and "hold cleared" in rows()["S.stop"]["notes"], (cleared.stdout, rows()["S.stop"])
     assert RUN.state_of(f"{T}/runs/S.stop") == "stopped"
     hold_cmd("set", "S.ok", "--by", "selftest", "--reason", "a finished id the person wants left alone", "--words", "relayed by selftest: do not run it again")      # a hold on a finished id too
     again = go("S.ok", ["bash", "-c", "echo again"], "--again")
     assert again.returncode == 2 and "on HOLD" in again.stdout and os.path.exists(f"{T}/runs/S.ok/done"), again.stdout
-    assert hold_cmd("clear", "S.ok", "--words", "Mirko: fine").returncode == 0
+    assert hold_cmd("clear", "S.ok", "--words", "the owner: fine").returncode == 0
     res = go("S.stop", ["bash", "-c", "echo resumed"])
     assert res.returncode == 0 and rows()["S.stop"]["status"] == "ok" and "attempt after stopped" in rows()["S.stop"]["notes"], (res.stdout, rows()["S.stop"])
     # a stopped run whose launcher died before the ledger write: `ledger.py sync` adds its row from the record, with the status "stopped"
@@ -199,7 +199,7 @@ try:
     assert RUN.state_of(f"{T}/runs/S.stopsync2") == "held"
     subprocess.run([sys.executable, f"{HERE}/ledger.py", "sync"], capture_output=True, text=True, env=env, check=True)
     assert rows()["S.stopsync2"]["status"] == "stopped", rows().get("S.stopsync2")
-    hold_cmd("clear", "S.stopsync2", "--words", "Mirko: ok")
+    hold_cmd("clear", "S.stopsync2", "--words", "the owner: ok")
     # a killed launcher leaves a stalled record: --after blocks on it, schedule.derived shows it failed, a new attempt is allowed
     stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(100):
@@ -266,7 +266,7 @@ try:
         out = p.communicate(timeout=60)[0]
         assert p.returncode == 2 and "on HOLD" in out and not os.path.exists(f"{T}/ran_{rid}"), (rid, p.returncode, out)
         assert RUN.record(f"{T}/runs/{rid}")["status"] == "held" and rows()[rid]["status"] == "held" and RUN.state_of(f"{T}/runs/{rid}") == "held", (rows()[rid], RUN.record(f"{T}/runs/{rid}"))
-        assert hold_cmd("clear", rid, "--words", "Mirko: ok").returncode == 0
+        assert hold_cmd("clear", rid, "--words", "the owner: ok").returncode == 0
 
     def dep_done():
         os.makedirs(f"{T}/runs/S.holddep", exist_ok=True)
@@ -278,7 +278,7 @@ try:
     al = go("S.al_a", ["bash", "-c", "echo x"])
     assert al.returncode == 2 and "S.al.a is on HOLD and names the same run folder" in al.stdout and "hold.py clear S.al.a" in al.stdout and not os.path.exists(f"{T}/runs/S.al_a/run.json"), al.stdout
     assert go("S.al.a", ["bash", "-c", "echo x"]).returncode == 2 and "S.al.a" not in rows()
-    assert hold_cmd("clear", "S.al.a", "--words", "Mirko: ok").returncode == 0 and go("S.al_a", ["bash", "-c", "echo x"]).returncode == 0, "no hold, no refusal"
+    assert hold_cmd("clear", "S.al.a", "--words", "the owner: ok").returncode == 0 and go("S.al_a", ["bash", "-c", "echo x"]).returncode == 0, "no hold, no refusal"
     # project.json gpu_slots_dir: one slot folder shared by the problems of a machine (D23); a live slot there blocks this problem too
     shared = tempfile.mkdtemp(prefix="ar_slots_")
     assert RUN.slot_dir(T, dict(gpu_slots_dir=shared), f"{T}/runs") == os.path.normpath(shared) and RUN.slot_dir(T, {}, f"{T}/runs") == f"{T}/runs/.gpu_slots"

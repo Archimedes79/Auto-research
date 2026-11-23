@@ -38,6 +38,6 @@ Prediction hits: E265 +0.012 vs +0.0115; E264 +0.045 vs +0.047; E266 +0.012 vs +
 ## What it means, and next
 - Gap 1 is mostly lost in the chain, not in the network: the spur rule (E265: coverage equal to a lower threshold's at the same vertex budget, with better Q) and the seed lattice at the box edge (E266: R@1 far +0.015) each gave something back without training. The strongest systems at range (the stack E267: R@1 far 0.798; the two-seed union E264: lanes found 0.786) are blocked by precision at range (false length, P@1 far), not by coverage.
 - Next loop: a precision step at range (range-dependent threshold for edge seeds, or the union with a wider vertex merge: on val250 vtx_r 1.9 keeps lanes found 0.783 at false length 0.060, val250 only; on 873 frames at vtx_r 1.5 it is 0.0635), with idle timing; route success on spur-kept graphs before any champion change.
-- Champion / control entries unchanged; promotion stays Mirko's (D4).
+- Champion / control entries unchanged; promotion stays the owner's (D4).
 
 Records: `experiment_execution/PLAN.md` (loop 22), `LEDGER.md` (rows E261 - E268), experiment files `experiments/E261_*` - `E268_*` (section 3 each), `evaluation/TEST_USAGE_LOG.md`.

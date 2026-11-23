@@ -2,7 +2,7 @@
  "id": "t10.dual_s1.eval",
  "hypothesis": "evaluation (cold VAL 1000, bev_suite) of t10_dual_s1, the seed twin of the dual-feature chain (rule E1 of t10)",
  "prediction": "lane divider@0.5 0.335 +- 0.03, drivable 0.806 +- 0.03, walkway 0.340 +- 0.03, front mAP2 0.361 +- 0.03 (the t10_dual_s0 numbers)",
- "rule": "measurement, no decision of its own: s1 agrees with s0 (E1 again) -> the dual chain is the proposed new base (promotion stays Mirko); s1 fails E1 -> keep t8_bevfeat / t8_ctl (experiments/t10_dual_features/experiment.md)",
+ "rule": "measurement, no decision of its own: s1 agrees with s0 (E1 again) -> the dual chain is the proposed new base (promotion stays the owner); s1 fails E1 -> keep t8_bevfeat / t8_ctl (experiments/t10_dual_features/experiment.md)",
  "split": "val",
  "basis": "",
  "seed": "",

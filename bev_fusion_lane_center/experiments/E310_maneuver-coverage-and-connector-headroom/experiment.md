@@ -1,6 +1,6 @@
 # E310 - maneuver coverage and where the connectors lose maneuvers
 
-Mirko, 2026-11-12: "do the numbers express what we look for qualitatively?" The pair numbers (recall 0.18, precision 0.6) and topo F1 (+0.005) say little about what the pictures show (the delivered graph draws most junctions). This card defines the number that matches the pictures and measures the headroom of every link of the chain with it. A measurement card: no training, CPU, VAL 873 frames, TEST untouched.
+The owner, 2026-11-12: "do the numbers express what we look for qualitatively?" The pair numbers (recall 0.18, precision 0.6) and topo F1 (+0.005) say little about what the pictures show (the delivered graph draws most junctions). This card defines the number that matches the pictures and measures the headroom of every link of the chain with it. A measurement card: no training, CPU, VAL 873 frames, TEST untouched.
 
 ## 0. The card (what the tools run)
 ```json card

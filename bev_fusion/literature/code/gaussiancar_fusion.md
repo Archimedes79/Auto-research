@@ -1,6 +1,6 @@
 # GaussianCaR - code extraction, FUSION sections only (camera BEV + radar BEV)
 
-Scope (Mirko's brief 2026-10-25): the part where the camera BEV and the radar BEV meet. The Gaussian lift / rasteriser and the heads are described only as far as they define the inputs of the fuser. Extracted by the fusion scout (deep mode), 2026-10-25. Everything below was read in the local clone files named (`checked`) unless marked derived.
+Scope (the owner's brief 2026-10-25): the part where the camera BEV and the radar BEV meet. The Gaussian lift / rasteriser and the heads are described only as far as they define the inputs of the fuser. Extracted by the fusion scout (deep mode), 2026-10-25. Everything below was read in the local clone files named (`checked`) unless marked derived.
 
 | field | value |
 |---|---|

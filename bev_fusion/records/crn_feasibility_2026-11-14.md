@@ -30,7 +30,7 @@ README model zoo for this checkpoint (val, 150 scenes, 10 classes, 360 degrees, 
 - CRN's labels differ from ours (nuScenes boxes against our care boxes in the fusion area, GT at camera time); the card already says so.
 - Old runs (`t20_base_s0`, `t16_full_s0`) import `autogt`, which no longer exists (D78 / D81): scoring the base on GT v13 needs a re-pin or an alias in the process that runs it (a scratch launcher exists: `temp/t26_b/with_autogt_alias.py`); not a CRN question but it blocks `t26.base_eval`.
 
-## What needs Mirko's OK
+## What needs the owner's OK
 Nothing in the CRN run itself: no download, no install, no GPU job of the card's training. For the lead to decide: (a) the symlink folder inside `~/work/CRN`, (b) the GPU slot (about 10 min, 4 GB), (c) only if the 39 scenes without CRN inputs should be covered: generating infos and radar PV for them (derived data, CPU, an hour or two; no new download).
 
 Fair alternatives if this is not wanted: CRN-R18 (checkpoint on disk) as a lighter second row; DualBEV front-only is the camera reference already stored (GT v8; its detections do not depend on the GT, only the GT boxes it is paired with).

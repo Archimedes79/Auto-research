@@ -1,6 +1,6 @@
 # E285 The junction ground truth of the lane head: zone, conflict core, arms, ranked entry / exit points, order-preserving pairs, painted evidence (D82)
 
-Card of 2026-11-11, written by the lane chat on Mirko's word (D82: "Stelle erstmal eine sehr gute GT her, guck dir die beispielhaft an. Sie sollte alles enthalten."). CPU only, derived data of the lane project (D80): the lane GT of GtGenerator (store `0702a065c6` = l4) is read, nothing of GtGenerator is edited, no store signature changes; the GT chat's prepared l6 (`prep/v13-l6`) is not merged by this card.
+Card of 2026-11-11, written by the lane chat on the owner's word (D82: "Stelle erstmal eine sehr gute GT her, guck dir die beispielhaft an. Sie sollte alles enthalten."). CPU only, derived data of the lane project (D80): the lane GT of GtGenerator (store `0702a065c6` = l4) is read, nothing of GtGenerator is edited, no store signature changes; the GT chat's prepared l6 (`prep/v13-l6`) is not merged by this card.
 
 ## 0. The card (what the tools run)
 ```json card

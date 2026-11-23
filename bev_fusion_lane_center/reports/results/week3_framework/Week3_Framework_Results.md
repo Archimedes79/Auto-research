@@ -12,7 +12,7 @@ Lane chain: 24 main-path stages, 12 of them rule steps; BEV system: 0. Prepared 
 D16 (run state derived from run records; 8 defects found by a fresh critic, 7 fixed), D21 (gate hook narrowed to the truth files), D22 - D24 tool fixes, D26 (dense head first, trainable image features), D28 - D30, D32 (layered restructuring in progress), D36 - D38 (coverage rule, fusion area, footprint share), the git rule of 1 November and `keep3`.
 
 ## Disk and repository
-C: free 4.1 GB at the start; 19.4 GB of old lane run files moved to `D:\Auto-research\lane_archive_2026-11-01` (verified by size, nothing deleted; record in `experiment_execution/history/lane_archive_2026-11-01/`); the six cached golden entries reproduced after the move. Prepared for Mirko, not run: `tools/maintenance/purge_and_compact_2026-11-01.ps1` (delete archive, D5 caches, second wave, compact the 318 GB WSL image). Main and 25 `lcr/*` run tags were pushed on 26 October; later commits are local.
+C: free 4.1 GB at the start; 19.4 GB of old lane run files moved to `D:\Auto-research\lane_archive_2026-11-01` (verified by size, nothing deleted; record in `experiment_execution/history/lane_archive_2026-11-01/`); the six cached golden entries reproduced after the move. Prepared for the owner, not run: `tools/maintenance/purge_and_compact_2026-11-01.ps1` (delete archive, D5 caches, second wave, compact the 318 GB WSL image). Main and 25 `lcr/*` run tags were pushed on 26 October; later commits are local.
 
 ## Open
 Run the purge and compaction script when no chat trains; keep or drop the failure-series caches `pert` and `p17` (74.6 GB); D18 / D19; E269 build needs a critic code pass (`p18_joint.py` is shared).

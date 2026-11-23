@@ -1,4 +1,4 @@
-Hi Mirko,
+Hi the owner,
 
 this is the one result mail of the D48 chain, which D51 moved behind the experiment t21 (one buffered frame for the temporal fusion). It covers what happened since the long report of D46: the redesign bundle t20 and your t21 question. The report is built, the numbers below are read from the stored evaluation files. A fresh numbers critic read the t21 texts against the primary files; its corrections are in.
 
