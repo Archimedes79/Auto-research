@@ -1,0 +1,6 @@
+# Line endings: LF in every checkout, on every platform. The scripts run in WSL / bash (a CRLF `.sh` fails with "$'\r': command not found"),
+# the generator signatures and the stored hashes are byte-exact (GtGenerator/.gitattributes says the same for its files), and a Windows git with
+# core.autocrlf=true would otherwise turn every text file of a fresh clone into CRLF.
+* text=auto eol=lf
+# PowerShell 5.1 scripts: keep Windows line endings
+*.ps1 text eol=crlf
