@@ -1,6 +1,6 @@
 # winner - the winning system of the lane project and its code
 
-One folder per winner (D139 / D140, 2026-11-23: every project keeps its winner with the code that belongs to it; until then the folders lived in the workspace folder `winners/`). A winner folder is small and self-describing: the **source code** of the system, a README with the exact commands and the numbers to reproduce, and a `MANIFEST.json`; **no weights, no data, no logs** (the weights stay in `../runs/`, named in the winner's README).
+One folder per winner (D139 / D140, 2026-11-23: every project keeps its winner with the code that belongs to it; until then the folders lived in a workspace folder named winners). A winner folder is small and self-describing: the **source code** of the system, a README with the exact commands and the numbers to reproduce, and a manifest (`e372_s4_champion/MANIFEST.json`); **no weights, no data, no logs** (the weights stay in `../runs/`, named in the winner's README).
 
 | folder | what | numbers (VAL 873 frames, seed 0 / seed 1) |
 |---|---|---|
