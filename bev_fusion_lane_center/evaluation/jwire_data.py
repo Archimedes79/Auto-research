@@ -1,8 +1,8 @@
 """E325 step 2: the data of the wiring head `Wire` (`training/grid/jwire_head.py`): per frame a compact RECORD of what a connector end sees (the kept pieces of the delivered graph and their attributes, the pairs, the keypoint probabilities,
 the GT ends the keypoints match), and the instances / agreement statistics made from it.
 
-    wsl bash tools/env/_py14.sh jwire_data.py val --seed 0 [--pair-run e312_p_s0] [--ends kp|att] [--thr 0.1] [--max N]  # VAL records from the stored dumps (CPU: runs/<pair run>/ends_val.pkl, B's full dump temp/e276/predfull_e273_p_s<seed>.pkl, the GT ends
-                                                                                                         # temp/jwiring/gt_ends_val.pkl) -> temp/jwire/val_records_v1_s<seed>[_pair_<run>][_ends_att].pkl and the rule's agreement with the oracle label (--run = --pair-run)
+    wsl bash tools/env/_py14.sh jwire_data.py val --seed 0 [--pair-run e312_p_s0] [--ends kp|att] [--thr 0.1] [--max N]  # VAL records from the stored dumps (CPU: runs/<pair run>/ends_val.pkl, B's full dump runs/kept/e276/predfull_e273_p_s<seed>.pkl, the GT ends
+                                                                                                         # runs/kept/jwiring/gt_ends_val.pkl) -> runs/kept/jwire/val_records_v1_s<seed>[_pair_<run>][_ends_att].pkl and the rule's agreement with the oracle label (--run = --pair-run)
     wsl bash tools/env/_py14.sh jwire_data.py live --seed 0 [--pair-run e312_p_s0] [--ends kp|att] [--split train|val_clean] [--max N]   # the same records from a LIVE pass of B and the pair run (GPU) + the pilot numbers
     wsl bash tools/env/_py14.sh jwire_data.py selftest
 
@@ -170,7 +170,7 @@ def frame_dict(o, i, ends="kp"):
 
 
 # E358 attempt 4 (card section 5, pre-stated before the run): the settings the two STORED dumps were made with, constants and not parameters; the check `jwire_check.py live --faithful` replays both
-DUMP_B = dict(bs=4, map_mode="exact")                      # B's full dump `temp/e276/predfull_e273_p_s<seed>.pkl`: `qgraph_run_eval.py:89` (`LD.loader("val_clean", bs=4, ..., map_mode=<exact>, pixels=False, strict=True)`)
+DUMP_B = dict(bs=4, map_mode="exact")                      # B's full dump `runs/kept/e276/predfull_e273_p_s<seed>.pkl`: `qgraph_run_eval.py:89` (`LD.loader("val_clean", bs=4, ..., map_mode=<exact>, pixels=False, strict=True)`)
 DUMP_PAIR = dict(bs=8, map_mode="error", workers=2)        # the pair dump `runs/<pair run>/ends_val.pkl`: `jends_eval.py:42` (`dump`: `DEFAULT_JUNCTION = True; LD.loader("val_clean", bs=8, workers=2, shuffle=False, map_mode="error", pixels=False)`)
 FAITHFUL_MAX = 64                                          # the faithful pass keeps B's predictions of all its frames in memory: a check, not a TRAIN pass
 
@@ -267,12 +267,12 @@ def _live_records_faithful(thr, nmax, workers, dev, mb, mp, ends):
 
 
 def cache_path(kind, seed, nmax=0, thr=0.1, pair_run=None, ends="kp"):
-    """temp/jwire/<kind>_records_v<version>_s<seed>[_max<N>][_thr<t>][_pair_<run>][_ends_att].pkl: the name carries everything that changes the content; E312's own pair run (the default) and the keypoint ends add nothing, so
+    """runs/kept/jwire/<kind>_records_v<version>_s<seed>[_max<N>][_thr<t>][_pair_<run>][_ends_att].pkl: the name carries everything that changes the content; E312's own pair run (the default) and the keypoint ends add nothing, so
     E325's and E350's names stay"""
     pair_run = resolve_pair_run(seed, pair_run)
     check_ends(ends, seed, pair_run)
     other = pair_run != default_pair_run(seed)
-    return os.path.join(ROOT, "temp", "jwire", f"{kind}_records_v{RECORD_VERSION}_s{seed}{'_max' + str(nmax) if nmax else ''}{'_thr' + str(thr) if thr != 0.1 else ''}{'_pair_' + pair_run if other else ''}{'_ends_' + ends if ends != 'kp' else ''}.pkl")
+    return os.path.join(ROOT, "runs", "kept", "jwire", f"{kind}_records_v{RECORD_VERSION}_s{seed}{'_max' + str(nmax) if nmax else ''}{'_thr' + str(thr) if thr != 0.1 else ''}{'_pair_' + pair_run if other else ''}{'_ends_' + ends if ends != 'kp' else ''}.pkl")
 
 
 def meta_of(seed, pair_run=None, ends="kp"):
@@ -449,7 +449,7 @@ def _test_pair_run():
         assert name("val", 0, pair_run="e312_p_s0") == "val_records_v1_s0.pkl" and name("train", 1, pair_run="e312_p_s1") == "train_records_v1_s1.pkl"
         assert name("val", 0, pair_run="e324_s_s0") == "val_records_v1_s0_pair_e324_s_s0.pkl" and name("train", 1, 40, pair_run="e324_s_s1") == "train_records_v1_s1_max40_pair_e324_s_s1.pkl"
         assert name("val", 0, pair_run="e312_p_s1") == "val_records_v1_s0_pair_e312_p_s1.pkl"                 # E312's run of the OTHER seed is not the default of this seed
-        assert os.path.dirname(cache_path("val", 0)) == os.path.join(d, "temp", "jwire")
+        assert os.path.dirname(cache_path("val", 0)) == os.path.join(d, "runs", "kept", "jwire")
         for bad in ("../x", "a/b", "", "a b"):
             for f in (lambda b: cache_path("val", 0, pair_run=b), lambda b: meta_of(0, b), lambda b: resolve_pair_run(0, b)):                    # an empty name is NOT the default
                 try:
@@ -552,7 +552,7 @@ def _test_pair_run():
             assert len(calls) == 4 and not os.path.exists(os.path.join(d, "x.pkl")), "a refused call computed or wrote something"
             assert (open(e325, "rb").read(), os.stat(e325).st_mtime_ns) == stamp, "E325's cache was touched"
             for f, pr, sd in (("val_records_v1_s0_pair_e324_s_s0.pkl", "e324_s_s0", 0), ("val_records_v1_s1.pkl", "e312_p_s1", 1), ("val_clean_records_v1_s0_max24_pair_e324_s_s0.pkl", "e324_s_s0", 0)):
-                assert pickle.load(open(os.path.join(d, "temp", "jwire", f), "rb"))["meta"] == dict(pair_run=pr, seed=sd, record_version=RECORD_VERSION), f
+                assert pickle.load(open(os.path.join(d, "runs", "kept", "jwire", f), "rb"))["meta"] == dict(pair_run=pr, seed=sd, record_version=RECORD_VERSION), f
             try:
                 main(["val", "--seed", "0", "--run", "e324_s_s0", "--pair-run", "e324_s_s1"])
                 raise AssertionError("--run and --pair-run that differ must be refused")
@@ -704,7 +704,7 @@ def _test_ends():
             assert calls == [("val", 0, "e324_s_s0", "att"), ("val", 0, "e324_s_s0", "kp"), ("live", 0, "val_clean", "e324_s_s0", "att")], calls
             assert "(att ends)" in out.getvalue() and "attached-end error" in out.getvalue() and "(kp ends)" in out.getvalue() and "keypoint error" in out.getvalue()
             for f, ends in (("val_records_v1_s0_pair_e324_s_s0_ends_att.pkl", "att"), ("val_records_v1_s0_pair_e324_s_s0.pkl", "kp"), ("val_clean_records_v1_s0_max24_pair_e324_s_s0_ends_att.pkl", "att")):
-                assert pickle.load(open(os.path.join(d, "temp", "jwire", f), "rb"))["meta"] == meta_of(0, "e324_s_s0", ends), f
+                assert pickle.load(open(os.path.join(d, "runs", "kept", "jwire", f), "rb"))["meta"] == meta_of(0, "e324_s_s0", ends), f
             for argv in (["val", "--seed", "0", "--ends", "att"], ["val", "--seed", "0", "--pair-run", "e312_p_s0", "--ends", "att"], ["live", "--seed", "0", "--ends", "att"], ["live", "--seed", "0", "--ends", "att", "--out", os.path.join(d, "x.pkl")]):
                 assert "attached ends" in (refusal(main, argv) or ""), argv
             assert len(calls) == 3 and not os.path.exists(os.path.join(d, "x.pkl")), "a refused call computed or wrote something"

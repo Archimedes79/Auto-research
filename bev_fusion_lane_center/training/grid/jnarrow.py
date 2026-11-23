@@ -1,7 +1,7 @@
 """E353 (D99 step 1): the junction maps head narrowed PHYSICALLY by channel surgery on a trained `jends_train.JEndModel`, the step after the sensitivity table of E345 (`evaluation/jprune_probe.py`, which only replaces channels by constants).
 
     import jnarrow as JN
-    spec = {"calib": "temp/e345/e324_s_s0/calib.pt", "edits": [{"unit": "jm.m05.hid", "frac": 0.75}]}       # plain JSON; frac = the REMOVED share
+    spec = {"calib": "runs/kept/e345/e324_s_s0/calib.pt", "edits": [{"unit": "jm.m05.hid", "frac": 0.75}]}       # plain JSON; frac = the REMOVED share
     model, args = JN.build_narrowed("e324_s_s0", spec)     # the stored model, groups removed, means folded; model.narrow_spec = the resolved spec (a checkpoint stores it as args["narrow"])
     model, args = JN.load_model("e353_n1_s0", "cpu")       # `jends_eval.load_model`'s contract for a narrowed (or an unnarrowed) checkpoint: the shapes come from args["narrow"]
     wsl bash tools/env/_py14.sh test_jnarrow.py            # the tests (CPU, real checkpoint and VAL frames)

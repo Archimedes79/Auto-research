@@ -293,6 +293,7 @@ def run(a):
         want = {0: (0.787, 0.620), 1: (0.790, 0.602)}[a.seed]
         got = (star["base_recall"], star["base_precision"])
         out["baseline_matches_step_0b"] = bool(abs(got[0] - want[0]) <= 0.003 and abs(got[1] - want[1]) <= 0.003)
+        os.makedirs(os.path.join(ROOT, "temp", "jtime"), exist_ok=True)
         json.dump(out, open(os.path.join(ROOT, "temp", "jtime", f"heat_replay_s{a.seed}.json"), "w"), indent=1)
         print("baseline matches step 0b:", out["baseline_matches_step_0b"], got, want)
 

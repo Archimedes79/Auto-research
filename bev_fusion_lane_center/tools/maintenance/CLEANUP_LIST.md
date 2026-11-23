@@ -84,21 +84,21 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 **Open, deliberately not changed during E276 (it would change the numerics of the training path against the stored baseline):** C7 `qgraph._seg_lse`: `math.exp(extra) * torch.exp(-m)` is 0 * inf = NaN for a group without a true candidate (masked by the later `torch.where`, gradient finite): write `torch.exp(extra - m)` after E276; C8 `qlinks.py` trims candidate pairs above 80,000 with the global torch RNG also at inference (unlikely to trigger): warn or raise when `gt is None`; C9 stale comments: qlinks.py:5 (KL = 32, code 64), sections.py:67 (half same-piece, code uniform), qgates.py reference head of seed 0 for every seed, `Frame.lane()` inserts into `sys.path` on every call.
 
 ## F. temp/ dry run of `clean_temp.py` (2026-11-18, lane chat; nothing moved): 172 folders, 8.2 GB
-`clean_temp.py <folder>` without `--move` over every folder of `temp/`: **125 folders (1.2 GB) would go** (no live code or document names them); **47 folders (7.0 GB) are BLOCKED** because live code reads them or a file changed in the last 6 hours. The 125 are to be moved only after the landing of 2026-11-18 and the tests of the landed tree, ONE small folder first with `git count-objects -vH` before and after (`clean_temp.py` tags the scratch first: the tag must add the scripts only; skip data-heavy folders such as e291, e330, qual_report_1117*, e309, e280, gt2 if it would add more); no disk gain on C: (a move to `_to_delete/` stays on the same disk). Never: `temp/e343/` (the frozen E343 digest), `temp/e321/` (protected TEST dumps) and the blocked ones. The blocked ones, largest first (references = lines of live code or documents that name the folder; the first one is shown; `python3 ../autoresearch/tools/clean_temp.py <folder>` lists all):
+`clean_temp.py <folder>` without `--move` over every folder of `temp/`: **125 folders (1.2 GB) would go** (no live code or document names them); **47 folders (7.0 GB) are BLOCKED** because live code reads them or a file changed in the last 6 hours. The 125 are to be moved only after the landing of 2026-11-18 and the tests of the landed tree, ONE small folder first with `git count-objects -vH` before and after (`clean_temp.py` tags the scratch first: the tag must add the scripts only; skip data-heavy folders such as e291, e330, qual_report_1117*, e309, e280, gt2 if it would add more); no disk gain on C: (a move to `_to_delete/` stays on the same disk). Never: `runs/kept/e343/` (the frozen E343 digest), `runs/kept/e321/` (protected TEST dumps) and the blocked ones. The blocked ones, largest first (references = lines of live code or documents that name the folder; the first one is shown; `python3 ../autoresearch/tools/clean_temp.py <folder>` lists all):
 
 | folder | size | references | first reference |
 |---|---|---|---|
 | `temp/e282/` | 3126 MB | 5 | `training/train/qnode_pilot.py:4` (file removed 2026-11-21) |
-| `temp/e343/` | 1171 MB | 17 | `evaluation/jtest_eval.py:19` |
-| `temp/e276/` | 487 MB | 18 | `evaluation/jdup.py:102` (file removed 2026-11-21) |
-| `temp/e321/` | 476 MB | 11 | `evaluation/jtest_eval.py:46` |
-| `temp/e292/` | 449 MB | 4 | `evaluation/qends_eval.py:407` |
+| `runs/kept/e343/` | 1171 MB | 17 | `evaluation/jtest_eval.py:19` |
+| `runs/kept/e276/` | 487 MB | 18 | `evaluation/jdup.py:102` (file removed 2026-11-21) |
+| `runs/kept/e321/` | 476 MB | 11 | `evaluation/jtest_eval.py:46` |
+| `runs/kept/e292/` | 449 MB | 4 | `evaluation/qends_eval.py:407` |
 | `temp/e352/` | 294 MB | 3 | `evaluation/jprune_b.py:7` |
-| `temp/jwire/` | 219 MB | 6 | `evaluation/jwire_data.py:275` |
+| `runs/kept/jwire/` | 219 MB | 6 | `evaluation/jwire_data.py:275` |
 | `temp/simplify/` | 200 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
 | `temp/e275/` | 150 MB | 2 | `evaluation/tests/test_qgraph_score_glue.py:79` (file removed 2026-11-21) |
 | `temp/qual_report_1115/` | 80 MB | 4 | `evaluation/README.md:55` |
-| `temp/e345/` | 77 MB | 10 | `evaluation/README.md:38` |
+| `runs/kept/e345/` | 77 MB | 10 | `evaluation/README.md:38` |
 | `temp/e273/` | 77 MB | 1 | `training/configs/README.md:23` |
 | `temp/jr/` | 51 MB | 2 | `evaluation/README.md:46` |
 | `temp/e365/` | 51 MB | 14 | `evaluation/README.md:55` |
@@ -108,7 +108,7 @@ Agents only move things to `_to_delete/` (CLAUDE.md); these deletes are yours. C
 | `temp/tmp8atbqy4o/` | 2 MB | 0 | ``` |
 | `temp/_session_scratch_critic_u1/` | 2 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
 | `temp/landing/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |
-| `temp/jwiring/` | 1 MB | 3 | `evaluation/jwire_data.py:5` |
+| `runs/kept/jwiring/` | 1 MB | 3 | `evaluation/jwire_data.py:5` |
 | `temp/jtime/` | 1 MB | 8 | `evaluation/jheat_replay.py:296` |
 | `temp/jdup/` | 1 MB | 2 | `evaluation/jdup.py:161` (file removed 2026-11-21) |
 | `temp/e385/` | 1 MB | 1 | (a file changed in the last 6 h: a job may use it; wait) |

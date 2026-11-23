@@ -5,6 +5,8 @@ Formerly `out/loop2`. What the live code reads and writes: checkpoints (`model.p
 | entry | what |
 |---|---|
 | `e<id>_<tag>/` | one run of experiment E<id> (loops 2-15); `e94_a` control trace network, `e37_final` dense head, `e120_*` refinement, `e117`-`e121` loop 14-15 |
+| `kept/` | the scratch data that living code reads, moved out of `temp/` on 2026-11-23 (D140; same names, content hashes checked before and after): `e276/` and `e292/` (the stored VAL dumps of B and E292 c2: jgraph, jmaneuver, jprune_b, jtime, jwiring, qends_eval, jtest_eval), `e321/` (E321's TEST dumps, sha-pinned read-only inputs of `jtest_eval.py`), `e343/` (the VAL dumps of plain B: `jtoken_eval.py` B_DUMP; `jtest_eval.py`'s write area), `e345/` (calibrations and sweeps of the pruning probe), `jwire/`, `jwiring/` (caches) |
+| `_from_scratch_2026-11-23/` | every checkpoint and weight file found in the scratch folders when they were cleared (D140: checkpoints are kept), under its old path (`_to_delete/...`, `temp/...`); smoke and dev runs, no ledger champion |
 | `e123/e123_<design>_r<rung>_<step>/` | ladder runs of loop 16 (model, `log.txt`, `status.json`); `e17_map_*` map-conditioned builders of loop 17 |
 | `prototype/<name>/` | output of `../tools/prototype/lane_prototype.py`: `scenes/<scene>.json` (planner format), `summary.json` / `.md`, optional video (rewritten by each call) |
 | `e123_ladder/` | loop 16 workspace: `cards/` (one json per finished run), `diag/`, `gate/`, `state.json`, `queue.json`, rung summaries (the human-readable `TRIAGE_STATE.md` moved to `../experiment_execution/history/indexes/`) |

@@ -2,7 +2,7 @@
 the CPU side (scoring, halves, classes, curves, table) is `jprune_table.py`, the cost of a set of removals `jprune_cost.py`. VAL and TRAIN only (a TEST split is refused).
 
     wsl bash tools/env/_py14.sh jprune_probe.py units  --run e312_p_s0                           # the unit table (45 units, 84 points) with the saved GMACs / parameters of each unit, CPU, no data
-    wsl bash tools/env/_py14.sh jprune_probe.py sweep  --run e312_p_s0 --out temp/e345/e312_p_s0 [--score-points f.json] [--runs-dir DIR] [--max N] [--val-stride N] [--calib-max N] [--workers N] [--device cpu] [--deterministic] [--no-controls]
+    wsl bash tools/env/_py14.sh jprune_probe.py sweep  --run e312_p_s0 --out runs/kept/e345/e312_p_s0 [--score-points f.json] [--runs-dir DIR] [--max N] [--val-stride N] [--calib-max N] [--workers N] [--device cpu] [--deterministic] [--no-controls]
                                                                                                  # resumes from sweep.json; the calibration is kept in calib.pt (a rerun picks the same channels); relative paths are relative to the problem folder
     wsl bash tools/env/_py14.sh jprune_probe.py time   --run e312_p_s0 [--device cuda] [--batches 4]     # seconds of one pass of the VAL cache on the device (the pass time of the GPU jobs, measured under load)
     wsl bash tools/env/_py14.sh jprune_probe.py selftest                                         # random-init model, CPU, no data (the data tests are tests/test_jprune_probe.py)

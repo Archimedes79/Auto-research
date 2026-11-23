@@ -2,7 +2,7 @@
 of every token (spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`). Derived data, not in git; this tool, its selftest and the manifests are.
 
     wsl bash tools/env/_pyr.sh lane_tokcache.py build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
-    wsl bash tools/env/_py14.sh lane_tokcache.py fixture --cache <dir> --dump temp/e292/predfull_e292_a_s0.pkl [--prefix]         # the cache against B's stored dump, bit for bit (VAL)
+    wsl bash tools/env/_py14.sh lane_tokcache.py fixture --cache <dir> --dump runs/kept/e292/predfull_e292_a_s0.pkl [--prefix]         # the cache against B's stored dump, bit for bit (VAL)
     wsl bash tools/env/_py14.sh lane_tokcache.py report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
     wsl bash tools/env/_py14.sh lane_tokcache.py summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
     wsl bash tools/env/_py14.sh lane_tokcache.py same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field

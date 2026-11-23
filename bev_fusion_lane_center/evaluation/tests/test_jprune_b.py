@@ -1,5 +1,5 @@
 """E352 step-0 tests of the B-side pruning probe (`jprune_b.py`), CPU only (the GPU is hidden), 2 threads, the stored E324 s and B (`e273_p_s<S>`) and the first 8 / 4 VAL frames; about 8 minutes on a loaded machine.
-The tests need the SCRATCH inputs temp/e276/predfull_e273_p_s0.pkl, temp/e345/e324_s_s0/calib.pt and temp/e345/e324_s_s1/calib.pt (not in git) and runs/e345_p000_e324_s_s0/ends_val.pkl; the real-card part of the gate test runs only when the hand-made diagnostic nulls
+The tests need the SCRATCH inputs runs/kept/e276/predfull_e273_p_s0.pkl, runs/kept/e345/e324_s_s0/calib.pt and runs/kept/e345/e324_s_s1/calib.pt (not in git) and runs/e345_p000_e324_s_s0/ends_val.pkl; the real-card part of the gate test runs only when the hand-made diagnostic nulls
 (`runs/e352diag_null_s<S>` -> temp/e352/diag_null_s<S>) exist.
 
     wsl bash tools/env/_py14.sh test_jprune_b.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
@@ -42,7 +42,7 @@ def fx():
     if not _FX:
         jm, args = JEV.load_model("e324_s_s0", "cpu")
         qg = QP.load_model(os.path.join(ROOT, "runs", "e273_p_s0"), "cpu")
-        calib = PP.load_calib(PP.rootpath("temp/e345/e324_s_s0/calib.pt"), "cpu")
+        calib = PP.load_calib(PP.rootpath("runs/kept/e345/e324_s_s0/calib.pt"), "cpu")
         _FX.update(jm=jm, args=args, qg=qg, calib=calib, taps=PP.tap_table(jm), passes={})
     return _FX
 
@@ -160,7 +160,7 @@ def test_empty_set_reproduces_the_stored_dumps():
 def test_dump_comparison_catches_a_changed_dump():
     """the comparison is not blind: a permuted dump is equal, a moved node / a changed link probability / a dropped link / a changed section start / a dropped keypoint is reported"""
     import copy
-    ref = pickle.load(open(os.path.join(ROOT, "temp", "e276", "predfull_e273_p_s0.pkl"), "rb"))[:2]
+    ref = pickle.load(open(os.path.join(ROOT, "runs", "kept", "e276", "predfull_e273_p_s0.pkl"), "rb"))[:2]
     perm = copy.deepcopy(ref)
     for d in perm:                                                                                       # the same graph with its nodes in another order (the links renumbered)
         n = len(d["e"])
@@ -215,7 +215,7 @@ def test_edited_pass_changes_both_models_and_the_random_draw_differs():
 
 def test_seed_one_uses_its_own_calibration():
     s0, s1 = one_pass("t1"), one_pass("t1", seed=1)
-    c0, c1 = (PP.load_calib(PP.rootpath(f"temp/e345/e324_s_s{s}/calib.pt"), "cpu") for s in (0, 1))
+    c0, c1 = (PP.load_calib(PP.rootpath(f"runs/kept/e345/e324_s_s{s}/calib.pt"), "cpu") for s in (0, 1))
     assert PB.sha256_file(PB.calib_path(1)) != PB.sha256_file(PB.calib_path(0))
     for e in s1["edits"]:                                                                                # seed 1's channels: the lowest importance of seed 1's calibration (and not seed 0's)
         want = set(np.argsort(c1.s[e.tap].numpy(), kind="stable")[:len(e.idx)].tolist())

@@ -1,9 +1,9 @@
 """CPU side of the E345 probe (D99 step 0): scoring of the point folders, the paired scene bootstrap, the halves, the classes, the greedy curves, the plan of the scored points, the controls and the table writer. The passes themselves are `jprune_probe.py`.
 
-    wsl bash tools/env/_py14.sh jprune_table.py plan  --sweep temp/e345/e312_p_s0/sweep.json --out temp/e345/e312_p_s0/score_points.json [--runs-dir runs]      # section 3: the point sets scored in full (+ v once the handle-scale points are scored), from the sweep of SEED 0
-    wsl bash tools/env/_py14.sh jprune_table.py score --run e312_p_s0 --points temp/e345/e312_p_s0/score_points.json [--only 12,101]                           # the stored scorer (`jends_eval.py score`) on the point folders of `runs/`, tag e345<NNN>
-    wsl bash tools/env/_py14.sh jprune_table.py boot  --run e312_p_s0 --points temp/e345/e312_p_s0/score_points.json [--only 12,101] [--n 1000]              # the paired scene bootstrap of every scored point against the null folder on the judged read-outs
-    wsl bash tools/env/_py14.sh jprune_table.py table --sweeps temp/e345/e312_p_s0,temp/e345/e312_p_s1,temp/e345/e324_s_s0,temp/e345/e324_s_s1 --out experiments/E345_pruning-sensitivity-step0 [--runs-dir runs]
+    wsl bash tools/env/_py14.sh jprune_table.py plan  --sweep runs/kept/e345/e312_p_s0/sweep.json --out runs/kept/e345/e312_p_s0/score_points.json [--runs-dir runs]      # section 3: the point sets scored in full (+ v once the handle-scale points are scored), from the sweep of SEED 0
+    wsl bash tools/env/_py14.sh jprune_table.py score --run e312_p_s0 --points runs/kept/e345/e312_p_s0/score_points.json [--only 12,101]                           # the stored scorer (`jends_eval.py score`) on the point folders of `runs/`, tag e345<NNN>
+    wsl bash tools/env/_py14.sh jprune_table.py boot  --run e312_p_s0 --points runs/kept/e345/e312_p_s0/score_points.json [--only 12,101] [--n 1000]              # the paired scene bootstrap of every scored point against the null folder on the judged read-outs
+    wsl bash tools/env/_py14.sh jprune_table.py table --sweeps runs/kept/e345/e312_p_s0,runs/kept/e345/e312_p_s1,runs/kept/e345/e324_s_s0,runs/kept/e345/e324_s_s1 --out experiments/E345_pruning-sensitivity-step0 [--runs-dir runs]
     (the tests are tests/test_jprune_probe.py)
 
 Job flow (one model, seeds 0 and 1; relative paths are relative to the problem folder): (1) GPU: `jprune_probe.py sweep` on both seeds (null twice, controls, the 84 points, random / reverse draws); (2) CPU: `plan` on the SEED-0 sweep -> `score_points.json` (18 point sets and the second null 900, without v);

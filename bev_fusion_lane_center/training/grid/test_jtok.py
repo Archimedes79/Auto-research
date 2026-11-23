@@ -42,6 +42,7 @@ import qtargets as QT  # noqa: E402
 
 torch.set_num_threads(2)
 SCRATCH = os.path.join(JT.ROOT, "temp", "e357")
+os.makedirs(SCRATCH, exist_ok=True)                                         # scratch of the tests (temp/ is emptied when a loop is filed, D140)
 GATE_MAX = 0.005                                                             # the card's rule: more than 0.5 % of the GT links outside the allowed gate = widen the gate before training
 
 

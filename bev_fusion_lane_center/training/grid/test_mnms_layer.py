@@ -1,7 +1,7 @@
 """E292 tests (CPU, torch): the one-pass Matrix-NMS layer as a switch of the model (`QGraph(soft_nms=('mnms', R, sigma))`, `qmnms.matrix_nms_logit`), the fine-tune phase 9 (pyramid frozen), the
 checkpoint round trip, and the mutations the card names (each one must be caught by a check below).
 Run: python test_mnms_layer.py [--real]    (`_py14.sh test_mnms_layer.py`)
---real: also the kill criterion of the card of E292: the layer reproduces `qgraph_readout.matrix_nms` on the scores of 20 frames of B's full dump (`temp/e276/predfull_e273_p_s0.pkl`, written by
+--real: also the kill criterion of the card of E292: the layer reproduces `qgraph_readout.matrix_nms` on the scores of 20 frames of B's full dump (`runs/kept/e276/predfull_e273_p_s0.pkl`, written by
 `qgraph_run_eval.py score --dump-full`; needs the stored dump, so it is in run_all_tests.sh, not in the fast gates)."""
 import json
 import os
@@ -286,7 +286,7 @@ check(abs(float(pz.grad[0, 1, 0, 1]) - dpos) < 1e-3 * dpos and abs(float(pz.grad
 
 # ---- 14. (--real) the kill criterion of the card: the layer reproduces qgraph_readout.matrix_nms on 20 frames of B's full dump
 if "--real" in sys.argv:
-    dump_path = os.path.join(ROOT, "temp", "e276", "predfull_e273_p_s0.pkl")
+    dump_path = os.path.join(ROOT, "runs", "kept", "e276", "predfull_e273_p_s0.pkl")
     assert os.path.exists(dump_path), f"--real needs B's full dump {dump_path} (made by `qgraph_run_eval.py score --run e273_p_s0 --seed 0 --exp e276 --readouts plain@0.5 --dump-full`, removed on 2026-11-21: run it from the git history (commit 4c6ddf52))"
     dump = pickle.load(open(dump_path, "rb"))
     H = W = 50

@@ -219,7 +219,7 @@ def replay(a):
     run, ends, gt, frames, scenes, infos = _setup(a)
     w = a.w
     prev_of = {t1: t0 for t0, t1 in _pairs_of_frames(scenes, ends)}
-    dump = pickle.load(open(os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
+    dump = pickle.load(open(os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
     order = [f.token for f in QE.val_frames()]
     assert [d["row"] for d in dump] == [frames[t].row for t in order], "the full dump is not in the order of the VAL frames"
     z_new = {}

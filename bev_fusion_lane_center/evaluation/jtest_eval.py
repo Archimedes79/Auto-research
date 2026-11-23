@@ -16,9 +16,9 @@ Before any dump is made, `all` checks the seeds of the pair runs (`config.json` 
 after hours of dumping (`score_seed` takes those counts over and scores the other read-outs; with B's dump still to be made the checks come after it, only on VAL). A dump that this module made (default paths) has a sidecar `<name>_head.json` with
 its provenance (run, device, sha256 of the checkpoint, digest and file list of the imported lane code, taken when the dump STARTS): an existing one is reused only under the same provenance, else refused with a message (nothing is deleted: move it away).
 A dump named by a flag has no provenance when it is not this module's (E321's pair dump has a `_head.json` without a provenance key, the stored VAL dumps have none): exempt, validated by its rows and, E321's, by its sha256; one with provenance is checked like the others.
-Every such refusal comes in the precheck, before a dump of any seed is made. The provenance is taken before the model is loaded and written to the sidecar FIRST, the pickle goes in afterwards without overwriting (a crash leaves a sidecar without a pickle, never a pickle without provenance); a dump on a GPU waits for room as `jends_eval.py dump` does. Cards and `results.md` are written once (refused when they exist; `--max` runs excepted), so before each re-run move the old outputs away (never delete): the cards folder of the earlier run, and the dumps in temp/e343/<split>/ made under another code
+Every such refusal comes in the precheck, before a dump of any seed is made. The provenance is taken before the model is loaded and written to the sidecar FIRST, the pickle goes in afterwards without overwriting (a crash leaves a sidecar without a pickle, never a pickle without provenance); a dump on a GPU waits for room as `jends_eval.py dump` does. Cards and `results.md` are written once (refused when they exist; `--max` runs excepted), so before each re-run move the old outputs away (never delete): the cards folder of the earlier run, and the dumps in runs/kept/e343/<split>/ made under another code
 digest. They name the device and carry the sha256 of the imported lane code, and `CODE DRIFT: <files>` is printed and written to `results.md` when one of those files changed during the run (not fatal). A standalone `dump-b` / `dump-ends` never overwrites
-a dump, and a name without `.pkl` is refused (the head file would overwrite it). The only folders written are temp/e343/, runs/eval/e324s_val, e324s_test and e312_val (an allow-list in `atomic`, next to the deny-list of E321's folders).
+a dump, and a name without `.pkl` is refused (the head file would overwrite it). The only folders written are runs/kept/e343/, runs/eval/e324s_val, e324s_test and e312_val (an allow-list in `atomic`, next to the deny-list of E321's folders).
 The code digest (`code_sha256`: the static import closure of this file over the project's search path, 70 or so files) is printed at the start of every `all`. THE CODE PIN: on TEST `--expect-code-card CARD` (a card of the VAL rehearsal) is REQUIRED and the expected
 digest is taken from it (no second typed value); the card must be that of a full, passed rehearsal (split val, 873 frames, rehearsal check ok, no code drift: the card stores the digest of the START state, its digest is that of its own file list); `all` refuses before any dump when the imported
 lane code or the environment (sha256 of data/splits.json, val_tokens.json, poses_val.npz, the `config.json` of the runs; torch / numpy / shapely versions, stored in every card) is not the card's, and names the changed files. `--expect-code-digest D` stays an optional extra check (the full digest or
@@ -28,23 +28,23 @@ The control (E324 s only) is E312's stored card (`--control-card`, default per s
 here must equal the card's (TEST 1e-9, VAL 3e-3 for a fresh CPU dump) or `all` stops before any number is printed. `--control-ends-dump` (default only on VAL: the stored E312 dump) re-scores E312's pair head for its per-frame counts, which give the paired
 interval; it is used only when it reproduces the stored card to 1e-9 on EVERY seed, else there is no interval on any seed and `reading()` takes its fallback. `{seed}` in a path flag is the seed.
 
-THE DRESS REHEARSAL ON VAL (criterion 2 of the card E343): the TEST command with VAL files, on the CPU, for S = 0 and 1 (outputs of an earlier rehearsal moved away first: see above). `verify --seed S` writes `temp/e343/val/val_check/verify_card_e312_p_s<S>.json`, E312's snapped card from the stored dumps in the layout of
+THE DRESS REHEARSAL ON VAL (criterion 2 of the card E343): the TEST command with VAL files, on the CPU, for S = 0 and 1 (outputs of an earlier rehearsal moved away first: see above). `verify --seed S` writes `runs/kept/e343/val/val_check/verify_card_e312_p_s<S>.json`, E312's snapped card from the stored dumps in the layout of
 E321's `card_s<S>.json`. The plain-graph tolerance of the rehearsal is the loose VAL one by design (a fresh CPU dump against GPU cards); the 1e-9 branch of the TEST kill criterion is covered by a toy test.
   (a) control from the stored VAL files (the TEST layout of the control card, the flagged B dump; E312's counts do NOT reproduce on the fresh B graph, so there is no interval and `reading()` takes its fallback: expected):
-      jtest_eval.py dump-b --split val --seed S                                          # B's fresh dump -> temp/e343/val/predfull_e273_p_s<S>.pkl
-      jtest_eval.py all --split val --test-id E343.v --run-prefix e324_s_s --seeds 0 1 --device cpu --b-dump temp/e343/val/predfull_e273_p_s{seed}.pkl --control-ends-dump runs/e312_p_s{seed}/ends_val.pkl --control-card temp/e343/val/val_check/verify_card_e312_p_s{seed}.json
+      jtest_eval.py dump-b --split val --seed S                                          # B's fresh dump -> runs/kept/e343/val/predfull_e273_p_s<S>.pkl
+      jtest_eval.py all --split val --test-id E343.v --run-prefix e324_s_s --seeds 0 1 --device cpu --b-dump runs/kept/e343/val/predfull_e273_p_s{seed}.pkl --control-ends-dump runs/e312_p_s{seed}/ends_val.pkl --control-card runs/kept/e343/val/val_check/verify_card_e312_p_s{seed}.json
   (b) control from the SAME fresh dumps (as on TEST, where E321's dumps and card belong together: E312's counts reproduce to 1e-9, the intervals are used):
-      jtest_eval.py dump-b --split val --seed S;  jtest_eval.py dump-ends --split val --seed S --run e312_p_s<S>                # temp/e343/val/predfull_e273_p_s<S>.pkl, ends_e312_p_s<S>.pkl
-      jtest_eval.py all --split val --run-prefix e312_p_s --seeds 0 1 --b-dump temp/e343/val/predfull_e273_p_s{seed}.pkl         # E312's cards of these dumps -> runs/eval/e312_val/card_s<S>.json (E321's layout), checked against its stored cards
-      jtest_eval.py all --split val --test-id E343.v --run-prefix e324_s_s --seeds 0 1 --device cpu --b-dump temp/e343/val/predfull_e273_p_s{seed}.pkl --control-ends-dump temp/e343/val/ends_e312_p_s{seed}.pkl --control-card runs/eval/e312_val/card_s{seed}.json
-  The TEST line is this command with the TEST files of E321 (--b-dump temp/e321/test/predfull_e273_p_s{seed}.pkl --control-ends-dump temp/e321/test/ends_e312_p_s{seed}.pkl --control-card runs/eval/e312_test/card_s{seed}.json), --split test --test-id E343.t,
+      jtest_eval.py dump-b --split val --seed S;  jtest_eval.py dump-ends --split val --seed S --run e312_p_s<S>                # runs/kept/e343/val/predfull_e273_p_s<S>.pkl, ends_e312_p_s<S>.pkl
+      jtest_eval.py all --split val --run-prefix e312_p_s --seeds 0 1 --b-dump runs/kept/e343/val/predfull_e273_p_s{seed}.pkl         # E312's cards of these dumps -> runs/eval/e312_val/card_s<S>.json (E321's layout), checked against its stored cards
+      jtest_eval.py all --split val --test-id E343.v --run-prefix e324_s_s --seeds 0 1 --device cpu --b-dump runs/kept/e343/val/predfull_e273_p_s{seed}.pkl --control-ends-dump runs/kept/e343/val/ends_e312_p_s{seed}.pkl --control-card runs/eval/e312_val/card_s{seed}.json
+  The TEST line is this command with the TEST files of E321 (--b-dump runs/kept/e321/test/predfull_e273_p_s{seed}.pkl --control-ends-dump runs/kept/e321/test/ends_e312_p_s{seed}.pkl --control-card runs/eval/e312_test/card_s{seed}.json), --split test --test-id E343.t,
   and `--expect-code-card runs/eval/e324s_val/card_s0.json` (required; add `--expect-code-digest <code_digest of that card>` as an extra check), so that the code and the environment of the TEST pass are those that were rehearsed.
 
 THE TEST GATE (hard rule 1, D84). `--split test` is refused unless (1) `--test-id <run id>` is given, (2) the process runs under the launcher (`AR_RUN_ID` = that id, set by `autoresearch/tools/run.py`), (3) the TEST log (`evaluation/TEST_USAGE_LOG.md`) opens the split for the id by
 the gate that `evaluate.py` and `run.py` share (`autoresearch/tools/testgate.py`), and (4) `--max` is not used. Nothing here selects, tunes or re-reads anything on the split: the read-outs, the thresholds (p >= 0.1), the close-node step `close:1.5@0.5` and the metrics are the ones of the VAL cards.
 
-Output (ONE write helper, `atomic`: a temporary file renamed at the end, refusing every path under `temp/e321/` and `runs/eval/e312_test/`, E321's artefacts, which are read-only inputs and are hashed at the start and the end of `all`): dumps in `temp/e343/<split>/`
-(`predfull_<B run>.pkl`, `ends_<run>.pkl`), cards in `runs/eval/e324s_<split>/` (E312: `e312_<split>`) as `card_s<S>.json` + `results.md`; a smoke run (`--max N`, never on TEST) writes under `temp/e343/<split>_max<N>/` only (cards in `cards_<system>/`). Every dump on the path is validated: the split's frame count and its rows in order.
+Output (ONE write helper, `atomic`: a temporary file renamed at the end, refusing every path under `runs/kept/e321/` and `runs/eval/e312_test/`, E321's artefacts, which are read-only inputs and are hashed at the start and the end of `all`): dumps in `runs/kept/e343/<split>/`
+(`predfull_<B run>.pkl`, `ends_<run>.pkl`), cards in `runs/eval/e324s_<split>/` (E312: `e312_<split>`) as `card_s<S>.json` + `results.md`; a smoke run (`--max N`, never on TEST) writes under `runs/kept/e343/<split>_max<N>/` only (cards in `cards_<system>/`). Every dump on the path is validated: the split's frame count and its rows in order.
 The graph GT of the frames is `graph_gt_val.pkl[row]` (that file, the tokens `val_tokens.json`, `poses_val.npz` and the features hold the VAL and the TEST rows of the cache; the rows of a split are `data/splits.json[split]`), the lane GT is the l6 store.
 """
 import argparse
@@ -104,7 +104,7 @@ SETUPS = {
 }
 CONTROL_RUN = "e312_p_s{seed}"                                                                       # the control: E312's pair-head run
 CONTROL_VARIANT = V("e312_snapped", "ctl", graph="ctl", snap=True)                                  # E312's snapped read-out on E312's own dumps (its per-frame counts, from which the paired intervals come)
-STORED_DUMPS = dict(b="temp/e276/predfull_e273_p_s{seed}.pkl", c2="temp/e292/predfull_e292_c2_s{seed}.pkl")  # the VAL dumps that made the stored cards
+STORED_DUMPS = dict(b="runs/kept/e276/predfull_e273_p_s{seed}.pkl", c2="runs/kept/e292/predfull_e292_c2_s{seed}.pkl")  # the VAL dumps that made the stored cards
 CONTROL_DEFAULTS = {"val": dict(ends="runs/e312_p_s{seed}/ends_val.pkl", b=STORED_DUMPS["b"], card="runs/e312_p_s{seed}/ends_card_snap_thr0.1.json"),
                     "test": dict(ends=None, b=None, card="runs/eval/e312_test/card_s{seed}.json")}   # TEST: the control's graph is the same B dump; the control's pair dump only by flag (the reading R1 of the card E343)
 
@@ -145,14 +145,14 @@ def require_gate(a):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ output: the ONE write helper, E321's artefacts
-PROTECTED = ("temp/e321", "runs/eval/e312_test")                                                    # E321's dumps and cards: read-only inputs of E343
-E321_SHA256 = {"temp/e321/test/predfull_e273_p_s0.pkl": "5f0500e8dd251f7966b0629223b5c428c8991f35d2637dbf0ce7a06e846970df", "temp/e321/test/predfull_e273_p_s1.pkl": "fa87972eb1aad01adc18dede7c8632335e6b9c2be73fb68b6d26605fa3510d28",
-               "temp/e321/test/ends_e312_p_s0.pkl": "8b1746d8927a51dc3fec2db8a27f47d114dde966a9a1588af3de816cff58c118", "temp/e321/test/ends_e312_p_s1.pkl": "5ff2142df247692d6af46b670c0a9d9e4fbe4c9883879a37388e7ada59cd5700",
+PROTECTED = ("runs/kept/e321", "runs/eval/e312_test")                                                    # E321's dumps and cards: read-only inputs of E343
+E321_SHA256 = {"runs/kept/e321/test/predfull_e273_p_s0.pkl": "5f0500e8dd251f7966b0629223b5c428c8991f35d2637dbf0ce7a06e846970df", "runs/kept/e321/test/predfull_e273_p_s1.pkl": "fa87972eb1aad01adc18dede7c8632335e6b9c2be73fb68b6d26605fa3510d28",
+               "runs/kept/e321/test/ends_e312_p_s0.pkl": "8b1746d8927a51dc3fec2db8a27f47d114dde966a9a1588af3de816cff58c118", "runs/kept/e321/test/ends_e312_p_s1.pkl": "5ff2142df247692d6af46b670c0a9d9e4fbe4c9883879a37388e7ada59cd5700",
                "runs/eval/e312_test/card_s0.json": "1f9628c00ca3a86e2e3e6791b259f86599d6291839f596a9f2fa7b6f5c82c049", "runs/eval/e312_test/card_s1.json": "6aa987ab74f1eb1207e524da39fd66752221d42d5cf3e8091cbbee6bcab7ec3b",
                "runs/eval/e312_test/results.md": "113871898d86f9d639b6b6586947ca61c510b31f882c1961f603bf0f594e4b13"}
 
 
-WRITABLE = ("temp/e343", "runs/eval/e324s_val", "runs/eval/e324s_test", "runs/eval/e312_val")          # the ONLY places this module writes (under ROOT): the deny-list above stays, as a second guard
+WRITABLE = ("runs/kept/e343", "runs/eval/e324s_val", "runs/eval/e324s_test", "runs/eval/e312_val")          # the ONLY places this module writes (under ROOT): the deny-list above stays, as a second guard
 EXTRA_WRITABLE = ()                                                                                  # more absolute folders, for the tests' temporary folders only
 
 
@@ -395,7 +395,7 @@ def guard_e321(when):
 
 
 def dump_dir(split, n=0):
-    return os.path.join(ROOT, "temp", "e343", split + (f"_max{n}" if n else ""))
+    return os.path.join(ROOT, "runs", "kept", "e343", split + (f"_max{n}" if n else ""))
 
 
 def out_dir(setup, split, n=0):
@@ -1285,7 +1285,7 @@ def main():
         s.add_argument("--split", required=True, choices=("val", "test"))
         s.add_argument("--test-id", default="", help="the run id that the TEST log names (--split test only; the process must run under run.py with that id)")
         s.add_argument("--device", default="cpu")
-        s.add_argument("--max", type=int, default=0, help="the first N frames only (a smoke test on VAL; its files go to temp/e343/<split>_max<N>/)")
+        s.add_argument("--max", type=int, default=0, help="the first N frames only (a smoke test on VAL; its files go to runs/kept/e343/<split>_max<N>/)")
         if seeds:
             s.add_argument("--seeds", type=int, nargs="+", default=[0, 1])
             s.add_argument("--boot", type=int, default=1000)
@@ -1294,7 +1294,7 @@ def main():
     s = sub.add_parser("dump-b")
     common(s)
     s.add_argument("--b-run", default=None, help="the B-type run to dump (default runs/e273_p_s<seed>; the stack: runs/e292_c2_s<seed>); the output is named predfull_<run>.pkl")
-    s.add_argument("--out", default=None, help="the dump file (ends with .pkl; under temp/e343/)")
+    s.add_argument("--out", default=None, help="the dump file (ends with .pkl; under runs/kept/e343/)")
     s = sub.add_parser("dump-ends")
     common(s)
     s.add_argument("--run", default=None, help="the pair-head run (default e312_p_s<seed>)")
@@ -1302,7 +1302,7 @@ def main():
     s = sub.add_parser("all")
     common(s, seeds=True)
     s.add_argument("--run-prefix", default="e312_p_s", choices=tuple(SETUPS), help="the system: the run is <prefix><seed>")
-    s.add_argument("--b-dump", default=None, help="B's dump to reuse ({seed}: the seed); it must exist (default temp/e343/<split>/predfull_e273_p_s<seed>.pkl, reused when it exists, else made)")
+    s.add_argument("--b-dump", default=None, help="B's dump to reuse ({seed}: the seed); it must exist (default runs/kept/e343/<split>/predfull_e273_p_s<seed>.pkl, reused when it exists, else made)")
     s.add_argument("--control-ends-dump", default=None, help="E312's pair dump, to re-score E312 for its per-frame counts (default: VAL only, the stored dump)")
     s.add_argument("--control-card", default=None, help="E312's stored card (default per split)")
     s.add_argument("--no-stack", action="store_true", help="E324 s without arm k (its check failed)")

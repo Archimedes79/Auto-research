@@ -8,7 +8,7 @@ What is delivered: the graph of B read out as before (`qgraph_readout` close:1.5
 (tangent = chord) from the entry keypoint to the exit keypoint, wired to the delivered section pieces whose last point lies within 4 m (and 45 degrees) of the entry and whose first point lies within 4 m (and 45
 degrees) of the exit (the wiring of the E283 oracles `temp/e284/p19..p22`, copied here). A delivered LONG-link piece is dropped when a curve covers it (a curve starts within 4 m of its first point and ends within 4 m
 of its last point); the others stay (the 'keep' integration: a head with gaps does not remove the connectors it does not know). The stage trains on the frozen pixel / node / link stages of a B run
-(`qgraph_train.py --phases 8 --resume-from`), so the delivered graph of the run IS B's: `score` reads it from B's full prediction dump of the same seed (`--full`, default `temp/e276/predfull_e273_p_s<seed>.pkl`,
+(`qgraph_train.py --phases 8 --resume-from`), so the delivered graph of the run IS B's: `score` reads it from B's full prediction dump of the same seed (`--full`, default `runs/kept/e276/predfull_e273_p_s<seed>.pkl`,
 written by `qgraph_run_eval.py score --dump-full`) and checks that the run's pixel / node / link tensors equal those of the B run (`--base`, default `runs/e273_p_s<seed>/model.pt`).
 Rule (D79, applied to the run's own card of the experiment, never decided here): topo_F1 of the graph with the head's connectors against the plain delivered graph: KEEP > +0.02 on both seeds, guards F1@1.0 not lower
 by more than 0.01, dup_frac not higher by more than 0.02, vertices per 100 m (DP) not higher by more than 1.0, junction F1 not lower by more than 0.03; lanes found, Q, topo P / R, junction P / R are reported.
@@ -241,7 +241,7 @@ def cmd_score(a):
     shared = [k for k in base if not k.startswith("ends.")]
     bad = [] if getattr(a, "skip_base_check", False) else [k for k in shared if k not in mine or not torch.equal(mine[k], base[k])]      # E287: a pair head on the junction maps run is not a QGraph checkpoint (jends_eval.py says so)
     assert not bad, f"the run changed tensors of the base run ({len(bad)}): {bad[:5]}; its delivered graph is not B's"
-    full = a.full or os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{a.seed}.pkl")
+    full = a.full or os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl")
     dump = pickle.load(open(full, "rb"))
     ends = {f["row"]: f for f in pickle.load(open(os.path.join(run_dir, "ends_val.pkl"), "rb"))}
     frames = QE.val_frames()
@@ -404,9 +404,9 @@ def selftest():
         assert refused(NS(thr=0.1, snap=True, tag="A b")), "a tag that is not a file-name word must be refused"
         for t_ in ("snap", "chord", "attach", "thr0", "r"):
             assert refused(NS(thr=0.1, snap=True, tag=t_)), f"the tag {t_!r} could name a card of record"
-        assert refused(NS(thr=0.1, snap=True, seed=0, full="temp/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s0/model.pt", tag="a")), "a dump of another seed must be refused"
-        assert refused(NS(thr=0.1, snap=True, seed=1, full="temp/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s10/model.pt", tag="a")), "_s10 is not _s1"
-        assert not refused(NS(thr=0.1, snap=True, seed=1, full="temp/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s1/model.pt", tag="a")), "the paths of the right seed must pass"
+        assert refused(NS(thr=0.1, snap=True, seed=0, full="runs/kept/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s0/model.pt", tag="a")), "a dump of another seed must be refused"
+        assert refused(NS(thr=0.1, snap=True, seed=1, full="runs/kept/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s10/model.pt", tag="a")), "_s10 is not _s1"
+        assert not refused(NS(thr=0.1, snap=True, seed=1, full="runs/kept/e292/predfull_e292_a_s1.pkl", base="runs/e292_a_s1/model.pt", tag="a")), "the paths of the right seed must pass"
         for f in ("ends_card_a_snap_thr0.1.json",):
             open(os.path.join(d, f), "w").write("{}")
         assert refused(NS(thr=0.1, snap=True, full="x.pkl", base="b.pt", tag="a")), "an existing tagged card must not be overwritten"
@@ -439,7 +439,7 @@ if __name__ == "__main__":
     s.add_argument("--run", required=True)
     s.add_argument("--seed", type=int, required=True)
     s.add_argument("--thr", type=float, default=0.5)
-    s.add_argument("--full", default=None, help="the full prediction dump of the head whose graph is delivered (default: B's, temp/e276/predfull_e273_p_s<seed>.pkl); E292: the dump of B'; needs --base and --tag")
+    s.add_argument("--full", default=None, help="the full prediction dump of the head whose graph is delivered (default: B's, runs/kept/e276/predfull_e273_p_s<seed>.pkl); E292: the dump of B'; needs --base and --tag")
     s.add_argument("--base", default=None, help="the checkpoint of the same head (default runs/e273_p_s<seed>/model.pt); needs --full")
     s.add_argument("--spec", default=None, help="the read-out of the delivered graph (qgraph_readout spec; default close:1.5@0.5, the hard close-node step; E292: plain@0.5 for a head with the layer); needs --tag")
     s.add_argument("--wire", default=None, choices=(None, "twin", "head"), help="E325: choose the wired pieces through add_connectors(wire_choice=...): twin = the zero-parameter twin of the nearest-piece rule, head = the learned head of --wire-run (needs --snap and --tag); the twin must reproduce the E312 cards")

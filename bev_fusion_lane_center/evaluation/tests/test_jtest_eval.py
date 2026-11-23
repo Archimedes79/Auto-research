@@ -76,7 +76,7 @@ def test_the_test_gate_guards_every_entry():
 # ------------------------------------------------------------------------------------------------------------------------------ the write helper and E321's artefacts
 def test_write_helper_refuses_e321_and_is_atomic():
     """the guard runs on a COPY of the layout (ROOT = a temporary folder with the two protected folders in it): a broken guard writes into the temporary folder, never into the real artefacts of E321"""
-    assert J.PROTECTED == ("temp/e321", "runs/eval/e312_test"), "the protected folders are E321's dumps and cards"
+    assert J.PROTECTED == ("runs/kept/e321", "runs/eval/e312_test"), "the protected folders are E321's dumps and cards"
     with tempfile.TemporaryDirectory() as t:
         d = os.path.join(t, "Mixed_Case_Root")                                                        # the real root has capitals too (Auto-research): both sides of the comparison are case-folded
         os.makedirs(d)
@@ -85,24 +85,24 @@ def test_write_helper_refuses_e321_and_is_atomic():
 
 def _write_helper_checks(d):
     with patched((J, "ROOT", d)):
-        for rel in J.PROTECTED + ("temp/e343",):
+        for rel in J.PROTECTED + ("runs/kept/e343",):
             os.makedirs(os.path.join(d, rel, "test"))
-        for rel in ("temp/e321/test/never_written.pkl", "runs/eval/e312_test/never_written.json", "temp/e343/../e321/test/never_written.pkl", "temp/e321/val_check/never_written.json", "temp/e321/new_folder/never_written.txt",
-                    "TEMP/E321/test/never_written.pkl", "Temp/e321/never_written.json", "RUNS/EVAL/E312_TEST/never_written.json", "runs/eval/e312_TEST/never_written.txt"):                         # /mnt/c is case-insensitive
+        for rel in ("runs/kept/e321/test/never_written.pkl", "runs/eval/e312_test/never_written.json", "runs/kept/e343/../e321/test/never_written.pkl", "runs/kept/e321/val_check/never_written.json", "runs/kept/e321/new_folder/never_written.txt",
+                    "RUNS/KEPT/E321/test/never_written.pkl", "Runs/Kept/e321/never_written.json", "RUNS/EVAL/E312_TEST/never_written.json", "runs/eval/e312_TEST/never_written.txt"):                         # /mnt/c is case-insensitive
             path = os.path.join(d, rel)
             for write in (lambda p: J.save_pickle(p, [1]), lambda p: J.save_json(p, {"a": 1}), lambda p: J.save_text(p, "x")):
                 assert raises(PermissionError, write, path), rel
-        assert [f for _, _, fs in os.walk(d) for f in fs] == [] and sorted(os.listdir(os.path.join(d, "temp"))) == ["e321", "e343"], "a refused write creates nothing: no file, no temporary file, no folder"
+        assert [f for _, _, fs in os.walk(d) for f in fs] == [] and sorted(os.listdir(os.path.join(d, "runs", "kept"))) == ["e321", "e343"], "a refused write creates nothing: no file, no temporary file, no folder"
         link = os.path.join(d, "link")
         try:
-            os.symlink(os.path.join(d, "temp", "e321"), link)
+            os.symlink(os.path.join(d, "runs", "kept", "e321"), link)
         except OSError:
             link = None                                                                                # no symlinks on this system
         if link:
             assert J.is_protected(os.path.join(link, "test", "x.pkl")) and raises(PermissionError, J.save_text, os.path.join(link, "x.txt"), "x"), "a symlink into E321's folder is refused by its real path"
-        assert not J.is_protected(os.path.join(d, "temp", "e343", "test", "x.pkl")) and not J.is_protected(os.path.join(d, "runs", "eval", "e324s_test", "card_s0.json")) and not J.is_protected(os.path.join(d, "temp", "e3210", "x"))
+        assert not J.is_protected(os.path.join(d, "runs", "kept", "e343", "test", "x.pkl")) and not J.is_protected(os.path.join(d, "runs", "eval", "e324s_test", "card_s0.json")) and not J.is_protected(os.path.join(d, "temp", "e3210", "x"))
         assert not J.is_protected(os.path.join(d, "TEMP", "E3210", "x")) and not J.is_protected(os.path.join(d, "runs", "eval", "E312_TEST_x", "x")), "a neighbour with a longer name is not E321's folder"
-        p = os.path.join(d, "temp", "e343", "test", "dump.pkl")
+        p = os.path.join(d, "runs", "kept", "e343", "test", "dump.pkl")
         J.save_pickle(p, [1, 2])
         assert pickle.load(open(p, "rb")) == [1, 2]
         try:
@@ -113,13 +113,13 @@ def _write_helper_checks(d):
             pass
         assert pickle.load(open(p, "rb")) == [1, 2] and os.listdir(os.path.dirname(p)) == ["dump.pkl"]
         assert raises(FileExistsError, J.save_json, p, {"a": 1}, overwrite=False) and raises(FileExistsError, J.save_text, p, "x", overwrite=False) and pickle.load(open(p, "rb")) == [1, 2], "a result written once is not overwritten"
-        J.save_json(os.path.join(d, "temp", "e343", "test", "new.json"), {"a": 1}, overwrite=False)
-        # the allow-list: only temp/e343 and runs/eval/e324s_val, e324s_test, e312_val are written (under the root); an NTFS short name of E321's folders, another folder or a place outside the root is refused, the deny-list or not
+        J.save_json(os.path.join(d, "runs", "kept", "e343", "test", "new.json"), {"a": 1}, overwrite=False)
+        # the allow-list: only runs/kept/e343 and runs/eval/e324s_val, e324s_test, e312_val are written (under the root); an NTFS short name of E321's folders, another folder or a place outside the root is refused, the deny-list or not
         for rel in ("runs/eval/E312_T~1/never.json", "temp/E321~1/test/never.pkl", "runs/eval/e312_test2/never.json", "runs/eval/other/never.json", "temp/other/never.txt", "runs/eval/e324s_train/never.json", "temp/e3430/never.txt", "runs/eval/e312_val2/never.json", "never.txt"):
             assert raises(PermissionError, J.save_text, os.path.join(d, rel), "x"), rel
         assert raises(PermissionError, J.save_text, os.path.join(os.path.dirname(d), "outside_the_root.txt"), "x"), "a path outside the root"
         assert not os.path.exists(os.path.join(d, "runs", "eval", "E312_T~1")) and not os.path.exists(os.path.join(d, "runs", "eval", "other")) and not os.path.exists(os.path.join(os.path.dirname(d), "outside_the_root.txt"))
-        for rel in ("runs/eval/e324s_test/card_s0.json", "runs/eval/e324s_val/results.md", "runs/eval/e312_val/card_s0.json", "temp/e343/val_max6/cards_e312/card_s0.json"):
+        for rel in ("runs/eval/e324s_test/card_s0.json", "runs/eval/e324s_val/results.md", "runs/eval/e312_val/card_s0.json", "runs/kept/e343/val_max6/cards_e312/card_s0.json"):
             J.save_text(os.path.join(d, rel), "x")
             assert os.path.exists(os.path.join(d, rel)), rel
         with patched((J, "EXTRA_WRITABLE", (os.path.join(os.path.dirname(d), "extra"),))):
@@ -136,16 +136,16 @@ def test_e321_artefacts_unchanged():
 
 
 def test_e321_guard_detects_a_change_and_a_missing_file():
-    files = {"temp/e321/test/a.pkl": b"one", "runs/eval/e312_test/card_s0.json": b"two"}
+    files = {"runs/kept/e321/test/a.pkl": b"one", "runs/eval/e312_test/card_s0.json": b"two"}
     want = {rel: hashlib.sha256(c).hexdigest() for rel, c in files.items()}
     with tempfile.TemporaryDirectory() as d, patched((J, "ROOT", d), (J, "E321_SHA256", want)):
         for rel, c in files.items():
             os.makedirs(os.path.dirname(os.path.join(d, rel)), exist_ok=True)
             open(os.path.join(d, rel), "wb").write(c)
         assert J.e321_changed() == [] and J.guard_e321("test") is None
-        open(os.path.join(d, "temp/e321/test/a.pkl"), "wb").write(b"1ne")
-        assert J.e321_changed() == ["temp/e321/test/a.pkl"] and raises(SystemExit, J.guard_e321, "after the run"), "a modified artefact stops the run"
-        open(os.path.join(d, "temp/e321/test/a.pkl"), "wb").write(b"one")
+        open(os.path.join(d, "runs/kept/e321/test/a.pkl"), "wb").write(b"1ne")
+        assert J.e321_changed() == ["runs/kept/e321/test/a.pkl"] and raises(SystemExit, J.guard_e321, "after the run"), "a modified artefact stops the run"
+        open(os.path.join(d, "runs/kept/e321/test/a.pkl"), "wb").write(b"one")
         os.remove(os.path.join(d, "runs/eval/e312_test/card_s0.json"))
         assert J.e321_changed() == ["runs/eval/e312_test/card_s0.json (missing)"] and raises(SystemExit, J.guard_e321, "before the run"), "a deleted artefact is a change"
 
@@ -579,7 +579,7 @@ def test_on_test_a_flagged_dump_without_provenance_is_one_of_e321s_artefacts_and
         os.makedirs(os.path.join(root, "runs", "e324_s_s0"))
         json.dump(dict(val=val_rows, test=test_rows), open(os.path.join(root, "data", "splits.json"), "w"))
         json.dump(dict(seed=0), open(os.path.join(root, "runs", "e324_s_s0", "config.json"), "w"))
-        e321, other = os.path.join(root, "temp", "e321", "test"), os.path.join(root, "temp", "other")
+        e321, other = os.path.join(root, "runs", "kept", "e321", "test"), os.path.join(root, "temp", "other")
         os.makedirs(e321)
         os.makedirs(other)
         full_t, full_v = toy_dump(split="test"), toy_dump(split="val")
@@ -588,7 +588,7 @@ def test_on_test_a_flagged_dump_without_provenance_is_one_of_e321s_artefacts_and
             pickle.dump(full_t, open(paths[k], "wb"))
         pickle.dump(full_v, open(paths["other_val"], "wb"))
         card = toy_card_file(root, 0.6, 0.5)
-        want = {"temp/e321/test/ends_e312_p_s0.pkl": "x", "temp/e321/test/predfull_e273_p_s0.pkl": "x"}
+        want = {"runs/kept/e321/test/ends_e312_p_s0.pkl": "x", "runs/kept/e321/test/predfull_e273_p_s0.pkl": "x"}
         ns = lambda **k: argparse.Namespace(**dict(dict(split="test", max=0, device="cpu", run_prefix="e324_s_s", b_dump=paths["b"], control_ends_dump=paths["ends"], control_card=card), **k))  # noqa: E731
         with patched((J, "ROOT", root), (J, "E321_SHA256", want), (J, "pyramid_same", lambda *x: True), (J, "provenance", PROV), (J, "dump_b", boom), (J, "dump_ends", boom)):
             assert J.precheck(ns(), setup, 0, False)[0]["ends"].endswith("ends_e324_s_s0.pkl"), "E321's own dumps pass on TEST"
@@ -600,7 +600,7 @@ def test_on_test_a_flagged_dump_without_provenance_is_one_of_e321s_artefacts_and
             pickle.dump(full_t[:-1], open(paths["ends"], "wb"))
             assert raises(RuntimeError, J.precheck, ns(), setup, 0, False), "E321's pair dump with a missing frame: refused in the precheck, before anything is dumped"
             pickle.dump(full_t, open(paths["ends"], "wb"))
-            own = os.path.join(root, "temp", "e343", "test", "ends_e324_s_s0.pkl")                      # a default dump that exists with the right provenance but a bad row order
+            own = os.path.join(root, "runs", "kept", "e343", "test", "ends_e324_s_s0.pkl")                      # a default dump that exists with the right provenance but a bad row order
             os.makedirs(os.path.dirname(own))
             pickle.dump(full_t[::-1], open(own, "wb"))
             json.dump(dict(provenance=PROV("e324_s_s0", "cpu")), open(own[:-4] + "_head.json", "w"))
@@ -805,17 +805,17 @@ def test_inputs_per_split():
     setup = J.SETUPS["e324_s_s"]
     r = lambda p: os.path.relpath(p, J.ROOT).replace(os.sep, "/")  # noqa: E731
     i = J.seed_inputs(ns(), setup, 1, True, False)
-    assert i["b_made"] and r(i["b"]) == "temp/e343/val/predfull_e273_p_s1.pkl" and r(i["ends"]) == "temp/e343/val/ends_e324_s_s1.pkl" and r(i["c2"]) == "temp/e343/val/predfull_e292_c2_s1.pkl"
-    assert r(i["ctl_ends"]) == "runs/e312_p_s1/ends_val.pkl" and r(i["ctl_b"]) == "temp/e276/predfull_e273_p_s1.pkl" and r(i["card"]) == "runs/e312_p_s1/ends_card_snap_thr0.1.json", "VAL: the control is E312's stored dumps and card"
-    t = J.seed_inputs(ns(split="test", b_dump="temp/e321/test/predfull_e273_p_s{seed}.pkl", control_card="runs/eval/e312_test/card_s{seed}.json"), setup, 0, True, False)
-    assert not t["b_made"] and t["b"] == "temp/e321/test/predfull_e273_p_s0.pkl" and t["ctl_ends"] is None and t["ctl_b"] == t["b"] and t["card"].endswith("runs/eval/e312_test/card_s0.json"), "TEST: no re-score of E312 without the flag"
-    assert r(t["ends"]) == "temp/e343/test/ends_e324_s_s0.pkl" and r(t["c2"]) == "temp/e343/test/predfull_e292_c2_s0.pkl", "the new dumps go to temp/e343/test"
-    t2 = J.seed_inputs(ns(split="test", control_ends_dump="temp/e321/test/ends_e312_p_s{seed}.pkl"), setup, 1, False, True)
-    assert not t2["b_made"] and t2["ctl_ends"] == "temp/e321/test/ends_e312_p_s1.pkl" and t2["ctl_b"] == t2["b"] and t2["c2"] is None and r(t2["card"]) == "runs/eval/e312_test/card_s1.json", "TEST by flag: E312's graph is the same B dump"
+    assert i["b_made"] and r(i["b"]) == "runs/kept/e343/val/predfull_e273_p_s1.pkl" and r(i["ends"]) == "runs/kept/e343/val/ends_e324_s_s1.pkl" and r(i["c2"]) == "runs/kept/e343/val/predfull_e292_c2_s1.pkl"
+    assert r(i["ctl_ends"]) == "runs/e312_p_s1/ends_val.pkl" and r(i["ctl_b"]) == "runs/kept/e276/predfull_e273_p_s1.pkl" and r(i["card"]) == "runs/e312_p_s1/ends_card_snap_thr0.1.json", "VAL: the control is E312's stored dumps and card"
+    t = J.seed_inputs(ns(split="test", b_dump="runs/kept/e321/test/predfull_e273_p_s{seed}.pkl", control_card="runs/eval/e312_test/card_s{seed}.json"), setup, 0, True, False)
+    assert not t["b_made"] and t["b"] == "runs/kept/e321/test/predfull_e273_p_s0.pkl" and t["ctl_ends"] is None and t["ctl_b"] == t["b"] and t["card"].endswith("runs/eval/e312_test/card_s0.json"), "TEST: no re-score of E312 without the flag"
+    assert r(t["ends"]) == "runs/kept/e343/test/ends_e324_s_s0.pkl" and r(t["c2"]) == "runs/kept/e343/test/predfull_e292_c2_s0.pkl", "the new dumps go to runs/kept/e343/test"
+    t2 = J.seed_inputs(ns(split="test", control_ends_dump="runs/kept/e321/test/ends_e312_p_s{seed}.pkl"), setup, 1, False, True)
+    assert not t2["b_made"] and t2["ctl_ends"] == "runs/kept/e321/test/ends_e312_p_s1.pkl" and t2["ctl_b"] == t2["b"] and t2["c2"] is None and r(t2["card"]) == "runs/eval/e312_test/card_s1.json", "TEST by flag: E312's graph is the same B dump"
     v2 = J.seed_inputs(ns(control_ends_dump="x/ends_{seed}.pkl"), setup, 0, True, True)
     assert v2["ctl_ends"] == "x/ends_0.pkl" and v2["ctl_b"] == v2["b"], "a control pair dump named by a flag is scored on the winner's B dump, on VAL too"
     assert not J.seed_inputs(ns(split="test"), setup, 0, True, False)["b_made"], "B is never dumped on TEST: E321's dump is reused"
-    assert r(J.seed_inputs(ns(max=8), setup, 0, True, False)["b"]) == "temp/e343/val_max8/predfull_e273_p_s0.pkl", "a smoke run has its own folder"
+    assert r(J.seed_inputs(ns(max=8), setup, 0, True, False)["b"]) == "runs/kept/e343/val_max8/predfull_e273_p_s0.pkl", "a smoke run has its own folder"
     assert r(J.out_dir(setup, "val", 8)) != r(J.out_dir(J.SETUPS["e312_p_s"], "val", 8)) and r(J.out_dir(setup, "val")) == "runs/eval/e324s_val", "smoke cards of two systems do not meet; a full run writes to runs/eval/e324s_<split>"
 
 
@@ -1112,7 +1112,7 @@ def test_check_stored_per_frame_counts():
     head, base = [cnt(i + 1) for i in range(4)], [cnt(10 + i) for i in range(4)]
     frames = [Frame(i, i // 2) for i in range(4)]
     card = dict(variants=dict(snapped=dict(base="plain", curves=100, wired_both_ends=60, numbers=dict(base=num(0.5), head=num(0.6)), difference=num(0.1))), maneuver={"plain": dict(recall=0.5)})
-    old = dict(curves=100, wired_both_ends=60, numbers=dict(base=num(0.5), head=num(0.6)), difference=num(0.1), thr=0.1, spec="close:1.5@0.5", snap=True, attach=False, attach_r=None, snap_options=[], wire=None, full="temp/e276/predfull_e273_p_s0.pkl")
+    old = dict(curves=100, wired_both_ends=60, numbers=dict(base=num(0.5), head=num(0.6)), difference=num(0.1), thr=0.1, spec="close:1.5@0.5", snap=True, attach=False, attach_r=None, snap_options=[], wire=None, full="runs/kept/e276/predfull_e273_p_s0.pkl")
     check = lambda h=head, b=base, fr=frames, st=setup: J.check_stored(st, "r0", 0, card, {"counts": {"snapped": h, "plain": b}}, J.EXACT, fr)  # noqa: E731
     with tempfile.TemporaryDirectory() as d, patched((J, "ROOT", d)):
         toy_stored(d, "ends_card_snap_thr0.1.json", old)

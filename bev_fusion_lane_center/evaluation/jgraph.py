@@ -333,7 +333,7 @@ def check_score_ready(dst, seed, flags, tag, src=None, base_pt=None, full=None):
     m = re.search(r"_s(\d+)[/\\]", str(args.get("maps", "")).replace("\\", "/") + "/")
     if not (args.get("seed", seed) == seed and (m is None or int(m.group(1)) == seed)):
         bad.append(f"--seed {seed} does not match the run (seed {args.get('seed')}, maps {args.get('maps')}): jends_eval.score would refuse")
-    for what, p in (("the base checkpoint", base_pt or os.path.join(ROOT, "runs", f"e273_p_s{seed}", "model.pt")), ("the full dump of B", full or os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{seed}.pkl"))):
+    for what, p in (("the base checkpoint", base_pt or os.path.join(ROOT, "runs", f"e273_p_s{seed}", "model.pt")), ("the full dump of B", full or os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{seed}.pkl"))):
         if not os.path.isfile(p):
             bad.append(f"{what} {p} is missing")
     ns = score_ns(os.path.basename(dst), seed, flags, tag)

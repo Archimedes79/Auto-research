@@ -274,7 +274,7 @@ def _test_pair_run():
     with JD.tmp_root() as d, contextlib.redirect_stdout(io.StringIO()):
         ROOT = d
         JD.val_records, JD.live_records = val_stub, live_stub
-        cache = lambda f: os.path.join(d, "temp", "jwire", f)  # noqa: E731
+        cache = lambda f: os.path.join(d, "runs", "kept", "jwire", f)  # noqa: E731
         try:
             # the command line, with a pair run: the whole pipeline on toy records (1 head + the ablation, 1 epoch)
             assert "mandatory" in (refused(main, ["run", "--seed", "0", "--pair-run", "e324_s_s0"]) or ""), "--pair-run without --name must be refused"
@@ -356,7 +356,7 @@ def _test_ends():
     with JD.tmp_root() as d, contextlib.redirect_stdout(io.StringIO()):
         ROOT = d
         JD.val_records, JD.live_records = val_stub, lambda *a, **k: [near_rec(r) for r in live_stub(*a, **k)]
-        cache = lambda f: os.path.join(d, "temp", "jwire", f)  # noqa: E731
+        cache = lambda f: os.path.join(d, "runs", "kept", "jwire", f)  # noqa: E731
         att_run = ["run", "--seed", "0", "--pair-run", "e324_s_s0", "--ends", "att", "--name", "e358_w_s0", "--heads", "1", "--epochs", "2", "--max-train", "30"]
         try:
             # att without an attach pair run (no --pair-run, or E312's own) and without its own name: refused before anything is computed or created

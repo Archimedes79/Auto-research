@@ -1,8 +1,8 @@
 """Wiring of the connectors of the junction pair head to the delivered pieces (E322, gate G0): how much is there to gain from CHOOSING the delivered piece a connector end is joined to?
 
-    wsl bash tools/env/_py14.sh jwiring.py gt-ends                                   the GT ends of the 873 VAL frames (position + heading, mask, true pairs) -> temp/jwiring/gt_ends_val.pkl (CPU, the loader of the dumps; needs the VAL lane GT store)
+    wsl bash tools/env/_py14.sh jwiring.py gt-ends                                   the GT ends of the 873 VAL frames (position + heading, mask, true pairs) -> runs/kept/jwiring/gt_ends_val.pkl (CPU, the loader of the dumps; needs the VAL lane GT store)
     wsl bash tools/env/_py14.sh jwiring.py score --run e312_p_s0 --seed 0 [--thr 0.1] [--attach] [--max N]
-                                                                                       -> runs/<run>/wiring_g0[_attach].json + a printed table (CPU, VAL; reads runs/<run>/ends_val.pkl, B's full dump temp/e276/predfull_e273_p_s<seed>.pkl and the GT ends above)
+                                                                                       -> runs/<run>/wiring_g0[_attach].json + a printed table (CPU, VAL; reads runs/<run>/ends_val.pkl, B's full dump runs/kept/e276/predfull_e273_p_s<seed>.pkl and the GT ends above)
     wsl bash tools/env/_py14.sh jwiring.py reach --run e312_p_s0 --seed 0 [--attach]  how many delivered piece ends lie in reach (4 m / 45 degrees) of the connector ends: how often the one-piece rule has a choice
     wsl bash tools/env/_py14.sh jwiring.py selftest
 
@@ -31,7 +31,7 @@ for sub in ("evaluation", "training", "training/grid", "training/data", "trainin
 from qends_eval import WIRE_ANG, WIRE_POS, KEYS, _ang, _tan, add_connectors, make_pairs  # noqa: E402
 
 MATCH_POS, MATCH_ANG = 4.0, 30.0
-GT_PATH = os.path.join(ROOT, "temp", "jwiring", "gt_ends_val.pkl")
+GT_PATH = os.path.join(ROOT, "runs", "kept", "jwiring", "gt_ends_val.pkl")
 VARIANTS = (("c", None), ("o", None), ("o_drop", None), ("second", None), ("r2", 2.0), ("r3", 3.0), ("r6", 6.0))
 
 
@@ -146,7 +146,7 @@ def gt_ends(a=None):
 def _load(a):
     import qgraph_eval as QE
     import qgraph_readout as QR
-    dump = pickle.load(open(os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
+    dump = pickle.load(open(os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
     ends = {f["row"]: f for f in pickle.load(open(os.path.join(ROOT, "runs", a.run, "ends_val.pkl"), "rb"))}
     frames = QE.val_frames()
     spec = QR.parse("close:1.5@0.5")

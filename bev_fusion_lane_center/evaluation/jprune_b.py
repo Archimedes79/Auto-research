@@ -1,12 +1,12 @@
 """Step 0 of E352 (no training): what do the E345 hook edits of B's pyramid trunk do to B's OWN graph, and to the junction system on B's re-dumped graph? The probe applies one point set {unit: f} (E345 semantics: the lowest-importance share f of the
-channels of the unit's tensor is replaced by its calibration mean; ranking and means from `temp/e345/e324_s_s<S>/calib.pt` through `jprune_probe`) to the pyramid of the junction system (`runs/e324_s_s<S>`) AND to the pyramid of B (`runs/e273_p_s<S>`, the QGraph that makes the
+channels of the unit's tensor is replaced by its calibration mean; ranking and means from `runs/kept/e345/e324_s_s<S>/calib.pt` through `jprune_probe`) to the pyramid of the junction system (`runs/e324_s_s<S>`) AND to the pyramid of B (`runs/e273_p_s<S>`, the QGraph that makes the
 delivered graph), in ONE pass over the 873 VAL frames, and writes a point folder: model.pt (a link to the unmodified E324 s checkpoint), ends_val.pkl (the junction dump on the edited pyramid, the format of `jends_eval.py dump`), predfull_<tag>_s<S>.pkl
-(B' = B's full prediction on the edited pyramid, the format of `temp/e276/predfull_e273_p_s<S>.pkl`: `qpredict.predict` + `qgraph_readout.dump_full`, exact map, as `qgraph_run_eval.score --dump-full`), point.json (the set, the channels, the saved cost, the sha256 of both pickles and of the
+(B' = B's full prediction on the edited pyramid, the format of `runs/kept/e276/predfull_e273_p_s<S>.pkl`: `qpredict.predict` + `qgraph_readout.dump_full`, exact map, as `qgraph_run_eval.score --dump-full`), point.json (the set, the channels, the saved cost, the sha256 of both pickles and of the
 calibration, the device, the seconds, `partial`; written LAST: a folder without it is incomplete). Nothing in a stored run is touched; every file goes through a temporary file and `os.replace`; a complete folder is never overwritten; a partial dump (--max) needs --out and cannot land in `runs/`.
 
     wsl bash tools/env/_py14.sh jprune_b.py plan     [--out temp/e352/points.json]            # CPU, no data: the 9 point sets (null, T1, T2, random draws), channel counts, saved GMACs; the point-set file
     wsl bash tools/env/_py14.sh jprune_b.py dump     --seed 0 --point t1 --groups [--threads N] [--device cuda] [--workers N] [--max N --out DIR]    # one point of one seed -> runs/e352g_t1_s0/
-    wsl bash tools/env/_py14.sh jprune_b.py check    --seed 0 [--max 24]                       # the EMPTY set against the stored B dump (temp/e276) and the stored E345 junction null, as arrays
+    wsl bash tools/env/_py14.sh jprune_b.py check    --seed 0 [--max 24]                       # the EMPTY set against the stored B dump (runs/kept/e276) and the stored E345 junction null, as arrays
     wsl bash tools/env/_py14.sh jprune_b.py gate     --seed 0 [--null-run e352_null_s0]        # the NULL gate: the null's cards against the stored E324 s cards, every number against its tolerance; exit 1 when one fails
     wsl bash tools/env/_py14.sh jprune_b.py table    [--seeds 0 1] [--out FILE]                # the step-0 table from the cards of all point folders, as markdown, with the rule's lines
     wsl bash tools/env/_py14.sh jprune_b.py commands --seed 0 [--point t1] [--groups] [--readout snap]   # the scoring lines (jends_eval.py score --full --base --tag, `$R` = the problem folder)
@@ -18,8 +18,8 @@ per (variant, draw, unit) from a CRC32 of the names (E345 used `1000 * draw + su
 null (variant-free: `e352_null_s<S>`, tag null), groups `e352g_<pt>_s<S>` (tag g<pt>), channels `e352c_<pt>_s<S>` (tag c<pt>), pt in t1, t2, r1d0..r1d2 (draws of T1), r2d0..r2d2 (draws of T2). Run ids of the chain: E352.s0_null_s<S>, E352.s0g_<pt>_s<S>, E352.s0c_<pt>_s<S>, each card
 job with the read-out before `_s<S>` (`E352.s0g_t1_snap_s0`). B's plain graph is `numbers.base` of any card; the junction numbers use B' as the delivered graph (`--full / --base / --tag` of `qends_eval.cmd_score`, default read-out `close:1.5@0.5` = the hard close-node step of B's delivery).
 A pass runs BOTH models on the same batch: a hook that does not fire once per forward or changes nothing stops the dump (E345's `Watch`). On the CPU the pass takes about 0.7 s per frame (about 11 minutes per point of 873 frames, 2 threads); B's section stage needs the single-threaded solve of
-`cpu_solve_fix` there (the threaded oneMKL LU of this box fails for 512 x 512). B' on the CPU matches the stored dump of the GPU as sets (the order of equal-valued nodes differs) and the scorer's numbers to the tolerances of `gate`. The tests need the scratch inputs temp/e276/predfull_e273_p_s0.pkl,
-temp/e345/e324_s_s0/calib.pt (and seed 1's) and runs/e345_p000_e324_s_s0/ends_val.pkl.
+`cpu_solve_fix` there (the threaded oneMKL LU of this box fails for 512 x 512). B' on the CPU matches the stored dump of the GPU as sets (the order of equal-valued nodes differs) and the scorer's numbers to the tolerances of `gate`. The tests need the scratch inputs runs/kept/e276/predfull_e273_p_s0.pkl,
+runs/kept/e345/e324_s_s0/calib.pt (and seed 1's) and runs/e345_p000_e324_s_s0/ends_val.pkl.
 """
 import argparse
 import contextlib
@@ -169,7 +169,7 @@ def load_models(seed, device):
 
 
 def calib_path(seed):
-    return PP.rootpath(f"temp/e345/e324_s_s{seed}/calib.pt")
+    return PP.rootpath(f"runs/kept/e345/e324_s_s{seed}/calib.pt")
 
 
 def check_out(max_frames, out):
@@ -340,9 +340,9 @@ def compare_frames(ref, new):
 
 
 def check(seed, n=24, device="cpu", out=None):
-    """the EMPTY set through the pass against the stored B dump (`temp/e276`) and the stored E345 null of the junction system (`runs/e345_p000_e324_s_s<S>`): the build's equality as arrays; nothing is written but the scratch pickle under `out`"""
+    """the EMPTY set through the pass against the stored B dump (`runs/kept/e276`) and the stored E345 null of the junction system (`runs/e345_p000_e324_s_s<S>`): the build's equality as arrays; nothing is written but the scratch pickle under `out`"""
     res = run_pass(seed, "null", device, max_frames=n)
-    ref_b = pickle.load(open(os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{seed}.pkl"), "rb"))[:n]
+    ref_b = pickle.load(open(os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{seed}.pkl"), "rb"))[:n]
     import qgraph_readout as RO
     out = out or os.path.join(ROOT, "temp", "e352", f"check_s{seed}")
     os.makedirs(out, exist_ok=True)

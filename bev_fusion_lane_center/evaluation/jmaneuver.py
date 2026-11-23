@@ -157,7 +157,7 @@ def score(a):
     unknown = [v for v in names if v not in ("plain", "oracle", "oracle+fit") and v not in thr]
     assert not unknown, f"unknown variants {unknown} (plain, p<t> such as p0.5, oracle, oracle+fit)"
     frames = QGE.val_frames()
-    dump = pickle.load(open(os.path.join(ROOT, "temp", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
+    dump = pickle.load(open(os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
     ends = {f["row"]: f for f in pickle.load(open(os.path.join(ROOT, "runs", a.run, "ends_val.pkl"), "rb"))}
     assert [d["row"] for d in dump] == [f.row for f in frames], "the full dump of B is not in the order of the VAL frames"
     cfg = json.load(open(os.path.join(ROOT, "runs", a.run, "config.json")))

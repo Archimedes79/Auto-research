@@ -73,7 +73,7 @@ KEEP_P = 0.05                                                               # ca
 KEYS = ("topo_F1", "topo_P", "topo_R", "F1@1.0", "lanes_found", "Q", "junction_F1", "dup_frac", "vert100_dp")
 CHECK = ("topo_F1", "F1@1.0", "lanes_found", "dup_frac", "vert100_dp")      # the layer-1 numbers (to 1e-6)
 BASE_CARD = os.path.join(JV.CARDS, "e324s_val", "card_s{seed}.json")        # variants.primary.numbers.base = plain B with the close-node step, B's own sections
-B_DUMP = "temp/e343/val/predfull_e273_p_s{seed}.pkl"                       # the fresh VAL dump of plain B made the E324 s card
+B_DUMP = "runs/kept/e343/val/predfull_e273_p_s{seed}.pkl"                       # the fresh VAL dump of plain B made the E324 s card
 CLOSE = "close:1.5@0.5"
 NODE_KEYS = ["cell", "dirv", "e", "flags", "pos", "s", "section"]
 THIRD = 1 / 3
@@ -1423,7 +1423,7 @@ def parse_args(argv=None):
     s.add_argument("--no-none-gate", action="store_true")
     s = sub.add_parser("check-layer1")
     s.add_argument("--seed", type=int, required=True)
-    s.add_argument("--dump", default=None, help="the stored dump of plain B (default temp/e343/val/predfull_e273_p_s<seed>.pkl)")
+    s.add_argument("--dump", default=None, help="the stored dump of plain B (default runs/kept/e343/val/predfull_e273_p_s<seed>.pkl)")
     s.add_argument("--overwrite", action="store_true", help="replace the stored plain B records runs/e365_planb/planb_s<seed>.pkl (kept otherwise)")
     s = sub.add_parser("timing")
     s.add_argument("--run", required=True)
