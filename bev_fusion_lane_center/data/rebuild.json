@@ -53,7 +53,7 @@
       "__pycache__",
       ".gpu_slots"
     ],
-    "allow_why": "explicit exceptions (2026-11-23): the architecture drawings are small text svg files drawn by code from the real modules and linked from the READMEs (the only svg in git); the ledger and its markdown are single-file text records over 1 MB that are read complete (CLAUDE.md: single-file records are not split or rolled)",
+    "allow_why": "explicit exceptions (2026-11-23): the architecture drawings are small text svg files drawn by code from the real modules and linked from the READMEs (the only svg in git); the ledger and its markdown are single-file text records over 1 MB that are read complete (CLAUDE.md: single-file records are not split or rolled); the data/ folder of the latest report (D139 / D140, 2026-11-23: all data that the latest report needs stays available): the 106 small result files (json / md cards, 1.5 MB) that its numbers are read from, copied from runs/ so that a clone rebuilds the text and checks every number",
     "allow": [
       "GtGenerator/architecture.svg",
       "autoresearch/architecture.svg",
@@ -64,13 +64,14 @@
       "bev_fusion/training/architecture.svg",
       "bev_fusion_lane_center/training/architecture.svg",
       "bev_fusion_lane_center/experiment_execution/LEDGER.csv",
-      "bev_fusion_lane_center/experiment_execution/LEDGER.md"
+      "bev_fusion_lane_center/experiment_execution/LEDGER.md",
+      "bev_fusion_lane_center/results/E2E_Report_2026-11-23/data/*"
     ]
   },
   "clone_checks": [
     {
       "name": "compile all code (python 3.12, gcar)",
-      "cmd": "source ~/miniconda3/etc/profile.d/conda.sh && conda activate gcar && PYTHONDONTWRITEBYTECODE=1 python -m compileall -q training evaluation tools reports/build temp",
+      "cmd": "source ~/miniconda3/etc/profile.d/conda.sh && conda activate gcar && PYTHONDONTWRITEBYTECODE=1 python -m compileall -q training evaluation tools reports/build",
       "timeout": 300
     },
     {

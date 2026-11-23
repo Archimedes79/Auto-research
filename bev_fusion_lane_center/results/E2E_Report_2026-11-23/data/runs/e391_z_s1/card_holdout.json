@@ -1,0 +1,575 @@
+{
+ "arm": "z",
+ "seed": 1,
+ "split": "holdout",
+ "levels": {
+  "dec": {
+   "assoc_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "lanes_acc": [
+    0.9042708398279194,
+    0.8637853939322035,
+    0.9369232611511359
+   ],
+   "lanes_acc_minus_p6zero": [
+    0.067098946318349,
+    0.023459820208822597,
+    0.10136932781923581
+   ],
+   "lanes_acc_minus_nearest": [
+    0.42737078371469545,
+    0.2767405324312374,
+    0.5846148451683673
+   ],
+   "lanes_acc_minus_logistic": [
+    0.4632333686638818,
+    0.2987138830775266,
+    0.6361820007982633
+   ],
+   "route_f1": [
+    0.8070329139162877,
+    0.76457788259775,
+    0.8513150321846309
+   ],
+   "route_f1_minus_p6zero": [
+    0.30908567059398,
+    0.2508796227794583,
+    0.38019880933028033
+   ],
+   "route_f1_minus_nearest": [
+    0.7403897641048748,
+    0.689645854952887,
+    0.7924495367646677
+   ],
+   "route_f1_minus_logistic": [
+    0.6781068689002105,
+    0.5936284970438857,
+    0.7669379645801181
+   ]
+  },
+  "exact": {
+   "assoc_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "lanes_acc": [
+    0.9043083039263858,
+    0.8643734400837537,
+    0.936867568617195
+   ],
+   "lanes_acc_minus_p6zero": [
+    -0.030397105462991902,
+    -0.07699311420303581,
+    0.004453316645064647
+   ],
+   "lanes_acc_minus_nearest": [
+    0.46437664716129895,
+    0.29863390942819973,
+    0.6384266797111816
+   ],
+   "lanes_acc_minus_logistic": [
+    0.4458167686603832,
+    0.2735432007471454,
+    0.6250604945018361
+   ],
+   "route_f1": [
+    0.8070329139162877,
+    0.76457788259775,
+    0.8513150321846309
+   ],
+   "route_f1_minus_p6zero": [
+    0.16824339699655377,
+    0.09733102326518446,
+    0.2591717381160467
+   ],
+   "route_f1_minus_nearest": [
+    0.7512217820220458,
+    0.698177835358375,
+    0.8020520229308796
+   ],
+   "route_f1_minus_logistic": [
+    0.6293668456936665,
+    0.5131203161396913,
+    0.7481251629354232
+   ]
+  },
+  "pose2": {
+   "assoc_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "lanes_acc": [
+    0.9042708398279194,
+    0.8637853939322035,
+    0.9369232611511359
+   ],
+   "lanes_acc_minus_p6zero": [
+    0.07029116528461876,
+    0.028230299913106566,
+    0.10518398708043206
+   ],
+   "lanes_acc_minus_nearest": [
+    0.41436498534821375,
+    0.26730998579791715,
+    0.5683102378514773
+   ],
+   "lanes_acc_minus_logistic": [
+    0.46263482760770624,
+    0.2981277266847827,
+    0.6355075124651118
+   ],
+   "route_f1": [
+    0.8070329139162877,
+    0.76457788259775,
+    0.8513150321846309
+   ],
+   "route_f1_minus_p6zero": [
+    0.31037544892144286,
+    0.2521758737857268,
+    0.3819059287407374
+   ],
+   "route_f1_minus_nearest": [
+    0.7178914725718948,
+    0.6689075817832741,
+    0.7711077043330092
+   ],
+   "route_f1_minus_logistic": [
+    0.6853279078491099,
+    0.6063707899712784,
+    0.7661027361489402
+   ]
+  },
+  "nd2": {
+   "assoc_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "assoc_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "seg_acc_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "none_recall_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_assign_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_p6zero": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_nearest": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "false_unassigned_minus_logistic": [
+    NaN,
+    NaN,
+    NaN
+   ],
+   "lanes_acc": [
+    0.9044042287334859,
+    0.8633064622609486,
+    0.93728907212985
+   ],
+   "lanes_acc_minus_p6zero": [
+    0.07485925281143391,
+    0.030961913209215222,
+    0.10997675568815757
+   ],
+   "lanes_acc_minus_nearest": [
+    0.4261866988641948,
+    0.2734225463001905,
+    0.586856428938358
+   ],
+   "lanes_acc_minus_logistic": [
+    0.46042933157370103,
+    0.2968935758115188,
+    0.6351558503214849
+   ],
+   "route_f1": [
+    0.8070329139162877,
+    0.76457788259775,
+    0.8513150321846309
+   ],
+   "route_f1_minus_p6zero": [
+    0.33281210581474474,
+    0.2775787868446424,
+    0.4004211850118844
+   ],
+   "route_f1_minus_nearest": [
+    0.7465278854947748,
+    0.6968049449232386,
+    0.7960263175635918
+   ],
+   "route_f1_minus_logistic": [
+    0.6929496174820419,
+    0.6144102869789311,
+    0.7755396237728598
+   ]
+  }
+ }
+}

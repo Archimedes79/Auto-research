@@ -216,6 +216,8 @@ status.json
 /bev_fusion_lane_center/results/E2E_*Report*/parts/*
 !/bev_fusion_lane_center/results/E2E_*Report*/parts/*.md
 !/bev_fusion_lane_center/results/E2E_*Report*/parts/*.svg
+# the data/ of the latest report: the small result files its numbers are read from (D140; listed in data/rebuild.json 'allow')
+!/bev_fusion_lane_center/results/E2E_*Report*/data/
 # E274: the experiment's result page in git (numbers per seed, tags, hashes, rebuild commands)
 !/bev_fusion_lane_center/results/E274/
 # E275: the result page in git (numbers per seed, tags, rebuild commands); the 80 pictures of the dropped nodes are not

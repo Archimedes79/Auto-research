@@ -1,0 +1,27 @@
+{
+ "run": "e392_r2_s0",
+ "device": "cuda",
+ "K": 512,
+ "frames": 24,
+ "repeats": 5,
+ "params": 168603,
+ "gmacs_head": 0.9895936,
+ "host": "host load (1 min) before 1.72 after 1.49, limit 3.0; GPU before util max 8 %, after util max 0 % (idle: at most 5 %): NOT QUIET",
+ "quiet": false,
+ "usable_for_gcost": false,
+ "gpu_rule": "GPU memory used 1346 MiB, no other run.py job",
+ "bf16": true,
+ "median_ms": {
+  "head": 8.778720378875732,
+  "bprime": 10.756752014160156,
+  "whole": 18.446335792541504
+ },
+ "p90_ms": {
+  "head": 13.391209506988536,
+  "bprime": 21.38975009918213,
+  "whole": 29.44091815948488
+ },
+ "macs_note": "matmul, linear and einsum only; softmax, norms, GELU, the pair-geometry features and the sort are not counted",
+ "params_bprime": 2196012,
+ "params_whole_path": 2364615
+}

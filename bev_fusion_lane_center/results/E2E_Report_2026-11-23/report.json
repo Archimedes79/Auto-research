@@ -65,1402 +65,1402 @@
  ],
  "values": {
   "e390_p1b_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p1.0",
    "fmt": "{:.3f}"
   },
   "e390_p1b_lo_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p1.1",
    "fmt": "{:.3f}"
   },
   "e390_p1ce0_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.ce0.p1.0",
    "fmt": "{:.3f}"
   },
   "e390_p1ce01_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.ce01.p1.0",
    "fmt": "{:.3f}"
   },
   "e390_p2b_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p2.0",
    "fmt": "{:.3f}"
   },
   "e390_p3b_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p3.0",
    "fmt": "{:.3f}"
   },
   "e390_p6b_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p6.0",
    "fmt": "{:.3f}"
   },
   "e390_p6pose2_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.pose2.p6.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.nd.p6.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_seg_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.nd.p6_seg.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_none_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.nd.p6_none.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_fn_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.nd.p6_false_none.0",
    "fmt": "{:.3f}"
   },
   "e390_dcopy_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p1_minus_copy.0",
    "fmt": "{:.3f}"
   },
   "e390_dbayes_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p1_minus_bayes.0",
    "fmt": "{:.3f}"
   },
   "e390_drule2_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.pose2.p6_minus_rule.0",
    "fmt": "{:.3f}"
   },
   "e390_dp3rule_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.base.p3_minus_rule.0",
    "fmt": "{:.3f}"
   },
   "e390_p1b_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p1.0",
    "fmt": "{:.3f}"
   },
   "e390_p1b_lo_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p1.1",
    "fmt": "{:.3f}"
   },
   "e390_p1ce0_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.ce0.p1.0",
    "fmt": "{:.3f}"
   },
   "e390_p1ce01_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.ce01.p1.0",
    "fmt": "{:.3f}"
   },
   "e390_p2b_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p2.0",
    "fmt": "{:.3f}"
   },
   "e390_p3b_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p3.0",
    "fmt": "{:.3f}"
   },
   "e390_p6b_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p6.0",
    "fmt": "{:.3f}"
   },
   "e390_p6pose2_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.pose2.p6.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.nd.p6.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_seg_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.nd.p6_seg.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_none_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.nd.p6_none.0",
    "fmt": "{:.3f}"
   },
   "e390_p6nd_fn_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.nd.p6_false_none.0",
    "fmt": "{:.3f}"
   },
   "e390_dcopy_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p1_minus_copy.0",
    "fmt": "{:.3f}"
   },
   "e390_dbayes_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p1_minus_bayes.0",
    "fmt": "{:.3f}"
   },
   "e390_drule2_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.pose2.p6_minus_rule.0",
    "fmt": "{:.3f}"
   },
   "e390_dp3rule_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.base.p3_minus_rule.0",
    "fmt": "{:.3f}"
   },
   "e391_val_assoc_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_assoc_lo_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.assoc_acc.1",
    "fmt": "{:.4f}"
   },
   "e391_val_assoc_hi_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.assoc_acc.2",
    "fmt": "{:.4f}"
   },
   "e391_val_dgate_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.assoc_acc_minus_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_val_dzero_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.assoc_acc_minus_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_val_fu_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_val_fa_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.false_assign.0",
    "fmt": "{:.4f}"
   },
   "e391_val_nonfalse_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.nonfalse_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_dnonfalse_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.nonfalse_acc_minus_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_route_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_exact_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.exact.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_nd2_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.nd2.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_pose2_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.pose2.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_zlanes_s0": {
-   "file": "../../runs/e391_z_s0/card_val.json",
+   "file": "data/runs/e391_z_s0/card_val.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_zroute_s0": {
-   "file": "../../runs/e391_z_s0/card_val.json",
+   "file": "data/runs/e391_z_s0/card_val.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_assoc_s0": {
-   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_val_s0.json",
    "key": "levels.dec.assoc_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_lanes_s0": {
-   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_val_s0.json",
    "key": "levels.dec.lanes_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_fa_s0": {
-   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_val_s0.json",
    "key": "levels.dec.false_assign_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_near_assoc_s0": {
-   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_val_s0.json",
    "key": "levels.dec.assoc_acc_nearest.0",
    "fmt": "{:.4f}"
   },
   "e391_null_gate_assoc_s0": {
-   "file": "../../runs/e391_assoc/nulls_gate_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_gate_val_s0.json",
    "key": "levels.dec.assoc_acc_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_nonfalse_s0": {
-   "file": "../../runs/e391_assoc/nulls_gate_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_gate_val_s0.json",
    "key": "levels.dec.nonfalse_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_gate_fu_s0": {
-   "file": "../../runs/e391_assoc/nulls_gate_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_gate_val_s0.json",
    "key": "levels.dec.false_unassigned_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_assoc_s0": {
-   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "file": "data/runs/e391_P_s0/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_fu_s0": {
-   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "file": "data/runs/e391_P_s0/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_lanes_s0": {
-   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "file": "data/runs/e391_P_s0/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_route_s0": {
-   "file": "../../runs/e391_P_s0/card_holdout.json",
+   "file": "data/runs/e391_P_s0/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_assoc_s0": {
-   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "file": "data/runs/e391_F1_s0/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_fu_s0": {
-   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "file": "data/runs/e391_F1_s0/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_lanes_s0": {
-   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "file": "data/runs/e391_F1_s0/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_route_s0": {
-   "file": "../../runs/e391_F1_s0/card_holdout.json",
+   "file": "data/runs/e391_F1_s0/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_assoc_s0": {
-   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "file": "data/runs/e391_F2_s0/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_fu_s0": {
-   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "file": "data/runs/e391_F2_s0/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_lanes_s0": {
-   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "file": "data/runs/e391_F2_s0/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_route_s0": {
-   "file": "../../runs/e391_F2_s0/card_holdout.json",
+   "file": "data/runs/e391_F2_s0/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_assoc_s0": {
-   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "file": "data/runs/e391_F3_s0/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_fu_s0": {
-   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "file": "data/runs/e391_F3_s0/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_lanes_s0": {
-   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "file": "data/runs/e391_F3_s0/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_route_s0": {
-   "file": "../../runs/e391_F3_s0/card_holdout.json",
+   "file": "data/runs/e391_F3_s0/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_z_lanes_s0": {
-   "file": "../../runs/e391_z_s0/card_holdout.json",
+   "file": "data/runs/e391_z_s0/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_z_route_s0": {
-   "file": "../../runs/e391_z_s0/card_holdout.json",
+   "file": "data/runs/e391_z_s0/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_gate_assoc_s0": {
-   "file": "../../runs/e391_assoc/nulls_gate_holdout_s0.json",
+   "file": "data/runs/e391_assoc/nulls_gate_holdout_s0.json",
    "key": "levels.dec.assoc_acc_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_val_assoc_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_assoc_lo_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.assoc_acc.1",
    "fmt": "{:.4f}"
   },
   "e391_val_assoc_hi_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.assoc_acc.2",
    "fmt": "{:.4f}"
   },
   "e391_val_dgate_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.assoc_acc_minus_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_val_dzero_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.assoc_acc_minus_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_val_fu_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_val_fa_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.false_assign.0",
    "fmt": "{:.4f}"
   },
   "e391_val_nonfalse_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.nonfalse_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_dnonfalse_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.nonfalse_acc_minus_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_route_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_exact_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.exact.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_nd2_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.nd2.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_lanes_pose2_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.pose2.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_zlanes_s1": {
-   "file": "../../runs/e391_z_s1/card_val.json",
+   "file": "data/runs/e391_z_s1/card_val.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_val_zroute_s1": {
-   "file": "../../runs/e391_z_s1/card_val.json",
+   "file": "data/runs/e391_z_s1/card_val.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_assoc_s1": {
-   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_val_s1.json",
    "key": "levels.dec.assoc_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_lanes_s1": {
-   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_val_s1.json",
    "key": "levels.dec.lanes_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_fa_s1": {
-   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_val_s1.json",
    "key": "levels.dec.false_assign_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_near_assoc_s1": {
-   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_val_s1.json",
    "key": "levels.dec.assoc_acc_nearest.0",
    "fmt": "{:.4f}"
   },
   "e391_null_gate_assoc_s1": {
-   "file": "../../runs/e391_assoc/nulls_gate_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_gate_val_s1.json",
    "key": "levels.dec.assoc_acc_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_null_zero_nonfalse_s1": {
-   "file": "../../runs/e391_assoc/nulls_gate_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_gate_val_s1.json",
    "key": "levels.dec.nonfalse_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_gate_fu_s1": {
-   "file": "../../runs/e391_assoc/nulls_gate_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_gate_val_s1.json",
    "key": "levels.dec.false_unassigned_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_assoc_s1": {
-   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "file": "data/runs/e391_P_s1/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_fu_s1": {
-   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "file": "data/runs/e391_P_s1/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_lanes_s1": {
-   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "file": "data/runs/e391_P_s1/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_P_route_s1": {
-   "file": "../../runs/e391_P_s1/card_holdout.json",
+   "file": "data/runs/e391_P_s1/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_assoc_s1": {
-   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "file": "data/runs/e391_F1_s1/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_fu_s1": {
-   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "file": "data/runs/e391_F1_s1/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_lanes_s1": {
-   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "file": "data/runs/e391_F1_s1/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F1_route_s1": {
-   "file": "../../runs/e391_F1_s1/card_holdout.json",
+   "file": "data/runs/e391_F1_s1/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_assoc_s1": {
-   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "file": "data/runs/e391_F2_s1/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_fu_s1": {
-   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "file": "data/runs/e391_F2_s1/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_lanes_s1": {
-   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "file": "data/runs/e391_F2_s1/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F2_route_s1": {
-   "file": "../../runs/e391_F2_s1/card_holdout.json",
+   "file": "data/runs/e391_F2_s1/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_assoc_s1": {
-   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "file": "data/runs/e391_F3_s1/card_holdout.json",
    "key": "levels.dec.assoc_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_fu_s1": {
-   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "file": "data/runs/e391_F3_s1/card_holdout.json",
    "key": "levels.dec.false_unassigned.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_lanes_s1": {
-   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "file": "data/runs/e391_F3_s1/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_F3_route_s1": {
-   "file": "../../runs/e391_F3_s1/card_holdout.json",
+   "file": "data/runs/e391_F3_s1/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_z_lanes_s1": {
-   "file": "../../runs/e391_z_s1/card_holdout.json",
+   "file": "data/runs/e391_z_s1/card_holdout.json",
    "key": "levels.dec.lanes_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_z_route_s1": {
-   "file": "../../runs/e391_z_s1/card_holdout.json",
+   "file": "data/runs/e391_z_s1/card_holdout.json",
    "key": "levels.dec.route_f1.0",
    "fmt": "{:.4f}"
   },
   "e391_hold_gate_assoc_s1": {
-   "file": "../../runs/e391_assoc/nulls_gate_holdout_s1.json",
+   "file": "data/runs/e391_assoc/nulls_gate_holdout_s1.json",
    "key": "levels.dec.assoc_acc_p6gate.0",
    "fmt": "{:.4f}"
   },
   "e392_c_f1_s0": {
-   "file": "../../runs/e392_c_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s0.json",
+   "file": "data/runs/e392_c_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_c_f1_s1": {
-   "file": "../../runs/e392_c_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s1.json",
+   "file": "data/runs/e392_c_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_x_f1_s0": {
-   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_x_d_s0": {
-   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_x_lo_s0": {
-   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_x_hi_s0": {
-   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_x_gl_s0": {
-   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_x_gj_s0": {
-   "file": "../../runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_x_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_x_f1_s1": {
-   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_x_d_s1": {
-   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_x_lo_s1": {
-   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_x_hi_s1": {
-   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_x_gl_s1": {
-   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_x_gj_s1": {
-   "file": "../../runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_x_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r1_f1_s0": {
-   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r1_d_s0": {
-   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r1_lo_s0": {
-   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r1_hi_s0": {
-   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r1_gl_s0": {
-   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r1_gj_s0": {
-   "file": "../../runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r1_f1_s1": {
-   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r1_d_s1": {
-   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r1_lo_s1": {
-   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r1_hi_s1": {
-   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r1_gl_s1": {
-   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r1_gj_s1": {
-   "file": "../../runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_f1_s0": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r2_d_s0": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_lo_s0": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r2_hi_s0": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r2_gl_s0": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_gj_s0": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_f1_s1": {
-   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r2_d_s1": {
-   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_lo_s1": {
-   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r2_hi_s1": {
-   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r2_gl_s1": {
-   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_gj_s1": {
-   "file": "../../runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_r2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_u_f1_s0": {
-   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_u_d_s0": {
-   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_u_lo_s0": {
-   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_u_hi_s0": {
-   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_u_gl_s0": {
-   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_u_gj_s0": {
-   "file": "../../runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_u_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_u_f1_s1": {
-   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_u_d_s1": {
-   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_u_lo_s1": {
-   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_u_hi_s1": {
-   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_u_gl_s1": {
-   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_u_gj_s1": {
-   "file": "../../runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_u_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a1_f1_s0": {
-   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_a1_d_s0": {
-   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a1_lo_s0": {
-   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_a1_hi_s0": {
-   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_a1_gl_s0": {
-   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a1_gj_s0": {
-   "file": "../../runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a1_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a1_f1_s1": {
-   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_a1_d_s1": {
-   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a1_lo_s1": {
-   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_a1_hi_s1": {
-   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_a1_gl_s1": {
-   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a1_gj_s1": {
-   "file": "../../runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a1_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a2_f1_s0": {
-   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_a2_d_s0": {
-   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a2_lo_s0": {
-   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_a2_hi_s0": {
-   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_a2_gl_s0": {
-   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a2_gj_s0": {
-   "file": "../../runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_a2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a2_f1_s1": {
-   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_a2_d_s1": {
-   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a2_lo_s1": {
-   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_a2_hi_s1": {
-   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_a2_gl_s1": {
-   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_a2_gj_s1": {
-   "file": "../../runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_a2_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ct_f1_s0": {
-   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_ct_d_s0": {
-   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ct_lo_s0": {
-   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_ct_hi_s0": {
-   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_ct_gl_s0": {
-   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ct_gj_s0": {
-   "file": "../../runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ct_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ct_f1_s1": {
-   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_ct_d_s1": {
-   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ct_lo_s1": {
-   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_ct_hi_s1": {
-   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_ct_gl_s1": {
-   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ct_gj_s1": {
-   "file": "../../runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ct_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_f1_s0": {
-   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "file": "data/runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r2t_d_s0": {
-   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "file": "data/runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_lo_s0": {
-   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "file": "data/runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_hi_s0": {
-   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "file": "data/runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_gl_s0": {
-   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "file": "data/runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_gj_s0": {
-   "file": "../../runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
+   "file": "data/runs/e392_r2t_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_f1_s1": {
-   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "file": "data/runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r2t_d_s1": {
-   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "file": "data/runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_lo_s1": {
-   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "file": "data/runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_hi_s1": {
-   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "file": "data/runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_gl_s1": {
-   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "file": "data/runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2t_gj_s1": {
-   "file": "../../runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
+   "file": "data/runs/e392_r2t_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ct_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_f1_s0": {
-   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_ctb_d_s0": {
-   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_lo_s0": {
-   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_hi_s0": {
-   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_gl_s0": {
-   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_gj_s0": {
-   "file": "../../runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_ctb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_f1_s1": {
-   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_ctb_d_s1": {
-   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_lo_s1": {
-   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_hi_s1": {
-   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_gl_s1": {
-   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_ctb_gj_s1": {
-   "file": "../../runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_ctb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_f1_s0": {
-   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "file": "data/runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r2tb_d_s0": {
-   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "file": "data/runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_lo_s0": {
-   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "file": "data/runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_hi_s0": {
-   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "file": "data/runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_gl_s0": {
-   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "file": "data/runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_gj_s0": {
-   "file": "../../runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
+   "file": "data/runs/e392_r2tb_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_f1_s1": {
-   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "file": "data/runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_r2tb_d_s1": {
-   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "file": "data/runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_lo_s1": {
-   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "file": "data/runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_hi_s1": {
-   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "file": "data/runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_gl_s1": {
-   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "file": "data/runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2tb_gj_s1": {
-   "file": "../../runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
+   "file": "data/runs/e392_r2tb_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_ctb_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_n_f1_s0": {
-   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_n_d_s0": {
-   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_n_lo_s0": {
-   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_n_hi_s0": {
-   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_n_gl_s0": {
-   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_n_gj_s0": {
-   "file": "../../runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_n_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_n_f1_s1": {
-   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_n_d_s1": {
-   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_n_lo_s1": {
-   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_n_hi_s1": {
-   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_n_gl_s1": {
-   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_n_gj_s1": {
-   "file": "../../runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_n_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_m0_f1_s0": {
-   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_m0_d_s0": {
-   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_m0_lo_s0": {
-   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_m0_hi_s0": {
-   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_m0_gl_s0": {
-   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_m0_gj_s0": {
-   "file": "../../runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_m0_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_m0_f1_s1": {
-   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "metrics.topo_F1",
    "fmt": "{:.4f}"
   },
   "e392_m0_d_s1": {
-   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_m0_lo_s1": {
-   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.lo",
    "fmt": "{:+.4f}"
   },
   "e392_m0_hi_s1": {
-   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.topo_F1.hi",
    "fmt": "{:+.4f}"
   },
   "e392_m0_gl_s1": {
-   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.lanes_found.diff",
    "fmt": "{:+.4f}"
   },
   "e392_m0_gj_s1": {
-   "file": "../../runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
+   "file": "data/runs/e392_m0_s1/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s1.json",
    "key": "info.paired_vs_ref_run.junction_F1.diff",
    "fmt": "{:+.4f}"
   },
   "e392_r2_params": {
-   "file": "../../runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
+   "file": "data/runs/e392_r2_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e392_c_s0.json",
    "key": "info.head_params",
    "fmt": "{:,}"
   },
   "e392_c_params": {
-   "file": "../../runs/e392_c_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s0.json",
+   "file": "data/runs/e392_c_s0/token_card_rec_lt0.3_ltl0.2_kt0.6_nng_vs_e373_cb_s0.json",
    "key": "info.head_params",
    "fmt": "{:,}"
   },
   "e389_d0": {
-   "file": "../../runs/eval/e389_verdict.json",
+   "file": "data/runs/eval/e389_verdict.json",
    "key": "m_minus_z_road_error.0.diff",
    "fmt": "{:+.4f}"
   },
   "e389_z0": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.0.z.error",
    "fmt": "{:.4f}"
   },
   "e389_wrong0": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.0.m.wrong_minus_z",
    "fmt": "{:+.4f}"
   },
   "e389b_da0": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.0.a.error_minus_z",
    "fmt": "{:+.4f}"
   },
   "e389b_dm0": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.0.m.error_minus_z",
    "fmt": "{:+.4f}"
   },
   "e389_d1": {
-   "file": "../../runs/eval/e389_verdict.json",
+   "file": "data/runs/eval/e389_verdict.json",
    "key": "m_minus_z_road_error.1.diff",
    "fmt": "{:+.4f}"
   },
   "e389_z1": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.1.z.error",
    "fmt": "{:.4f}"
   },
   "e389_wrong1": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.1.m.wrong_minus_z",
    "fmt": "{:+.4f}"
   },
   "e389b_da1": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.1.a.error_minus_z",
    "fmt": "{:+.4f}"
   },
   "e389b_dm1": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "seeds.1.m.error_minus_z",
    "fmt": "{:+.4f}"
   },
   "e389b_dp": {
-   "file": "../../runs/eval/e389b_verdict.json",
+   "file": "data/runs/eval/e389b_verdict.json",
    "key": "plain_s0.error_minus_z",
    "fmt": "{:+.4f}"
   },
   "e394_smoke_f1": {
-   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "file": "data/runs/e394_step0/degrade_holdout_s0_smoke.json",
    "key": "levels.wrong_scene+dec.heads.F1.lanes_all",
    "fmt": "{:.2f}"
   },
   "e394_smoke_z": {
-   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "file": "data/runs/e394_step0/degrade_holdout_s0_smoke.json",
    "key": "levels.wrong_scene+dec.heads.z.lanes_all",
    "fmt": "{:.2f}"
   },
   "e394_smoke_p6": {
-   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "file": "data/runs/e394_step0/degrade_holdout_s0_smoke.json",
    "key": "levels.wrong_scene+dec.heads.p6zero.lanes_all",
    "fmt": "{:.2f}"
   },
   "e394_smoke_f1_exact": {
-   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "file": "data/runs/e394_step0/degrade_holdout_s0_smoke.json",
    "key": "levels.exact.heads.F1.lanes_all",
    "fmt": "{:.2f}"
   },
   "e394_smoke_frames": {
-   "file": "../../runs/e394_step0/degrade_holdout_s0_smoke.json",
+   "file": "data/runs/e394_step0/degrade_holdout_s0_smoke.json",
    "key": "levels.exact.frames",
    "fmt": "{}"
   },
@@ -1695,82 +1695,82 @@
    "fmt": "{}"
   },
   "e391_val_seg_s0": {
-   "file": "../../runs/e391_F1_s0/card_val.json",
+   "file": "data/runs/e391_F1_s0/card_val.json",
    "key": "levels.dec.seg_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_null_seg_s0": {
-   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_val_s0.json",
    "key": "levels.dec.seg_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_fu_s0": {
-   "file": "../../runs/e391_assoc/nulls_val_s0.json",
+   "file": "data/runs/e391_assoc/nulls_val_s0.json",
    "key": "levels.dec.false_unassigned_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e390_dlr2_s0": {
-   "file": "../../runs/e390_g7_s0/probe_card.json",
+   "file": "data/runs/e390_g7_s0/probe_card.json",
    "key": "levels.pose2.p6_minus_lr.0",
    "fmt": "{:.3f}"
   },
   "e391_val_seg_s1": {
-   "file": "../../runs/e391_F1_s1/card_val.json",
+   "file": "data/runs/e391_F1_s1/card_val.json",
    "key": "levels.dec.seg_acc.0",
    "fmt": "{:.4f}"
   },
   "e391_null_seg_s1": {
-   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_val_s1.json",
    "key": "levels.dec.seg_acc_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e391_null_fu_s1": {
-   "file": "../../runs/e391_assoc/nulls_val_s1.json",
+   "file": "data/runs/e391_assoc/nulls_val_s1.json",
    "key": "levels.dec.false_unassigned_p6zero.0",
    "fmt": "{:.4f}"
   },
   "e390_dlr2_s1": {
-   "file": "../../runs/e390_g7_s1/probe_card.json",
+   "file": "data/runs/e390_g7_s1/probe_card.json",
    "key": "levels.pose2.p6_minus_lr.0",
    "fmt": "{:.3f}"
   },
   "cost_c1": {
-   "file": "../../runs/e392_c_s0/token_timing_20261123T073611Z.json",
+   "file": "data/runs/e392_c_s0/token_timing_20261123T073611Z.json",
    "key": "median_ms.whole",
    "fmt": "{:.2f}"
   },
   "cost_c1h": {
-   "file": "../../runs/e392_c_s0/token_timing_20261123T073611Z.json",
+   "file": "data/runs/e392_c_s0/token_timing_20261123T073611Z.json",
    "key": "median_ms.head",
    "fmt": "{:.2f}"
   },
   "cost_c2": {
-   "file": "../../runs/e392_c_s0/token_timing_20261123T074440Z.json",
+   "file": "data/runs/e392_c_s0/token_timing_20261123T074440Z.json",
    "key": "median_ms.whole",
    "fmt": "{:.2f}"
   },
   "cost_c2h": {
-   "file": "../../runs/e392_c_s0/token_timing_20261123T074440Z.json",
+   "file": "data/runs/e392_c_s0/token_timing_20261123T074440Z.json",
    "key": "median_ms.head",
    "fmt": "{:.2f}"
   },
   "cost_r2": {
-   "file": "../../runs/e392_r2_s0/token_timing_20261123T073935Z.json",
+   "file": "data/runs/e392_r2_s0/token_timing_20261123T073935Z.json",
    "key": "median_ms.whole",
    "fmt": "{:.2f}"
   },
   "cost_r2h": {
-   "file": "../../runs/e392_r2_s0/token_timing_20261123T073935Z.json",
+   "file": "data/runs/e392_r2_s0/token_timing_20261123T073935Z.json",
    "key": "median_ms.head",
    "fmt": "{:.2f}"
   },
   "cost_r2b": {
-   "file": "../../runs/e392_r2_s0/token_timing_20261123T080151Z.json",
+   "file": "data/runs/e392_r2_s0/token_timing_20261123T080151Z.json",
    "key": "median_ms.whole",
    "fmt": "{:.2f}"
   },
   "cost_r2bh": {
-   "file": "../../runs/e392_r2_s0/token_timing_20261123T080151Z.json",
+   "file": "data/runs/e392_r2_s0/token_timing_20261123T080151Z.json",
    "key": "median_ms.head",
    "fmt": "{:.2f}"
   }
@@ -1796,16 +1796,16 @@
   "parts/src_e389_05_ergebnis.md",
   "parts/src_e389_08_nacht.md",
   "parts/src_e389_03_gt.md",
-  "../../runs/e390_g7_s*/probe_card.json",
-  "../../runs/e390_g7_s*/clause_vs_n_base.json",
-  "../../runs/e390_sdgraph/nulls_val.json",
-  "../../runs/e391_*/card_*.json",
-  "../../runs/e391_assoc/nulls_*.json",
-  "../../runs/e392_*/token_card_rec_*.json",
-  "../../runs/e392_*/token_timing_*.json",
-  "../../runs/eval/e389_verdict.json",
-  "../../runs/eval/e389b_verdict.json",
-  "../../runs/e394_step0/degrade_holdout_s0_smoke.json"
+  "data/runs/e390_g7_s*/probe_card.json",
+  "data/runs/e390_g7_s*/clause_vs_n_base.json",
+  "data/runs/e390_sdgraph/nulls_val.json",
+  "data/runs/e391_*/card_*.json",
+  "data/runs/e391_assoc/nulls_*.json",
+  "data/runs/e392_*/token_card_rec_*.json",
+  "data/runs/e392_*/token_timing_*.json",
+  "data/runs/eval/e389_verdict.json",
+  "data/runs/eval/e389b_verdict.json",
+  "data/runs/e394_step0/degrade_holdout_s0_smoke.json"
  ],
  "utilities": [
   {
