@@ -2,10 +2,10 @@
 """winner: export the code of a winning system as a small, self-describing folder (source + README + MANIFEST, never weights),
 so that it can be handed over, put into git, and checked later for drift.
 
-    python winner.py export <name> --src <file-or-glob> [--src ...] [--strip <base dir>] [--out <winners dir>] [--limit 1000000]
+    python winner.py export <name> --src <file-or-glob> [--src ...] [--strip <base dir>] --out <project>/winner [--limit 1000000]
                              [--title T] [--numbers "VAL topo F1 0.6931 / 0.6964 (s0 / s1)"] [--command "python ... "] [--weights "runs/x (not in git)"]
                              [--allow-dirty]
-    python winner.py verify <winners/name>        # re-hash the files against MANIFEST.json; if the sources still exist, report drift
+    python winner.py verify <project>/winner/<name>        # re-hash the files against MANIFEST.json; if the sources still exist, report drift
     python winner.py selftest
 
 What it writes into <out>/<name>/: code/ (the files, relative to --strip), README.md (what it is, the command, the numbers to reproduce, where the weights
@@ -125,7 +125,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     e = sp.add_parser("export")
-    e.add_argument("name"); e.add_argument("--src", action="append", required=True); e.add_argument("--strip"); e.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "winners"))
+    e.add_argument("name"); e.add_argument("--src", action="append", required=True); e.add_argument("--strip"); e.add_argument("--out", required=True, help="the project's winner folder, e.g. bev_fusion_lane_center/winner (D139 / D140)")
     e.add_argument("--limit", type=int, default=1_000_000); e.add_argument("--title"); e.add_argument("--numbers"); e.add_argument("--command"); e.add_argument("--weights")
     e.add_argument("--allow-dirty", action="store_true")
     v = sp.add_parser("verify"); v.add_argument("folder")

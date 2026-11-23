@@ -6,7 +6,7 @@ The checkpoint files stay in `../runs/` (the live code loads them by those paths
 
 | role | file (under `runs/`) | what | used by |
 |---|---|---|---|
-| **token champion** (system of record, D113 - D120) | `e373_cb_s<S>/` (stage-1 head), `e372_s4_s0/`, `e372_s4_s1/` (stage 2 = S4: the head and the node head of B' trained together; 2.323 M parameters) | VAL topo F1 0.6682 / 0.6813, 16.2 ms per frame (whole path, quiet GPU); no TEST check | `evaluation/jtoken_eval.py`, `training/train/jlive_train.py`; the source is `../../winners/e372_s4_champion` |
+| **token champion** (system of record, D113 - D120) | `e373_cb_s<S>/` (stage-1 head), `e372_s4_s0/`, `e372_s4_s1/` (stage 2 = S4: the head and the node head of B' trained together; 2.323 M parameters) | VAL topo F1 0.6682 / 0.6813, 16.2 ms per frame (whole path, quiet GPU); no TEST check | `evaluation/jtoken_eval.py`, `training/train/jlive_train.py`; the source is `../winner/e372_s4_champion` |
 | lane head B' / plain B | `e292_a_s<S>/` (B': pyramid and node head, frozen under the token champion), `e273_p_s<S>/` (plain B, E273) | the front end of the token system, and its baseline (topo F1 0.6259 / 0.6249) | `training/grid/qgraph.py`, `training/data/lane_tokcache.py` |
 | reference system E324 s | `e324_s_s<S>/` (pair head) with `e273_p_s<S>/` | VAL topo F1 0.6912 / 0.6948 at the end-to-end read-out, 19.7 ms; five rule steps | `training/lanegraph/` |
 | route-association head (E389) | `e389_m_s<S>/` (with the SD route), `e389_z_s<S>/` (matched control without it) | TIE (no gain over the no-map head); not in the champion | `training/grid/jroute.py`, `evaluation/jroute_eval.py` |

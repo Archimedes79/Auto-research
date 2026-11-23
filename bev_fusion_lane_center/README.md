@@ -16,8 +16,9 @@ The delivered chain of the token champion, drawn from the code ([file map, the n
 ## Where things are
 - the owner's decisions and permissions: `experiment_execution/DECISIONS.md` (one file, D<n>); the experiment list: the cards `experiments/E<id>_<slug>/experiment.md`; every run: `experiment_execution/LEDGER.md` (from `LEDGER.csv`)
 - the code of the champion: `training/grid/jtoken.py` (token head), `training/data/lane_tokcache.py` and `lane_live_tok.py` (tokens), `training/train/jtoken_train.py` and `jlive_train.py` (the two training stages), `evaluation/jtoken_eval.py` (decode, score, timing); the lane head B': `training/grid/qgraph.py`, `pyramid.py`
+- the winner and its code: `winner/e372_s4_champion/` (the champion's source snapshot with the commands, the numbers to reproduce and where the weights are; no weights; `winner/README.md`, D139 / D140)
 - the reference systems: `training/lanegraph/` (E324 s, bit-identical re-implementation) and the route-graph builder chain of loops 8 - 18 (`training/models/p16_*`, `training/train/p16_train.py`, `training/pipeline/p16_pipeline.py`, scored by `evaluation/evaluate.py`)
-- outside this folder, in the workspace root: `../winners/` (source of the learned winner systems, no weights), `../GtGenerator/` (the ground truth), `../data/NuScenes/` (the dataset family); the result packages and report pages of this project are in `results/`
+- outside this folder, in the workspace root: `../GtGenerator/` (the ground truth), `../data/NuScenes/` (the dataset family); the result packages and report pages of this project are in `results/`
 - the code that was removed in the clean-ups of 2026-11 (the junction-thread bundle, the old p8 - p13 chain pieces, data-prep scripts that no recipe names, the `experiments/E*/code` folders) is only in the git history: `git log --stat -- <path>`
 
 ## Folders (by role in the method)

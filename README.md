@@ -13,7 +13,6 @@ One lead agent plans a round and writes the experiment cards. Experiment agents 
 | [`GtGenerator/`](GtGenerator/README.md) | the nuScenes ground-truth suite: BEV ground truth (map layers, objects, velocity) per keyframe, versioned (`autogt/vN` tags) |
 | [`bev_fusion_lane_center/`](bev_fusion_lane_center/README.md) | problem 1: a lane-centre-line graph from camera + radar, attached to an SD map; the system of record is the token champion (`training/architecture.svg`) |
 | [`bev_fusion/`](bev_fusion/README.md) | problem 2: a camera + radar BEV perception system on nuScenes: the five-layer framework and the full network (camera + radar + temporal fusion + motion block) on the current GT version; training, evaluation, experiments, literature |
-| [`winners/`](winners/README.md) | the exported source code of the winning learned systems (one folder each: code, README with the command and the numbers to reproduce, manifest; no weights) |
 | [`data/NuScenes/`](data/NuScenes/README.md) | the nuScenes dataset family: description, manifest, download / check / link tools and the map of where raw data, caches and checkpoints live (the data itself is not in the repository) |
 
 Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).

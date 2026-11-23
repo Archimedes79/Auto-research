@@ -71,7 +71,7 @@ The line `Table: ...` before a table becomes its numbered caption; the alt text 
 |---|---|
 | `reporter.py` | the whole report tool, one file, with `selftest` |
 | `plots.py` | one clear bar chart from a small json (the ladder of systems with the gate floor; pending rows are a hatched stub) |
-| `winner.py` | exports the code of a winning system as a small folder (source + README + MANIFEST, never weights) for transfer and git; `verify` checks it against its manifest and reports drift; the folders live in `../winners/` |
+| `winner.py` | exports the code of a winning system as a small folder (source + README + MANIFEST, never weights) for transfer and git; `verify` checks it against its manifest and reports drift; the folders live in each project's `winner/` folder (`bev_fusion_lane_center/winner/`, `bev_fusion/winner/`; D139 / D140), `--out` names it |
 | `SKILL.md` | the procedure and the quality bar for writing such a report (an agent skill: copy it to `.claude/skills/reporter/SKILL.md` to install) |
 | `README.md` | this page |
 

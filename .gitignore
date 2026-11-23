@@ -21,9 +21,8 @@
 # both stay ignored by the first rule
 !/GtGenerator/
 
-# the report tool (reporter/: report builder, plots, winner export) and the winner folders (winners/: small source snapshots of winning systems, no weights)
+# the report tool (reporter/: report builder, plots, winner export); the winner folders are in each project (<project>/winner/: small source snapshots of winning systems, no weights; D139 / D140)
 !/reporter/
-!/winners/
 
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/
@@ -34,6 +33,7 @@
 !/bev_fusion_lane_center/project.json
 !/bev_fusion_lane_center/HANDOVER.md
 !/bev_fusion_lane_center/DESIGN.md
+!/bev_fusion_lane_center/winner/
 # code
 !/bev_fusion_lane_center/training/
 !/bev_fusion_lane_center/evaluation/
