@@ -192,4 +192,3 @@ dependencies:
       - wadler-lindig==0.1.7
       - yacs==0.1.8
       - yarl==1.25.1
-prefix: /home/ml/miniconda3/envs/gcar

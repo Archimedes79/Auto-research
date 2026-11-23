@@ -16,14 +16,16 @@ export CUDA_HOME="$CONDA_PREFIX"
 ls "$CUDA_HOME/bin/nvcc" && "$CUDA_HOME/bin/nvcc" --version | tail -2
 step "Python-Pakete"
 pip install -f https://data.pyg.org/whl/torch-2.8.0+cu129.html "torch-scatter==2.1.2+pt28cu129" 2>&1 | tail -2
-pip install spconv-cu126 addict efficientnet-pytorch einops fvcore hydra-core jaxtyping lightning "numpy<2" nuscenes-devkit peft pillow rootutils segmentation-models-pytorch timm transformers matplotlib opencv-python scikit-image imgaug scipy tqdm pyquaternion 2>&1 | tail -3
+pip install spconv-cu126 addict efficientnet-pytorch einops fvcore hydra-core jaxtyping lightning "numpy<2" nuscenes-devkit peft pillow rootutils segmentation-models-pytorch timm transformers matplotlib opencv-python scikit-image imgaug scipy tqdm pyquaternion numba 2>&1 | tail -3     # numba: evaluation/sparse_lanes/graph_eval.py and training/pipeline/p18_union_nb.py import it
 step "Gauss-Rasterizer bauen"
+# the clone of the GaussianCaR code is a prerequisite (remote and commit: foundation_code.md next to this script); without it the rasteriser cannot be built
+[ -d "$HOME/work/gaussiancar/gaussiancar/ops/diff-gaussian-rasterization" ] || { echo "FEHLT: der Clone ~/work/gaussiancar (siehe foundation_code.md); Umgebung NICHT fertig"; exit 1; }
 cd "$HOME/work/gaussiancar"
 export TORCH_CUDA_ARCH_LIST="8.6" MAX_JOBS=6
 pip install --no-build-isolation ./gaussiancar/ops/diff-gaussian-rasterization 2>&1 | tail -5
 step "Pruefung"
-python - <<'PY'
-import torch, spconv.pytorch, torch_scatter, timm, diff_gaussian_rasterization
+python - <<'PY' || { echo "PRUEFUNG FEHLGESCHLAGEN: Umgebung NICHT fertig (siehe die Meldung oben)"; exit 1; }
+import torch, spconv.pytorch, torch_scatter, timm, diff_gaussian_rasterization, numba
 print("torch", torch.__version__, "cuda", torch.version.cuda, torch.cuda.is_available(), torch.cuda.get_device_name(0))
 print("spconv ok, torch_scatter ok, timm", timm.__version__, "rasterizer ok")
 PY

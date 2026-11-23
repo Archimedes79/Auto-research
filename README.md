@@ -14,6 +14,7 @@ One lead agent plans a round and writes the experiment cards. Experiment agents 
 | [`bev_fusion_lane_center/`](bev_fusion_lane_center/README.md) | problem 1: a lane-centre-line graph from camera + radar, attached to an SD map; the system of record is the token champion (`training/architecture.svg`) |
 | [`bev_fusion/`](bev_fusion/README.md) | problem 2: a camera + radar BEV perception system on nuScenes: the five-layer framework and the full network (camera + radar + temporal fusion + motion block) on the current GT version; training, evaluation, experiments, literature |
 | [`data/NuScenes/`](data/NuScenes/README.md) | the nuScenes dataset family: description, manifest, download / check / link tools and the map of where raw data, caches and checkpoints live (the data itself is not in the repository) |
+| [`reporter/`](reporter/README.md) | the report builder: a folder of markdown parts and result files becomes one html report with its numbers filled from the result files and checked (`reporter.py build / check / pack`) |
 
 Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).
 
@@ -24,6 +25,7 @@ Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (dis
 - **Ground truth:** [`GtGenerator/README.md`](GtGenerator/README.md) (front v13, lane l6, release v14).
 - **Data:** raw nuScenes on D:, caches and checkpoints next to it, reached through links; the map is [`data/NuScenes/README.md`](data/NuScenes/README.md).
 - **Clean-up of 2026-11-20 / 21 (D129):** the decisions record was rewritten in neutral wording and merged into one file (`experiment_execution/DECISIONS.md`, shared by the two problems); clutter and dead code were removed (the removed code is only in the git history); the READMEs and drawings were brought to the current state.
+- **Layout of 2026-11-23 / 24 (D139 - D141):** each problem keeps its best network inside its own folder (`bev_fusion_lane_center/winner/`, `bev_fusion/winner/`: code copy, configs, manifest; the checkpoint itself is not in git); only the latest report stays (`bev_fusion_lane_center/results/E2E_Report_2026-11-23/`, with the result files its numbers come from in `data/`); the scratch folders `temp/` were emptied and left git; the owner's name and mail address left the tracked text. The decisions since then (new experiments included) are the last rows of `experiment_execution/DECISIONS.md`.
 
 ## Where to start
 - The method and its rules: [`autoresearch/METHOD.md`](autoresearch/METHOD.md) (six hard rules, everything else is a default).
@@ -35,14 +37,16 @@ Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (dis
 `git clone` gives the code and all text records (cards, ledgers, decisions, reports as text, the run tags `lcr/<run id>` / `bf/...` that are on origin: a tag holds the code a run started from). It does not give data, checkpoints, caches, images or the generated reports: those are rebuilt, and `bev_fusion_lane_center/data/rebuild.json` names the script that makes each one. The repository sets LF line endings itself (`.gitattributes`), so a clone on Windows with `core.autocrlf=true` works in WSL.
 
 1. **Machine**: Windows 11 + WSL2 Ubuntu 22.04, an NVIDIA GPU for training (RTX 3060 12 GB was used; the tests and the checks below need no GPU).
-2. **Python environment** `gcar` (conda, torch 2.8): `bash bev_fusion_lane_center/tools/env/setup/setup_gcar_env.sh` (list of packages: `bev_fusion_lane_center/tools/env/environment_gcar.yml`, `.txt`; third-party code that is cloned, not stored: `tools/env/setup/foundation_code.md`). Scripts run through `bash tools/env/_py14.sh <script>` from the problem folder.
+2. **Python environment** `gcar` (conda, torch 2.8; the scripts expect Miniconda at `~/miniconda3` inside WSL and the clone of the GaussianCaR code at `~/work/gaussiancar`): `bash bev_fusion_lane_center/tools/env/setup/setup_gcar_env.sh` (list of packages: `bev_fusion_lane_center/tools/env/environment_gcar.yml`, `.txt`; third-party code that is cloned, not stored: `tools/env/setup/foundation_code.md`). Scripts run through `bash tools/env/_py14.sh <script>` from the problem folder.
 3. **Raw data**: nuScenes is not in git and not downloaded by any tool without the owner's word; `data/NuScenes/README.md` and `data/NuScenes/manifest.json` say what is needed and how it is verified (`data/NuScenes/tools/`). The ground truth is generated from it: `wsl bash GtGenerator/run_nice.sh ...` (see `GtGenerator/AGENTS.md`).
 4. **Check what works without data** (minutes, CPU only), from the problem folder `bev_fusion_lane_center/`:
    ```
+   wsl python3 ../autoresearch/tools/install_agents.py            # once: copies the agent roles into .claude/agents/ (not in git; the test wrapper checks them)
    wsl python3 tools/maintenance/reproducible.py --no-clone      # git policy, imports, rebuild manifest
    wsl bash tools/maintenance/run_all_tests.sh                    # PASS / SKIP / FAIL: a SKIP names stored data that is not in git, a FAIL is a real defect
    wsl python3 ../autoresearch/tools/check_structure.py           # folder rules, dead paths in the documents
    ```
+   `check_structure.py` exits 1 in a fresh clone: it also lists every path in a document that points at data or run folders, which a clone does not have (several hundred `dead path` lines); in a clone only its lines about root files, folders and missing READMEs count. `reporter.py check` runs with the system python, `reporter.py build` needs `markdown-it-py` (the `gcar` environment has it).
 5. **Run tags**: a tag is pushed only when the commit it points at holds no scratch or forbidden file (`autoresearch/tools/check_git.py` lists the held-back ones). About 380 older tags are held back on the machine that ran them (their snapshots include scratch folders), so an old card's `git show lcr/<id>:<file>` can fail in a clone; the card's text, the ledger row and the code of main are what a clone has.
 6. **Understand the state**: this README, then `bev_fusion_lane_center/HANDOVER.md` (where we are), `PROBLEM.md`, `DESIGN.md`, `experiment_execution/DECISIONS.md`; each experiment card (`experiments/E<id>_*/experiment.md`) says what it ran, with which data and which code (the git tag of the run). Without the result folders (`runs/`) a card shows the recorded numbers but a number cannot be re-measured until the data and the checkpoint are rebuilt as `data/rebuild.json` describes.
 

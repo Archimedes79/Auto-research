@@ -8,7 +8,9 @@
 # Usage (from the repository root): wsl bash data/NuScenes/tools/link_views.sh [--selftest]
 #   --selftest: holds a file of the mini view open and checks that the guard sees it; changes nothing
 set -euo pipefail
-raw_d=/mnt/d/Auto-research/NuScenes
+raw_d="${NUSC_ROOT:-/mnt/d/Auto-research/NuScenes}"     # where the raw data lies; another machine sets NUSC_ROOT (as get_occ3d_labels.sh does)
+[ -d "$raw_d" ] || { echo "the raw nuScenes folder $raw_d does not exist: set NUSC_ROOT (see data/NuScenes/README.md)"; exit 1; }
+[ -d bev_fusion_lane_center/data/nuscenes_additions ] || { echo "bev_fusion_lane_center/data/nuscenes_additions is missing (the lane project's info files and radar filters, not in git: bev_fusion_lane_center/data/README.md says how they are made); run from the repository root"; exit 1; }
 add_c="$(cd bev_fusion_lane_center/data/nuscenes_additions && pwd)"
 add="nuscenes_infos_train.pkl nuscenes_infos_val.pkl nuscenes_infos_train_crn.pkl nuscenes_infos_val_crn.pkl radar_bev_filter radar_pv_filter"
 open_files() {  # "fd -> target" of every open file under a view or under what the views link to (no pipe: pipefail + SIGPIPE)

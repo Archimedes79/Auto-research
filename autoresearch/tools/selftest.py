@@ -202,7 +202,7 @@ try:
     hold_cmd("clear", "S.stopsync2", "--words", "the owner: ok")
     # a killed launcher leaves a stalled record: --after blocks on it, schedule.derived shows it failed, a new attempt is allowed
     stall = subprocess.Popen([sys.executable, f"{HERE}/run.py", "--id", "S.stall", "--hyp", "selftest", "--pred", "p", "--rule", "r", "--no-git", "--", "bash", "-c", "sleep 60"], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    for _ in range(100):
+    for _ in range(450):         # up to 45 s: a launch on a Windows-mounted checkout (/mnt/c) can take 25 - 30 s; the command itself sleeps 60 s
         if RUN.record(f"{T}/runs/S.stall").get("status") == "running" and RUN.record(f"{T}/runs/S.stall").get("pid"):
             break
         import time

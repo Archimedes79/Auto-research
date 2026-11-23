@@ -22,7 +22,7 @@ Abstract and a teaser figure first, then:
 Layout: serif text, sans headings and tables, numbered figures ("Figure 3.") and tables with captions, an abstract box, a print stylesheet (browser "Save as PDF" gives a clean paper), light and dark mode.
 
 ## Use (one page)
-Needs python 3.8+ with `markdown-it-py` (Pillow optional: it recompresses images). In this workspace: `wsl /home/ml/miniconda3/envs/gcar/bin/python reporter.py ...` (it has both).
+Needs python 3.8+ with `markdown-it-py` (Pillow optional: it recompresses images). In this workspace: `wsl ~/miniconda3/envs/gcar/bin/python reporter.py ...` (it has both).
 
 ```
 python reporter.py new   my_report --title "My system"   # scaffold: report.json + the chapters above, each with a prompt
