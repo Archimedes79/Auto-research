@@ -31,5 +31,19 @@ Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (dis
 - A problem: its README, `project.json` (paths), `DESIGN.md` (the design spec) and, for the lane problem, `HANDOVER.md` (where we are), `PROBLEM.md` (goal) and `experiment_execution/DECISIONS.md` (the decisions of the owner, one neutral table); `bev_fusion/` keeps its plan in `bev_fusion/plan/`.
 - Rules for agents working in this checkout: [`CLAUDE.md`](CLAUDE.md).
 
+## Fresh checkout: what you get and what you need
+`git clone` gives the code and all text records (cards, ledgers, decisions, reports as text, the run tags `lcr/<run id>`, `bf/...`, which hold the code a run started from). It does not give data, checkpoints, caches, images or the generated reports: those are rebuilt, and `bev_fusion_lane_center/data/rebuild.json` names the script that makes each one. The repository sets LF line endings itself (`.gitattributes`), so a clone on Windows with `core.autocrlf=true` works in WSL.
+
+1. **Machine**: Windows 11 + WSL2 Ubuntu 22.04, an NVIDIA GPU for training (RTX 3060 12 GB was used; the tests and the checks below need no GPU).
+2. **Python environment** `gcar` (conda, torch 2.8): `bash bev_fusion_lane_center/tools/env/setup/setup_gcar_env.sh` (list of packages: `bev_fusion_lane_center/tools/env/environment_gcar.yml`, `.txt`; third-party code that is cloned, not stored: `tools/env/setup/foundation_code.md`). Scripts run through `bash tools/env/_py14.sh <script>` from the problem folder.
+3. **Raw data**: nuScenes is not in git and not downloaded by any tool without the owner's word; `data/NuScenes/README.md` and `data/NuScenes/manifest.json` say what is needed and how it is verified (`data/NuScenes/tools/`). The ground truth is generated from it: `wsl bash GtGenerator/run_nice.sh ...` (see `GtGenerator/AGENTS.md`).
+4. **Check what works without data** (minutes, CPU only), from the problem folder `bev_fusion_lane_center/`:
+   ```
+   wsl python3 tools/maintenance/reproducible.py --no-clone      # git policy, imports, rebuild manifest
+   wsl bash tools/maintenance/run_all_tests.sh                    # PASS / SKIP / FAIL: a SKIP names stored data that is not in git, a FAIL is a real defect
+   wsl python3 ../autoresearch/tools/check_structure.py           # folder rules, dead paths in the documents
+   ```
+5. **Understand the state**: this README, then `bev_fusion_lane_center/HANDOVER.md` (where we are), `PROBLEM.md`, `DESIGN.md`, `experiment_execution/DECISIONS.md`; each experiment card (`experiments/E<id>_*/experiment.md`) says what it ran, with which data and which code (the git tag of the run). Without the result folders (`runs/`) a card shows the recorded numbers but a number cannot be re-measured until the data and the checkpoint are rebuilt as `data/rebuild.json` describes.
+
 ## Reproducing a result
 A result card names the ground-truth version and mode, the evaluation code version, the frames, the raw-data manifest, the model and the environment (`autoresearch/reproducibility.md`, `autoresearch/tools/provenance.py`). Recipes for the raw data stay in git (`data/NuScenes/`).
