@@ -2,7 +2,7 @@
 Origin: the owner's questions of 2026-11-23 (every section a Catmull-Rom spline through the nodes; should the nodes pull information from their neighbours; support points at intersections?). Numbers: memory note
 lane-catmull-rom-check-2026-11-23.
 
-    wsl bash tools/env/_py14.sh curve_repr_check.py [repr|noise|kinks|boundaries|splits|curvature|nodeerror|smooth|all] [--every 12]      # VAL frames, every 12th (73 frames, 1090 paths)
+    wsl bash tools/env/_py14.sh curve_repr_check.py [repr|noise|kinks|boundaries|splits|curvature|nodeerror|paircorr|smooth|all] [--every 12]      # VAL frames, every 12th (73 frames, 1090 paths)
     wsl bash tools/env/_py14.sh curve_repr_check.py --selftest
 
   repr        interior nodes per 100 m that a polyline / uniform Catmull-Rom / centripetal Catmull-Rom / cubic Hermite with the TRUE heading (the present connector with a perfect heading, handles 1/3 of the chord) needs to stay
@@ -13,6 +13,7 @@ lane-catmull-rom-check-2026-11-23.
   splits      angles at the split / merge events of the GT between the path directions on each side (can ONE shared node carry ONE tangent?)
   curvature   the same Catmull-Rom error binned by the local turning rate of the GT (7 m and 3.5 m node spacing): where would extra nodes pay
   nodeerror   the position errors of the B' tokens of VAL against their GT nodes: lateral / longitudinal rms and the correlation of the lateral error between nodes 1 .. 5 hops (about 2 m each) apart
+  paircorr    the correlation of the 2-D position error between two nodes at distance d, on the SAME lane (<= 10 hops of the GT graph) or on another lane: along the lane or across lanes?
   smooth      nodes every 7 m with independent noise: the spline through the raw nodes against a spline through nodes that were smoothed with their neighbours (3 / 5 nodes, quadratic fit): how much do neighbours help
 The curves (`cr_uniform`, `cr_centripetal`, `hermite_true`) are the building blocks of a spline read-out; a read-out of the champion's nodes would import them from here."""
 import os
@@ -319,7 +320,7 @@ def report_node_error(every=4):
     td = LT.TokData("val", res=2.0, feats=False)
     lat_pairs = {h: [] for h in range(1, 6)}
     lon_pairs = {h: [] for h in range(1, 6)}
-    lats, lons, n_tok = [], [], 0
+    lats, lons, rngs, n_tok = [], [], [], 0
     for i in range(0, len(ds), every):
         it = ds[i]
         t = td.table(i)
@@ -340,6 +341,7 @@ def report_node_error(every=4):
             err_lon[g] = float(d @ u)
             err_lat[g] = float(d @ np.array([-u[1], u[0]]))
         lats += list(err_lat.values())
+        rngs += [float(np.linalg.norm(np.asarray(t["pos"][g], float))) for g in err_lat]
         lons += list(err_lon.values())
         n_tok += int(m.sum())
         succ = {}
@@ -353,12 +355,70 @@ def report_node_error(every=4):
                     if b in err_lat:
                         lat_pairs[h].append((err_lat[g], err_lat[b]))
                         lon_pairs[h].append((err_lon[g], err_lon[b]))
-    lats, lons = np.array(lats), np.array(lons)
+    lats, lons, rngs = np.array(lats), np.array(lons), np.array(rngs)
     print(f"VAL cache seed 0, every {every}th frame: {len(lats)} GT nodes with an assigned token ({n_tok} tokens)")
     print(f"lateral error rms {np.sqrt(np.mean(lats ** 2)):.3f} m (median |e| {np.median(np.abs(lats)):.3f}, p90 {np.percentile(np.abs(lats), 90):.3f}); longitudinal rms {np.sqrt(np.mean(lons ** 2)):.3f} m")
+    print("lateral error rms by range from the ego: " + ", ".join(f"{lo} - {hi} m: {np.sqrt(np.mean(lats[(rngs >= lo) & (rngs < hi)] ** 2)):.3f} (n {int(((rngs >= lo) & (rngs < hi)).sum())})" for lo, hi in ((0, 15), (15, 30), (30, 50), (50, 100))))
     print("correlation of the error between GT nodes h hops (about 2 m each) apart:   h:  " + "  ".join(f"{h}" for h in range(1, 6)))
     for name, pairs in (("lateral     ", lat_pairs), ("longitudinal", lon_pairs)):
         print(f"  {name}" + " " * 52 + "  ".join(f"{np.corrcoef(np.array(pairs[h]).T)[0, 1]:.2f}" for h in range(1, 6)) + "   n " + str([len(pairs[h]) for h in range(1, 6)]))
+
+
+def report_pair_corr(every=4):
+    """does a node's position error resemble that of nodes on the SAME lane (connected within 10 hops of the GT graph, about 20 m) or that of nodes on OTHER lanes at the same Euclidean distance? Global 2-D error vectors of the B' tokens against their GT
+    nodes (VAL, cache seed 0); correlation = sum(e_a . e_b) / sqrt(sum |e_a|^2 sum |e_b|^2) per distance bin"""
+    import lane_ptok_data as LP
+    import lane_tok_data as LT
+    ds = LP.PTokData("val", 0, "e292_a", None, 0.0)
+    td = LT.TokData("val", res=2.0, feats=False)
+    edges = [0, 2, 4, 6, 10, 15, 25]
+    acc = {c: np.zeros((len(edges) - 1, 3)) for c in ("same", "other")}
+    cnt = {c: np.zeros(len(edges) - 1, int) for c in ("same", "other")}
+    for i in range(0, len(ds), every):
+        it = ds[i]
+        t = td.table(i)
+        gid = np.asarray(it["label"]["gt_id"])
+        valid = np.asarray(it["valid"], bool)
+        pos = np.asarray(it["pos"], float)
+        m = valid & (gid >= 0) & (gid < len(t["pos"]))
+        e = {}
+        for k in np.flatnonzero(m):
+            e.setdefault(int(gid[k]), []).append(pos[k])
+        ids = np.array(sorted(e))
+        if len(ids) < 2:
+            continue
+        gp = np.asarray(t["pos"], float)[ids]
+        ev = np.array([np.mean(e[g], axis=0) for g in ids]) - gp
+        adj = {}
+        for a_, b_ in zip(t["src"], t["dst"]):
+            adj.setdefault(int(a_), set()).add(int(b_))
+            adj.setdefault(int(b_), set()).add(int(a_))
+        index = {int(g): n for n, g in enumerate(ids)}
+        near = np.zeros((len(ids), len(ids)), bool)
+        for g in ids:
+            seen, front = {int(g)}, {int(g)}
+            for _ in range(10):
+                front = {y for x in front for y in adj.get(x, ())} - seen
+                seen |= front
+            for x in seen:
+                if x in index:
+                    near[index[int(g)], index[x]] = True
+        D = np.linalg.norm(gp[:, None] - gp[None], axis=2)
+        iu = np.triu_indices(len(ids), 1)
+        d, same = D[iu], near[iu]
+        dot = (ev[:, None] * ev[None]).sum(2)[iu]
+        n2 = (ev ** 2).sum(1)
+        na, nb = n2[iu[0]], n2[iu[1]]
+        for b in range(len(edges) - 1):
+            sel = (d >= edges[b]) & (d < edges[b + 1])
+            for c, mm in (("same", sel & same), ("other", sel & ~same)):
+                acc[c][b] += [dot[mm].sum(), na[mm].sum(), nb[mm].sum()]
+                cnt[c][b] += int(mm.sum())
+    print("correlation of the 2-D position error (global frame) between two nodes at Euclidean distance d, on the same lane (<= 10 hops of the GT graph) or on another lane")
+    print("d (m)        " + "".join(f"{f'{edges[b]} - {edges[b + 1]}':>14}" for b in range(len(edges) - 1)))
+    for c, name in (("same", "same lane"), ("other", "other lane")):
+        r = [acc[c][b][0] / np.sqrt(max(acc[c][b][1] * acc[c][b][2], 1e-12)) for b in range(len(edges) - 1)]
+        print(f"{name:12s} " + "".join(f"{v:14.2f}" for v in r) + "   pairs " + str(list(cnt[c])))
 
 
 def selftest():
@@ -387,12 +447,12 @@ def main():
     if "--selftest" in sys.argv:
         return selftest()
     every = int(sys.argv[sys.argv.index("--every") + 1]) if "--every" in sys.argv else 12
-    what = [a for a in sys.argv[1:] if a in ("repr", "noise", "kinks", "boundaries", "splits", "curvature", "nodeerror", "smooth", "all")] or ["all"]
+    what = [a for a in sys.argv[1:] if a in ("repr", "noise", "kinks", "boundaries", "splits", "curvature", "nodeerror", "paircorr", "smooth", "all")] or ["all"]
     frames = load(every)
     paths, sections = paths_of(frames)
     print(f"{len(frames)} frames, {len(paths)} paths, {len(sections)} sections (>= 6 m)")
     for w, f in (("repr", lambda: report_repr(paths, sections)), ("noise", lambda: report_noise(paths)), ("kinks", lambda: report_kinks(paths)), ("boundaries", lambda: report_boundaries(frames)),
-                 ("splits", lambda: report_splits(frames)), ("curvature", lambda: report_curvature(paths)), ("nodeerror", lambda: report_node_error()), ("smooth", lambda: report_smooth(paths))):
+                 ("splits", lambda: report_splits(frames)), ("curvature", lambda: report_curvature(paths)), ("nodeerror", lambda: report_node_error()), ("paircorr", lambda: report_pair_corr()), ("smooth", lambda: report_smooth(paths))):
         if "all" in what or w in what:
             f()
             sys.stdout.flush()
