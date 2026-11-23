@@ -1,5 +1,5 @@
 {
- "rule": "card E389b (ecf42b8811), by hand; arithmetic by temp/e389b/e389b_verdict.py",
+ "rule": "card E389b (ecf42b8811), by hand; arithmetic by evaluation/jroute_verdict.py",
  "band": 0.01,
  "seeds": {
   "0": {
