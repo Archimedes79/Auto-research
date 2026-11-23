@@ -319,4 +319,4 @@ Reading depth of the level-1 notes: loop-16 notes (301) are method level (M) or 
 ## 6. Related documents
 - [../experiment_execution/plans/Literature_Compatibility_Space_EN.md](../experiment_execution/plans/Literature_Compatibility_Space_EN.md): how each technique family fits the loop-16 builder (stages, adapters, conflicts).
 - [../experiment_execution/plans/Concept_Hypothesis_Tree_Lane_Graph_EN.md](../experiment_execution/plans/Concept_Hypothesis_Tree_Lane_Graph_EN.md), [Hypothesis_Tree_Spec_and_Tests_EN.md](../experiment_execution/plans/Hypothesis_Tree_Spec_and_Tests_EN.md), [Growth_and_Link_Architectures_EN.md](../experiment_execution/plans/Growth_and_Link_Architectures_EN.md), [Loop16_Triage_Plan_EN.md](../experiment_execution/plans/Loop16_Triage_Plan_EN.md): the design the literature was read against.
-- [../HANDOVER.md](../HANDOVER.md), [../experiment_execution/PLAN.md](../experiment_execution/PLAN.md): state and next loop.
+- [../HANDOVER.md](../HANDOVER.md), [../experiment_execution/DECISIONS.md](../experiment_execution/DECISIONS.md): where we are and what the owner decided.

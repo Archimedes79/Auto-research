@@ -211,6 +211,7 @@ status.json
 !/bev_fusion_lane_center/results/E2E_*Report*/
 /bev_fusion_lane_center/results/E2E_*Report*/*
 !/bev_fusion_lane_center/results/E2E_*Report*/report.json
+!/bev_fusion_lane_center/results/E2E_*Report*/README.md
 !/bev_fusion_lane_center/results/E2E_*Report*/parts/
 /bev_fusion_lane_center/results/E2E_*Report*/parts/*
 !/bev_fusion_lane_center/results/E2E_*Report*/parts/*.md

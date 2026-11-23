@@ -53,7 +53,19 @@
       "__pycache__",
       ".gpu_slots"
     ],
-    "allow": []
+    "allow_why": "explicit exceptions (2026-11-23): the architecture drawings are small text svg files drawn by code from the real modules and linked from the READMEs (the only svg in git); the ledger and its markdown are single-file text records over 1 MB that are read complete (CLAUDE.md: single-file records are not split or rolled)",
+    "allow": [
+      "GtGenerator/architecture.svg",
+      "autoresearch/architecture.svg",
+      "autoresearch/history/architecture_target_2026-11-01.svg",
+      "autoresearch/overview.svg",
+      "autoresearch/suites.svg",
+      "autoresearch/system.svg",
+      "bev_fusion/training/architecture.svg",
+      "bev_fusion_lane_center/training/architecture.svg",
+      "bev_fusion_lane_center/experiment_execution/LEDGER.csv",
+      "bev_fusion_lane_center/experiment_execution/LEDGER.md"
+    ]
   },
   "clone_checks": [
     {

@@ -3,12 +3,18 @@ BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"; RE
 # Run every self-test of the project (about 10 minutes, uses the GPU for four of them). Usage (from the problem folder): wsl bash tools/maintenance/run_all_tests.sh
 R=$BFLC
 P="bash $R/tools/env/_py14.sh"
-fail=0
+fail=0; npass=0; nskip=0; nfail=0
+# PASS / FAIL as before; SKIP = the test needs stored data that is not in git (runs/, data/, models/: run folders, caches, checkpoints; data/rebuild.json says how each is made): a fresh checkout skips
+# these with the missing path named instead of failing; any other failure is a FAIL
 run() {
   name="$1"; shift
   out=$($P "$@" 2>&1); rc=$?
   last=$(echo "$out" | tail -1 | cut -c1-110)
-  if [ $rc -eq 0 ]; then echo "PASS  $name  | $last"; else echo "FAIL  $name  | $last"; fail=1; fi
+  if [ $rc -eq 0 ]; then echo "PASS  $name  | $last"; npass=$((npass+1))
+  elif echo "$out" | grep -qE "(FileNotFoundError|No such file or directory).*/(runs|data|models)/"; then
+    miss=$(echo "$out" | grep -oE "(FileNotFoundError|No such file or directory)[^/]*'?/[^ ']*/(runs|data|models)/[^ ']*" | head -1 | grep -oE "/[^ ']*/(runs|data|models)/[^ ']*" | sed 's#.*/\(runs\|data\|models\)/#\1/#' | head -1)
+    echo "SKIP  $name  | needs data that is not in git: ${miss:-see the message}"; nskip=$((nskip+1))
+  else echo "FAIL  $name  | $last"; fail=1; nfail=$((nfail+1)); fi
 }
 run "grid metric reproduces stored numbers" lane_grid/selftest.py
 run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
@@ -89,9 +95,11 @@ run "E389 route-association head + trainer (CPU, synthetic, 67 mutants)" grid/te
 run "E389 route-association read-out: hand frames, cost, dump / score / rules on 24 real VAL frames (CPU; the full run with the textual mutants is test_jroute_eval.py without argument, about 30 min)" test_jroute_eval.py selftests
 run "E389 route data: tier-1 route, band labels, forks, map-error modes (needs the VAL cache; mutants: run the file without the argument)" grid/test_lane_route.py selftests
 run "E390 SD road-graph encoding: leaks, invariance, divider line, paired levels, P6, cut (CPU, hand graphs, mutants)" grid/test_sdgraph.py
+run "E394 map-error catalogue (nested draws, per-mode invariants, the TRAIN mix, 10 mutants; CPU, hand graph)" grid/test_maperror.py
 run "E391 map association: perception untouched (no-detach mutant), the label rule, targets + every arm on a real batch (CPU)" grid/test_mapassoc.py
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py
 run "jthresh: learned decode thresholds (E388): soft F1 by hand, a known optimum, mutants" jthresh.py selftest
 run "lane suite of the evaluation (5 checks, about 9 minutes)" test_lane_suite.py
 run "simplify_stat: the simplification table of a report from git" tools/simplify_stat.py selftest
+echo "== $npass passed, $nskip skipped (need data that is not in git: bev_fusion_lane_center/data/README.md and data/rebuild.json say how it is made), $nfail failed"
 exit $fail
