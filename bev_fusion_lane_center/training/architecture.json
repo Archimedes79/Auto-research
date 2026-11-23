@@ -993,6 +993,7 @@
  "not_drawn": {
   "evaluation/gpu_gate.py": "helper: wait until the GPU has room before a GPU evaluation step (D100)",
   "evaluation/pmap.py": "helper: order-keeping parallel map over a fork pool for CPU scoring",
+  "evaluation/jroute_verdict.py": "E389b: the arithmetic of the card's rule from stored score cards (by hand), no part of the chain",
   "evaluation/tests/": "unit tests of the evaluation modules (run by tools/maintenance/run_all_tests.sh)",
   "tools/": "helpers around the chain: pictures, one-off figure scripts, literature catalogue, maintenance, environment; no part of the delivered path",
   "training/bflc_paths.py": "project paths from the checkout location, imported by every module",
