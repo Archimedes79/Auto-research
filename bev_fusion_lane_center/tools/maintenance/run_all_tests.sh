@@ -39,9 +39,16 @@ run "output stage simplify_dp (10)"         test_dp_simplify.py
 run "route data: one copy of resample_matrix / route_item" test_route_data.py
 run "seed ring (E266) + output union (E264)" test_seed_ring_union.py
 run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
-run "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
-run "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest
-run "agent copies in .claude/agents in step"   $REPO/autoresearch/tools/install_agents.py --check
+# the tools of autoresearch/ run with the system python3 of the WSL (as the hook, the launcher and their documentation call them), not with the conda env: the guard hook's selftest
+# expects the RecursionError of Python 3.10 on a 5000-deep event, Python 3.12 of the env parses it (the hook itself is run by python3)
+runsys() { local keep="$P"; P="python3"; run "$@"; P="$keep"; }
+runsys "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
+runsys "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest
+if [ -d "$REPO/.claude/agents" ]; then
+  runsys "agent copies in .claude/agents in step"   $REPO/autoresearch/tools/install_agents.py --check
+else
+  echo "SKIP  agent copies in .claude/agents in step  | not installed in this checkout: python3 autoresearch/tools/install_agents.py"; nskip=$((nskip+1))
+fi
 run "images + video tools"                  viz/selftest.py
 run "lane prototype: JSON graph == evaluate's graph, card reproduced" test_lane_prototype.py
 run "champion fast path == reference graphs" p16_fast_check.py --n 10
