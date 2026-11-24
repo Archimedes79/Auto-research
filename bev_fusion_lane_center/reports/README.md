@@ -1,5 +1,17 @@
 # Reports
 
+## The latest report and how to build one (2026-11-24)
+
+**The latest html report is not in this folder**: `../results/E2E_Report_2026-11-23/E2E_Bericht_2026-11-23.html` (one file, pictures embedded; next to it `E2E_Code_Paket_2026-11-23.zip`, the chapters in `parts/`, `report.json`, the result files in `data/`). The html and the zip are generated, so they are on this disk and not in git; older reports are gone from the tree (D140). Reports since 2026-11-12 are built by the report tool `../../reporter/reporter.py` (README there), not by the builders below.
+
+How a report is made (the tool writes files only):
+- a report is a folder: `report.json` (title, abstract, chapters, `values` = name -> result file + key, `sources`) and the chapters as markdown in `parts/`; the text says `{{name}}` and the tool fills the number from the result file, a missing one stays a visible PENDING mark;
+- pictures: `![caption](parts/figures/x.png)` becomes a numbered, embedded figure; `Table: caption` above a table numbers it; `![clip](media/x.mp4)` puts a video next to the html; a drawing is an svg part; light / dark mode and a print stylesheet are built in;
+- commands (from the repository root; in WSL `~/miniconda3/envs/gcar/bin/python`): `python reporter/reporter.py new <folder> --title "..."` (scaffold with the chapters), `build <folder> --strict` (html; refuses PENDING), `check <folder>` (every number of the text is in a source), `pack <folder>` (the code package zip);
+- the pictures of the latest report come from `../tools/map_assoc_fig.py`, `../tools/report_charts.py` and `../tools/route_frames_fig.py` (run with `bash tools/env/_py14.sh <script> ...`); they need run folders that are not in git, so a clone rebuilds text and numbers, not the figures; the exact lines are in the report's own README.
+
+Everything below describes the October weekly reports (PDF) and their builders; it is kept as history.
+
 Cleaned up on 2026-10-24 (two passes). Read the two weekly reports first.
 
 ## weekly/ (the documents to read)
