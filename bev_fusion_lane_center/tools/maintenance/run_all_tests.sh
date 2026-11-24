@@ -47,6 +47,7 @@ runsys() { local keep="$P"; P="python3"; run "$@"; P="$keep"; }
 runneeds() { local need="$1"; shift; if [ -e "$R/$need" ]; then run "$@"; else echo "SKIP  $1  | needs data that is not in git: $need"; nskip=$((nskip+1)); fi; }
 runsys "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
 runsys "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest
+runsys "recipe.py: repeat a run from a clone (base + overlay, show / repeat / check / store on throw-away repositories)" $REPO/autoresearch/tools/recipe.py --selftest
 if [ -d "$REPO/.claude/agents" ]; then
   runsys "agent copies in .claude/agents in step"   $REPO/autoresearch/tools/install_agents.py --check
 else
