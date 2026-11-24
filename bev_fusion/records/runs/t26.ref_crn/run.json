@@ -1,0 +1,76 @@
+{
+ "id": "t26.ref_crn",
+ "hypothesis": "CRN R50 scores a devkit mAP within 0.473 +- 0.05 on the 1706 samples of the 43 common scenes, and its boxes converted to our frames give the reference for the object row.",
+ "prediction": "devkit mAP 0.42 - 0.52 (gate c, light tables); the front-sector mAP2 of CRN on the 1620 frames above the base's",
+ "rule": "gate c of card t26 section 1 (else maps only); the object row itself is composed by hand from the table rows",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/t26/job_crn_full.sh",
+ "argv": [
+  "bash",
+  "temp/t26/job_crn_full.sh"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 489590,
+ "created": "2026-11-15T09:21:32",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "t26",
+ "card_sha": "28dd05270a1bbc5a",
+ "card_arms": {
+  "one": {
+   "order": {},
+   "run_ids": [
+    "t26.one_s0"
+   ]
+  },
+  "base": {
+   "order": {
+    "": [
+     "runs/t26_base/eval/card.json"
+    ]
+   },
+   "run_ids": [
+    "t26.base_eval",
+    "t26.base_eval43",
+    "t26.ref_maps_base",
+    "t26.base_eval_vel",
+    "t26.ref_crn_smoke",
+    "t26.ref_crn"
+   ]
+  }
+ },
+ "code_hash_first": "8c0ecdd363d0",
+ "started": "2026-11-15T09:22:41",
+ "code_hash": "8c0ecdd363d0",
+ "commit": "3f365b62f5",
+ "tag": "bf/t26.ref_crn",
+ "git_note": "1755 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 490140,
+ "pgid": 490140,
+ "pid_start": 13314967,
+ "exit": 0,
+ "duration_s": 1250,
+ "attempts": 1,
+ "ended": "2026-11-15T09:43:33",
+ "last_lines": [
+  "construction_vehicle\t0.188\t1.004\t0.565\t1.135\t0.070\t0.448",
+  "pedestrian\t0.497\t0.560\t0.294\t0.702\t0.351\t0.192",
+  "motorcycle\t0.585\t0.360\t0.291\t0.713\t0.329\t0.346",
+  "bicycle\t0.517\t0.396\t0.244\t0.756\t0.177\t0.011",
+  "traffic_cone\t0.658\t0.355\t0.389\tnan\tnan\tnan",
+  "barrier\t0.525\t0.356\t0.273\t0.160\tnan\tnan",
+  "mAP 0.5023  NDS 0.5824  | car AP 0.730  pedestrian AP 0.497 | truck 0.372  bus 0.656  trailer 0.295  construction_vehicle 0.188  motorcycle 0.585  bicycle 0.517  traffic_cone 0.658  barrier 0.525",
+  "gate (c): PASS - mAP 0.5023 against the README's 0.473 +- 0.05 on 1706 samples",
+  "GT: v13, signature 0.5_4_a107e0b4e8, store data/autogt/a107e0b4e8",
+  "1706 CRN samples in 43 scenes; 1620 are VAL samples with a previous and a next key frame (43 scenes)",
+  "1620 frames of 43 scenes, 329058 CRN boxes with score >= 0.05 -> /home/ml/work/CRN/outputs/t26_crn/crn_front.pkl",
+  "crn full done"
+ ]
+}

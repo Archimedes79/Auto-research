@@ -1,0 +1,69 @@
+{
+ "id": "t26.base_eval",
+ "hypothesis": "The stored base runs/t20_base_s0 (GT v9, frozen cached teachers), scored on GT v13 by the live evaluator on VAL 1000, is the control of t26; the GT shift is measured before the launch.",
+ "prediction": "detf mAP within 0.02 of the stored card on GT v9 (0.4092) and lane divider IoU@0.5 within 0.02 (0.4256)",
+ "rule": "no verdict of its own: the numbers are the control of t26 (JSON clauses against base); the shift against the stored card is written into the card",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/t26/job_base_eval.sh",
+ "argv": [
+  "bash",
+  "temp/t26/job_base_eval.sh"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 448853,
+ "created": "2026-11-15T04:15:09",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "t26",
+ "card_sha": "28dd05270a1bbc5a",
+ "card_arms": {
+  "one": {
+   "order": {},
+   "run_ids": [
+    "t26.one_s0"
+   ]
+  },
+  "base": {
+   "order": {},
+   "run_ids": [
+    "t26.base_eval",
+    "t26.base_eval43",
+    "t26.ref_maps_base"
+   ]
+  }
+ },
+ "code_hash_first": "8c0ecdd363d0",
+ "started": "2026-11-15T04:17:12",
+ "code_hash": "8c0ecdd363d0",
+ "commit": "9793347460",
+ "tag": "bf/t26.base_eval",
+ "git_note": "1735 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 449340,
+ "pgid": 449340,
+ "pid_start": 11482053,
+ "exit": 0,
+ "duration_s": 5114,
+ "attempts": 1,
+ "ended": "2026-11-15T05:42:27",
+ "last_lines": [
+  "cov/dt+0.00/pedestrian/radar_only/recall2m                       0.5057",
+  "cov/dt+0.00/pedestrian/neither/n_gt                            602.0000",
+  "cov/dt+0.00/pedestrian/neither/recall2m                          0.4585",
+  "val_loss/group.areas                                             0.9280",
+  "val_loss/group.lines                                             1.7320",
+  "val_loss/group.motion                                            0.5455",
+  "val_loss/group.objects                                          11.0248",
+  "val_loss/total                                                   8.1061",
+  "info/step                                                          6000",
+  "info/n_samples                                                     1000",
+  "info/n_scenes                                                        82",
+  "done: 1000 val frames, 82 scenes, 4668 s -> temp/t26/base_run/eval (suite run /mnt/c/Auto-research/bev_fusion/temp/t26/base_run/eval/suite/quant/eval_fusion_n1000)"
+ ]
+}

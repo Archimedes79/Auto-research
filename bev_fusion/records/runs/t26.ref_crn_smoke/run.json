@@ -1,0 +1,76 @@
+{
+ "id": "t26.ref_crn_smoke",
+ "hypothesis": "CRN R50 runs on our frames on the RTX 3060 within about 5 GB; TF32 off against on moves box centres by at most 0.1 m on 50 samples; the converted boxes land on our ground truth.",
+ "prediction": "peak memory 3 - 5 GB, ms per sample below 400, largest matched-centre difference TF32 on / off <= 0.1 m, overlay hits >= 90 of 100 GT boxes",
+ "rule": "gate b (centres within 0.1 m, no box lost) and gate a (the overlay by eye) of card t26 section 1; a failure makes the object row maps only; no other verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/t26/job_crn_smoke.sh",
+ "argv": [
+  "bash",
+  "temp/t26/job_crn_smoke.sh"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 487837,
+ "created": "2026-11-15T09:16:28",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "t26",
+ "card_sha": "28dd05270a1bbc5a",
+ "card_arms": {
+  "one": {
+   "order": {},
+   "run_ids": [
+    "t26.one_s0"
+   ]
+  },
+  "base": {
+   "order": {
+    "": [
+     "runs/t26_base/eval/card.json"
+    ]
+   },
+   "run_ids": [
+    "t26.base_eval",
+    "t26.base_eval43",
+    "t26.ref_maps_base",
+    "t26.base_eval_vel",
+    "t26.ref_crn_smoke",
+    "t26.ref_crn"
+   ]
+  }
+ },
+ "code_hash_first": "8c0ecdd363d0",
+ "started": "2026-11-15T09:17:40",
+ "code_hash": "8c0ecdd363d0",
+ "commit": "6a6c8d1982",
+ "tag": "bf/t26.ref_crn_smoke",
+ "git_note": "1754 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 488389,
+ "pgid": 488389,
+ "pid_start": 13284869,
+ "exit": 0,
+ "duration_s": 124,
+ "attempts": 1,
+ "ended": "2026-11-15T09:19:45",
+ "last_lines": [
+  "scene-0101[1]: GT boxes in the sector 1, with a CRN box of the same group within 2 m 0",
+  "scene-0104[0]: GT boxes in the sector 9, with a CRN box of the same group within 2 m 9",
+  "scene-0106[0]: GT boxes in the sector 5, with a CRN box of the same group within 2 m 5",
+  "scene-0108[0]: GT boxes in the sector 4, with a CRN box of the same group within 2 m 4",
+  "scene-0110[0]: GT boxes in the sector 2, with a CRN box of the same group within 2 m 1",
+  "scene-0268[0]: GT boxes in the sector 7, with a CRN box of the same group within 2 m 5",
+  "scene-0271[0]: GT boxes in the sector 3, with a CRN box of the same group within 2 m 1",
+  "scene-0273[0]: GT boxes in the sector 2, with a CRN box of the same group within 2 m 2",
+  "scene-0276[0]: GT boxes in the sector 7, with a CRN box of the same group within 2 m 4",
+  "scene-0278[0]: GT boxes in the sector 5, with a CRN box of the same group within 2 m 5",
+  "20 frames: 83 of 99 GT boxes of the sector have a CRN box within 2 m (84%) -> /home/ml/work/CRN/outputs/t26_crn/tf32_off_n50/overlay.png",
+  "crn smoke done"
+ ]
+}
