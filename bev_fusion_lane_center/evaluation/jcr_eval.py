@@ -517,8 +517,9 @@ def verdict_cmd(kind, arm, control, seeds=(0, 1), flags=None):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ run.py launch (hard rule 3)
-def launch(step, arm, seed, run, extra, dry=False):
-    """a scoring step of the card through run.py with the card's words (as `jarm.py`): id E395.<step>_<arm>_s<S>, command `jcr_eval.py <cmd> --run <run> --seed S <extra>`; the ids must be listed in the card"""
+def launch(step, arm, seed, run, extra, dry=False, again=False):
+    """a scoring step of the card through run.py with the card's words (as `jarm.py`): id E395.<step>_<arm>_s<S>, command `jcr_eval.py <cmd> --run <run> --seed S <extra>`; the ids must be listed in the card;
+    `again` = run.py's --again, a deliberate repeat of an id that finished with exit 0 (the old record stays in the ledger notes; used when a kill flag from the training log was missing in the first run)"""
     import subprocess
     sys.path.insert(0, os.path.join(ROOT, "tools"))
     import jarm
@@ -528,7 +529,7 @@ def launch(step, arm, seed, run, extra, dry=False):
     h, p, r = jarm.card_texts("E395")
     what = extra if step == "verdict" else f"--run {run} --seed {seed} {extra}"                  # verdict: `step1 --arm c` / `step2 --arm p0 --control c [--flags ...]`
     inner = f"env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh evaluation/jcr_eval.py {cmd} {what}"                                  # the folder-qualified name: _py14.sh refuses a basename that exists twice (a scratch copy under temp/)
-    line = ["python3", os.path.join(jarm.AR, "run.py"), "--id", rid, "--seed", str(seed), "--require-card", "--split", "val", "--timeout", "7200", "--hyp", h, "--pred", p, "--rule", r, "--", "bash", "-c", inner]
+    line = ["python3", os.path.join(jarm.AR, "run.py"), "--id", rid, "--seed", str(seed), "--require-card", "--split", "val", "--timeout", "7200"] + (["--again"] if again else []) + ["--hyp", h, "--pred", p, "--rule", r, "--", "bash", "-c", inner]
     print(rid, "->", inner, flush=True)
     return 0 if dry else subprocess.call(line, cwd=ROOT, env=dict(os.environ, BFLC_SIG="1.0"))
 
@@ -719,6 +720,7 @@ def main(argv=None):
     ln.add_argument("--seed", type=int, default=0)
     ln.add_argument("--extra", default="")
     ln.add_argument("--dry", action="store_true")
+    ln.add_argument("--again", action="store_true", help="run.py --again: a deliberate repeat of an id that finished with exit 0")
     sub.add_parser("selftest")
     a = ap.parse_args(argv)
     if a.cmd == "selftest":
@@ -731,7 +733,7 @@ def main(argv=None):
             fl.setdefault(int(sd_), []).append(f_)
         return verdict_cmd(a.kind, a.arm, a.control, (0, 1), fl)
     if a.cmd == "launch":
-        return launch(a.step, a.arm, a.seed, a.run, a.extra, a.dry)
+        return launch(a.step, a.arm, a.seed, a.run, a.extra, a.dry, a.again)
     if a.cmd == "step2":
         return step2(a.run, a.seed, a.control, ab(a.out), versus=a.versus)
     if a.cmd == "nodeerr":
