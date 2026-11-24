@@ -106,6 +106,7 @@ run "E389 route-association read-out: hand frames, cost, dump / score / rules on
 runneeds runs/e365_cache "E389 route data: tier-1 route, band labels, forks, map-error modes (needs the VAL cache; mutants: run the file without the argument)" grid/test_lane_route.py selftests
 run "E390 SD road-graph encoding: leaks, invariance, divider line, paired levels, P6, cut (CPU, hand graphs, mutants)" grid/test_sdgraph.py
 run "E394 map-error catalogue (nested draws, per-mode invariants, the TRAIN mix, 10 mutants; CPU, hand graph)" grid/test_maperror.py
+run "E394 v1 gate g: the label, the four label-free frame features by hand, the logistic and its TRAIN threshold, the card levels (CPU, no data)" test_maptrust_gate.py
 run "E391b existence gate and the delivered-mask rerun: features by hand, per-kind rates, re-weighting, threshold, stop rule, outcome table, the choice and the verdict of part B (CPU, toy data, no stored data)" mapassoc_exist.py selftest
 run "E391 map association: perception untouched (no-detach mutant), the label rule, targets + every arm on a real batch (CPU)" grid/test_mapassoc.py
 run "pmap: the order-keeping fork-pool map of the CPU scorers" evaluation/pmap.py

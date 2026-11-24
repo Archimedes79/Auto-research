@@ -707,7 +707,7 @@
   },
   {
    "id": "e394",
-   "label": "E394 step 3 of the SD-map line: map-error catalogue and trust (saved, not run)",
+   "label": "E394 step 3 of the SD-map line: map-error catalogue, step 0, label-free trust gate g (closed on TRAIN)",
    "kind": "alt",
    "col": 0,
    "row": 11,
@@ -716,10 +716,11 @@
    "code": [
     "training/data/lane_maperror_data.py",
     "evaluation/maperror_probe.py",
+    "evaluation/maptrust_gate.py",
     "training/grid/test_maperror.py"
    ],
    "note": "the catalogue of map errors as nested, calibrated draws on the E390 road graph (pure shift and turn, bigger count errors, ghost segments, spurious or swapped links, an outdated map, a wrong route, the map of another scene) and the TRAIN mix with wrong maps; the step-0 probe measures how each error degrades the E391 association and the lanes read through it (nulls and headroom first); a wrong map must not be worse than no map (R9); saved, not run (D138 pauses new experiments); not in the champion",
-   "sub": "lane_maperror_data.py +2"
+   "sub": "lane_maperror_data.py +3"
   }
  ],
  "edges": [
@@ -995,6 +996,7 @@
   "evaluation/gpu_gate.py": "helper: wait until the GPU has room before a GPU evaluation step (D100)",
   "evaluation/pmap.py": "helper: order-keeping parallel map over a fork pool for CPU scoring",
   "evaluation/jroute_verdict.py": "E389b: the arithmetic of the card's rule from stored score cards (by hand), no part of the chain",
+  "evaluation/mapassoc_exist.py": "E391b: the existence gate on the zero-shot P6 association (CPU, no head trained) and E391's protocol rerun on the delivered tokens: analysis of stored caches and probes of the E391 line, no part of the delivered chain",
   "evaluation/pyr_change.py": "E393 read-out: how much a stage-2 run moved B's pyramid (output features on fixed VAL frames, weights) against its start, no part of the chain",
   "evaluation/jcr_eval.py": "E395 (D142): Catmull-Rom read-out of the delivered tokens, oracle positions, scoring of moved nodes and the verdict arithmetic of the card; analysis of stored dumps, no part of the delivered path",
   "evaluation/tests/": "unit tests of the evaluation modules (run by tools/maintenance/run_all_tests.sh)",
