@@ -27,6 +27,7 @@ import qgraph_eval as QE  # noqa: E402
 import qtargets as QT  # noqa: E402
 
 STEP = QE.STEP                                                                  # 0.5 m: the scorer's sampling of the delivered curves
+EVAL = os.path.join(ROOT, "runs", "eval")                                      # where `verdict` reads the cards (the selftest points it at a fixture folder)
 D115 = ["--link-thr", "0.3", "--link-thr-long", "0.2", "--keep-thr", "0.6", "--no-none-gate"]
 CONNECTORS = ("H", "P", "CR", "CRC", "CRS")
 POSITIONS = ("", "OLAT", "OFULL")
@@ -65,7 +66,7 @@ def turn(u, v):
 
 
 def ghosts(pos, src, dst, preds, succs, l):
-    """the ghost nodes (P0, P3) of link l (module docstring); the first candidate wins a tie"""
+    """the ghost nodes (P0, P3) of link l (module docstring); the first candidate wins a tie; a neighbour that is the other end of the link itself (k == j, m == i: a two-node cycle) is skipped"""
     i, j = int(src[l]), int(dst[l])
     pi, pj = pos[i], pos[j]
     d = pj - pi
@@ -182,6 +183,7 @@ def step1(run, seed, live, modes, out_dir, log=print):
     r = JE.read_dump(a, JE.RUNS, None)
     JE.check_decode(r, a)
     decf = JE.decode_frames(r, a)
+    assert "H" in modes, "--modes must contain H: the record check (the STOP kill) and every paired difference read mode H"
     need_gt = any(split_mode(m)[0] for m in modes)
     gt = gt_nodes(r) if need_gt else None
     frames = r["frames"]
@@ -339,6 +341,7 @@ def nodeerr(run, seed, out_dir, log=print):
 
 # ------------------------------------------------------------------------------------------------------------------------------ the verdicts of the card (section 1.3), as code so that the case table is tested
 BAND, FLOOR = 0.010, 0.010
+GUARDS = {"topo_F1": -0.010, "lanes_found": -0.010, "junction_F1": -0.015, "F1@1.0": -0.005}       # the total M(X) against the control: no difference below these (card section 1.3)
 
 
 def bar(h):
@@ -349,6 +352,8 @@ def bar(h):
 def step1_class(d):
     """one seed, one connector against H: d = dict(F1@0.5, F1@1.0, topo_F1) of (diff, lo, hi); LOSS when a metric is <= -0.010, GAIN when F1@0.5 and F1@1.0 are >= +0.010 with the intervals above 0, else TIE"""
     d05, d10, dt = d["F1@0.5"], d["F1@1.0"], d["topo_F1"]
+    if not all(np.isfinite([x for m in (d05, d10, dt) for x in m])):
+        return "NONFINITE"
     if min(d05[0], d10[0], dt[0]) <= -BAND:
         return "LOSS"
     if d05[0] >= BAND and d10[0] >= BAND and d05[1] > 0 and d10[1] > 0:
@@ -359,6 +364,8 @@ def step1_class(d):
 def step1_verdict(seeds):
     """both seeds (a list of two `step1_class` inputs): the class when they agree; GAIN + TIE = TIE; LOSS on one seed with anything else, or GAIN + LOSS = INCONCLUSIVE; also whether the connector 'replaces H at no cost' (every difference >= -0.003 on both seeds)"""
     cl = [step1_class(d) for d in seeds]
+    if "NONFINITE" in cl:
+        return "INCONCLUSIVE", False
     if cl[0] == cl[1]:
         v = cl[0]
     elif "LOSS" in cl:
@@ -374,7 +381,7 @@ def step2_verdict(seeds):
     the paired intervals above 0. ORDER: 0 a CUT kill; 1 INCONCLUSIVE (a non-finite number; an INCONCLUSIVE kill; the bar met on exactly one seed; the two seeds differ by more than 0.020 in D05 or D10; a GAIN on both seeds (D05 >= 0.010 with the interval above 0
     and D10 >= 0) but a guard fails on exactly one seed); 2 CUT (D10 or D05 <= -0.010 on a seed and the other seed's value not >= +0.010; a guard fails on both seeds); 3 KEEP-quality (the bar on both seeds, no guard fails); 4 PARTIAL (a GAIN on both seeds, no guard
     fails, the bar not met: real, below the bar, the owner decides); 5 TIE (no effect established: inside the band or the intervals not above 0). INCONCLUSIVE is final for the card (an extension is an addendum written before its runs). Returns (verdict, reason)"""
-    LIM = dict(topo_F1=-0.010, lanes_found=-0.010, junction_F1=-0.015)
+    LIM = GUARDS
     nums = [x for sd in seeds for k in ("D05", "D10") for x in sd[k]] + [sd["guards"][k] for sd in seeds for k in LIM] + [sd["B05"] for sd in seeds] + [sd["B10"] for sd in seeds]
     gfail = [any(sd["guards"][k] < LIM[k] for k in LIM) for sd in seeds]
     met = [sd["D05"][0] >= sd["B05"] and sd["D05"][1] > 0 and sd["D10"][0] >= sd["B10"] and sd["D10"][1] > 0 for sd in seeds]
@@ -401,16 +408,25 @@ def step2_verdict(seeds):
         return "KEEP-quality", "the bar on both seeds, the guards hold"
     if all(gain) and not any(gfail):
         return "PARTIAL", "a real gain (D05 >= 0.010, D10 >= 0, intervals above 0) below the bar: the owner decides"
-    return "TIE", "no effect established (inside the band, or the intervals are not above 0)"
+    why = ["no effect established (inside the band, or the intervals are not above 0)"]
+    if any(sd["D10"][0] < 0 for sd in seeds):
+        why.append("D10 is negative on a seed")
+    if any(gfail):
+        why.append("a guard fails on a seed")
+    return "TIE", "; ".join(why)
 
 
 def step3_verdict(seeds):
     """the soft-neighbour arm p2s against p2 (section 1.5): per seed D05 / D10 = M(p2s) - M(p2) with paired intervals and the guards against r2; KEEP-quality when both seeds have D05 >= 0.010 with the interval above 0 and D10 >= 0 and no guard fails;
     one such seed or a guard failing on exactly one seed = INCONCLUSIVE; else TIE (p2 stands)"""
-    LIM = dict(topo_F1=-0.010, lanes_found=-0.010, junction_F1=-0.015)
+    LIM = GUARDS
     nums = [x for sd in seeds for k in ("D05", "D10") for x in sd[k]] + [sd["guards"][k] for sd in seeds for k in LIM]
+    if any(sd.get("kill_cut") for sd in seeds):
+        return "CUT", "a CUT kill (the refined nodes are worse than the unmoved ones, or the offsets saturate)"
     if not all(np.isfinite(nums)):
         return "INCONCLUSIVE", "a non-finite number in the inputs"
+    if any(sd.get("kill_inc") for sd in seeds):
+        return "INCONCLUSIVE", "a kill fired (loss not finite / no learning / not finished / not parity / tests)"
     gain = [sd["D05"][0] >= BAND and sd["D05"][1] > 0 and sd["D10"][0] >= 0 for sd in seeds]
     gfail = [any(sd["guards"][k] < LIM[k] for k in LIM) for sd in seeds]
     if all(gain) and not any(gfail):
@@ -438,10 +454,11 @@ def verdict_cmd(kind, arm, control, seeds=(0, 1), flags=None):
     cards and the nodeerr cards (the refined-worse kill: mean |lateral error| after above the one before by more than 0.01 m); `verdict step3 --arm p2s --control p2` (the cards of p2s with --control r2 --versus p2); `verdict diag`: the point differences p0 - p0n, p2 - p0
     and the interaction (p2 - r2) - (p0 - c). The flags (--flags 0:no_learning,1:saturate ...) carry the kills that only the training log shows; names are asserted (KILL_NAMES)"""
     flags = flags or {}
+    assert set(flags) <= set(seeds), f"--flags names seeds {sorted(set(flags) - set(seeds))} that are not read"
     for sd_, names in flags.items():
         bad = [n for n in names if n not in KILL_NAMES]
         assert not bad, f"unknown kill flag(s) {bad}: {sorted(KILL_NAMES)}"
-    d1 = os.path.join(ROOT, "runs", "eval", "e395_step1")
+    d1 = os.path.join(EVAL, "e395_step1")
     if kind == "step1":
         cards = {d: [read_card(os.path.join(d1, STEP1_DUMPS[d].format(s=s) + ".json")) for s in seeds] for d in STEP1_DUMPS}
         for d in ("c", "r2"):
@@ -463,35 +480,37 @@ def verdict_cmd(kind, arm, control, seeds=(0, 1), flags=None):
             out[mode] = (per["s4"][0], consistent, free)
             print(f"STEP1 {mode}: {per['s4'][0]} on S4" + ("" if consistent else " (NOT CONSISTENT with c / r2)") + (", replaces H at no cost" if free else ""))
         return out
+    e2, ne_dir = os.path.join(EVAL, "e395_step2"), os.path.join(EVAL, "e395_nodeerr")
     if kind == "diag":
-        e2 = os.path.join(ROOT, "runs", "eval", "e395_step2")
         for s in seeds:
             cd = {a: read_card(os.path.join(e2, f"e395_{a}_s{s}.json")) for a in ("p0", "p0n", "p2")}
+            mv = {a: {m: cd[a]["paired_M_vs_U"][m]["diff"] for m in ("F1@0.5", "F1@1.0")} for a in cd}
             tot = {a: {m: cd[a]["modes"]["M"][m] for m in ("F1@0.5", "F1@1.0")} for a in cd}
             ctl = {a: {m: cd[a]["control"][m] for m in ("F1@0.5", "F1@1.0")} for a in ("p0", "p2")}
             for m in ("F1@0.5", "F1@1.0"):
-                print(f"seed {s} {m}: p0 - p0n {tot['p0'][m] - tot['p0n'][m]:+.4f}; p2 - p0 {tot['p2'][m] - tot['p0'][m]:+.4f}; interaction (p2 - r2) - (p0 - c) {(tot['p2'][m] - ctl['p2'][m]) - (tot['p0'][m] - ctl['p0'][m]):+.4f}")
+                print(f"seed {s} {m}: move effect D(p0) - D(p0n) {mv['p0'][m] - mv['p0n'][m]:+.4f} (the step-3 gate (a) reads F1@0.5 >= +0.005 on both seeds); D(p2) - D(p0) {mv['p2'][m] - mv['p0'][m]:+.4f}; total p0 - p0n {tot['p0'][m] - tot['p0n'][m]:+.4f}; "
+                      f"interaction (p2 - r2) - (p0 - c) on the totals {(tot['p2'][m] - ctl['p2'][m]) - (tot['p0'][m] - ctl['p0'][m]):+.4f}")
         return None
-    e2, ne_dir = os.path.join(ROOT, "runs", "eval", "e395_step2"), os.path.join(ROOT, "runs", "eval", "e395_nodeerr")
     sd = []
     for s in seeds:
         c = read_card(os.path.join(e2, f"e395_{arm}_s{s}.json"))
         fl = flags.get(s, ())
+        ne = read_card(os.path.join(ne_dir, f"e395_{arm}_s{s}.json"))
+        kc = ne["by"]["M"]["lateral_abs_mean"] > ne["by"]["U"]["lateral_abs_mean"] + 0.010 or any(KILL_NAMES[n] == "cut" for n in fl)
+        ki = any(KILL_NAMES[n] == "inc" for n in fl)
         if kind == "step3":
             assert c["control"]["run"] == f"e392_r2_s{s}" and c["versus"]["run"] == f"e395_{control}_s{s}", f"seed {s}: the card's control / versus are not e392_r2 / e395_{control}"
             pm, pc = c["paired_M_vs_versusM"], c["paired_M_vs_control"]
-            sd.append(dict(D05=p3(pm["F1@0.5"]), D10=p3(pm["F1@1.0"]), guards={k: pc[k]["diff"] for k in ("topo_F1", "lanes_found", "junction_F1")}))
+            sd.append(dict(D05=p3(pm["F1@0.5"]), D10=p3(pm["F1@1.0"]), guards={k: pc[k]["diff"] for k in GUARDS}, kill_cut=kc, kill_inc=ki))
             print(f"seed {s}: M({arm}) - M({control}): D05 {sd[-1]['D05'][0]:+.4f} [{sd[-1]['D05'][1]:+.4f}, {sd[-1]['D05'][2]:+.4f}], D10 {sd[-1]['D10'][0]:+.4f} [{sd[-1]['D10'][1]:+.4f}, {sd[-1]['D10'][2]:+.4f}]; guards " + " ".join(f"{k} {v:+.4f}" for k, v in sd[-1]["guards"].items()))
             continue
         assert c["control"]["run"] == f"e392_{control}_s{s}", f"seed {s}: the step-2 card's control is {c['control']['run']}, not e392_{control}_s{s} (the headroom and the guards must share the control)"
         ctl = read_card(os.path.join(d1, f"e392_{control}_s{s}.json"))["modes"]
-        ne = read_card(os.path.join(ne_dir, f"e395_{arm}_s{s}.json"))
         h05, h10 = ctl["OLAT+H"]["F1@0.5"] - ctl["H"]["F1@0.5"], ctl["OLAT+H"]["F1@1.0"] - ctl["H"]["F1@1.0"]
         pm, pc = c["paired_M_vs_U"], c["paired_M_vs_control"]
-        kc = ne["by"]["M"]["lateral_abs_mean"] > ne["by"]["U"]["lateral_abs_mean"] + 0.010 or any(KILL_NAMES[n] == "cut" for n in fl)
-        sd.append(dict(D05=p3(pm["F1@0.5"]), D10=p3(pm["F1@1.0"]), B05=bar(h05), B10=bar(h10), guards={k: pc[k]["diff"] for k in ("topo_F1", "lanes_found", "junction_F1")}, kill_cut=kc, kill_inc=any(KILL_NAMES[n] == "inc" for n in fl)))
+        sd.append(dict(D05=p3(pm["F1@0.5"]), D10=p3(pm["F1@1.0"]), B05=bar(h05), B10=bar(h10), guards={k: pc[k]["diff"] for k in GUARDS}, kill_cut=kc, kill_inc=ki))
         print(f"seed {s}: D05 {sd[-1]['D05'][0]:+.4f} [{sd[-1]['D05'][1]:+.4f}, {sd[-1]['D05'][2]:+.4f}] (bar {sd[-1]['B05']:.4f}, H05 {h05:.4f}), D10 {sd[-1]['D10'][0]:+.4f} [{sd[-1]['D10'][1]:+.4f}, {sd[-1]['D10'][2]:+.4f}] (bar {sd[-1]['B10']:.4f}, H10 {h10:.4f}); guards "
-              + " ".join(f"{k} {v:+.4f}" for k, v in sd[-1]["guards"].items()) + f"; mean |lateral error| U {ne['by']['U']['lateral_abs_mean']:.3f} -> M {ne['by']['M']['lateral_abs_mean']:.3f} m")
+              + " ".join(f"{k} {v:+.4f}" for k, v in sd[-1]["guards"].items()) + f"; total M - control F1@0.5 {pc['F1@0.5']['diff']:+.4f}, F1@1.0 {pc['F1@1.0']['diff']:+.4f}; mean |lateral error| U {ne['by']['U']['lateral_abs_mean']:.3f} -> M {ne['by']['M']['lateral_abs_mean']:.3f} m")
     v = step3_verdict(sd) if kind == "step3" else step2_verdict(sd)
     print(f"VERDICT {arm} against {control}: {v[0]} ({v[1]})")
     return v
@@ -508,13 +527,60 @@ def launch(step, arm, seed, run, extra, dry=False):
     cmd = {"step1": "step1", "score": "step2", "nodeerr": "nodeerr", "verdict": "verdict"}[step]
     h, p, r = jarm.card_texts("E395")
     what = extra if step == "verdict" else f"--run {run} --seed {seed} {extra}"                  # verdict: `step1 --arm c` / `step2 --arm p0 --control c [--flags ...]`
-    inner = f"env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jcr_eval.py {cmd} {what}"
+    inner = f"env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh evaluation/jcr_eval.py {cmd} {what}"                                  # the folder-qualified name: _py14.sh refuses a basename that exists twice (a scratch copy under temp/)
     line = ["python3", os.path.join(jarm.AR, "run.py"), "--id", rid, "--seed", str(seed), "--require-card", "--split", "val", "--timeout", "7200", "--hyp", h, "--pred", p, "--rule", r, "--", "bash", "-c", inner]
     print(rid, "->", inner, flush=True)
     return 0 if dry else subprocess.call(line, cwd=ROOT, env=dict(os.environ, BFLC_SIG="1.0"))
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ tests
+def selftest_fixture():
+    """`verdict_cmd` wiring on fixture cards in a temporary folder: the headroom from the control's step-1 card, the paired move effect, the guards, the nodeerr kill, the control assert; `check_record_card` on a fixture run folder"""
+    import contextlib
+    import io
+    import tempfile
+    global EVAL
+    old_eval, old_runs = EVAL, JE.RUNS
+    with tempfile.TemporaryDirectory() as tmp:
+        EVAL = os.path.join(tmp, "eval")
+        try:
+            for sub_ in ("e395_step1", "e395_step2", "e395_nodeerr"):
+                os.makedirs(os.path.join(EVAL, sub_))
+            tri = lambda d: dict(diff=d, lo=d - 0.003, hi=d + 0.003)  # noqa: E731
+            for sd in (0, 1):
+                json.dump(dict(modes={"H": {"F1@0.5": 0.648, "F1@1.0": 0.846}, "OLAT+H": {"F1@0.5": 0.781, "F1@1.0": 0.879}, "OFULL+H": {"F1@0.5": 0.785, "F1@1.0": 0.880}}), open(os.path.join(EVAL, "e395_step1", f"e392_c_s{sd}.json"), "w"))
+                json.dump(dict(control=dict(run=f"e392_c_s{sd}", **{"F1@0.5": 0.648, "F1@1.0": 0.846}), modes={"M": {"F1@0.5": 0.69, "F1@1.0": 0.86}}, paired_M_vs_U={"F1@0.5": tri(0.04), "F1@1.0": tri(0.012)},
+                               paired_M_vs_control={"topo_F1": tri(0.002), "lanes_found": tri(0.0), "junction_F1": tri(0.0), "F1@1.0": tri(0.01), "F1@0.5": tri(0.04)}), open(os.path.join(EVAL, "e395_step2", f"e395_p0_s{sd}.json"), "w"))
+                json.dump(dict(by={"U": {"lateral_abs_mean": 0.30}, "M": {"lateral_abs_mean": 0.26}}), open(os.path.join(EVAL, "e395_nodeerr", f"e395_p0_s{sd}.json"), "w"))
+            with contextlib.redirect_stdout(io.StringIO()) as buf:
+                v = verdict_cmd("step2", "p0", "c")
+            assert v[0] == "KEEP-quality" and "bar 0.0333" in buf.getvalue(), (v, buf.getvalue())
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert verdict_cmd("step2", "p0", "c", flags={1: ["saturate"]})[0] == "CUT" and verdict_cmd("step2", "p0", "c", flags={0: ["no_learning"]})[0] == "INCONCLUSIVE"
+            for sd in (0, 1):                                                                # the refined-worse kill: the mean |lateral error| after above the one before by more than 0.01 m
+                json.dump(dict(by={"U": {"lateral_abs_mean": 0.30}, "M": {"lateral_abs_mean": 0.32}}), open(os.path.join(EVAL, "e395_nodeerr", f"e395_p0_s{sd}.json"), "w"))
+            with contextlib.redirect_stdout(io.StringIO()):
+                assert verdict_cmd("step2", "p0", "c")[0] == "CUT"
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    verdict_cmd("step2", "p0", "r2")
+                raise SystemExit("the control assert did not fire")
+            except (AssertionError, FileNotFoundError):
+                pass
+            JE.RUNS = os.path.join(tmp, "runs")                                              # check_record_card: the stored D115 card of the run, 1e-4
+            os.makedirs(os.path.join(JE.RUNS, "fix_run"))
+            ref = {"topo_F1": 0.6679, "F1@0.5": 0.6477, "F1@1.0": 0.8459, "lanes_found": 0.7191, "junction_F1": 0.2517}
+            json.dump(dict(metrics=ref), open(os.path.join(JE.RUNS, "fix_run", "token_card_rec_lt0.3_ltl0.2_kt0.6_nng.json"), "w"))
+            check_record_card("fix_run", dict(ref, topo_F1=0.66795), False)
+            try:
+                check_record_card("fix_run", dict(ref, topo_F1=0.6685), False)
+                raise SystemExit("check_record_card accepted a difference above 1e-4")
+            except AssertionError:
+                pass
+        finally:
+            EVAL, JE.RUNS = old_eval, old_runs
+
+
 def selftest():
     # the Catmull-Rom segment: through its end nodes, a line through collinear nodes, the tangent (P2 - P0) / 2
     P = np.array([[0.0, 0.0], [10.0, 0.0], [20.0, 0.0], [30.0, 0.0]])
@@ -580,7 +646,7 @@ def selftest():
     assert np.allclose(mv["pos"], [[0.5, 2.0], [0.0, -0.25]]) and np.allclose(tk["pos"][0], [1.0, 2.0]) and np.allclose(normals(tk["dirv"]), [[-1.0, 0.0], [0.0, 1.0]])
     # the verdict table (card section 1.3): the cases of the critic and the order
     P_ = lambda d, w=0.003: (d, d - w, d + w)  # noqa: E731
-    G0 = dict(topo_F1=0.0, lanes_found=0.0, junction_F1=0.0)
+    G0 = {"topo_F1": 0.0, "lanes_found": 0.0, "junction_F1": 0.0, "F1@1.0": 0.0}
     mk = lambda d05, d10, g=G0, b05=0.033, b10=0.010, kc=False, ki=False: dict(D05=P_(d05), D10=P_(d10), B05=b05, B10=b10, guards=g, kill_cut=kc, kill_inc=ki)  # noqa: E731
     assert step2_verdict([mk(0.04, 0.012), mk(0.05, 0.015)])[0] == "KEEP-quality"
     assert step2_verdict([mk(0.04, 0.04), mk(0.04, 0.00)])[0] == "INCONCLUSIVE", "D10 +0.04 on one seed, 0.00 on the other: the bar is met on one seed only"
@@ -603,12 +669,22 @@ def selftest():
             raise SystemExit("an unknown kill flag was accepted")
         except AssertionError:
             pass
+    assert step2_verdict([mk(0.04, 0.012, dict(G0, **{"F1@1.0": -0.01})), mk(0.05, 0.015)])[0] == "INCONCLUSIVE", "the total F1@1.0 guard: a gain with the total F1@1.0 more than 0.005 below the control on one seed"
+    assert step3_verdict([mk(0.012, 0.0, kc=True), mk(0.015, 0.002)])[0] == "CUT" and step3_verdict([mk(0.012, 0.0, ki=True), mk(0.015, 0.002)])[0] == "INCONCLUSIVE"
+    assert "D10 is negative" in step2_verdict([mk(0.05, -0.009), mk(0.05, -0.009)])[1] and "guard" in step2_verdict([mk(0.004, 0.0, dict(G0, topo_F1=-0.03)), mk(0.003, 0.0)])[1]
+    try:
+        verdict_cmd("step2", "p0", "c", flags={2: ["saturate"]})
+        raise SystemExit("a flag for a seed that is not read was accepted")
+    except AssertionError:
+        pass
+    selftest_fixture()
     assert bar(0.133) == 0.25 * 0.133 and bar(0.033) == 0.010
     cl = lambda a, b, c: dict({"F1@0.5": P_(a), "F1@1.0": P_(b), "topo_F1": P_(c)})  # noqa: E731
     assert step1_verdict([cl(0.0, 0.0, 0.0), cl(0.001, 0.0, 0.0)]) == ("TIE", True)
     assert step1_verdict([cl(-0.02, -0.02, -0.03), cl(-0.01, -0.025, -0.03)])[0] == "LOSS"
     assert step1_verdict([cl(-0.02, -0.02, -0.03), cl(0.0, 0.0, 0.0)])[0] == "INCONCLUSIVE" and step1_verdict([cl(0.02, 0.02, 0.0), cl(0.0, 0.0, 0.0)])[0] == "TIE"
     assert step1_verdict([cl(0.02, 0.02, 0.0), cl(0.02, 0.03, 0.0)])[0] == "GAIN" and step1_verdict([cl(0.0, 0.0, -0.0065), cl(0.0, 0.0, -0.0065)]) == ("TIE", False)
+    assert step1_verdict([cl(float("nan"), 0.0, 0.0), cl(0.0, 0.0, 0.0)])[0] == "INCONCLUSIVE"
     print("jcr_eval selftest ok")
 
 
