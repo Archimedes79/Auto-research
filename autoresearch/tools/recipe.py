@@ -240,6 +240,11 @@ class Repo:
             self._dirty[folder] = bool(self.g("status", "--porcelain", "--", rel + "/recipe.json", rel + "/code").strip())
         return self._dirty[folder]
 
+    def in_git(self, folder):
+        """True when the experiment folder holds a file that git tracks (a folder that only exists on disk is another chat's work in progress: no recipe is put into it)"""
+        rel = os.path.relpath(folder, self.top).replace("\\", "/")
+        return bool(self.g("ls-files", "--", rel).strip())
+
     def tracked(self):
         if self._tracked is None:
             self._tracked = [p for p in self.g("ls-files", "--", self.pf or ".").split("\n") if p]
@@ -483,6 +488,9 @@ def cmd_store(repo, ids, apply):
         folder = exp_dir(row["id"])
         if not folder:
             skipped.append((row["id"], "no experiment folder"))
+            continue
+        if not repo.in_git(folder):
+            skipped.append((row["id"], "its experiment folder is not in git (yet)"))
             continue
         base, how, snap = repo.base_of(row)
         if not base:
@@ -906,6 +914,9 @@ def selftest():
             assert unres == [] and needed(R, {"command": "bash tools/env/_py.sh nowhere.py"}, base, snap)[2] == ["nowhere.py"], "a script of the command that is found nowhere is recorded"
             assert base in R.history_blobs() and snap not in R.history_blobs(), "the history of main, not the snapshots"
             assert cmd_check(R, [], False) == 0
+            put(repo, "prob/experiments/E9_loose/experiment.md", "not committed\n")
+            assert R.in_git(os.path.join(repo, "prob/experiments/E1_x")) and not R.in_git(os.path.join(repo, "prob/experiments/E9_loose")), "a folder that git does not track gets no recipe"
+            shutil.rmtree(os.path.join(repo, "prob/experiments/E9_loose"))
             for n in ("E2_alpha", "E2_beta_two"):                                                    # two folders share the prefix E2: the card or the slug decides
                 put(repo, f"prob/experiments/{n}/experiment.md", "# " + n + ("\nruns: E2.zzz\n" if n == "E2_alpha" else "\n"))
             assert exp_dir("E2.zzz") == os.path.join(repo, "prob/experiments/E2_alpha") and exp_dir("E2.beta_two_s0") == os.path.join(repo, "prob/experiments/E2_beta_two") and exp_dir("E2.q") is None
