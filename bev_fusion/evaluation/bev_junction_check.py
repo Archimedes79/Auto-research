@@ -3,9 +3,9 @@
     python evaluation/bev_junction_check.py                       synthetic known answers (CPU, no data, seconds)
     python evaluation/bev_junction_check.py --reproduce [--n N]   the real-data check on the 246 stored frames of the recall test (CPU, 20 s)
 
-`--reproduce` reads the UNTRACKED scratch `temp/overview/rp_frames.json` + `rp_out/` (the stored dt-0 probability maps and per-frame counts of the t20 network) and the GT cache
+`--reproduce` reads the UNTRACKED reference folder `runs/junction_ref/` (`rp_frames.json` + `rp_out/`, moved out of temp/ by D140) (the stored dt-0 probability maps and per-frame counts of the t20 network) and the GT cache
 `data/cache/gt/`: it cannot run on a clean clone, and says so. It re-counts the lane divider IoU of the recall test with the packed GtGenerator masks and compares with
-`temp/overview/intersection_iou_result.txt` (made with a PIL raster of the map's intersection polygons, which differs from the exact mask in about 1.6 % of the edge cells).
+`records/intersection_iou_result.txt` (made with a PIL raster of the map's intersection polygons, which differs from the exact mask in about 1.6 % of the edge cells).
 """
 import os
 import sys
@@ -19,7 +19,7 @@ for _p in (ROOT, os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearc
         sys.path.insert(0, _p)
 from evaluation.bev_junction import MASKS, RASTER, JunctionMasks, junction_free  # noqa: E402
 
-STORED = {"fovj": (0.2204, 0.5091, 0.6410), "fovjb": (0.2223, 0.5141, 0.6472)}      # temp/overview/intersection_iou_result.txt, variants "both" and "both+band" (the map raster, PIL), IoU@0 / 0.5 / 1
+STORED = {"fovj": (0.2204, 0.5091, 0.6410), "fovjb": (0.2223, 0.5141, 0.6472)}      # records/intersection_iou_result.txt, variants "both" and "both+band" (the map raster, PIL), IoU@0 / 0.5 / 1
 
 
 def _fake_store(root, data="d1", raster=RASTER, borders=tuple(MASKS.values()), cells=None):
@@ -124,16 +124,16 @@ def selftest():
 
 
 def reproduce(n=None):
-    """the real-data check against temp/overview/intersection_iou_result.txt: the 246 frames of the recall test (stored dt-0 probability maps), the metric's own counting with the
+    """the real-data check against records/intersection_iou_result.txt: the 246 frames of the recall test (stored dt-0 probability maps), the metric's own counting with the
     packed GtGenerator masks instead of the map raster. Prints the base counts against the real metric's stored counts (they differ by at most 1 cell, as in the scratch), the mask
     shares, the orientation check (the mask lies on the GT drivable area, a flipped one does not) and the lane divider IoU at 0 / 0.5 / 1 m of the base and of both junction masks next to
-    the stored values. CPU, 2 threads. Needs the untracked scratch temp/overview/rp_*: without it, says so and returns None"""
+    the stored values. CPU, 2 threads. Needs the untracked reference folder runs/junction_ref/ (rp_frames.json, rp_out/): without it, says so and returns None"""
     import json
     import pickle
     from evaluation.metrics import SegMeter
-    here = os.path.join(ROOT, "temp", "overview")
+    here = os.path.join(ROOT, "runs", "junction_ref")
     if not os.path.exists(os.path.join(here, "rp_frames.json")):
-        print(f"--reproduce needs the untracked scratch {here}/rp_frames.json + rp_out/ (the stored predictions of the recall test): not in a clean clone")
+        print(f"--reproduce needs the untracked reference folder {here}/rp_frames.json + rp_out/ (the stored predictions of the recall test): not in a clean clone")
         return None
     frames = json.load(open(os.path.join(here, "rp_frames.json")))
     done = [f for f in frames if os.path.exists(os.path.join(here, "rp_out", f"{f['i']}.npz"))][:n]

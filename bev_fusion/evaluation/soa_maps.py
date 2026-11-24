@@ -1,5 +1,5 @@
 """soa_maps - our map layers against the published camera + radar map model GaussianCaR on the SAME frames, the SAME ground truth, the SAME camera cells and the SAME metric code
-(evaluation/metrics.SegMeter), with the paired scene bootstrap of the difference per row (card t26, G0; promoted from the scratch temp/t16/soa_maps_v8.py, used a second time).
+(evaluation/metrics.SegMeter), with the paired scene bootstrap of the difference per row (card t26, G0; promoted from the scratch script soa_maps_v8.py (removed with the scratch folder, D140), used a second time).
 
     python evaluation/soa_maps.py RUN OUT.json [--n N] [--frames-from STORED.json] [--device cpu|cuda] [--no-model] [--gt-signature SIG] [--allow-gt-mismatch]
                                   [--offset 0.5] [--x-max 50] [--boot 1000] [--seed 0] [--check STORED.json]
@@ -9,7 +9,7 @@
 What it scores. RUN = a run folder (its last checkpoint under the EMA weights, the run's own code snapshot, the suite's cold state: an EMPTY memory before every frame, dt 0), run through
 `bev_eval.free_source` / `FreeSubject` (the network never reads the ground truth). GaussianCaR: the logits of the lane project's cache (`~/exp_gcar_b123/feats/val_logit7.npy`, 1706 frames of
 43 of our 82 val scenes; the ones that are samples of the run's val set are used), drivable_area = max(sigmoid(lane), sigmoid(road_segment)), the other five layers directly; array row = -y,
-column = forward + OFFSET (0.5 m, temp/soa_gap/align_gcar.py), 200 x 200 cells of 0.5 m, +-50 m. Six layers, tolerances 0 / 0.5 / 1 m, thresholds 0.3 / 0.5 / 0.7; counts per frame (additive).
+column = forward + OFFSET (0.5 m, found by the scratch script align_gcar.py, removed with the scratch folder, D140), 200 x 200 cells of 0.5 m, +-50 m. Six layers, tolerances 0 / 0.5 / 1 m, thresholds 0.3 / 0.5 / 0.7; counts per frame (additive).
 GT: the stored GT of a signature (`--gt-signature`, default the live generator's; GtGenerator.store, nothing is generated or written); printed with its version, and REFUSED when it is not the
 GT the run was trained on (runs/RUN/gt.json) unless `--allow-gt-mismatch` (a base scored again on a newer GT says so in the json).
 
@@ -22,7 +22,7 @@ threshold of {0.3, 0.5, 0.7} (chosen once on all frames: in-sample, labelled so;
 (`Evaluation.stats.bootstrap_scenes`: 1000 draws, seed 0, scenes drawn with replacement, the same draw for both systems; the helper of `bev_suite.py compare`). Output: OUT.json (per row: n_gt,
 ours, reference, d1 / d2 with interval), OUT.md, OUT_frames.npz (the per-frame counts, so a row can be bootstrapped again: --retable).
 
-Reproduction gate (GT v8, runs/t16_full_s0, the 384 frames of temp/t16/soa/soa_maps_v8_t16_full_s0.json): `--frames-from` that json, `--gt-signature 6a7aa7864a`, `--check` it: every per-frame count of the
+Reproduction gate (GT v8, runs/t16_full_s0, the 384 frames of runs/t16_soa_ref/soa_maps_v8_t16_full_s0.json, not in git): `--frames-from` that json, `--gt-signature 6a7aa7864a`, `--check` it: every per-frame count of the
 region `old` equals the stored one (CPU against CPU: exactly; a GPU run differs in the cells that sit on a threshold), and the reference column of Table 1 is reproduced to 0.001 on all frames
 with `--no-model`. 2.5 s per frame on 2 CPU threads, so `--n 40` for the model.
 """
@@ -406,7 +406,7 @@ def collect(a):
 
 
 def check_stored(scores, stored_json):
-    """the reproduction gate: the per-frame counts of region `old` against those of the stored scratch run (temp/t16/soa_maps_v8.py: `_frames.npz` next to its json), frame by frame (by token),
+    """the reproduction gate: the per-frame counts of region `old` against those of the stored scratch run (the scratch script soa_maps_v8.py: `_frames.npz` next to its json in runs/t16_soa_ref/), frame by frame (by token),
     for every system both have; and, when the frames are the same, the reference's numbers of its Table 1. -> {system: max abs count difference} and the table difference"""
     stem = stored_json[:-5]
     meta = json.load(open(stored_json))
@@ -454,7 +454,7 @@ def main(argv=None):
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--logits", default=LOGITS)
     p.add_argument("--tokens", default=TOKENS)
-    p.add_argument("--check", default=None, help="a stored result json (temp/t16/soa/soa_maps_v8_*.json): the reproduction gate")
+    p.add_argument("--check", default=None, help="a stored result json (runs/t16_soa_ref/soa_maps_v8_*.json): the reproduction gate")
     p.add_argument("--retable", default=None, help="OUT_frames.npz: the rows again from stored per-frame counts (the second argument is the json to write)")
     p.add_argument("--selftest", action="store_true")
     p.add_argument("--mutants", action="store_true")

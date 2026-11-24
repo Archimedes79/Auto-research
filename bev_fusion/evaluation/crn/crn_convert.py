@@ -3,7 +3,7 @@
     python evaluation/crn/crn_convert.py RESULTS_JSON OUT.pkl [--info INFOS.pkl] [--tables DIR] [--min-score 0.05] [--expect-signature SIG] [--partial]
 
 RESULTS_JSON = `results_nusc.json` of `crn_export.py` (CRN's own writer: boxes of the key frame in the GLOBAL frame at the annotation (lidar) time, size w l h, quaternion
-w x y z, velocity in the global axes). OUT.pkl = what `bev_suite.py front REF ... LABEL=OUT.pkl` reads (the format of temp/t16/soa_front_v8.py, DualBEV):
+w x y z, velocity in the global axes). OUT.pkl = what `bev_suite.py front REF ... LABEL=OUT.pkl` reads (the format of the scratch script soa_front_v8.py, DualBEV, removed with the scratch folder in D140; a sample is runs/t16_soa_ref/dualbev_front_v8_n30.pkl):
 {"seg": {}, "det": {scene: {0.0: [(dets, gt boxes) per frame]}}, "detr": {scene: {}}, "meta": {"frames": [tokens], "gt_signature": ...}}.
 
 The rule, written once (the helpers below, each one line of it):

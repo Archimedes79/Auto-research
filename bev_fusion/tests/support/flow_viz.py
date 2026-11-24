@@ -40,5 +40,8 @@ if __name__ == "__main__":
     assert flow_rgb(torch.zeros(2, 1, 1)).max() == 0
     fig, ax = plt.subplots(figsize=(2.5, 2.5))
     wheel(ax)
-    fig.savefig("temp/checks/flow_wheel.png", dpi=100)
-    print("flow_viz selftest ok (forward = red, zero = black); wheel temp/checks/flow_wheel.png")
+    import os
+    import tempfile
+    out = os.path.join(tempfile.gettempdir(), "flow_wheel.png")             # the system temp folder: bev_fusion/temp/ is scratch that is emptied (D140)
+    fig.savefig(out, dpi=100)
+    print(f"flow_viz selftest ok (forward = red, zero = black); wheel {out}")

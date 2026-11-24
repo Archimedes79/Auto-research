@@ -2,7 +2,7 @@
 
 The map has no divider labels inside the polygons it flags as intersection, the network draws the paint it sees there, and the metric counts it as false (D66: 50 % of the false
 cells lie inside intersections, 1.5 % of the label cells do). `bev_suite.py ... --junction-free` scores the two divider layers a second time next to the unchanged headline rows:
-the intersection cells leave the prediction, the GT and the scored cells alike BEFORE the tolerance dilation (the "both" variant of temp/overview/intersection_iou_result.txt, which
+the intersection cells leave the prediction, the GT and the scored cells alike BEFORE the tolerance dilation (the "both" variant of records/intersection_iou_result.txt, which
 this reproduces). Two masks, from the GtGenerator area masks (`key.mask(token, "intersection", border_m)`, packed cache of the lane store of the rig `bev_fusion`):
     fovj    the polygons as they are (border 0)       -> flat rows `seg_fovj/seg/dt+0.00/lane_divider/all/all/iou@0.5` ...
     fovjb   the polygons widened by 0.5 m (one cell)   -> `seg_fovjb/...`

@@ -34,6 +34,8 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `t25_p4_readout_2026-11-14.txt` | go / no-go read-out of t25 on the stored P4 network (CPU diagnostic, no verdict) |
 | `crn_feasibility_2026-11-14.md` | read-only check that the CRN reference runs on our frames (card t26, track B3): what it needs, steps, the 1620 frames of 43 scenes |
 | `t26_g0/` | the G0 records of t26 as text: the 43 scenes, the base against GaussianCaR on the claim region, the base against CRN on the front sector (`t26_g0/README.md`) |
+| `d140_card_scratch_2026-11-24.md` | the scratch files that the cards name after D140 emptied `temp/`: 23 are in a local `bf/*` tag (how to read them), 5 were copied into the tree, 12 outputs / inputs of one-off runs are gone, one script was only planned |
+| `intersection_iou_result.txt` | the stored lane divider IoU of the junction-free rows (the "both" variants, made with the map's PIL raster); the reference of `evaluation/bev_junction_check.py --reproduce` (copied out of the scratch folder by D140) |
 
 ## Start a training
 From `bev_fusion/` (the problem folder), in the WSL. `AR_PROJECT` names this problem (the tools default to the lane problem):
