@@ -1,16 +1,22 @@
 #!/bin/bash
 BFLC="${BFLC_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/../.." && pwd)}"
-# The fast gates (the BEV system's tests/run_gates.sh, adapted): the tests that need no GPU and no stored network output, a few minutes. Run them before every commit of code.
+# The fast gates (the BEV system's tests/run_gates.sh, adapted): the tests that need no GPU, a few minutes. A few read stored run data (runs/, data/): in a fresh checkout they print SKIP with the missing path, not FAIL. Run them before every commit of code.
 # The full suite (metrics, golden numbers, the chain, the tools) is run_all_tests.sh (about 25 minutes, uses the GPU for some).
 # Usage (from the problem folder): wsl bash tools/maintenance/run_gates.sh
 R=$BFLC
 P="bash $R/tools/env/_py14.sh"
-fail=0
+fail=0; npass=0; nskip=0; nfail=0
+# PASS / FAIL as before; SKIP = the gate reads stored data that is not in git (runs/, data/, models/: run folders, caches, checkpoints): a fresh checkout skips it with the missing path named
+# (the same rule as run_all_tests.sh); any other failure is a FAIL
 run() {
   name="$1"; shift
   out=$($P "$@" 2>&1); rc=$?
   last=$(echo "$out" | tail -1 | cut -c1-110)
-  if [ $rc -eq 0 ]; then echo "PASS  $name  | $last"; else echo "FAIL  $name  | $last"; fail=1; fi
+  if [ $rc -eq 0 ]; then echo "PASS  $name  | $last"; npass=$((npass+1))
+  elif echo "$out" | grep -qE "(FileNotFoundError|No such file or directory).*/(runs|data|models)/"; then
+    miss=$(echo "$out" | grep -oE "(FileNotFoundError|No such file or directory)[^/]*'?/[^ ']*/(runs|data|models)/[^ ']*" | head -1 | grep -oE "/[^ ']*/(runs|data|models)/[^ ']*" | sed 's#.*/\(runs\|data\|models\)/#\1/#' | head -1)
+    echo "SKIP  $name  | needs data that is not in git: ${miss:-see the message}"; nskip=$((nskip+1))
+  else echo "FAIL  $name  | $last"; fail=1; nfail=$((nfail+1)); fi
 }
 run "trainer: crash + resume, NaN, rollback, Training contract (log.jsonl, stop = exit 75)" trainer_selftest.py
 run "builder spec tests"                    test_p16_spec.py
@@ -57,4 +63,5 @@ run "head: pixel targets"                                grid/qraster.py
 run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py
 run "head: close-node read-out (rule cases, 300 frames)" test_qgraph_readout.py
 run "head: pictures selftest"                            viz/qgraph_view.py --selftest
+echo "gates: $npass PASS, $nskip SKIP (stored data not in this checkout), $nfail FAIL"
 exit $fail

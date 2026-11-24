@@ -1,4 +1,4 @@
-﻿# bev_fusion_lane_center
+# bev_fusion_lane_center
 
 - Lane centre-line graph from camera + radar BEV features (nuScenes): the problem of this folder, one of the problems of the research system around it (`../autoresearch/`)
 - Target: a fully differentiable chain, one frame and one radar scan -> lane graph, later attached to an SD-map route -> planner; short graphs, correct graphs, fast
