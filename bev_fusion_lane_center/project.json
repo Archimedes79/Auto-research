@@ -13,7 +13,7 @@
   "headline_metrics": ["Q", "topo_F1", "lanes_found", "R@1_far"],
   "_lower_is_better": "the directions of cards written before their \"better\" map (2026-10-31); new cards declare it themselves (evaluation/sparse_lanes/sparse_metrics.py LOWER_IS_BETTER)",
   "lower_is_better": ["vert100", "verts_per_frame", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"],
-  "code_dirs": ["training", "evaluation", "tools", "reports/build", "temp"],
+  "code_dirs": ["training", "evaluation", "tools", "reports/build"],
   "fingerprint_extra": ["data/splits.json", "models/registry.json"],
   "scratch": "temp",
   "_training": "the block of the class Training (autoresearch/Training, `python3 -m Training check|run job.json`; compose.py): presets are json files of overrides, the composed config goes to out, check is the static check of training/startable.py, train is the command run.py wraps (training/train/run_config.py turns the config into the trainer's command line); the BEV system's block, adapted (2026-11-03)",
