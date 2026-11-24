@@ -24,6 +24,8 @@ What it checks
      card should carry the command instead. Listed, never an error: it is the work list for promoting them. "run or imported" means the referrer is code or a
      launcher (a docstring mention counts, so look at the list); a run.json that names the file as its command is "recorded" (the run's tag keeps the script, the git
      rule promotes it too); folders and globs (`temp/t10/*.sh`) are not followed.
+  4. size (an alarm, never an error): the history of all refs on disk against REPO_BUDGET_BYTES, what main added in the last GROWTH_DAYS days against
+     GROWTH_BUDGET_BYTES, and the biggest files and folders of that window (the policy: autoresearch/reproducibility.md, section Git)
 Folders named history/ are archives and are neither scanned for references nor reported. Merge commits are not inspected (their count is shown).
 Exit codes: 0 fine, 1 an error found, 2 wrong use or nothing to check.
 """
@@ -43,6 +45,9 @@ import gitfast as GF  # noqa: E402  (read-only git through git.exe on a Windows 
 MAX_BYTES = 1_000_000
 RECORD_NAMES = {"LEDGER.csv", "LEDGER.md"}                                              # the run ledgers are one complete text record each (CLAUDE.md: do not split or roll them)
 RECORD_MAX_BYTES = 3_000_000                                                            # ... and grow with every run: their limit is 3 MB (D120 follow-up, 2026-11-18: LEDGER.csv passed 1 MB)
+REPO_BUDGET_BYTES = 1_000_000_000                                                      # the whole history (all refs) on disk, `rev-list --disk-usage`: GitHub recommends under 1 GB; 50 MB on 2026-11-24
+GROWTH_BUDGET_BYTES = 100_000_000                                                      # what main may add per GROWTH_DAYS: 38 MB in the first month (2026-10-25 .. 11-24)
+GROWTH_DAYS = 30
 SCRATCH_DIRS = ("temp", "_to_delete")
 FORBIDDEN_EXT = {".pt", ".pth", ".ckpt", ".npy", ".npz", ".pkl", ".pickle", ".h5", ".png", ".jpg", ".jpeg", ".svg", ".mp4", ".gif", ".pdf", ".pptx", ".docx", ".xlsx",
                  ".html", ".zip", ".tgz", ".gz", ".tar", ".7z", ".log", ".tmp", ".lock", ".done", ".bin", ".onnx", ".safetensors", ".parquet",
@@ -304,6 +309,46 @@ def used_scratch(top, tracked=None, untracked=None):
     return out, imports
 
 
+def size_budget(top, branch="main", repo_budget=REPO_BUDGET_BYTES, growth_budget=GROWTH_BUDGET_BYTES, days=GROWTH_DAYS):
+    """(warnings, info lines) on the size of the history (`rev-list --disk-usage`: bytes on disk, packed or loose as they lie): all refs together, and what
+    `branch` added in the last `days` days with its five biggest added files and folders. Never an error: the per-file limits of the push check prevent the big single file;
+    this is the alarm for many small files that add up (a generated table committed with every run, a folder of records that should be one file)"""
+    try:
+        return _size_budget(top, branch, repo_budget, growth_budget, days)
+    except (SystemExit, ValueError) as e:                       # a git without --disk-usage (< 2.31), a partial clone, a corrupt object: the alarm is skipped, never the report
+        return [], [f"size: not measured ({str(e).strip()[:160]})"]
+
+
+def _size_budget(top, branch, repo_budget, growth_budget, days):
+    mb = lambda b: f"{b / 1e6:.1f} MB"                          # noqa: E731
+    total = int(git(top, "rev-list", "--disk-usage", "--objects", "--all") or 0)
+    if git(top, "rev-parse", "-q", "--verify", branch, check=False) == "":
+        return ([f"WARNING: the history is {mb(total)}, over the budget of {mb(repo_budget)}"] if total > repo_budget else []), [f"size: {mb(total)} history on disk (all refs), no branch {branch}"]
+    base = git(top, "rev-list", "-1", f"--before={days}.days", branch, check=False).strip()
+    rng = [branch] + (["--not", base] if base else [])
+    grown = int(git(top, "rev-list", "--disk-usage", "--objects", *rng) or 0)
+    objs = [ln.split(" ", 1) for ln in git(top, "rev-list", "--objects", *rng).splitlines() if " " in ln]
+    blobs = {}                                                  # every object of the repository, no stdin (a large stdin can hang git.exe from WSL; 1.6 s for 43k objects)
+    for ln in git(top, "cat-file", "--batch-all-objects", "--batch-check=%(objectname) %(objecttype) %(objectsize:disk)").splitlines():
+        f = ln.split()
+        if len(f) == 3 and f[1] == "blob":
+            blobs[f[0]] = int(f[2])
+    per_path = {}
+    for o, p in objs:
+        per_path[p] = per_path.get(p, 0) + blobs.get(o, 0)
+    top5 = sorted(per_path.items(), key=lambda x: -x[1])[:5]
+    per_dir = {}
+    for p, b in per_path.items():                               # many small files add up: the folders (two levels) show it where single files do not
+        d = "/".join(p.split("/")[:-1][:2]) or "."
+        per_dir[d] = per_dir.get(d, 0) + b
+    info = [f"size: {mb(total)} history on disk (all refs; budget {mb(repo_budget)}), {branch} +{mb(grown)} in the last {days} days (budget {mb(growth_budget)})",
+            "  biggest files in that window (all versions): " + ", ".join(f"{p} {mb(b)}" for p, b in top5),
+            "  biggest folders in that window: " + ", ".join(f"{d} {mb(b)}" for d, b in sorted(per_dir.items(), key=lambda x: -x[1])[:5])]
+    warn = ([f"WARNING: the history is {mb(total)}, over the budget of {mb(repo_budget)}: see autoresearch/reproducibility.md, section Git"] if total > repo_budget else []) + \
+           ([f"WARNING: {branch} grew {mb(grown)} in {days} days, over the budget of {mb(growth_budget)}: look at the biggest files above"] if grown > growth_budget else [])
+    return warn, info
+
+
 def report(top, show_all=False, remote_on=True):
     errors, lines = [], []
     e, info = push_check(top)
@@ -312,6 +357,8 @@ def report(top, show_all=False, remote_on=True):
     te, tinfo = tag_check(top, remote_on)
     errors += te
     lines += [""] + tinfo + ["  " + x for x in te]
+    sw, sinfo = size_budget(top)
+    lines += [""] + sinfo + ["  " + x for x in sw]
     staged, untracked = pending(top)
     se = path_errors(top, list(staged), staged) + path_errors(top, untracked, scratch_ok=True, lead="untracked ")        # `git add -A` takes an untracked file that no rule ignores
     errors += se
@@ -584,6 +631,31 @@ def _selftest():
         assert len(errors) == 1 and "forbidden file w.npz" in errors[0] and first[:8] in errors[0], errors
         assert info[1].startswith("tags without a forbidden file (1): tagC | held back (2): "), info
         assert f"tagA (publishes commit {first[:8]}: forbidden file w.npz)" in info[1] and f"tagB (publishes commit {first[:8]}: forbidden file w.npz)" in info[1], info
+    with tempfile.TemporaryDirectory() as base:                  # the size budget: an alarm (warnings, never an error) on the whole history and on the growth of main
+        subprocess.run(["git", "init", "-q", "-b", "main", base], check=True)
+
+        def g(*a, env=None):
+            return subprocess.run(["git", "-C", base, "-c", "user.name=t", "-c", "user.email=t@t", *a], check=True, capture_output=True, text=True, env=env).stdout.strip()
+        old = dict(os.environ, GIT_AUTHOR_DATE="2020-01-01T00:00:00", GIT_COMMITTER_DATE="2020-01-01T00:00:00")
+        open(os.path.join(base, "old.txt"), "w").write("o" * 5000)
+        g("add", "-A")
+        g("commit", "-qm", "old", env=old)                                                      # before the window
+        open(os.path.join(base, "new big.txt"), "w").write(os.urandom(40_000).hex())            # 80 kB that do not compress well, a name with a space
+        open(os.path.join(base, "small.py"), "w").write("x = 1\n")
+        g("add", "-A")
+        g("commit", "-qm", "new")
+        warn, info = size_budget(base, repo_budget=10**9, growth_budget=10**9)
+        assert warn == [] and info[0].startswith("size: ") and info[1].split(": ", 1)[1].startswith("new big.txt ") and info[2].startswith("  biggest folders"), info
+        assert "old.txt" not in info[1], info                                                     # outside the window
+        warn, info = size_budget(base, repo_budget=1000, growth_budget=1000)
+        assert len(warn) == 2 and warn[0].startswith("WARNING: the history is") and warn[1].startswith("WARNING: main grew"), warn
+        assert size_budget(base, branch="nope")[1][0].endswith("no branch nope") and size_budget(base, branch="nope", repo_budget=1)[0][0].startswith("WARNING")
+        saved = globals()["git"]
+        globals()["git"] = lambda *a, **k: (_ for _ in ()).throw(SystemExit("git rev-list --disk-usage failed: unknown option"))
+        try:
+            assert size_budget(base) == ([], ["size: not measured (git rev-list --disk-usage failed: unknown option)"]), "a failing measurement must not end the report"
+        finally:
+            globals()["git"] = saved
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))      # the repository this file lives in (its temp/ is scratch)
     if GF.exe_prefix(root):                                      # a repository on a Windows drive with git.exe at hand: the report is the same text through git.exe and through the WSL git
         base = os.path.join(root, "temp", f"check_git_test_{os.getpid()}")

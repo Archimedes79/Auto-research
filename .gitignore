@@ -89,6 +89,10 @@
 # because the launcher's snapshot adds the .py / .sh files of the scratch folder by force (run.py scratch_scripts)
 # D139 (2) / D140 (2026-11-23): temp folders are not in git at all (no README placeholder either)
 /bev_fusion_lane_center/temp/
+# ... and nowhere else either: a temp/ or _to_delete/ folder inside a code folder (evaluation/temp/) was swept into 443 run tags by the snapshot's `add -A`
+# (2026-11-24), which made them unpushable; the bev_fusion re-includes below come after these two lines on purpose
+**/temp/**
+**/_to_delete/**
 
 # not in git: wsl/ (the WSL disk image) and the raw data itself (nuScenes is on D:). In git: data/NuScenes = description, manifest and download / check / link tools of the nuScenes data family
 !/data/

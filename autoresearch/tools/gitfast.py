@@ -19,6 +19,8 @@ The rule: a call goes through git.exe when ALL hold
   - the call names no repository through the environment (GIT_DIR, GIT_INDEX_FILE, GIT_WORK_TREE ...: git.exe does not see WSL variables or WSL paths) and `.git`
     of the folder is not a file (a linked worktree holds a WSL path that git.exe cannot follow);
   - every path after `--` can be written relative to the repository (-C makes both gits read it the same way); any other absolute path stays with the WSL git.
+  - the command line is at most MAX_ARGS characters and the stdin at most MAX_STDIN bytes (a large stdin hung git.exe from WSL); a git.exe call with stdin and no
+    timeout of the caller that takes over STDIN_TIMEOUT seconds is answered by the WSL git.
 git.exe runs with `-c core.autocrlf=false` (Git for Windows defaults to true: a file's reported state must not change) and `-c core.quotepath=off`; the output
 paths are repo-relative with forward slashes, the same strings as in the WSL git. The two gits read their own system / global config: a global excludes
 or attributes file would apply to the one that has it only (this machine has none; the repository's own config and .gitignore are shared).
@@ -32,6 +34,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 READ_ONLY = {"status", "ls-files", "diff", "diff-tree", "diff-index", "rev-list", "rev-parse", "log", "show", "cat-file", "grep", "ls-remote", "for-each-ref", "ls-tree",
              "merge-base"}
@@ -42,6 +45,8 @@ ENV_ERROR = re.compile(rb"not a git repository|dubious ownership|safe\.directory
 HARMLESS_ENV = ("GIT_AUTHOR_", "GIT_COMMITTER_", "GIT_TERMINAL_PROMPT")
 PARTIAL = re.compile(rb"could not open directory|Function not implemented|WSL \(|UtilAcceptVsock", re.I)   # git.exe answered but left something out (a WSL symlink to a directory) or the WSL bridge hiccuped: whatever the exit code, ask the WSL git
 MAX_ARGS = 30000                                                        # characters of arguments that git.exe still starts with (the Windows command line stops at 32 KB)
+MAX_STDIN = 16_000                                                      # bytes of stdin git.exe is given from WSL: 0.25 MB went through, 0.5 MB and more hung `cat-file --batch-check` until the timeout, once 41 kB did (2026-11-24)
+STDIN_TIMEOUT = 30                                                      # seconds a git.exe call with stdin may take when the caller set no timeout; then the WSL git answers that call (a hang is not reproducible below the limit, so it is caught)
 _BROKEN = set()                                                         # folders where git.exe failed for an environment reason
 
 
@@ -123,10 +128,17 @@ def run(top, *args, inp=None, timeout=None, env=None):
     data = inp.encode("utf-8") if isinstance(inp, str) else inp
     prefix = exe_prefix(top) if reads_only(args) and not any(k.startswith("GIT_") and not k.startswith(HARMLESS_ENV) for k in (os.environ if env is None else env)) else None
     xargs = exe_args(top, args) if prefix else None
-    if xargs is not None and sum(len(x) + 1 for x in xargs) <= MAX_ARGS:     # a longer command line is the WSL git's, for this call only
+    if xargs is not None and sum(len(x) + 1 for x in xargs) <= MAX_ARGS and len(data or b"") <= MAX_STDIN:     # a longer command line or stdin is the WSL git's, for this call only
         try:
-            r = subprocess.run([*prefix, *xargs], capture_output=True, input=data, timeout=timeout, env=env)
-            if r.returncode and ENV_ERROR.search(r.stderr):
+            try:
+                r = subprocess.run([*prefix, *xargs], capture_output=True, input=data, timeout=timeout or (STDIN_TIMEOUT if data else None), env=env)
+            except subprocess.TimeoutExpired:
+                if timeout:                                             # the caller's own limit: its to handle
+                    raise
+                r = None                                                # a git.exe stdin hang: the WSL git answers this call
+            if r is None:
+                pass
+            elif r.returncode and ENV_ERROR.search(r.stderr):
                 _BROKEN.add(top)
             elif PARTIAL.search(r.stderr):                              # not broken for good: only this answer cannot be trusted
                 pass
@@ -208,6 +220,22 @@ def _selftest():
             stub(fake("echo FAKE"))
             assert git(tmp, "ls-files", "--", *[f"{i:040d}" for i in range(800)]).strip() == "" and tmp not in _BROKEN, "an over-long command line goes to the WSL git for this call only (the stand-in would have answered FAKE)"
             assert git(tmp, "tag").strip() == "FAKE", "git.exe is still the one for the next call"
+            big = ("HEAD^{commit}\n" * (MAX_STDIN // 14 + 1))             # 2026-11-24: a stdin over MAX_STDIN hung git.exe from WSL; it goes to the WSL git for this call only
+            assert git(tmp, "cat-file", "--batch-check", inp=big).splitlines()[0].split()[1] == "commit", "the stand-in would have answered FAKE"
+            assert git(tmp, "cat-file", "--batch-check", inp="HEAD^{commit}\n").strip() == "FAKE", "a small stdin still goes to git.exe"
+            global STDIN_TIMEOUT
+            saved_to, STDIN_TIMEOUT = STDIN_TIMEOUT, 1
+            try:                                                         # critic 2026-11-24: a git.exe that hangs on a small stdin: the WSL git answers after STDIN_TIMEOUT, the caller's own timeout is the caller's
+                stub(fake("sleep 5; echo FAKE"))
+                t0 = time.time()
+                assert git(tmp, "cat-file", "--batch-check", inp="HEAD^{commit}\n").split()[1] == "commit" and time.time() - t0 < 4.5, "a stdin hang must fall back to the WSL git"
+                try:
+                    run(tmp, "cat-file", "--batch-check", inp="HEAD^{commit}\n", timeout=1)
+                    raise AssertionError("the caller's timeout must reach the caller")
+                except subprocess.TimeoutExpired:
+                    pass
+            finally:
+                STDIN_TIMEOUT = saved_to
             _BROKEN.clear()
             stub(lambda top: ["/nonexistent/git.exe", "-C", top])
             assert git(tmp, "tag").split() == ["v1"] and tmp in _BROKEN, "git.exe cannot start (OSError): the WSL git answers"
