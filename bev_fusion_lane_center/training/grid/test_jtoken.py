@@ -2321,10 +2321,64 @@ def test_pos_head_trainer():
           f"and model.pt (load_model rebuilds posh), another recipe is refused, the same one resumes; the loader gets geom=True exactly for a loss weight; the stage-2 trainer refuses a head run with a position head; mutants ({', '.join(muts)}) fail: ok")
 
 
+def _check_pos_mean(mod):
+    """`mod.make_loss` (jtoken_train or a textual mutant of it) on 130 calls of a head with a position head on synthetic geometry batches: the info of a call holds pos_mean = the mean of the TRAINED position loss (`curve` with curve_w, `node` with node_w) over the calls so far, at most
+    the last LOG_WINDOW (100), and pos_n = the calls in that mean; a run without a position loss has neither key; the loss value is the loss of the jtoken loss alone (the window is information only)"""
+    bs = [JK.synthetic_batch(2, 48, seed=s, geom=True) for s in range(5)]
+    quiet = types.SimpleNamespace(log=lambda *a, **k: None)
+    for kw, key, other in ((dict(curve_w=0.5), "curve", "node"), (dict(node_w=0.5), "node", "curve")):
+        m, fn, infos, losses = _pos_head(step=JK.SWITCH + 5, perturb=True), mod.make_loss(quiet, 0.25, **kw), [], []
+        with torch.no_grad():
+            for i in range(130):
+                lo, inf = fn(m, bs[i % 5])
+                losses.append(float(lo))
+                infos.append(inf)
+            refs = [float(JK.jtoken_loss(m(b_), b_, none_weight=0.25, **kw)[0]) for b_ in bs]                                          # the jtoken loss alone, the head unchanged after 130 calls (past the key-weight switch, no dropout)
+        mean = lambda a, b, k: float(np.mean([infos[j][k] for j in range(a, b)]))  # noqa: E731
+        assert (infos[0]["pos_n"], infos[49]["pos_n"], infos[99]["pos_n"], infos[129]["pos_n"]) == (1, 50, 100, 100), [i["pos_n"] for i in infos[::43]]
+        for upto, lo_ in ((1, 0), (50, 0), (100, 0), (130, 30)):
+            assert abs(infos[upto - 1]["pos_mean"] - mean(lo_, upto, key)) < 1e-12, (key, upto)
+        assert abs(mean(30, 130, key) - mean(30, 130, other)) > 1e-4 and abs(infos[129]["pos_mean"] - mean(30, 130, other)) > 1e-4, "the two losses read the same: the check does not tell them apart"
+        assert all(abs(losses[i] - refs[i % 5]) < 1e-6 for i in range(130)) and all(math.isfinite(x) for x in refs), "the window changed the loss"
+    for head in (_pos_head(step=JK.SWITCH + 5, perturb=True), JK.JTokenHead()):                                                   # no position loss: no window keys
+        head.set_step(JK.SWITCH + 5)
+        with torch.no_grad():
+            inf = mod.make_loss(quiet, 0.25)(head, bs[0])[1]
+        assert "pos_mean" not in inf and "pos_n" not in inf and "curve" not in inf, sorted(inf)
+
+
+def test_pos_mean():
+    """E395 addendum A1: the log row of a position-loss run holds `pos_mean` (the mean of the trained loss over the last 100 calls) and `pos_n`; the numbers by hand on 130 calls (windows of 1, 50, 100 and 100 calls), the curve run reads `curve`, the node run `node`, a run without a
+    position loss has neither key, the loss is unchanged; mutants (an unbounded window, the wrong loss, pos_n the cap, the last call instead of the mean) fail; the two smoke runs hold the keys in their log rows"""
+    import jcr_eval as JC
+    assert JC.WINDOW == JKT.LOG_WINDOW == 100, "the kill reader's window and the trainer's are the same number"
+    _check_pos_mean(JKT)
+    muts = {"the window is not bounded": [("pwin = collections.deque(maxlen=LOG_WINDOW)", "pwin = collections.deque()")],
+            "a curve run reads the node loss": [('float(info["curve" if curve_w else "node"])', 'float(info["node"])')],
+            "pos_n is the cap, not the calls": [("pos_n=len(pwin)", "pos_n=LOG_WINDOW")],
+            "the row holds the last call, not the mean": [("pos_mean=float(np.mean(pwin))", "pos_mean=pwin[-1]")]}
+    for edits in muts.values():
+        must_fail(_check_pos_mean, _mutant(*edits, of=JKT))
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        real, seen = JK.jtoken_loss, []
+
+        def recording(out, batch, **k):                                                                                            # the loss info of every call of the smoke run
+            r = real(out, batch, **k)
+            seen.append(r[1])
+            return r
+        for name, extra in (("curve", ["--curve-w", "0.5"]), ("node", ["--node-w", "0.5"])):
+            seen.clear()
+            patched(JK, "jtoken_loss", recording, JKT.train, JKT.parse_args(["--name", name, "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25", "--pos-head"] + extra), runs, 500, 48)
+            last = [json.loads(r) for r in open(os.path.join(runs, name, "log.jsonl")) if "total" in r][-1]
+            assert len(seen) == 20 and last["pos_n"] == 20 and abs(last["pos_mean"] - float(np.mean([i[name] for i in seen]))) < 1e-9, (name, last)
+    print(f"pos_mean: pos_mean / pos_n = the mean and the count of the trained position loss over the last 100 calls (windows of 1, 50, 100, 100 on 130 calls by hand; curve run -> curve, node run -> node; none without a position loss; the loss unchanged), "
+          f"in the log rows of the smoke runs; mutants ({', '.join(muts)}) fail: ok")
+
+
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
          test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise,
          test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none, test_msg_self,
-         test_pos_head, test_curve_loss, test_pos_loss_weights, test_dump_dpos, test_pos_head_trainer]
+         test_pos_head, test_curve_loss, test_pos_loss_weights, test_dump_dpos, test_pos_head_trainer, test_pos_mean]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want

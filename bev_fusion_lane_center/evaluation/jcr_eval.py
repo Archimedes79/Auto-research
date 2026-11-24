@@ -12,9 +12,11 @@ positions: none (the delivered tokens), OLAT = every delivered token with a GT n
 between (P_i - P_k) and (P_j - P_i), P3 = the delivered successor l of j with the smallest turning angle between (P_l - P_j) and (P_j - P_i); a missing ghost is the reflection (2 P_i - P_j, 2 P_j - P_i). The curve is sampled at
 max(2, ceil(chord / 0.5 m) + 1) points uniform in t and handed to the scorer as `links['curves']` (`qgraph_eval.readout` takes a given curve instead of the Hermite one). No GT field enters a mode without `OLAT` / `OFULL`."""
 import argparse
+import glob
 import json
 import math
 import os
+import shutil
 import sys
 
 import numpy as np
@@ -446,14 +448,92 @@ def p3(p):
 
 KILL_NAMES = {"no_learning": "inc", "nonfinite": "inc", "notparity": "inc", "notfinished": "inc", "tests": "inc", "saturate": "cut"}
 STEP1_DUMPS = {"c": "e392_c_s{s}", "r2": "e392_r2_s{s}", "s4": "e372_s4_s{s}"}
+EARLY, LATE, NOLEARN, SATURATE_AT, WINDOW = (100, 200), (1900, 2000), 0.95, 0.5, 100       # the card's kill rows, the no-learning ratio, the saturation share, the calls in a `pos_mean` (= jtoken_train.LOG_WINDOW)
 
 
-def verdict_cmd(kind, arm, control, seeds=(0, 1), flags=None):
+def kill_flags(run, rule, runs=None):
+    """the kills of the card (section 1.3) that only the training log shows, for one step-2 run (`runs/<run>/log.jsonl`, `config.json`) -> (a dict of the numbers read, the list of kill flag names):
+    `nonfinite` (a value in any row is NaN / inf, or the run skipped a non-finite step: `skipped` in status.json, an `incident_*.json`; a skipped step writes no row), `notfinished` (the last logged step is below the run's steps and status.json is not `done` at the last step), `saturate` (`dpos_cap` of the row of step 2000 above 0.5),
+    `no_learning` (the position loss of the arm in the rows of steps 1900 / 2000, as a mean, not below 0.95 x the mean in the rows of steps 100 / 200): rule `window` (addendum A1) reads `pos_mean`, the mean over the 100 calls
+    before the row, and refuses a row whose `pos_n` is not 100 (a window cut by a resume at a step that is not a multiple of 100); rule `single` (card v5, the first three arms) reads the row's own `curve` / `node`, one batch. The loss of the arm is the one with a weight in config.json"""
+    d = os.path.join(runs or JE.RUNS, run)
+    cfg = json.load(open(os.path.join(d, "config.json")))
+    a = cfg["args"]
+    assert (a.get("curve_w", 0) > 0) != (a.get("node_w", 0) > 0), f"{run}: the run has no position loss, or both (curve_w {a.get('curve_w')}, node_w {a.get('node_w')})"
+    key = "curve" if a.get("curve_w", 0) > 0 else "node"
+    assert rule in ("window", "single"), rule
+    rows, bad = {}, []
+    for line in open(os.path.join(d, "log.jsonl")):
+        r = json.loads(line)
+        bad += [(r.get("step"), k) for k, v in r.items() if isinstance(v, float) and not math.isfinite(v)]
+        if "step" in r and "total" in r:
+            rows[int(r["step"])] = r                                                        # a step logged twice (a resume, a roll-back): the last row counts
+    st = json.load(open(os.path.join(d, "status.json")))
+    skipped = int(st.get("skipped", 0)) + len(glob.glob(os.path.join(d, "incident_*.json")))
+    need = EARLY + LATE
+    assert all(s in rows for s in need), f"{run}: the log has no row of step {[s for s in need if s not in rows]} (a row every 100 steps; skipped non-finite steps: {skipped}, a skipped step writes no row)"
+    if rule == "window":
+        assert all(key_ in rows[s] for s in need for key_ in ("pos_mean", "pos_n")), f"{run}: no pos_mean / pos_n in the rows (a run before addendum A1: rule single)"
+        cut = {s: rows[s]["pos_n"] for s in need if int(rows[s]["pos_n"]) != WINDOW}
+        assert not cut, f"{run}: the window of the rows {cut} is not {WINDOW} calls (a resume at a step that is not a multiple of 100): the rule cannot be read"
+    col = "pos_mean" if rule == "window" else key
+    early, late = np.mean([rows[s][col] for s in EARLY]), np.mean([rows[s][col] for s in LATE])
+    cap = rows[LATE[-1]].get("dpos_cap")
+    last, steps = max(rows), int(cfg["steps"])
+    done = st.get("state") == "done" and int(st.get("step", 0)) >= steps
+    info = dict(loss=key, rule=rule, early=float(early), late=float(late), ratio=float(late / early), dpos_cap_2000=cap, last_step=last, steps=steps, nonfinite=len(bad), skipped=skipped)
+    flags = [n for n, on in (("nonfinite", bool(bad) or skipped > 0), ("notfinished", last < steps and not done), ("saturate", cap is not None and cap > SATURATE_AT), ("no_learning", not late < NOLEARN * early)) if on]
+    return info, flags
+
+
+def family_class(twins, spread):
+    """addendum A1, the reading of the family p0n (card section 1.6) from the verdicts of the two twin arms (None = an arm without cards at the end of the time frame) and the spread ('STABLE' / 'NOT STABLE' / None = not read):
+    both twins KEEP-quality or PARTIAL and the spread STABLE = 'REPRODUCED below the bar' (both KEEP-quality: 'REPRODUCED at the bar'); both twins TIE or CUT = 'NOT REPRODUCED'; everything else (a kill, an INCONCLUSIVE twin, one gain and one none, a missing arm,
+    NOT STABLE, spread not read) = 'INCONCLUSIVE'"""
+    good, none = ("KEEP-quality", "PARTIAL"), ("TIE", "CUT")
+    if all(v in good for v in twins) and spread == "STABLE":
+        return "REPRODUCED at the bar" if all(v == "KEEP-quality" for v in twins) else "REPRODUCED below the bar"
+    if all(v in none for v in twins):
+        return "NOT REPRODUCED"
+    return "INCONCLUSIVE"
+
+
+SPREAD = {"F1@0.5": 0.010, "F1@1.0": 0.005}                                                 # addendum A1: the largest range of a move effect over the head seeds of one cache seed that still reads as stable
+
+
+def kills_cmd(arm, rule, seeds=(0, 1), runs=None):
+    """`kills --arm A --rule window|single`: the log kills of `runs/e395_<arm>_s<S>` per seed, printed with the numbers; -> {seed: [flag names]} (the `--flags` of the verdict)"""
+    out = {}
+    for s in seeds:
+        info, fl = kill_flags(f"e395_{arm}_s{s}", rule, runs)
+        out[s] = fl
+        print(f"seed {s} {arm} ({info['loss']} loss, rule {rule}): mean of steps {EARLY} {info['early']:.4f} -> mean of steps {LATE} {info['late']:.4f}, ratio {info['ratio']:.3f} (kill at >= {NOLEARN}); dpos_cap at step {LATE[-1]} {info['dpos_cap_2000']} "
+              f"(kill above {SATURATE_AT}); non-finite values {info['nonfinite']}, skipped steps {info['skipped']}; last logged step {info['last_step']} of {info['steps']}; kills: {','.join(fl) or 'none'}")
+    print("FLAGS " + (",".join(f"{s}:{n}" for s, fl in out.items() for n in fl) or "(none)"))
+    return out
+
+
+OLD_ARMS = ("p0", "p0n", "p2", "p2s")                                                        # the arms of step 2 / 3 before addendum A1: no pos_mean in their logs
+
+
+def with_log_kills(kind, arm, flags, kills, seeds):
+    """the flags by hand plus the log kills read by `kills_cmd` (step2 / step3 only: `kills` for another kind is refused); every arm but the old ones (OLD_ARMS) must be read with `kills` (a verdict cannot be made without the log kills again)"""
+    flags = {s: list(v) for s, v in (flags or {}).items()}
+    assert not kills or kind in ("step2", "step3"), f"--kills is read for step2 / step3 only, not for {kind}"
+    assert kills or kind not in ("step2", "step3") or arm in OLD_ARMS, f"arm {arm}: the verdict must read the log kills (--kills window): the first round made a verdict without them"
+    if kills:
+        for s, names in kills_cmd(arm, kills, seeds).items():
+            flags[s] = flags.get(s, []) + [n for n in names if n not in flags.get(s, [])]
+    return flags
+
+
+def verdict_cmd(kind, arm, control, seeds=(0, 1), flags=None, kills=None):
     """`verdict step1 --arm all` reads runs/eval/e395_step1/<run>.json of c, r2 and the S4 live dump (both seeds): per dump and connector the class and the no-cost flag; the verdict of a connector = the S4 class, 'not consistent' when c or r2 disagree, 'no cost'
     only when every dump is free; prints the headroom H05 / H10 and the bars B05 / B10 per seed and the OFULL + H sanity. `verdict step2 --arm <p0|p0n|p2> --control <c|r2>` reads runs/eval/e395_step2/e395_<arm>_s<S>.json, the headroom from the control's step-1
     cards and the nodeerr cards (the refined-worse kill: mean |lateral error| after above the one before by more than 0.01 m); `verdict step3 --arm p2s --control p2` (the cards of p2s with --control r2 --versus p2); `verdict diag`: the point differences p0 - p0n, p2 - p0
-    and the interaction (p2 - r2) - (p0 - c). The flags (--flags 0:no_learning,1:saturate ...) carry the kills that only the training log shows; names are asserted (KILL_NAMES)"""
-    flags = flags or {}
+    and the interaction (p2 - r2) - (p0 - c); `verdict spread --arm a,b,c`: the range of the move effects over the head-seed twins per cache seed; `verdict family --arm p0n,<twin>,<twin>`: the family reading of addendum A1 (`family_class`). The flags (--flags 0:no_learning,1:saturate ...) carry the kills that only the training log shows; names are asserted (KILL_NAMES);
+    `kills` = 'window' / 'single' (`--kills`, step2 / step3): the log kills are READ by `kills_cmd` from `runs/e395_<arm>_s<S>` and added to the flags, so the verdict cannot run without them (addendum A1: always give it)"""
+    flags = with_log_kills(kind, arm, flags, None if kind == "family" else kills, seeds)         # family reads the logs of its twin arms itself
     assert set(flags) <= set(seeds), f"--flags names seeds {sorted(set(flags) - set(seeds))} that are not read"
     for sd_, names in flags.items():
         bad = [n for n in names if n not in KILL_NAMES]
@@ -491,6 +571,38 @@ def verdict_cmd(kind, arm, control, seeds=(0, 1), flags=None):
                 print(f"seed {s} {m}: move effect D(p0) - D(p0n) {mv['p0'][m] - mv['p0n'][m]:+.4f} (the step-3 gate (a) reads F1@0.5 >= +0.005 on both seeds); D(p2) - D(p0) {mv['p2'][m] - mv['p0'][m]:+.4f}; total p0 - p0n {tot['p0'][m] - tot['p0n'][m]:+.4f}; "
                       f"interaction (p2 - r2) - (p0 - c) on the totals {(tot['p2'][m] - ctl['p2'][m]) - (tot['p0'][m] - ctl['p0'][m]):+.4f}")
         return None
+    if kind == "spread":                                                                     # `--arm p0n,p0nt,p0ntb`: the head-seed twins of one arm, one cache seed at a time
+        arms = arm.split(",")
+        assert len(arms) >= 2, "spread needs the arms of two head seeds or more (--arm a,b,c)"
+        stable = True
+        for s in seeds:
+            cd = {a_: read_card(os.path.join(e2, f"e395_{a_}_s{s}.json"))["paired_M_vs_U"] for a_ in arms}
+            for m in ("F1@0.5", "F1@1.0"):
+                v = {a_: cd[a_][m]["diff"] for a_ in arms}
+                rng = max(v.values()) - min(v.values())
+                stable &= rng <= SPREAD[m] + 1e-9
+                print(f"seed {s} {m} move effect: " + ", ".join(f"{a_} {x:+.4f}" for a_, x in v.items()) + f"; mean {sum(v.values()) / len(v):+.4f}, range {rng:.4f} (stable at <= {SPREAD[m]})")
+        print("SPREAD " + ("STABLE" if stable else "NOT STABLE"))
+        return ("STABLE" if stable else "NOT STABLE", "")
+    if kind == "family":                                                                     # `--arm p0n,p0nt,p0ntb`: the first arm is the original, the two others the twins
+        arms = arm.split(",")
+        assert len(arms) == 3, "family needs --arm <original>,<twin>,<twin>"
+        twins = []
+        for a_ in arms[1:]:
+            try:
+                twins.append(verdict_cmd("step2", a_, control, seeds, None, kills)[0])
+            except (FileNotFoundError, AssertionError) as e_:                                    # an arm without cards (never started, cut by time, stopped by the parity check) or a log that cannot be read: no verdict
+                print(f"arm {a_}: no verdict ({type(e_).__name__}: {str(e_)[:160]})")
+                twins.append(None)
+        sp = None
+        if None not in twins:
+            try:
+                sp = verdict_cmd("spread", arm, control, seeds)[0]
+            except FileNotFoundError as e_:
+                print(f"spread not read ({e_})")
+        fam = family_class(twins, sp)
+        print(f"FAMILY {fam} (twins {twins}, spread {sp})")
+        return (fam, "")
     sd = []
     for s in seeds:
         c = read_card(os.path.join(e2, f"e395_{arm}_s{s}.json"))
@@ -535,6 +647,106 @@ def launch(step, arm, seed, run, extra, dry=False, again=False):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ tests
+def make_log(runs, name, loss, ratio=0.8, cap=0.0, pos_n=WINDOW, last=12000, nan=False, window=True, single=None, skipped=0, incident=False, cut=(), nan_at=None, stale=False, done=None):
+    """a fixture run folder `runs/<name>`: config.json (the loss with a weight, 12000 steps), status.json (done at `last` = 12000 unless `done` says otherwise; `skipped` steps) and log.jsonl, a row every 100 steps: the position loss
+    0.14 / 0.10 at steps 100 / 200 (mean 0.12), 0.11 up to step 1800, 0.12 x ratio x 1.1 / 0.9 at steps 1900 / 2000 (mean 0.12 x ratio: the pairs differ, so reading one row of a pair gives another ratio), 0.12 x ratio after; pos_mean / pos_n when
+    `window` (pos_n cut to 60 at the steps in `cut`, pos_mean NaN at `nan_at`; the row's own loss `single[step]` when given, else the same level), dpos_cap at step 2000; nan: a last row with a NaN; incident: an incident_100.json;
+    stale: a first, wrong row of steps 1900 / 2000 at the head of the file (a resumed run writes a step twice: the last row counts)"""
+    d = os.path.join(runs, name)
+    os.makedirs(d, exist_ok=True)
+    for f_ in glob.glob(os.path.join(d, "incident_*.json")):
+        os.remove(f_)
+    json.dump(dict(steps=12000, args=dict(curve_w=0.5 if loss == "curve" else 0.0, node_w=0.5 if loss == "node" else 0.0)), open(os.path.join(d, "config.json"), "w"))
+    json.dump(dict(state="done" if (last >= 12000 if done is None else done) else "running", steps=12000, step=12000 if done else last, skipped=skipped), open(os.path.join(d, "status.json"), "w"))
+    if incident:
+        open(os.path.join(d, "incident_100.json"), "w").write("{}")
+
+    def level(s):
+        return 0.14 if s == 100 else 0.10 if s == 200 else 0.11 if s < 1900 else 0.12 * ratio * (1.1 if s == 1900 else 0.9 if s == 2000 else 1.0)
+    with open(os.path.join(d, "log.jsonl"), "w") as fh:
+        if stale:
+            for s in LATE:
+                fh.write(json.dumps({"step": s, "total": 1.0, "dpos_cap": 0.0, loss: 0.5, "pos_mean": 0.5, "pos_n": WINDOW}) + "\n")
+        for s in range(100, last + 1, 100):
+            row = {"step": s, "total": 1.0, "dpos_cap": cap if s == 2000 else 0.0, loss: (single or {}).get(s, level(s))}
+            if window:
+                row.update(pos_mean=float("nan") if s == nan_at else level(s), pos_n=60 if s in cut else pos_n)
+            fh.write(json.dumps(row) + "\n")
+        if nan:
+            fh.write('{"step": %d, "total": NaN}\n' % (last + 100))
+
+
+def selftest_logs(runs):
+    """the kill reader on fixture logs: the window rule at 0.949 / 0.951 of the early mean (the rows of a pair differ), the single-row rule reading the noisy rows the window does not, saturation (> 0.5 only), an unfinished run (and one that is
+    `done` in status.json without a row at the last step), a NaN row, a NaN pos_mean, a skipped step and an incident file (`nonfinite`), a step logged twice (the last row), the refusals (a window cut at ONE row by a resume, no pos_mean under `window`,
+    a missing row, no position loss, both losses); the logs of e395_p0_s0 / s1 for the verdict fixtures are left clean"""
+    def refused(*a):
+        try:
+            kill_flags(*a, runs)
+        except AssertionError:
+            return True
+        return False
+    for ratio, want in ((0.8, []), (0.949, []), (0.951, ["no_learning"]), (1.1, ["no_learning"])):
+        make_log(runs, "k", "curve", ratio=ratio)
+        info, fl = kill_flags("k", "window", runs)
+        assert fl == want and abs(info["ratio"] - ratio) < 1e-9 and info["loss"] == "curve", (ratio, fl, info)
+    make_log(runs, "k", "node", ratio=0.8, single={1900: 0.14, 2000: 0.14})
+    assert kill_flags("k", "window", runs)[1] == [] and kill_flags("k", "single", runs)[1] == ["no_learning"] and kill_flags("k", "single", runs)[0]["loss"] == "node", "the window and the single rows are read separately"
+    make_log(runs, "k", "curve", cap=0.5)
+    assert kill_flags("k", "window", runs)[1] == [], "saturation is above 0.5"
+    make_log(runs, "k", "curve", cap=0.6)
+    assert kill_flags("k", "window", runs)[1] == ["saturate"]
+    make_log(runs, "k", "curve", last=11900)
+    assert kill_flags("k", "window", runs)[1] == ["notfinished"]
+    make_log(runs, "k", "curve", last=11900, done=True)
+    assert kill_flags("k", "window", runs)[1] == [], "status.json is done at step 12000 (that step was skipped: no row): finished"
+    make_log(runs, "k", "curve", last=12000, done=False)
+    assert kill_flags("k", "window", runs)[1] == [], "the last row is at step 12000: finished, whatever status.json says"
+    make_log(runs, "k", "curve", nan=True)
+    assert "nonfinite" in kill_flags("k", "window", runs)[1]
+    make_log(runs, "k", "curve", skipped=1)
+    assert kill_flags("k", "window", runs)[1] == ["nonfinite"], "a skipped non-finite step writes no row: status.json says so"
+    make_log(runs, "k", "curve", incident=True)
+    assert kill_flags("k", "window", runs)[1] == ["nonfinite"], "an incident file is a skipped non-finite step"
+    make_log(runs, "k", "curve", nan_at=2000)
+    assert kill_flags("k", "window", runs)[1] == ["nonfinite", "no_learning"], "a NaN window mean is no learning"
+    make_log(runs, "k", "curve", stale=True)
+    assert kill_flags("k", "window", runs)[1] == [], "a step logged twice: the last row counts"
+    make_log(runs, "k", "curve", ratio=1.1, cap=0.7, last=11900)
+    assert kill_flags("k", "window", runs)[1] == ["notfinished", "saturate", "no_learning"]
+    for rows_ in ({1900}, {2000}, {100}, {200}, {100, 200, 1900, 2000}):
+        make_log(runs, "k", "curve", cut=rows_)
+        assert refused("k", "window") and kill_flags("k", "single", runs)[1] == [], f"a window cut at the rows {sorted(rows_)} is refused, the single rule does not read it"
+    make_log(runs, "k", "curve", window=False)
+    assert refused("k", "window") and kill_flags("k", "single", runs)[1] == []
+    make_log(runs, "k", "curve", last=1800, skipped=1)
+    assert refused("k", "window") and refused("k", "single")
+    make_log(runs, "k", "curve")
+    json.dump(dict(steps=12000, args=dict(curve_w=0.0, node_w=0.0)), open(os.path.join(runs, "k", "config.json"), "w"))
+    assert refused("k", "window")
+    json.dump(dict(steps=12000, args=dict(curve_w=0.5, node_w=0.5)), open(os.path.join(runs, "k", "config.json"), "w"))
+    assert refused("k", "window")
+    make_log(runs, "e395_p0_s0", "curve")
+    make_log(runs, "e395_p0_s1", "curve")
+    # the helper of --kills: step2 / step3 read the logs, the other kinds refuse the option, a new arm is refused without it
+    assert with_log_kills("step3", "p0", {1: ["saturate"]}, "window", (0, 1)) == {0: [], 1: ["saturate"]}
+    assert with_log_kills("step2", "p0", None, None, (0, 1)) == {} and with_log_kills("step1", "all", None, None, (0, 1)) == {}
+    for kind_, arm_, kills_ in (("step1", "all", "window"), ("diag", "", "window"), ("spread", "p0,p0n", "single"), ("step2", "p0nt", None), ("step3", "p2sx", None)):
+        try:
+            with_log_kills(kind_, arm_, None, kills_, (0, 1))
+        except AssertionError:
+            continue
+        raise SystemExit(f"with_log_kills accepted {kind_} {arm_} kills={kills_}")
+    # the family reading of addendum A1: every branch
+    G, T, C, I, K = "PARTIAL", "TIE", "CUT", "INCONCLUSIVE", "KEEP-quality"
+    for tw, sp, want in (((G, G), "STABLE", "REPRODUCED below the bar"), ((K, G), "STABLE", "REPRODUCED below the bar"), ((K, K), "STABLE", "REPRODUCED at the bar"), ((G, G), "NOT STABLE", "INCONCLUSIVE"),
+                         ((G, G), None, "INCONCLUSIVE"), ((T, T), "STABLE", "NOT REPRODUCED"), ((T, C), None, "NOT REPRODUCED"), ((C, C), "NOT STABLE", "NOT REPRODUCED"), ((G, T), "STABLE", "INCONCLUSIVE"), ((G, C), "STABLE", "INCONCLUSIVE"),
+                         ((I, T), None, "INCONCLUSIVE"), ((I, G), "STABLE", "INCONCLUSIVE"), ((None, G), None, "INCONCLUSIVE"), ((None, None), None, "INCONCLUSIVE"), ((T, None), None, "INCONCLUSIVE")):
+        assert family_class(tw, sp) == want, (tw, sp, want, family_class(tw, sp))
+    every = [family_class((a_, b_), sp_) for a_ in (G, K, T, C, I, None) for b_ in (G, K, T, C, I, None) for sp_ in ("STABLE", "NOT STABLE", None)]
+    assert len(every) == 108 and set(every) == {"REPRODUCED below the bar", "REPRODUCED at the bar", "NOT REPRODUCED", "INCONCLUSIVE"}
+
+
 def selftest_fixture():
     """`verdict_cmd` wiring on fixture cards in a temporary folder: the headroom from the control's step-1 card, the paired move effect, the guards, the nodeerr kill, the control assert; `check_record_card` on a fixture run folder"""
     import contextlib
@@ -544,6 +756,7 @@ def selftest_fixture():
     old_eval, old_runs = EVAL, JE.RUNS
     with tempfile.TemporaryDirectory() as tmp:
         EVAL = os.path.join(tmp, "eval")
+        JE.RUNS = os.path.join(tmp, "runs")                                                  # the training logs of the kill reader
         try:
             for sub_ in ("e395_step1", "e395_step2", "e395_nodeerr"):
                 os.makedirs(os.path.join(EVAL, sub_))
@@ -556,6 +769,41 @@ def selftest_fixture():
             with contextlib.redirect_stdout(io.StringIO()) as buf:
                 v = verdict_cmd("step2", "p0", "c")
             assert v[0] == "KEEP-quality" and "bar 0.0333" in buf.getvalue(), (v, buf.getvalue())
+            selftest_logs(JE.RUNS)
+            with contextlib.redirect_stdout(io.StringIO()):                                  # `--kills`: the verdict reads the training logs itself (the first-round lesson: a verdict run without them printed PARTIAL)
+                assert verdict_cmd("step2", "p0", "c", kills="window")[0] == "KEEP-quality", "logs without a kill"
+                make_log(JE.RUNS, "e395_p0_s0", "curve", ratio=1.0)
+                assert verdict_cmd("step2", "p0", "c", kills="window")[0] == "INCONCLUSIVE" and verdict_cmd("step2", "p0", "c")[0] == "KEEP-quality", "no_learning from the log on seed 0 only with --kills"
+                make_log(JE.RUNS, "e395_p0_s1", "curve", cap=0.6)
+                assert verdict_cmd("step2", "p0", "c", kills="window")[0] == "CUT", "saturate on seed 1 is a CUT"
+                make_log(JE.RUNS, "e395_p0_s0", "curve")
+                make_log(JE.RUNS, "e395_p0_s1", "curve")
+                assert verdict_cmd("step2", "p0", "c", flags={0: ["no_learning"]}, kills="window")[0] == "INCONCLUSIVE", "the flags by hand and the kills of the log are both used"
+                for s_ in (0, 1):                                                              # the spread over head seeds: the move effects D05 / D10 of arms at the same seeds (p0t: seed 1 at 0.06; p0u: 0.048 on both seeds)
+                    for arm_, d05_, d10_ in (("p0t", 0.06 if s_ else 0.04, 0.012), ("p0u", 0.048, 0.015), ("p0v", 0.04, 0.019), ("p0w", 0.04 if s_ else 0.06, 0.012)):
+                        c_ = json.load(open(os.path.join(EVAL, "e395_step2", f"e395_p0_s{s_}.json")))
+                        c_["paired_M_vs_U"] = {"F1@0.5": tri(d05_), "F1@1.0": tri(d10_)}
+                        json.dump(c_, open(os.path.join(EVAL, "e395_step2", f"e395_{arm_}_s{s_}.json"), "w"))
+                assert verdict_cmd("spread", "p0,p0t,p0u", "c")[0] == "NOT STABLE", "D05 on seed 1 0.04 / 0.06 / 0.048: range 0.02"
+                assert verdict_cmd("spread", "p0,p0u", "c")[0] == "STABLE", "0.04 / 0.048 on both seeds: range 0.008 is inside"
+                assert verdict_cmd("spread", "p0,p0v", "c")[0] == "NOT STABLE", "D05 equal, D10 0.012 / 0.019: range 0.007 above 0.005"
+                assert verdict_cmd("spread", "p0,p0w", "c")[0] == "NOT STABLE", "D05 on seed 0 only: 0.04 / 0.06"
+                for arm_ in ("p0a", "p0b"):                                                    # the family: two twin arms with the cards and nodeerr cards of p0 and clean logs
+                    for s_ in (0, 1):
+                        for sub_ in ("e395_step2", "e395_nodeerr"):
+                            shutil.copy(os.path.join(EVAL, sub_, f"e395_p0_s{s_}.json"), os.path.join(EVAL, sub_, f"e395_{arm_}_s{s_}.json"))
+                        make_log(JE.RUNS, f"e395_{arm_}_s{s_}", "node")
+                assert verdict_cmd("family", "p0,p0a,p0b", "c", kills="window")[0] == "REPRODUCED at the bar", "two twins at the bar, equal move effects"
+                make_log(JE.RUNS, "e395_p0b_s0", "node", ratio=1.0)
+                assert verdict_cmd("family", "p0,p0a,p0b", "c", kills="window")[0] == "INCONCLUSIVE", "a no_learning kill on one twin"
+                make_log(JE.RUNS, "e395_p0b_s0", "node")
+                os.remove(os.path.join(EVAL, "e395_step2", "e395_p0b_s1.json"))
+                assert verdict_cmd("family", "p0,p0a,p0b", "c", kills="window")[0] == "INCONCLUSIVE", "a twin without cards at the end of the time frame"
+                try:
+                    verdict_cmd("step2", "p0a", "c")
+                    raise SystemExit("a verdict of an addendum arm without --kills was accepted")
+                except AssertionError:
+                    pass
             with contextlib.redirect_stdout(io.StringIO()):
                 assert verdict_cmd("step2", "p0", "c", flags={1: ["saturate"]})[0] == "CUT" and verdict_cmd("step2", "p0", "c", flags={0: ["no_learning"]})[0] == "INCONCLUSIVE"
             for sd in (0, 1):                                                                # the refined-worse kill: the mean |lateral error| after above the one before by more than 0.01 m
@@ -709,10 +957,14 @@ def main(argv=None):
     ne.add_argument("--seed", type=int, required=True)
     ne.add_argument("--out", default=os.path.join(ROOT, "runs", "eval", "e395_nodeerr"))
     vd = sub.add_parser("verdict")
-    vd.add_argument("kind", choices=("step1", "step2", "step3", "diag"))
+    vd.add_argument("kind", choices=("step1", "step2", "step3", "diag", "spread", "family"))
     vd.add_argument("--arm", default="")
     vd.add_argument("--control", default="c")
-    vd.add_argument("--flags", default="", help="kills the training log shows, e.g. 0:no_learning,1:saturate")
+    vd.add_argument("--flags", default="", help="kills the training log shows, by hand, e.g. 0:no_learning,1:saturate")
+    vd.add_argument("--kills", choices=("window", "single"), default=None, help="step2 / step3: READ the log kills from runs/e395_<arm>_s<S> (window = addendum A1, single = the card of before) and add them to --flags")
+    kl = sub.add_parser("kills")
+    kl.add_argument("--arm", required=True)
+    kl.add_argument("--rule", choices=("window", "single"), required=True)
     ln = sub.add_parser("launch")
     ln.add_argument("step", choices=("step1", "score", "nodeerr", "verdict"))
     ln.add_argument("arm")
@@ -731,7 +983,9 @@ def main(argv=None):
         for it in [x for x in a.flags.split(",") if x]:
             sd_, _, f_ = it.partition(":")
             fl.setdefault(int(sd_), []).append(f_)
-        return verdict_cmd(a.kind, a.arm, a.control, (0, 1), fl)
+        return verdict_cmd(a.kind, a.arm, a.control, (0, 1), fl, a.kills)
+    if a.cmd == "kills":
+        return kills_cmd(a.arm, a.rule) and None
     if a.cmd == "launch":
         return launch(a.step, a.arm, a.seed, a.run, a.extra, a.dry, a.again)
     if a.cmd == "step2":

@@ -28,6 +28,7 @@ trained head is the champion network at inference; needs --rounds >= 1 and --wir
 their early wiring reads (`jtoken.jtoken_loss(wire_w=)`); in the recipe and in model.pt's args, so `build_head` (the trainer, `load_model`, the stage-2 trainer) rebuilds the head with them; absent in an old run's args = the default.
 `--pos-head` / `--curve-w W` / `--node-w W` (E395 card, default off = the champion bit for bit): the position head of the token head (`jtoken.JTokenHead(pos_head=)`, a normal offset per token, zero start) and the weight of its loss, the Catmull-Rom curve loss
 (`--curve-w`) or the node loss (`--node-w`, the control; not both), `jtoken.jtoken_loss(curve_w=, node_w=)` on the GT geometry of `data/lane_gtgeom_data` (the loader is built with geom=True; `--smoke`: the synthetic toy geometry); both weights need --pos-head and are refused with --distill-from;
+the log row of such a run also holds `pos_mean` (the mean of the trained position loss over the last LOG_WINDOW calls) and `pos_n` (the calls in that mean), the reading of the card's no-learning kill from addendum A1 on (`curve` / `node` are one batch);
 in the recipe and in model.pt's args (absent in an old run's args = off), so `build_head` rebuilds the head with it. The stage-2 trainer (`jlive_train`) refuses a head run that has a position head.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
@@ -194,6 +195,7 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
     gb = lambda f: f() / 1e9 if torch.cuda.is_available() else 0.0  # noqa: E731
     first = {}                                                              # the teachers on the first batch of this process: their own GT loss, precision_kl, the frame tokens
     win = collections.deque(maxlen=LOG_WINDOW)                              # (gt, kd) of the last LOG_WINDOW calls: gt_mean / kd_mean of a log row = the means since the row before
+    pwin = collections.deque(maxlen=LOG_WINDOW)                             # E395 addendum A1: the position loss that is trained (curve with --curve-w, else node) of the last LOG_WINDOW calls: pos_mean / pos_n of a log row
 
     def gt_loss(out, b, w=wire_w):
         return JK.jtoken_loss(out, b, none_weight=none_weight, pos_loss=pos_loss, wire_w=w, curve_w=curve_w, node_w=node_w)
@@ -215,6 +217,10 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
         b = to_device(b, dev)
         out = m(b)
         loss, info = gt_loss(out, b)
+        if curve_w or node_w:                                                   # a single step's value is one batch of its own composition; the mean of the window is what a rule can read (pos_n = the calls in it: 100 unless this process started less than 100 calls ago)
+            assert "curve" in info and "node" in info, "a position loss weight is set but the loss returned no curve / node info (the weights did not reach jtoken_loss)"
+            pwin.append(float(info["curve" if curve_w else "node"]))
+            info.update(pos_mean=float(np.mean(pwin)), pos_n=len(pwin))
         if ns is not None:
             info.update(noise_disp=ns[0], noise_e_abs=ns[1])
         if teachers:
