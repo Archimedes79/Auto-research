@@ -9,7 +9,7 @@ Scope (the owner's brief 2026-10-25): the part where the camera BEV and the rada
 | state read | commit `c0e748b9e95a6a6062579ddebdcd1c1e79500c2e`, branch `master`, shallow clone made 2026-10-13 (`.git/refs/heads/master`, `.git/logs/HEAD`); local files, no download |
 | licence | project: Apache-2.0 (`LICENSE` header read, README states it). The CUDA rasteriser `gaussiancar/ops/diff-gaussian-rasterization/` carries the Inria / MPII "Gaussian-Splatting License" (`LICENSE.md`, first lines read: research-community use, non-commercial terms; rest not read) - do not copy it. `gaussiancar/ops/ptv3/model.py` is "Pointcept detached version" (Xiaoyang Wu; its licence is not stated in the file header - from memory MIT, to verify before use). `cmx.py` follows the CMX fusion modules (licence of the original not checked) |
 | stack | Python, PyTorch, hydra / rootutils configs, lightning, timm (`efficientvit_l2.r384_in1k`), einops, custom CUDA `diff_gaussian_rasterization` (built from source), PointTransformerV3 (needs spconv / torch_scatter style deps, not checked) |
-| size, checkpoints | fuser 110 lines (`modeling/components/fuser.py`), CMX modules 189 lines (`cmx.py`), model 256 lines; weights on Hugging Face `santimontieleu/gaussiancar` (README) |
+| size, checkpoints | fuser 110 lines (`modeling/components/fuser.py`), CMX modules 189 lines (`cmx.py`), model 256 lines; weights on Hugging Face `santimontieleu/gaussiancar` (README): https://huggingface.co/santimontieleu/gaussiancar (`nuscenes_map.ckpt`, `nuscenes_vehicle.ckpt`; sha256 of the map file in `bev_fusion_lane_center/tools/env/setup/foundation_code.md`) |
 
 ## Port card
 | field | value |
