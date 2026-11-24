@@ -88,7 +88,29 @@
 
 ## 3. Summary
 **Pins (cited before the first run):** the fourth cards critic ACCEPTED step 1 at card v4 / `jcr_eval.py` 864d063ae7 (no blocking item); the step-1 launch then failed before anything ran (run.py's snapshot timed out on a critic's scratch copies under `temp/`, and the launch command named `jcr_eval.py` by basename), so the follow-up fixes of the critic's should-fix items (guards, `verdict diag` / `step3`, kills, fixture tests, the folder-qualified launch command) were committed first and the step-1 runs of the record use THAT commit (cited below when made; the scoring code `step1` is unchanged since 864d063ae7 except an assert that mode H is in `--modes`).
-(no result yet)
+**Step 1, the record (2026-11-24, 02:21 clock; all six scoring runs `E395.step1_{c,r2,s4}_s{0,1}` exit 0, VAL 873 frames, D115 cell; cards `runs/eval/e395_step1/`; the verdict runs `E395.verdict_step1_{s4,c,r2}`, code `1ef42b64ac` / `18de65c1d9` / `4a9e065c68`; the scoring runs' snapshot commits: c_s0 `a1d89a71c4`, c_s1 `a8855c18c2`, r2_s0 `64027d2fa6`, r2_s1 `36a3f0d2fa`, s4_s0 `1793a8e4ff`, s4_s1 `55d9b00e96`; `jcr_eval.py` is unchanged since a966e334c8 in all of them (the ledger notes of the first three runs say 'code on disk changed while the run was going': the one file named is `tools/maintenance/run_all_tests.sh`, another chat's edit, not read by the scoring); step 2 had not been trained when the bars were read):**
+
+| dump | seed | H F1@0.5 / F1@1.0 / topo | OLAT+H F1@0.5 / F1@1.0 | **H05** | **B05** | H10 | **B10** |
+|---|---|---|---|---|---|---|---|
+| c (control of p0, p0n) | 0 | 0.6477 / 0.8459 / 0.6679 | 0.7807 / 0.8786 | 0.1330 | **0.0332** | 0.0327 | **0.0100** (floor) |
+| c | 1 | 0.6498 / 0.8467 / 0.6762 | 0.7844 / 0.8796 | 0.1346 | **0.0337** | 0.0329 | **0.0100** (floor) |
+| r2 (control of p2) | 0 | 0.6523 / 0.8515 / 0.6780 | 0.7844 / 0.8841 | 0.1321 | **0.0330** | 0.0326 | **0.0100** (floor) |
+| r2 | 1 | 0.6523 / 0.8519 / 0.6867 | 0.7861 / 0.8851 | 0.1337 | **0.0334** | 0.0332 | **0.0100** (floor) |
+
+The bars of section 1.3 for step 2 are these B05 (a quarter of the headroom, 0.033) and B10 (the floor 0.010: a quarter of H10 is 0.008, below it), per seed and per control. OFULL+H (the oracle positions of the nodes the oracle also keeps) sanity-checks against OLAT+H on all four rows (F1@0.5 0.7853 / 0.7885 / 0.7886 / 0.7898, i.e. 0.004 above OLAT+H). Moving the delivered nodes to the oracle lateral positions with the connectors unchanged (OLAT+H) is worth +0.133 F1@0.5 and +0.033 F1@1.0 on every dump: that is the headroom a position head could use; with Catmull-Rom connectors on the oracle nodes (OLAT+CR) the F1@1.0 difference to H is only +0.004 / -0.001 (c, seeds 0 / 1) and +0.003 / -0.001 (r2), against +0.033 with Hermite: in the oracle test a Catmull-Rom curve erases the F1@1.0 gain of the better nodes.
+
+The read-out as the scorer's connector (deciding dump = the S4 live dump, c and r2 consistent on every class; the numbers are differences to H, seeds 0 / 1):
+
+| mode | F1@0.5 | F1@1.0 | topo F1 | verdict (S4) |
+|---|---|---|---|---|
+| P (the straight chord of every link, sampled at 0.5 m: the null) | -0.0103 / -0.0160 | -0.0265 / -0.0286 | -0.0242 / -0.0312 | **LOSS** |
+| CR (Catmull-Rom on every link, ghost nodes by the turning-angle rule) | -0.0111 / -0.0177 | -0.0259 / -0.0283 | -0.0302 / -0.0372 | **LOSS** |
+| CRC (the centripetal variant) | -0.0109 / -0.0170 | -0.0243 / -0.0269 | -0.0229 / -0.0299 | **LOSS** |
+| CRS (Catmull-Rom for the short links, Hermite for the long) | -0.0007 / -0.0010 | -0.0000 / -0.0005 | -0.0066 / -0.0071 | **TIE** (no gain, topo F1 about -0.007: not a free read-out) |
+
+So the read-out question of step 1 is answered with no change of the system: **a Catmull-Rom curve does not beat the Hermite connector with the heading and handle scales the head predicts, in any form; the short-link variant ties on F1 and loses 0.007 topo F1.** The development read of section 1.2 (c seed 0) is reproduced for the record to the third digit (c seed 0, CRS: topo -0.0065; CR: F1@1.0 -0.0251). Step 2 therefore runs with the Hermite connectors of the head (the read-out of the card's `M`), and the bars above.
+
+(step 2: no result yet)
 
 ## 5. Referee history -> what changed
 **v5 (the fourth cards critic, ACCEPT for step 1, should-fix S1 - S7), taken in:** S1 the id `E395.verdict_diag` and its launch line; S2 gate (a) reads D(p0) - D(p0n) (the move effects) in code and prose; S3 `--flags` for a seed that is not read is refused and `verdict step3` reads the nodeerr kills and the flags; S4 the saturation kill names its log field `dpos_cap`; S5 a fourth guard (the total F1@1.0, -0.005) and the statement that KEEP-quality is about the move effect, the verdict line prints the totals; S6 the reason strings, a non-finite clause and the H-in-modes assert for step 1, the ghost skip stated, the JSON prediction note; S7 fixture-card tests of `verdict_cmd` and `check_record_card` in the selftest, the README row with `verdict`.
