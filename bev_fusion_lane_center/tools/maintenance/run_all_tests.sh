@@ -42,6 +42,8 @@ run "trainer: crash + resume, NaN, rollback" trainer_selftest.py
 # the tools of autoresearch/ run with the system python3 of the WSL (as the hook, the launcher and their documentation call them), not with the conda env: the guard hook's selftest
 # expects the RecursionError of Python 3.10 on a 5000-deep event, Python 3.12 of the env parses it (the hook itself is run by python3)
 runsys() { local keep="$P"; P="python3"; run "$@"; P="$keep"; }
+# runneeds <path under the problem folder> <name> <script> ...: a test of real stored data; SKIP (naming the path) when that data is not in this checkout (a fresh clone), else as run
+runneeds() { local need="$1"; shift; if [ -e "$R/$need" ]; then run "$@"; else echo "SKIP  $1  | needs data that is not in git: $need"; nskip=$((nskip+1)); fi; }
 runsys "autoresearch tools (launcher, git tag, ledger, schedule, decide)" $REPO/autoresearch/tools/selftest.py
 runsys "structure and documents (check_structure)" $REPO/autoresearch/tools/check_structure.py --selftest
 if [ -d "$REPO/.claude/agents" ]; then
@@ -77,15 +79,15 @@ run "E319 junction maps head: heading-guided exchange (flag off = before, zero s
 run "E332 junction maps head without auxiliary maps (flags off = before, bit-identical reduction, loss terms, gradients)" grid/test_jmaps_simplify.py
 run "E330 cost of the junction system per block (parameters, MACs)" jmodel_cost.py selftest
 run "E331 - E335 adoption rule of a removal arm" jrule_removal.py selftest
-run "E273 pixel targets on real lane GT frames" grid/test_qraster.py
-run "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
+runneeds ../data/autogt/lane "E273 pixel targets on real lane GT frames" grid/test_qraster.py
+runneeds ../data/autogt/lane "E273 targets: the oracle on real lane GT frames" grid/test_qtargets.py
 run "E273 local scorer (oracle, degradations, lane suite reproduction)" test_qgraph_eval.py
 run "E273 pictures: selftest" viz/qgraph_view.py --selftest
 run "E275 close-node suppression (cases, 300 random frames, toy scorer)" test_qgraph_readout.py
 run "E276 tier / vis / sparse targets (toy lane, 40 real frames)" grid/test_tiers_sparse.py
 run "E276 tier loss switches (defaults = the frozen E273 loss)" grid/test_tier_loss.py
 run "E277 soft close-node step (hard limit on 183 random frames, chain, ties, gradients, model switch, load_model)" grid/test_soft_nms.py
-run "E292 Matrix-NMS layer = matrix_nms on 20 frames of B's real dump (kill criterion), switch, phase 9, mutations" grid/test_mnms_layer.py --real
+runneeds runs/kept/e276/predfull_e273_p_s0.pkl "E292 Matrix-NMS layer = matrix_nms on 20 frames of B's real dump (kill criterion), switch, phase 9, mutations" grid/test_mnms_layer.py --real
 run "E282 zones of the sparse node target, zone-matching loss (toy lane, winner rules, E273 loss bit for bit, 6 real frames)" grid/test_zones.py
 run "vertex scoring (selftest)" vertex_eval.py selftest
 run "lanegraph champion code == original modules (exact, 24 frames x 2 seeds, read-out fuzz, golden digests; CPU, about 2 minutes)" lanegraph/tests/run_lg_tests.py
@@ -96,11 +98,11 @@ run "E365 - E379 token head: likelihood by hand, options, trainer, resume, KD (C
 run "token head read-out: dumps, sweep, cells, cards, paired scores (toy cache)" test_jtoken_eval.py
 run "token head cost / time ensemble" test_token_time_ens.py
 run "E372 live token producer (B' in the step) and the live trainer" grid/test_lane_live.py
-run "E372 live training step" grid/test_jlive_train.py
+runneeds runs/e365_cache "E372 live training step" grid/test_jlive_train.py
 run "jarm: one arm of a token experiment (card words, cells, table)" jarm.py selftest
 run "E389 route-association head + trainer (CPU, synthetic, 67 mutants)" grid/test_jroute.py
 run "E389 route-association read-out: hand frames, cost, dump / score / rules on 24 real VAL frames (CPU; the full run with the textual mutants is test_jroute_eval.py without argument, about 30 min)" test_jroute_eval.py selftests
-run "E389 route data: tier-1 route, band labels, forks, map-error modes (needs the VAL cache; mutants: run the file without the argument)" grid/test_lane_route.py selftests
+runneeds runs/e365_cache "E389 route data: tier-1 route, band labels, forks, map-error modes (needs the VAL cache; mutants: run the file without the argument)" grid/test_lane_route.py selftests
 run "E390 SD road-graph encoding: leaks, invariance, divider line, paired levels, P6, cut (CPU, hand graphs, mutants)" grid/test_sdgraph.py
 run "E394 map-error catalogue (nested draws, per-mode invariants, the TRAIN mix, 10 mutants; CPU, hand graph)" grid/test_maperror.py
 run "E391 map association: perception untouched (no-detach mutant), the label rule, targets + every arm on a real batch (CPU)" grid/test_mapassoc.py
