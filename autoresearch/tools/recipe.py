@@ -16,10 +16,10 @@ What the git history of the lane problem showed (2026-11-24, 1215 ledger runs, 1
     about 1700 scratch files, nearly all of them unrelated to the run. A tag is therefore a poor record: 450 tags are local only (they hold scratch and names), 157 runs have
     none, and a clone cannot read them
   - so a run needs three things in git: the BASE (the main commit it started on: 40 characters), the command (ledger) and the OVERLAY: only the files its command can execute
-    (the script, what it imports or names, to a depth of six) that differ from the base; a version that main's history holds (most dirty edits were committed
+    (the script and, to the end of the chain, what it imports or runs) that differ from the base; a version that main's history holds (most dirty edits were committed
     later) is named by its blob id, the rest is copied once under the experiment folder as code/<blob id>_<name>
   - everything else is derived at read time from what git holds anyway (ledger row, card, tracked result files, rebuild recipes), never copied
-The record is <experiment folder>/recipe.json: {"schema": 1, "runs": {<run id>: {"base", "how", "snapshot", "overlay": {<repo path>: {"blob", "file"?}}, "truncated"?}}}.
+The record is <experiment folder>/recipe.json: {"schema": 2, "overlays": [...each distinct overlay once...], "runs": {<run id>: {"base", "how", "snapshot", "overlay": {<repo path>: {"blob", "file"?}}, "truncated"?}}}.
 A run without a local tag gets its base from the ledger's start time (the last first-parent commit of origin/main before it): marked "by time", exact in about 96 % of the
 tagged runs (the others waited in the queue after the snapshot); its overlay is empty, so `check` also tests that the scripts of its command exist at that base.
 `store` never replaces an exact entry (tag parent) by an approximate one; it needs the tag, so run it on the machine that ran the experiment, then commit recipe.json and code/.
@@ -27,8 +27,10 @@ Not covered: the data and checkpoints a command reads (`show` lists the paths it
 and files that are not code (configs, registry json) that differed from the base: `repeat` runs those at the base's version.
 """
 import argparse
+import contextlib
 import csv
 import hashlib
+import io
 import json
 import os
 import posixpath
@@ -44,11 +46,11 @@ sys.path.insert(0, HERE)
 import gitfast  # noqa: E402
 import project as P  # noqa: E402
 
-MAX_FILES, MAX_DEPTH, MAX_BLOB = 600, 6, 1_000_000
+MAX_FILES, MAX_BLOB = 600, 1_000_000
 NAMED = re.compile(r"[\w./~${}-]+\.(?:py|sh)\b")
 IMPORT = re.compile(r"^[ \t]*(?:from[ \t]+([\w.]+)[ \t]+import[ \t]+(\([^)]*\)|[^\n]+)|import[ \t]+([\w., \t]+))", re.M)
 DATA_EXT = (".pt", ".pth", ".ckpt", ".pkl", ".npy", ".npz", ".json", ".csv", ".yml", ".yaml")
-LEGACY_TOP = "/mnt/c/ML-Experiment"          # the folder the first runs were started from (their ledger commands name it)
+EXACT = ("snapshot parent", "pinned commit")     # how a base was found when it is not a guess
 
 
 def blob_id(data):
@@ -89,8 +91,8 @@ class Repo:
         self.prefix = P.cfg_of(self.root)["tag_prefix"]
         pre = (re.escape(self.pf) + "/") if self.pf else ""
         # folders that hold no code a run executes: the data / records / literature folders at the top of the repository or of the problem folder, and the stored overlay itself
-        self.skip = re.compile(rf"^(?:{pre})?(?:literature|data|results|runs|models|reports/source|_to_delete|\.claude)/|^data/|(?:^|/)_to_delete/|(?:^|/)experiments/[^/]+/code/")
-        self._trees, self._tags, self._tracked, self._refs, self._dirty, self._anc = {}, None, None, {}, {}, {}
+        self.skip = re.compile(rf"^(?:{pre})?(?:literature|data|results|runs|models|reports/source|winner|_to_delete|\.claude)/|^data/|(?:^|/)winner/|(?:^|/)_to_delete/|(?:^|/)experiments/[^/]+/code/")
+        self._trees, self._tags, self._tracked, self._refs, self._dirty, self._anc, self._have, self._hist, self._main = {}, None, None, {}, {}, {}, {}, None, {}
 
     def g(self, *a):
         return gitfast.git(self.top, *a)                 # a failing git call ends the tool: a half-read repository must not look like an exact record
@@ -105,7 +107,15 @@ class Repo:
         return self._tags
 
     def exists(self, commit):
-        return bool(commit) and gitfast.run(self.top, "cat-file", "-e", commit + "^{commit}").returncode == 0
+        if not commit:
+            return False
+        if commit not in self._have:
+            self._have[commit] = gitfast.run(self.top, "cat-file", "-e", commit + "^{commit}").returncode == 0
+        return self._have[commit]
+
+    def top_names(self):
+        """the names of the top-level entries of the repository (for the absolute paths of a command)"""
+        return {n for n in self.g("ls-tree", "--name-only", "HEAD").split("\n") if n}
 
     def index(self, paths):
         byname = {}
@@ -139,6 +149,9 @@ class Repo:
             m = meta.split()
             if m[4] == "D":
                 paths.pop(p, None)
+                n = posixpath.basename(p)
+                if p in byname.get(n, []):
+                    byname[n] = [c for c in byname[n] if c != p]
                 continue
             paths[p] = m[3]
             n = posixpath.basename(p)
@@ -173,22 +186,44 @@ class Repo:
                 self._refs[o] = refs(p, data.get(o, b"").decode("utf-8", "replace")) if len(data.get(o, b"")) <= MAX_BLOB else []
         return {o: self._refs[o] for _, o in items}
 
+    def in_main(self, commit):
+        """True when the commit is in the history of origin/main (HEAD without a remote): a pinned run's commit is, a snapshot is not"""
+        if commit not in self._main:
+            ref = "origin/main" if self.exists("origin/main") else "HEAD"
+            self._main[commit] = gitfast.run(self.top, "merge-base", "--is-ancestor", commit, ref).returncode == 0
+        return self._main[commit]
+
     def base_of(self, row):
-        """(base commit, how, the snapshot commit): the parent of the run's tag, else the last first-parent commit of origin/main (HEAD) before the ledger's start time"""
-        tag = self.prefix + "/" + row["id"]
-        if tag in self.tags():
-            c = self.g("rev-list", "--parents", "-n", "1", tag).split()
+        """(base commit, how, snapshot commit). The snapshot is the commit of the LAST attempt that the ledger records (run.py rewrites it on every resume), else the run's tag (attempt 1);
+        its first parent is the base, the commit the working tree was snapshotted on. A commit that is in main's history is a pinned run (the code of a named commit): its own base.
+        Without a snapshot: the last first-parent commit of origin/main (HEAD) before the ledger's start time, a guess"""
+        snap = (row.get("commit") or "").strip()
+        if not self.exists(snap):
+            tag = self.prefix + "/" + row["id"]
+            snap = self.g("rev-parse", tag + "^{commit}").strip() if tag in self.tags() else ""
+        if snap:
+            c = self.g("rev-list", "--parents", "-n", "1", snap).split()
+            if self.in_main(c[0]):
+                return c[0], "pinned commit", c[0]
             if len(c) >= 2:
-                return c[1], "tag parent", c[0]
+                return c[1], "snapshot parent", c[0]
         started = (row.get("started") or "").replace("T", " ")
         ref = "origin/main" if self.exists("origin/main") else "HEAD"
         c = self.g("rev-list", "-n", "1", "--first-parent", f"--before={started}", ref).strip() if started else ""
         return c, "by time (approximate)" if c else "unknown", (row.get("commit") or "").strip()
 
     def history_blobs(self):
-        """the ids of every object in the history of origin/main (HEAD without a remote): a file version that is in it needs no copy"""
-        ref = "origin/main" if self.exists("origin/main") else "HEAD"
-        return {l.split()[0] for l in self.g("rev-list", "--objects", ref).split("\n") if l.strip()}
+        """the ids of every object in the history of origin/main (HEAD without a remote): a file version that is in it needs no copy, and a clone has it"""
+        if self._hist is None:
+            ref = "origin/main" if self.exists("origin/main") else "HEAD"
+            self._hist = {l.split()[0] for l in self.g("rev-list", "--objects", ref).split("\n") if l.strip()}
+        return self._hist
+
+    def pushed(self, folder):
+        """True / False / None (no origin/main): the last commit that touched recipe.json or code/ of the folder is on origin/main"""
+        rel = os.path.relpath(folder, self.top).replace("\\", "/")
+        c = self.g("log", "-1", "--format=%H", "--", rel + "/recipe.json", rel + "/code").strip()
+        return self.on_origin(c) if c else None
 
     def on_origin(self, commit):
         """True / False, or None when this repository has no origin/main to ask"""
@@ -219,8 +254,13 @@ def command_scripts(cmd):
     return [p for p in (q.strip(";&|") for q in parts) if re.search(r"\.(py|sh)$", p) and not p.startswith("-")]
 
 
+EXEC_LINE = re.compile(r"subprocess|os\.system|Popen|check_call|check_output|\bbash\b|\bpython3?\b|runpy|execfile|\bsh\b")
+
+
 def refs(path, text):
-    """names of the code files a file can run: its imports (module, dotted parts and imported names, also in a parenthesised list over several lines) and every .py / .sh it names"""
+    """what a file can run, as (is_module, token): its imports (the module, its dotted parts and the imported names, also in a parenthesised list over several lines) and the
+    .py / .sh files it names where it executes them (every non-comment line of a shell script; in Python only a line that starts a process). Prose and comments name files
+    without running them: following them made closures of hundreds of files"""
     out = []
     if path.endswith(".py"):
         for m in IMPORT.finditer(text):
@@ -232,48 +272,74 @@ def refs(path, text):
             for md in mods:
                 for part in md.split("."):
                     if part and part != "*" and re.fullmatch(r"\w+", part):
-                        out += [part + ".py", part + "/"]
-    out += [posixpath.basename(m.group(0)) for m in NAMED.finditer(text)]
-    return out
+                        out += [(True, part + ".py"), (True, part + "/")]
+        named = [l for l in text.split("\n") if EXEC_LINE.search(l) and not l.lstrip().startswith("#")]
+    else:
+        named = [re.sub(r"\s#.*$", "", l) for l in text.split("\n") if not l.lstrip().startswith("#")]
+    return out + [(False, m.group(0)) for l in named for m in NAMED.finditer(l)]
 
 
-def pick(byname, name, importer):
-    cands = byname.get(name, [])
-    pool = [c for c in cands if "/temp/" not in "/" + c] or cands
-    return [c for c in pool if posixpath.dirname(c) == posixpath.dirname(importer)] or pool
+def resolve(byname, tok, importer, strict=True):
+    """the code paths a name or a path written in `importer` stands for: a path with a folder part must match the end of a path (or lie relative to the importer), an absolute
+    one is matched by its longest tail, a bare name means the importer's folder first, then the only file of that name, then the only one outside temp/; a bare name that is still
+    ambiguous is dropped when strict (a generic name like show.py would pull in every namesake)"""
+    if tok.endswith("/"):
+        t, cands = tok.rstrip("/"), byname.get(tok, [])
+    else:
+        t = posixpath.normpath(re.sub(r"^(?:\$\{?\w+\}?|~)/", "", tok.replace("\\", "/")))
+        cands = byname.get(posixpath.basename(t), [])
+        if t.startswith("/") or re.match(r"[A-Za-z]:", t):
+            parts = t.strip("/").split("/")
+            for i in range(len(parts)):
+                hits = [c for c in cands if c == "/".join(parts[i:]) or c.endswith("/" + "/".join(parts[i:]))]
+                if hits:
+                    return hits
+            return []
+        if "/" in t:
+            near = posixpath.normpath(posixpath.join(posixpath.dirname(importer), t))
+            return [c for c in cands if c.endswith("/" + t) or c == t or c == near]
+    same = [c for c in cands if posixpath.dirname(c) == posixpath.dirname(importer)]
+    if same:
+        return same
+    if len(cands) == 1:
+        return cands
+    out = [c for c in cands if "/temp/" not in "/" + c]
+    return out if len(out) == 1 else ([] if strict else cands)
 
 
 def closure(repo, snap, cmd):
     """(the code files the command can execute in a tree {path: blob id}, truncated)"""
     paths, byname = snap
-    seen, level = {}, []
+    seen, level, unresolved = {}, [], []
     for tok in command_scripts(cmd):
-        t = posixpath.normpath(tok.replace("\\", "/").split("ML-Experiment/")[-1])
-        hits = pick(byname, posixpath.basename(t), repo.rel("x"))
-        level += [h for h in hits if h.endswith("/" + t) or h == t] or hits
+        hits = resolve(byname, tok.replace("\\", "/").split("ML-Experiment/")[-1], repo.rel("x"), strict=False)
+        level += hits
+        if not hits:
+            unresolved.append(tok)
     truncated = False
-    for depth in range(MAX_DEPTH + 1):
-        level = [p for p in dict.fromkeys(level) if p not in seen]
+    while level:
+        level = [p for p in dict.fromkeys(level) if p not in seen and p in paths]
         if not level:
             break
-        if len(seen) + len(level) > MAX_FILES or depth == MAX_DEPTH:
+        if len(seen) + len(level) > MAX_FILES:
             truncated = True
             level = level[:max(0, MAX_FILES - len(seen))]
         seen.update({p: paths[p] for p in level})
         rf = repo.refs_of([(p, paths[p]) for p in level])
-        level = [c for p in level for r in rf[paths[p]] for c in pick(byname, r, p)]
+        level = [c for p in level for _, r in rf[paths[p]] for c in resolve(byname, r, p)]
         if truncated:
             break
-    return seen, truncated
+    return seen, truncated, unresolved
 
 
 def needed(repo, row, base, snapshot):
-    """({path: blob id} of the files the command executes that differ from the base commit, truncated), or None when the base or the snapshot cannot be read here"""
+    """({path: blob id} of the files the command executes that differ from the base commit, truncated, the scripts of the command that were found nowhere), or None when the
+    base or the snapshot cannot be read here"""
     if not (repo.exists(base) and repo.exists(snapshot)):
         return None
     bt = repo.tree(base)[0]
-    cl, truncated = closure(repo, repo.snap_tree(base, snapshot), row.get("command", ""))
-    return {p: o for p, o in cl.items() if bt.get(p) != o}, truncated
+    cl, truncated, unresolved = closure(repo, repo.snap_tree(base, snapshot), row.get("command", ""))
+    return {p: o for p, o in cl.items() if bt.get(p) != o}, truncated, unresolved
 
 
 def ledger_rows():
@@ -330,18 +396,36 @@ def dump_recipe(rec):
             + ",\n  ".join(f"{json.dumps(rid)}: {json.dumps(runs[rid], sort_keys=True)}" for rid in sorted(runs)) + "\n }}\n")
 
 
-def printable(cmd, dest, tops):
-    """the ledger's command as a command line again: every absolute prefix of the author's checkout points into `dest`, and `bash -c <words>` (run.py joined the arguments with
-    spaces and lost the quotes) gets its one argument back"""
-    for t in dict.fromkeys(list(tops) + [LEGACY_TOP]):
-        cmd = cmd.replace(t.rstrip("/") + "/", dest.rstrip("/") + "/")
+SHELL_C = re.compile(r"^((?:env\s+)?(?:[A-Za-z_]\w*=\S+\s+)*(?:nice\s+-n\s+\d+\s+)?)(bash|sh)\s+-c\s+(.+)$", re.S)
+
+
+def printable(cmd, dest, top_names, top=""):
+    """the ledger's command as a command line again: an absolute path of a Windows drive mount (/mnt/c/...) that leads into a folder of the repository is moved into `dest` (the
+    checkout it was made in may have had another name, or lie elsewhere), and `[env VAR=x] bash -c <words>` (run.py joined the arguments with spaces and lost the quotes) gets its
+    one argument back"""
+    dest = dest.rstrip("/")
+
+    def move(m):
+        parts = m.group(0).split("/")
+        for i in range(2, len(parts)):
+            if parts[i] in top_names:
+                return dest + "/" + "/".join(parts[i:])
+        return m.group(0)
+
+    cmd = re.sub(r"/mnt/[a-zA-Z]/[^\s'\"]+", move, cmd)
+    if top:
+        cmd = cmd.replace(top.rstrip("/") + "/", dest + "/")
+    m = SHELL_C.match(cmd)
     try:
-        parts = shlex.split(cmd)
+        words = len(shlex.split(m.group(3))) if m else 0
     except ValueError:
         return cmd
-    if len(parts) > 3 and parts[0] in ("bash", "sh") and parts[1] == "-c":
-        return f"{parts[0]} -c " + shlex.quote(cmd.split(" -c ", 1)[1])
-    return cmd
+    return f"{m.group(1)}{m.group(2)} -c " + shlex.quote(m.group(3)) if m and words > 1 else cmd
+
+
+def outside(path):
+    """True for an overlay path that would leave the worktree (a recipe.json is text from a repository: it is read, not trusted)"""
+    return path.startswith("/") or ".." in path.split("/") or bool(re.match(r"[A-Za-z]:", path))
 
 
 def missing_scripts(repo, row, ent):
@@ -362,25 +446,32 @@ def entry_state(repo, folder, row, ent):
     """why a stored entry cannot be repeated from a clone, or ''"""
     if not repo.exists(ent.get("base", "")):
         return f"base {ent.get('base', '')[:10] or 'none'} is not in this repository (git fetch)"
+    if repo.on_origin(ent["base"]) is False:
+        return f"base {ent['base'][:10]} is not on origin/main (push it)"
     if ent.get("truncated"):
         return f"the closure was cut at {MAX_FILES} files: the stored files may be incomplete"
+    named = {o["blob"]: path for path, o in ent.get("overlay", {}).items() if "file" not in o}     # named by blob id: the version must be in the history of origin/main, as a clone has it
+    gone = [b for b in named if b not in repo.history_blobs()]
+    if gone:
+        return f"the version {gone[0][:10]} of {posixpath.basename(named[gone[0]])} is not in the history of origin/main (git fetch, or push)"
     for path, o in ent.get("overlay", {}).items():
-        if "file" not in o:                                  # named by blob id: the version must be in this repository's history
-            if gitfast.run(repo.top, "cat-file", "-e", o["blob"]).returncode:
-                return f"the version {o['blob'][:10]} of {posixpath.basename(path)} is not in this repository (git fetch)"
+        if "file" not in o:
             continue
         f = os.path.join(folder, o["file"])
         if not os.path.isfile(f):
             return f"stored file {o['file']} is missing"
         if blob_id(open(f, "rb").read()) != o["blob"]:
             return f"stored file {o['file']} does not match its blob id"
-    if repo.on_origin(ent["base"]) is False:
-        return f"base {ent['base'][:10]} is not on origin/main (push it)"
     if repo.uncommitted(folder):
         return "recipe.json or code/ is not committed"
-    miss = missing_scripts(repo, row, ent)
-    if miss:
-        return f"script {miss[0]} is not at the base commit and not stored (a run without a tag has no overlay)"
+    if repo.pushed(folder) is False:
+        return "recipe.json and code/ are committed but not pushed"
+    if ent.get("unresolved"):
+        return f"script {ent['unresolved'][0]} was found in no tree when the recipe was made"
+    if ent.get("how") not in EXACT:                            # a run without a snapshot has no overlay: its scripts must be at the base
+        miss = missing_scripts(repo, row, ent)
+        if miss:
+            return f"script {miss[0]} is not at the base commit and not stored (a run without a tag has no overlay)"
     return ""
 
 
@@ -398,7 +489,7 @@ def cmd_store(repo, ids, apply):
             skipped.append((row["id"], "no base commit"))
             continue
         e = {"base": base, "how": how, "snapshot": snap, "overlay": {}}
-        if how == "tag parent":
+        if how in EXACT:
             res = needed(repo, row, base, snap)
             if res is None:
                 skipped.append((row["id"], "base or snapshot commit is not readable here"))
@@ -406,10 +497,12 @@ def cmd_store(repo, ids, apply):
             e["overlay"] = res[0]
             if res[1]:
                 e["truncated"] = True
+            if res[2]:
+                e["unresolved"] = res[2]
         else:
             approx.append(row["id"])
         by_folder.setdefault(folder, {})[row["id"]] = e
-    nfiles = nbytes = nruns = nhist = nsan = 0
+    nfiles = nbytes = nruns = nhist = nsan = npruned = 0
     hist = repo.history_blobs()
     priv = load_private(repo.top)
     all_stored, kinds = set(), {"new": {}, "modified": {}}
@@ -445,7 +538,7 @@ def cmd_store(repo, ids, apply):
         def merge(rec):
             for run_id, e in runs.items():
                 old = rec["runs"].get(run_id)
-                if old and old.get("how") == "tag parent" and e["how"] != "tag parent":
+                if old and old.get("how") in EXACT and e["how"] not in EXACT:
                     kept.append(run_id)                                  # never trade an exact entry for an approximate one (a clone has no tag)
                 else:
                     rec["runs"][run_id] = e
@@ -461,6 +554,13 @@ def cmd_store(repo, ids, apply):
             with P.locked(path):
                 rec = merge(load_recipe(folder))
                 P.atomic_write(path, dump_recipe(rec))
+                used = {v["file"] for e in rec["runs"].values() for v in e.get("overlay", {}).values() if "file" in v}
+                for name in os.listdir(os.path.join(folder, "code")):                    # a copy that no run names any more (an older, wider store) goes; other files of a code/ folder stay
+                    if re.match(r"[0-9a-f]{12}_", name) and "code/" + name not in used:
+                        os.remove(os.path.join(folder, "code", name))
+                        npruned += 1
+                if not os.listdir(os.path.join(folder, "code")):
+                    os.rmdir(os.path.join(folder, "code"))
         else:
             rec = merge(load_recipe(folder))
         nruns += len(runs)
@@ -472,6 +572,8 @@ def cmd_store(repo, ids, apply):
           f"{nfiles - nhist} copied ({len(all_stored)} distinct versions, {nbytes} bytes in the experiment folders; {nsan} entries changed by the private patterns)")
     print(f"  copied versions by kind (distinct): new files {len(kinds['new'])} ({sum(kinds['new'].values())} bytes), changed tracked files {len(kinds['modified'])} ({sum(kinds['modified'].values())} bytes)")
     print(f"  base by time (no local tag, approximate, no overlay): {len(approx)} runs" + (": " + ", ".join(approx[:6]) + (" ..." if len(approx) > 6 else "") if approx else ""))
+    if npruned:
+        print(f"  removed {npruned} copied file(s) that no run names any more")
     if kept:
         print(f"  kept the exact entry of {len(kept)} run(s) (no local tag to rebuild it from): {', '.join(kept[:5])}")
     for n in notes_big[:5]:
@@ -493,7 +595,9 @@ def classify(repo, row):
         why = entry_state(repo, folder, row, ent)
         if why:
             return "gap: " + why, folder, ent
-        return ("ok" if ent["how"] == "tag parent" else "ok, base by time (approximate)"), folder, ent
+        return ("ok" if ent["how"] in EXACT else "approximate: base by time, the edits that were not committed that day are unknown"), folder, ent
+    if folder is None:
+        return "gap: no experiment folder for this run id (nowhere to keep a recipe)", folder, None
     if (repo.prefix + "/" + row["id"]) in repo.tags():
         return "gap: only a local tag (run store)", folder, None
     return "gap: no recipe, no tag", folder, None
@@ -508,6 +612,9 @@ def cmd_check(repo, ids, show_list):
         k = re.sub(r"base [0-9a-f]{10}|stored file \S+|script \S+", lambda m: m.group(0).split()[0] + " ...", k)
         cnt[k] += 1
         who[k].append(r["id"])
+    if ids and not rows:
+        print(f"no ledger row matches {', '.join(ids)}")
+        return 2
     print(f"{len(rows)} runs of {P.path('ledger')}")
     for k, n in cnt.most_common():
         print(f"  {n:5d}  {k}" + (f"   e.g. {', '.join(who[k][:3])}" if not k.startswith("ok") else ""))
@@ -607,7 +714,7 @@ def cmd_show(repo, run_id):
 def link_data(repo, dest):
     """the big data stays where it is: linked into the worktree (a folder that is partly tracked gets a link for every child that is not tracked), as provenance.py repro --repeat does"""
     notes = []
-    for rel in ("data", posixpath.join(repo.pf, "data") if repo.pf else "data"):
+    for rel in ("data", posixpath.join(repo.pf, "data") if repo.pf else "data", posixpath.join(repo.pf, "runs") if repo.pf else "runs"):     # runs/: a command reads the output of an earlier run
         src, dst = os.path.join(repo.top, rel), os.path.join(dest, rel)
         if not os.path.isdir(src):
             continue
@@ -650,6 +757,8 @@ def cmd_repeat(repo, run_id, dest):
             sys.exit(f"git worktree add failed: {r.stderr.strip()[:300]}")
     named = repo.blobs([o["blob"] for o in ent["overlay"].values() if "file" not in o])
     for p, o in ent["overlay"].items():
+        if outside(p):
+            sys.exit(f"{run_id}: the overlay names a path outside the checkout: {p}")
         target = os.path.join(dest, p)
         os.makedirs(os.path.dirname(target), exist_ok=True)
         if "file" in o:
@@ -664,7 +773,7 @@ def cmd_repeat(repo, run_id, dest):
     if notes:
         print("WARNING: " + "; ".join(notes), file=sys.stderr)
     work = os.path.normpath(os.path.join(dest, repo.pf))
-    cmd = printable(row.get("command") or "", dest, [repo.top])
+    cmd = printable(row.get("command") or "", dest, repo.top_names(), repo.top)
     print(f"worktree {dest} at {ent['base'][:10]} with {len(ent['overlay'])} stored file(s); remove it later with: git worktree remove --force {dest}")
     print(f"cd {work} && AR_PROJECT=. python3 ../autoresearch/tools/run.py --id {run_id}.repro --hyp \"repetition of {run_id}\" "
           f"--pred \"same code, same data, same seed: the numbers agree within seed noise\" --rule \"by hand: a repetition, no verdict\" --no-card -- {cmd}")
@@ -690,11 +799,24 @@ def selftest():
         return False
 
     # the printed command: quotes come back, every absolute prefix of the author's checkout moves into the worktree
-    assert printable("bash -c bash temp/x.sh && bash tools/env/_py14.sh a.py", "/d", ["/c/top"]) == "bash -c 'bash temp/x.sh && bash tools/env/_py14.sh a.py'"
-    assert printable("bash /mnt/c/ML-Experiment/p/x.sh /c/top/data/y", "/d", ["/c/top"]) == "bash /d/p/x.sh /d/data/y"
-    assert printable("bash -c 'echo hi'", "/d", []) == "bash -c 'echo hi'"
-    assert printable("bash tools/x.sh a b", "/d", []) == "bash tools/x.sh a b"
-    assert refs("a.py", "from pkg import (\n    one,   # c\n    modb as m,\n)\nimport x, y.z\n").count("modb.py") == 1 and "one.py" in refs("a.py", "from pkg import (\n one,\n two)\n")
+    tn = {"p", "data", "bev"}
+    assert printable("bash -c bash temp/x.sh && bash tools/env/_py14.sh a.py", "/d", tn) == "bash -c 'bash temp/x.sh && bash tools/env/_py14.sh a.py'"
+    assert printable("env OMP=2 nice -n 10 bash -c bash a.sh && bash b.sh", "/d", tn) == "env OMP=2 nice -n 10 bash -c 'bash a.sh && bash b.sh'", "env VAR=x before bash -c"
+    assert printable("OMP=2 bash -c env X=1 bash y.sh", "/d", tn) == "OMP=2 bash -c 'env X=1 bash y.sh'"
+    assert printable("bash /mnt/c/ML-Experiment/p/x.sh /mnt/d/other-name/data/y /home/ml/data/z /mnt/c/Auto-research/bev/runs/r/model.pt", "/d", tn, "/c/top") == \
+        "bash /d/p/x.sh /d/data/y /home/ml/data/z /d/bev/runs/r/model.pt", "a drive path into a folder of the repository moves into the worktree, whatever the checkout was called; a home path stays"
+    assert outside("../x.py") and outside("a/../../x.py") and outside("/etc/x") and outside("C:/x.py") and not outside("prob/temp/e1/a.py")
+    assert printable("bash -c 'echo hi'", "/d", tn) == "bash -c 'echo hi'" and printable("bash tools/x.sh a b", "/d", tn) == "bash tools/x.sh a b"
+    assert refs("a.py", "from pkg import (\n    one,   # c\n    modb as m,\n)\nimport x, y.z\n").count((True, "modb.py")) == 1 and (True, "one.py") in refs("a.py", "from pkg import (\n one,\n two)\n")
+    # prose and comments name files without running them; a line that starts a process, or a line of a shell script, does
+    assert refs("a.py", "# see temp/e1/prose.py\n\"\"\"docs: temp/e1/doc.py\"\"\"\nsubprocess.run(['bash', 'temp/e1/run.sh'])\n") == [(False, "temp/e1/run.sh")]
+    assert refs("a.sh", "# bash temp/e1/comment.sh\nbash temp/e1/real.sh   # but not temp/e1/tail.sh\n") == [(False, "temp/e1/real.sh")]
+    bn = {"show.py": ["a/temp/x/show.py", "a/temp/y/show.py"], "lib.py": ["a/training/lib.py"], "go.sh": ["a/temp/e1/go.sh", "a/temp/e2/go.sh"], "pkg/": ["a/pkg/__init__.py"]}
+    assert resolve(bn, "show.py", "a/temp/x/main.py") == ["a/temp/x/show.py"], "a bare name: the importer's folder first"
+    assert resolve(bn, "show.py", "a/training/m.py") == [] and len(resolve(bn, "show.py", "a/training/m.py", strict=False)) == 2, "a generic name that stays ambiguous is dropped unless the command names it"
+    assert resolve(bn, "lib.py", "a/temp/z/m.py") == ["a/training/lib.py"] and resolve(bn, "pkg/", "a/m.py") == ["a/pkg/__init__.py"]
+    assert resolve(bn, "temp/e2/go.sh", "a/x.sh") == ["a/temp/e2/go.sh"] and resolve(bn, "$BFLC/temp/e1/go.sh", "a/x.sh") == ["a/temp/e1/go.sh"]
+    assert resolve(bn, "/mnt/c/Auto-research/a/temp/e1/go.sh", "a/x.sh") == ["a/temp/e1/go.sh"] and resolve(bn, "temp/e3/go.sh", "a/x.sh") == []
     assert blob_id(b"hello\n") == "ce013625030ba8dba906f756967f9e9ca394464a"                           # git's own blob id of "hello\n"
 
     old = os.environ.get("AR_PROJECT")
@@ -712,6 +834,7 @@ def selftest():
         put(repo, "prob/training/other.py", "X = 1\n")
         put(repo, "prob/tools/env/_py.sh", "#!/bin/bash\npython3 \"$@\"\n")
         put(repo, "prob/data/README.md", "tracked part of a data folder\n")
+        put(repo, "prob/winner/lib.py", "# a frozen copy of lib.py\n")
         put(repo, "prob/experiments/E1_x/experiment.md", "# E1\n```json card\n" + json.dumps({"id": "E1", "arms": {"a": {"recipe": "the arm", "run_ids": ["E1.a"]}}}) + "\n```\n")
         sh(repo, "add", "-A")
         sh(repo, "commit", "-q", "-m", "A")
@@ -730,10 +853,30 @@ def selftest():
         sh(repo, "tag", "-a", "-m", "run", "t/E1.a", snap)
         sh(repo, "checkout", "-q", "--", ".")
         sh(repo, "clean", "-fdq")
+        def snapshot(files, delete=()):
+            """a snapshot commit on `base`: the base tree plus these files (added by force) minus these paths, made through a temporary index as run.py does"""
+            ix = os.path.join(T, "idx_" + str(len(os.listdir(T))))
+            e2 = dict(os.environ, GIT_INDEX_FILE=ix)
+            sh(repo, "read-tree", base, env=e2)
+            for d in delete:
+                sh(repo, "rm", "-q", "--cached", d, env=e2)
+            for rel, text in files.items():
+                put(repo, rel, text)
+                sh(repo, "add", "-f", rel, env=e2)
+                os.remove(os.path.join(repo, rel))
+            return sh(repo, "commit-tree", sh(repo, "write-tree", env=e2), "-p", base, "-m", "snapshot")
+
+        snap_del = snapshot({"prob/temp/e1/armd.py": "import other\n"}, delete=["prob/training/other.py"])
+        snap2 = snapshot({"prob/temp/e1/arm.py": "import lib\nprint('second attempt')\n"})
+        for tg in ("t/E1.d", "t/E1.r", "t/E1.p"):
+            sh(repo, "tag", "-a", "-m", "run", tg, snap)
         put(repo, "prob/LEDGER.csv", "id,started,status,exit,command,seed,hypothesis,prediction,rule,result,decision,commit\n"
                                      f"E1.a,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh arm.py,0,h,p,r,res,dec,{snap[:10]}\n"
                                      "E1.b,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh arm.py,0,h,p,r,res,dec,\n"
-                                     "E1.c,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh other.py,0,h,p,r,res,dec,\n")
+                                     "E1.c,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh other.py,0,h,p,r,res,dec,\n"
+                                     f"E1.d,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh nowhere.py,0,h,p,r,res,dec,{snap[:10]}\n"
+                                     f"E1.r,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh arm.py,0,h,p,r,res,dec,{snap2[:10]}\n"
+                                     f"E1.p,2099-01-01T00:00:00,ok,0,bash tools/env/_py.sh arm.py,0,h,p,r,res,dec,{base[:10]}\n")
         sh(repo, "add", "-A")
         sh(repo, "commit", "-q", "-m", "ledger")
         put(repo, "prob/training/lib.py", "from pkg import (\n    one,\n    modb,\n)\n\n\ndef f():\n    return 2   # dirty\n")      # the dirty edit of lib.py is committed later: its version is in main's history
@@ -742,14 +885,26 @@ def selftest():
         os.environ["AR_PROJECT"] = os.path.join(repo, "prob")
         try:
             R = Repo()
-            assert R.base_of({"id": "E1.a", "started": "2099-01-01T00:00:00"})[:2] == (base, "tag parent")
+            assert R.base_of({"id": "E1.a", "started": "2099-01-01T00:00:00"})[:2] == (base, "snapshot parent")
+            assert R.base_of(ledger_rows()[4]) == (base, "snapshot parent", snap2), "the ledger's commit (the last attempt) wins over the tag (the first)"
+            assert R.base_of(ledger_rows()[5]) == (base, "pinned commit", base), "a commit that is in main's history is a pinned run: its own base"
+            cl2, _, _ = closure(R, R.snap_tree(base, snap_del), "bash tools/env/_py.sh armd.py")
+            assert "prob/temp/e1/armd.py" in cl2 and "prob/training/other.py" not in cl2, "a file the snapshot deleted is not followed (and does not crash the closure)"
+            top = globals()["MAX_FILES"]
+            globals()["MAX_FILES"] = 1
+            try:
+                assert closure(R, R.snap_tree(base, snap), "bash tools/env/_py.sh arm.py")[1] is True, "the cap marks the closure as cut"
+            finally:
+                globals()["MAX_FILES"] = top
             assert R.base_of({"id": "E1.b", "started": "2000-01-01T00:00:00"})[0] == ""            # before the first commit: no base
-            cl, cut = closure(R, R.snap_tree(base, snap), "bash tools/env/_py.sh arm.py")
+            cl, cut, unres = closure(R, R.snap_tree(base, snap), "bash tools/env/_py.sh arm.py")
             assert not cut and cl.keys() >= {"prob/temp/e1/arm.py", "prob/training/lib.py", "prob/tools/env/_py.sh", "prob/training/data/modb.py"}, cl.keys()    # a folder called data/ inside training is code, a name in a multi-line import list is followed
             assert R.snap_tree(base, snap)[0] == R.tree(snap)[0], "base + difference == the listed tree"
-            ov, cut = needed(R, {"command": "bash tools/env/_py.sh arm.py"}, base, snap)
+            ov, cut, unres = needed(R, {"command": "bash tools/env/_py.sh arm.py"}, base, snap)
             assert set(ov) == {"prob/temp/e1/arm.py", "prob/training/lib.py", "prob/training/data/modb.py"}, ov   # what differs from the base and is executed: not the unrelated scratch, not the unchanged shell wrapper
             assert needed(R, {"command": "x.py"}, "0" * 40, snap) is None, "an unreadable base is None, never an empty overlay"
+            assert unres == [] and needed(R, {"command": "bash tools/env/_py.sh nowhere.py"}, base, snap)[2] == ["nowhere.py"], "a script of the command that is found nowhere is recorded"
+            assert base in R.history_blobs() and snap not in R.history_blobs(), "the history of main, not the snapshots"
             assert cmd_check(R, [], False) == 0
             for n in ("E2_alpha", "E2_beta_two"):                                                    # two folders share the prefix E2: the card or the slug decides
                 put(repo, f"prob/experiments/{n}/experiment.md", "# " + n + ("\nruns: E2.zzz\n" if n == "E2_alpha" else "\n"))
@@ -764,32 +919,53 @@ def selftest():
             folder = os.path.join(repo, "prob/experiments/E1_x")
             rec = load_recipe(folder)
             raw = json.load(open(os.path.join(folder, "recipe.json")))
-            assert raw["schema"] == 2 and isinstance(raw["runs"]["E1.a"]["overlay"], int) and len(raw["overlays"]) == 2 and raw["runs"]["E1.b"]["overlay"] == raw["runs"]["E1.c"]["overlay"], "equal overlays are kept once"
+            assert raw["schema"] == 2 and isinstance(raw["runs"]["E1.a"]["overlay"], int) and len(raw["overlays"]) == 3 and raw["runs"]["E1.b"]["overlay"] == raw["runs"]["E1.c"]["overlay"], "equal overlays are kept once"
             assert dump_recipe(expand_recipe(json.loads(dump_recipe(rec)))) == dump_recipe(rec), "dump and load round-trip"
             assert rec["runs"]["E1.a"]["base"] == base and set(rec["runs"]["E1.a"]["overlay"]) == set(ov)
             assert rec["runs"]["E1.b"]["how"].startswith("by time") and rec["runs"]["E1.b"]["overlay"] == {}
+            assert rec["runs"]["E1.d"]["unresolved"] == ["nowhere.py"]
+            assert rec["runs"]["E1.r"]["snapshot"] == snap2 and "second attempt" in open(os.path.join(folder, rec["runs"]["E1.r"]["overlay"]["prob/temp/e1/arm.py"]["file"])).read()
+            assert rec["runs"]["E1.p"]["how"] == "pinned commit" and rec["runs"]["E1.p"]["overlay"] == {}
             ovr = rec["runs"]["E1.a"]["overlay"]
             arm = open(os.path.join(folder, ovr["prob/temp/e1/arm.py"]["file"])).read()
             assert "SECRETNAME" not in arm and "the owner decided this" in arm and ovr["prob/temp/e1/arm.py"]["sanitised"], "the private patterns are applied to a copied file"
             assert blob_id(arm.encode()) == ovr["prob/temp/e1/arm.py"]["blob"], "the entry names the blob of the stored (changed) content"
             assert apply_private(b"a SECRETNAME b", [(re.compile("SECRETNAME"), "X")]) == b"a X b" and apply_private(b"\xff\xfeSECRETNAME", [(re.compile("SECRETNAME"), "X")]) == b"\xff\xfeSECRETNAME"
             assert "file" not in ovr["prob/training/lib.py"] and "file" in ovr["prob/temp/e1/arm.py"] and "file" in ovr["prob/training/data/modb.py"], "a version in main's history is named, the rest is copied"
-            assert sorted(os.listdir(os.path.join(folder, "code"))) == sorted(v["file"].split("/")[1] for v in ovr.values() if "file" in v)
+            assert sorted(os.listdir(os.path.join(folder, "code"))) == sorted({v["file"].split("/")[1] for e in rec["runs"].values() for v in e["overlay"].values() if "file" in v})
             assert classify(R, ledger_rows()[0])[0] == "gap: recipe.json or code/ is not committed"
             sh(repo, "add", "-A")
             sh(repo, "commit", "-q", "-m", "recipe")
             R = Repo()
             assert classify(R, ledger_rows()[0])[0] == "ok"
             assert classify(R, ledger_rows()[1])[0].startswith("gap: script arm.py is not at the base commit"), "a run without a tag has no overlay: its scripts must be at the base"
-            assert classify(R, ledger_rows()[2])[0] == "ok, base by time (approximate)"
+            assert classify(R, ledger_rows()[2])[0].startswith("approximate: base by time")
+            assert classify(R, ledger_rows()[3])[0].startswith("gap: script nowhere.py was found in no tree"), "a script of the command that no tree held is a gap"
+            put(repo, "prob/experiments/E1_x/code/zz_new.txt", "x\n")
+            assert classify(Repo(), ledger_rows()[0])[0] == "gap: recipe.json or code/ is not committed", "an untracked file in code/ counts"
+            os.remove(os.path.join(repo, "prob/experiments/E1_x/code/zz_new.txt"))
+            rp0 = os.path.join(folder, "recipe.json")                                                # a named version that origin's history does not hold is a gap
+            keep0 = open(rp0).read()
+            open(rp0, "w").write(keep0.replace(ovr["prob/training/lib.py"]["blob"], "e" * 40))
+            assert "is not in the history of origin/main" in classify(Repo(), ledger_rows()[0])[0]
+            open(rp0, "w").write(keep0)
             sh(repo, "update-ref", "refs/remotes/origin/main", root)                                 # origin/main behind the base: a clone would not have it
             assert "is not on origin/main" in classify(Repo(), ledger_rows()[0])[0]
+            sh(repo, "update-ref", "refs/remotes/origin/main", sh(repo, "rev-parse", "HEAD~1"))        # the commit with recipe.json is not pushed yet
+            assert classify(Repo(), ledger_rows()[0])[0] == "gap: recipe.json and code/ are committed but not pushed"
             sh(repo, "update-ref", "refs/remotes/origin/main", "HEAD")
-            sh(repo, "tag", "-d", "t/E1.a")                                                          # a clone without the tag
+            sh(repo, "tag", "-d", "t/E1.a")                                                          # a clone without the tag, and without the snapshot's name in the ledger
+            lp = os.path.join(repo, "prob/LEDGER.csv")
+            text = open(lp).read()
+            open(lp, "w").write(text.replace(f"arm.py,0,h,p,r,res,dec,{snap[:10]}\n", "arm.py,0,h,p,r,res,dec,\n", 1))
             R2 = Repo()
             assert classify(R2, ledger_rows()[0])[0] == "ok", "the recipe replaces the tag"
+            put(repo, "prob/experiments/E1_x/code/ffffffffffff_stale.py", "old\n")                  # a copy that no run names, and a file that is not a copy
+            put(repo, "prob/experiments/E1_x/code/keep_me.sh", "mine\n")
             cmd_store(R2, ["E1"], True)                                                              # store again with no tag: the exact entry must stay
-            assert load_recipe(folder)["runs"]["E1.a"]["how"] == "tag parent"
+            assert load_recipe(folder)["runs"]["E1.a"]["how"] == "snapshot parent"
+            assert not os.path.exists(os.path.join(folder, "code/ffffffffffff_stale.py")) and os.path.exists(os.path.join(folder, "code/keep_me.sh")), "an unreferenced copy is pruned, other files are not"
+            os.remove(os.path.join(folder, "code/keep_me.sh"))
             dest = os.path.join(T, "wt")
             put(repo, "prob/data/big.bin", "not in git\n")                                           # the real data folder holds an untracked child
             os.makedirs(os.path.join(T, "wrong"))
@@ -798,7 +974,12 @@ def selftest():
             sh(repo, "worktree", "add", "-q", "--detach", other, root)
             assert raises(cmd_repeat, R2, "E1.a", other), "a worktree of another commit is refused, not mixed with the overlay"
             subprocess.run(["git", "-C", repo, "worktree", "remove", "--force", other], capture_output=True)
-            assert cmd_repeat(R2, "E1.a", dest) == 0
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                assert cmd_repeat(R2, "E1.a", dest) == 0
+            printed = buf.getvalue().rstrip()
+            assert "--no-card" in printed and "--id E1.a.repro" in printed and f"cd {dest}/prob && AR_PROJECT=. python3 ../autoresearch/tools/run.py" in printed \
+                and printed.endswith("-- bash tools/env/_py.sh arm.py"), printed
             assert open(os.path.join(dest, "prob/training/lib.py")).read().endswith("# dirty\n") and os.path.isfile(os.path.join(dest, "prob/temp/e1/arm.py"))
             assert not os.path.exists(os.path.join(dest, "prob/temp/e1/unrelated.py"))
             assert os.path.islink(os.path.join(dest, "prob/data/big.bin")) and os.path.isfile(os.path.join(dest, "prob/data/README.md")), "an untracked child of a partly tracked data folder is linked"
@@ -816,7 +997,7 @@ def selftest():
             some = next(v["file"] for v in rec["runs"]["E1.a"]["overlay"].values() if "file" in v)    # a changed stored file is a gap, not a silent wrong code
             open(os.path.join(folder, some), "ab").write(b"#")
             assert classify(R2, ledger_rows()[0])[0].startswith("gap: stored file")
-            assert cmd_check(R2, ["E1.a"], False) == 1
+            assert cmd_check(R2, ["E1.a"], False) == 1 and cmd_check(R2, ["NOPE"], False) == 2, "a selected run with a gap, and an id that matches nothing, are not exit 0"
             os.remove(os.path.join(folder, some))
             assert classify(R2, ledger_rows()[0])[0].startswith("gap: stored file") and cmd_check(R2, ["E1.a"], False) == 1
             # the by-time base follows the first parent: the merge commit is after the window, its side parent is inside it and newer than the first parent: the first parent wins
