@@ -6,7 +6,7 @@ Third-party code is not in git (D11): it is cloned again from these remotes at t
 cd ~/work && git clone <remote> <folder> && git -C <folder> checkout <commit>
 ```
 
-Open: the source of the GaussianCaR weights (`~/work/gaussiancar_ckpt`) is not recorded here yet; record it (URL, file name, sha256) when known.
+GaussianCaR weights (`~/work/gaussiancar_ckpt`), recorded 2026-11-24 from the local copy: file `nuscenes_map.ckpt`, 1,130,353,854 bytes, modified 2026-10-13 19:49, sha256 `a184b022ef6d73fcf3abd075176273912a0e1fbbdf589e284151f1e388fb9baa`. Source named by the repository README: the Hugging Face repository `santimontieleu/gaussiancar` (read in `bev_fusion/literature/code/gaussiancar_fusion.md`, 2026-10-25). Still open: the exact download URL and who downloaded it are not recorded, so it is not proven that this file is the one on Hugging Face; compare the sha256 with the file there when it is fetched again. The vehicle checkpoint (`nuscenes_vehicle.ckpt`) is not on this machine.
 
 ## Clones
 
