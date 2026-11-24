@@ -88,6 +88,28 @@ def scratch_tag_files(root, prefix):
     return paths, names
 
 
+def recipe_paths(root):
+    """(paths relative to the problem folder, base names) of the files that the recipe.json of the experiment folders keep (recipe.py store): a card cites
+    `temp/e330/recipe.sh`, the script left the tree after the experiment, and the recipe holds the version the run executed (copied, or named by its blob id in main's history)"""
+    paths, names = set(), set()
+    name = os.path.basename(os.path.abspath(root))
+    for d, dirs, files in os.walk(root):
+        dirs[:] = [x for x in dirs if x not in ("temp", "_to_delete", "runs", "literature", "data", ".git") and d.count(os.sep) - root.count(os.sep) < 4]
+        if "recipe.json" not in files:
+            continue
+        try:
+            raw = json.load(open(os.path.join(d, "recipe.json"), encoding="utf-8"))
+        except ValueError:
+            continue
+        for ent in raw.get("runs", {}).values():
+            ov = ent.get("overlay", {})
+            for key in (raw.get("overlays", [])[ov] if isinstance(ov, int) else ov):         # schema 2 keeps each distinct overlay once, the run names it by its index
+                p = key.split(name + "/", 1)[1] if name + "/" in key else key       # the keys are paths from the top of the repository
+                paths.add(p)
+                names.add(os.path.basename(p))
+    return paths, names
+
+
 def resolves(tok, md, names, root, R):
     t = tok.strip().rstrip(".,;:)").replace("\\", "/")
     t = t.split("#")[0].split(":")[0] if not t.startswith(("http", "C:")) else t
@@ -130,7 +152,9 @@ def check(root=None, stats=None):
             problems.append(f"{d}/: no README.md")
     names = code_index(root, R)
     R["tag_paths"], tag_names = scratch_tag_files(root, P.cfg().get("tag_prefix", ""))
-    names = names | tag_names
+    rpaths, rnames = recipe_paths(root)
+    R["tag_paths"] = R["tag_paths"] | rpaths
+    names = names | tag_names | rnames
     docs = living_files(root, R)
     if stats is not None:
         stats["documents"] = len(docs)
@@ -192,6 +216,13 @@ def selftest():
         assert resolves("temp/loop5/x.py", md2, tag_names, proj, R2) and resolves("temp/loop5/", md2, tag_names, proj, R2) and resolves("x.py", md2, tag_names, proj, R2)
         assert not resolves("temp/loop5/y.py", md2, tag_names, proj, R2) and not resolves("temp/loop6/x.py", md2, tag_names, proj, R2), "only what a tag holds"
         assert not resolves("temp/loop5/x.py", md2, set(), proj, R), "without the tag files the path is dead"
+        # a script that the recipe of an experiment keeps is not a dead path either (recipe.json names it from the top of the repository)
+        os.makedirs(os.path.join(proj, "experiments", "E1_x"))
+        json.dump({"schema": 2, "overlays": [{}, {"proj/temp/e1/arm.py": {"blob": "0" * 40}}], "runs": {"E1.a": {"overlay": 1}, "E1.b": {"overlay": 0}}}, open(os.path.join(proj, "experiments", "E1_x", "recipe.json"), "w"))
+        rp, rn = recipe_paths(proj)
+        assert rp == {"temp/e1/arm.py"} and rn == {"arm.py"}, (rp, rn)
+        R3 = dict(R, tag_paths=rp)
+        assert resolves("temp/e1/arm.py", md2, rn, proj, R3) and not resolves("temp/e1/other.py", md2, rn, proj, R3) and not resolves("temp/e1/arm.py", md2, set(), proj, R)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     # deep review 2026-11-10: "in step" is claimed only for documents that were scanned; an empty `living` list is said out loud

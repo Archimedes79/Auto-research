@@ -18,6 +18,7 @@ Standard-library Python (any interpreter: WSL, Windows, a Linux server). Most to
 | `metrics.py` | the loop table: runs, GPU hours, verdicts, prediction hits and errors, TEST uses |
 | `keep3.py` | the best three networks of a problem and their checkpoints |
 | `provenance.py`, `lineage.py`, `package.py` | what a result card records, the verified chain network -> run -> code -> data, the result package and the clean-up of derived data |
+| `recipe.py` | repeat a run from a fresh clone: `show` (the brief for an AI: question, rule, base commit + stored files, command, inputs, expected result, steps, gaps), `repeat` (worktree + stored files + the run.py command), `check` (which runs can be repeated), `store` (base commit and the few executed files that differ from it, into the experiment folder as `recipe.json` + `code/`) |
 | `commit_paths.py`, `check_git.py` | commit exactly the named paths in the shared checkout; what may go into git and be pushed |
 | `gitfast.py` | read-only git calls through git.exe when this runs in WSL on a Windows drive (40-100x faster than the WSL git on 9p); imported by `check_git.py`, `provenance.py`, `check_structure.py`; `AR_GIT=wsl` forces the WSL git |
 | `check_numbers.py`, `check_structure.py` | numbers of a report against their sources; folder structure and dead paths of the living documents |
