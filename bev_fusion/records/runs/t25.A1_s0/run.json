@@ -1,0 +1,80 @@
+{
+ "id": "t25.A1_s0",
+ "hypothesis": "t25 (card experiments/t25_one_frame_one_scan, D91, D145): one camera frame and ONE radar sweep per step with the past carried recursively at feature level keeps what the 0.5 s radar window and the pair buffer give; arm A1",
+ "prediction": "A1 (recurrent camera + one radar sweep): detf mean mAP -0.025 (-0.040 .. -0.015) against ctl, pedestrian AP@1 -0.04 or worse, velocity EPE +0.15 (+0.08 .. +0.25)",
+ "rule": "by hand: composed from the table rows (card section 1, added 2026-11-24): HOLDS (provisional, one seed) when d >= -0.010 on detf mean mAP against ctl with the interval's lower end >= -0.015 and no guard CUT; FAILS when d < -0.020 with the interval's upper end below -0.010; else INCONCLUSIVE; the memory PAYS when A2 - A1 >= +0.010 with the interval above 0, HURTS at <= -0.010 with the interval below 0, else TIE (A1 taken); ctl outside its sanity band voids the comparison; the card's guards and kill criteria as written",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/run_ar.sh temp/compose/t25_A1_s0.json",
+ "argv": [
+  "bash",
+  "tools/run_ar.sh",
+  "temp/compose/t25_A1_s0.json"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 223387,
+ "created": "2026-11-24T15:27:29",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "t25",
+ "card_sha": "b6f5d253c5ec1546",
+ "card_arms": {
+  "A2": {
+   "order": {},
+   "run_ids": [
+    "t25.A2_s0"
+   ]
+  },
+  "A1": {
+   "order": {},
+   "run_ids": [
+    "t25.A1_s0"
+   ]
+  },
+  "R": {
+   "order": {},
+   "run_ids": [
+    "t25.R_s0"
+   ]
+  },
+  "ctl": {
+   "order": {},
+   "run_ids": [
+    "t25.ctl_s0"
+   ]
+  }
+ },
+ "code_hash_first": "36b79156f309",
+ "started": "2026-11-24T15:28:07",
+ "code_hash": "36b79156f309",
+ "commit": "afdfcae465",
+ "tag": "bf/t25.A1_s0",
+ "git_note": "",
+ "pid": 223545,
+ "pgid": 223545,
+ "pid_start": 2492629,
+ "exit": 0,
+ "duration_s": 7376,
+ "attempts": 1,
+ "ended": "2026-11-24T17:31:04",
+ "last_lines": [
+  "step 1320: total 6.5747 lr 4.16e-06 grad 22.95",
+  "step 1340: total 9.0173 lr 3.32e-06 grad 29.21",
+  "step 1360: total 7.8453 lr 2.58e-06 grad 31.13",
+  "step 1380: total 7.1131 lr 1.93e-06 grad 20.98",
+  "step 1400: total 6.2560 lr 1.38e-06 grad 16.03",
+  "step 1420: total 7.9315 lr 9.23e-07 grad 17.30",
+  "step 1440: total 9.1037 lr 5.67e-07 grad 22.50",
+  "step 1460: total 9.1614 lr 3.11e-07 grad 22.73",
+  "step 1480: total 6.7035 lr 1.55e-07 grad 12.83",
+  "step 1500: total 7.1105 lr 1.00e-07 grad 12.27",
+  "step 1500: val total 8.7578",
+  "t25_A1_s0 exit 0 17:31:03"
+ ]
+}
