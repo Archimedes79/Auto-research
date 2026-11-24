@@ -3,5 +3,5 @@
   {"bev_fusion_lane_center/temp/e274/table.py": {"blob": "fa660a753dd223b62a3d9b70beddcd3735b7a6fd", "file": "code/fa660a753dd2_table.py"}, "bev_fusion_lane_center/temp/loop23/reach.py": {"blob": "86ff80e638cb9643481658d8cf9f9a33d866ef0e", "file": "code/86ff80e638cb_reach.py"}}
  ],
  "runs": {
-  "E306.smoke_s0": {"base": "39f45900f506a5b1922c37f14496e8b215b6071b", "how": "tag parent", "overlay": 0, "snapshot": "eb320f03ef1828b64e31e66c5f4db1859fd3c0f4"}
+  "E306.smoke_s0": {"base": "39f45900f506a5b1922c37f14496e8b215b6071b", "how": "snapshot parent", "overlay": 0, "snapshot": "eb320f03ef1828b64e31e66c5f4db1859fd3c0f4"}
  }}

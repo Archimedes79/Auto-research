@@ -3,6 +3,6 @@
   {}
  ],
  "runs": {
-  "E244.a0": {"base": "d942fc6714ddf8184554500d1275a216174c0c63", "how": "by time (approximate)", "overlay": 0, "snapshot": "637c0f8eb5"},
-  "E244.b0": {"base": "e71f49b41a179b58653e759500f5ae5e23278a86", "how": "by time (approximate)", "overlay": 0, "snapshot": "50cf7b9d49"}
+  "E244.a0": {"base": "d942fc6714ddf8184554500d1275a216174c0c63", "how": "snapshot parent", "overlay": 0, "snapshot": "637c0f8eb557ceae8e02a7d47781d5ad44a4d39c"},
+  "E244.b0": {"base": "e71f49b41a179b58653e759500f5ae5e23278a86", "how": "snapshot parent", "overlay": 0, "snapshot": "50cf7b9d4900f3229fed5a32b55ef8bcefb5c3f9"}
  }}

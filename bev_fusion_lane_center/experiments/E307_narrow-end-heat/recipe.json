@@ -4,7 +4,7 @@
   {"bev_fusion_lane_center/temp/e274/table.py": {"blob": "fa660a753dd223b62a3d9b70beddcd3735b7a6fd", "file": "code/fa660a753dd2_table.py"}, "bev_fusion_lane_center/temp/loop23/reach.py": {"blob": "86ff80e638cb9643481658d8cf9f9a33d866ef0e", "file": "code/86ff80e638cb_reach.py"}, "bev_fusion_lane_center/training/grid/jgt.py": {"blob": "4066d0bb1766c6f70387cea2d45df34a90391a9e"}, "bev_fusion_lane_center/training/train/jmaps_train.py": {"blob": "91e525b31d5611947699d7d60be4d0bc3c7ea43f"}}
  ],
  "runs": {
-  "E307.n_s0": {"base": "ad004838ad3166abdc4bb6751265917f4559e5a1", "how": "tag parent", "overlay": 0, "snapshot": "d032330f700acad83af439675cb4199bda6ecbe1"},
-  "E307.n_s1": {"base": "ad004838ad3166abdc4bb6751265917f4559e5a1", "how": "tag parent", "overlay": 0, "snapshot": "3b0f6aad81ca02911cb7f2033d6cfb0a510dbdbb"},
-  "E307.smoke_s0": {"base": "39f45900f506a5b1922c37f14496e8b215b6071b", "how": "tag parent", "overlay": 1, "snapshot": "30b86b54f49273fd43d147630e248646f30238f3"}
+  "E307.n_s0": {"base": "ad004838ad3166abdc4bb6751265917f4559e5a1", "how": "snapshot parent", "overlay": 0, "snapshot": "d032330f700acad83af439675cb4199bda6ecbe1"},
+  "E307.n_s1": {"base": "ad004838ad3166abdc4bb6751265917f4559e5a1", "how": "snapshot parent", "overlay": 0, "snapshot": "3b0f6aad81ca02911cb7f2033d6cfb0a510dbdbb"},
+  "E307.smoke_s0": {"base": "39f45900f506a5b1922c37f14496e8b215b6071b", "how": "snapshot parent", "overlay": 1, "snapshot": "30b86b54f49273fd43d147630e248646f30238f3"}
  }}

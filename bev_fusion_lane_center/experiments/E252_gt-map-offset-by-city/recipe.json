@@ -1,8 +1,9 @@
 {"schema": 2,
  "overlays": [
-  {}
+  {"bev_fusion_lane_center/temp/loop20/e252_gt_offset.py": {"blob": "aea3479fbb6b04ee9bcf241c5178ceeb3d8b5200"}},
+  {"bev_fusion_lane_center/temp/loop20/e252b_controls.py": {"blob": "0ebba52a61ba91fb01f4a29328f40ef7c8eb1207"}}
  ],
  "runs": {
-  "E252.a0": {"base": "46c78e6e43b444ef819b62f9eabf73bce11273d8", "how": "by time (approximate)", "overlay": 0, "snapshot": "fd136d8007"},
-  "E252.b0": {"base": "46c78e6e43b444ef819b62f9eabf73bce11273d8", "how": "by time (approximate)", "overlay": 0, "snapshot": "d02cc56739"}
+  "E252.a0": {"base": "46c78e6e43b444ef819b62f9eabf73bce11273d8", "how": "snapshot parent", "overlay": 0, "snapshot": "fd136d80071e02c6055dede32082b7a03048fdaa"},
+  "E252.b0": {"base": "46c78e6e43b444ef819b62f9eabf73bce11273d8", "how": "snapshot parent", "overlay": 1, "snapshot": "d02cc5673928780f90e0d0dc51d5a7220b107e0c"}
  }}

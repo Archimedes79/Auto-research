@@ -3,8 +3,8 @@
   {"bev_fusion_lane_center/temp/_session_scratch_s292/report/build.py": {"blob": "bf00108ac902478ae7f341ed6023edf6abe7193f", "file": "code/bf00108ac902_build.py"}, "bev_fusion_lane_center/temp/e316/table.py": {"blob": "ec928f37962384c4fa93550afce3701a3a049757", "file": "code/ec928f379623_table.py"}}
  ],
  "runs": {
-  "E373.cb_s0": {"base": "c0fe4d02827b9f8c56f790d5d9b4c6b7c66048d7", "how": "tag parent", "overlay": 0, "snapshot": "044e4b3c9027abf553579dbdcd5e5d7e3de7942b"},
-  "E373.cb_s1": {"base": "c0fe4d02827b9f8c56f790d5d9b4c6b7c66048d7", "how": "tag parent", "overlay": 0, "snapshot": "396a08fa31be6b06595d0a7a2e0d65eb7ef1c8a6"},
-  "E373.read_s0": {"base": "168ba04f885423645618b506ff63278404972852", "how": "tag parent", "overlay": 0, "snapshot": "1a37ba32857b7a34a10d852b5641b232ba19eb2b"},
-  "E373.read_s1": {"base": "168ba04f885423645618b506ff63278404972852", "how": "tag parent", "overlay": 0, "snapshot": "de772923395706143eadeb38731bac585b22a85b"}
+  "E373.cb_s0": {"base": "c0fe4d02827b9f8c56f790d5d9b4c6b7c66048d7", "how": "snapshot parent", "overlay": 0, "snapshot": "044e4b3c9027abf553579dbdcd5e5d7e3de7942b"},
+  "E373.cb_s1": {"base": "c0fe4d02827b9f8c56f790d5d9b4c6b7c66048d7", "how": "snapshot parent", "overlay": 0, "snapshot": "396a08fa31be6b06595d0a7a2e0d65eb7ef1c8a6"},
+  "E373.read_s0": {"base": "168ba04f885423645618b506ff63278404972852", "how": "snapshot parent", "overlay": 0, "snapshot": "1a37ba32857b7a34a10d852b5641b232ba19eb2b"},
+  "E373.read_s1": {"base": "168ba04f885423645618b506ff63278404972852", "how": "snapshot parent", "overlay": 0, "snapshot": "de772923395706143eadeb38731bac585b22a85b"}
  }}

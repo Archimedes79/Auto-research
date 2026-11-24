@@ -1,10 +1,11 @@
 {"schema": 2,
  "overlays": [
-  {}
+  {"bev_fusion_lane_center/temp/e274/table.py": {"blob": "fa660a753dd223b62a3d9b70beddcd3735b7a6fd", "file": "code/fa660a753dd2_table.py"}, "bev_fusion_lane_center/training/grid/qgraph.py": {"blob": "6ac8668a1d0172b3e63938fe8b4a3fc01a02b599", "file": "code/6ac8668a1d01_qgraph.py"}, "bev_fusion_lane_center/training/grid/qnodes.py": {"blob": "d13b5d851a9f249b04e107d9af3af01ff280f920", "file": "code/d13b5d851a9f_qnodes.py"}, "bev_fusion_lane_center/training/grid/qpredict.py": {"blob": "72c46c392b35a810b6b499c3429c8443fbf225cf", "file": "code/72c46c392b35_qpredict.py"}, "bev_fusion_lane_center/training/train/qgraph_train.py": {"blob": "16f85ab294f1707881d2e16aeb7607ee631b27e1"}},
+  {"bev_fusion_lane_center/temp/e274/table.py": {"blob": "fa660a753dd223b62a3d9b70beddcd3735b7a6fd", "file": "code/fa660a753dd2_table.py"}}
  ],
  "runs": {
-  "E277.u_s0": {"base": "47f5e6a0234c12e292c841a19874a8dfe56e76a1", "how": "by time (approximate)", "overlay": 0, "snapshot": "6bf534079b"},
-  "E277.u_s1": {"base": "47f5e6a0234c12e292c841a19874a8dfe56e76a1", "how": "by time (approximate)", "overlay": 0, "snapshot": "3f1de5b874"},
-  "E277.uq_s0": {"base": "33a2d6e6f0b0b7ddb0d873a32b547b05af98336a", "how": "by time (approximate)", "overlay": 0, "snapshot": "8c0371e6f7"},
-  "E277.uq_s1": {"base": "56e15f3777350b34ded8b77a0c2998ad0ab9c36b", "how": "by time (approximate)", "overlay": 0, "snapshot": "8e70501670"}
+  "E277.u_s0": {"base": "47f5e6a0234c12e292c841a19874a8dfe56e76a1", "how": "snapshot parent", "overlay": 0, "snapshot": "6bf534079b09709a1b9b285d4d511fb33586be5a"},
+  "E277.u_s1": {"base": "47f5e6a0234c12e292c841a19874a8dfe56e76a1", "how": "snapshot parent", "overlay": 0, "snapshot": "3f1de5b874b39fa28afad367a0c3f73ee567693b"},
+  "E277.uq_s0": {"base": "33a2d6e6f0b0b7ddb0d873a32b547b05af98336a", "how": "snapshot parent", "overlay": 1, "snapshot": "8c0371e6f7302a118e32c07521e6c48a14023fda"},
+  "E277.uq_s1": {"base": "56e15f3777350b34ded8b77a0c2998ad0ab9c36b", "how": "snapshot parent", "overlay": 1, "snapshot": "8e705016707714cc091c825797e251135ed375cd"}
  }}

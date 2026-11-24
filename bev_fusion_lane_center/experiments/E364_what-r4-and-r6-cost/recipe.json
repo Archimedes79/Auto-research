@@ -4,9 +4,9 @@
   {"bev_fusion_lane_center/temp/_session_scratch_s292/report/build.py": {"blob": "bf00108ac902478ae7f341ed6023edf6abe7193f", "file": "code/bf00108ac902_build.py"}, "bev_fusion_lane_center/temp/e364/mask_ceiling.py": {"blob": "4761f540b3f3b0af873d6a84d0df12a70ff26845", "file": "code/4761f540b3f3_mask_ceiling.py"}}
  ],
  "runs": {
-  "E364.fx_s0": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "tag parent", "overlay": 0, "snapshot": "c59f639018e51cbf3ff719c72bc30fd9fc93e4b1"},
-  "E364.fx_s1": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "tag parent", "overlay": 0, "snapshot": "4d11497257f1605e151b2831646081467bf9f5e5"},
-  "E364.m": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "tag parent", "overlay": 1, "snapshot": "91f03656857eb38f57e99a47a4dd4122ef283962"},
-  "E364.n_s0": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "tag parent", "overlay": 0, "snapshot": "2706155db96f2b0e3e3d945814dbaf1c6ea31224"},
-  "E364.n_s1": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "tag parent", "overlay": 0, "snapshot": "9bb921395979e1808593869f3878421cdac82d85"}
+  "E364.fx_s0": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "snapshot parent", "overlay": 0, "snapshot": "c59f639018e51cbf3ff719c72bc30fd9fc93e4b1"},
+  "E364.fx_s1": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "snapshot parent", "overlay": 0, "snapshot": "4d11497257f1605e151b2831646081467bf9f5e5"},
+  "E364.m": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "snapshot parent", "overlay": 1, "snapshot": "91f03656857eb38f57e99a47a4dd4122ef283962"},
+  "E364.n_s0": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "snapshot parent", "overlay": 0, "snapshot": "2706155db96f2b0e3e3d945814dbaf1c6ea31224"},
+  "E364.n_s1": {"base": "a8ced890ab51b6657f570e9defd583b742411e5b", "how": "snapshot parent", "overlay": 0, "snapshot": "9bb921395979e1808593869f3878421cdac82d85"}
  }}
