@@ -26,6 +26,9 @@ the read-outs (`jtoken_eval.py`) take no noise. In the recipe.
 `--rounds R` (E392 card v3, 0 / 1 / 2; default 0 = the champion bit for bit) / `--msg real|uniform|none|self` (uniform = the content null; self = the capacity null: the round modules on each token's own features, no neighbour read, any --wire-weight; none = deep supervision without exchange: no round module, the early reads exist in training mode only, so the
 trained head is the champion network at inference; needs --rounds >= 1 and --wire-weight > 0) / `--wire-weight W` (default 0): the head's message rounds after layer 1 / 2 (`jtoken.JTokenHead`) and the weight of the likelihood of
 their early wiring reads (`jtoken.jtoken_loss(wire_w=)`); in the recipe and in model.pt's args, so `build_head` (the trainer, `load_model`, the stage-2 trainer) rebuilds the head with them; absent in an old run's args = the default.
+`--pos-head` / `--curve-w W` / `--node-w W` (E395 card, default off = the champion bit for bit): the position head of the token head (`jtoken.JTokenHead(pos_head=)`, a normal offset per token, zero start) and the weight of its loss, the Catmull-Rom curve loss
+(`--curve-w`) or the node loss (`--node-w`, the control; not both), `jtoken.jtoken_loss(curve_w=, node_w=)` on the GT geometry of `data/lane_gtgeom_data` (the loader is built with geom=True; `--smoke`: the synthetic toy geometry); both weights need --pos-head and are refused with --distill-from;
+in the recipe and in model.pt's args (absent in an old run's args = off), so `build_head` rebuilds the head with it. The stage-2 trainer (`jlive_train`) refuses a head run that has a position head.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
 A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
 are TEST-ONLY arguments (a run uses 500 / 384).
@@ -49,10 +52,10 @@ import jtoken as JK  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "none_weight", "pos_loss", "head_seed",
-          "distill_from", "distill_weight", "distill_sha256", "noise_pos", "noise_e", "rounds", "wire_weight", "msg")
+          "distill_from", "distill_weight", "distill_sha256", "noise_pos", "noise_e", "rounds", "wire_weight", "msg", "pos_head", "curve_w", "node_w")
 ARCH_DEFAULTS = dict(none_weight=1.0, pos_loss="sum", head_seed=None, live_inputs=False,
                      distill_from=None, distill_weight=1.0, distill_sha256=None, noise_pos=0.0, noise_e=0.0,
-                     rounds=0, wire_weight=0.0, msg="real")                 # what a run of before these options means (the head of the first build)
+                     rounds=0, wire_weight=0.0, msg="real", pos_head=False, curve_w=0.0, node_w=0.0)                 # what a run of before these options means (the head of the first build)
 ARCH = dict(d=64, heads=4, layers=3, ffn=128)                               # the champion's architecture (the head of the first build), a constant since D117
 REMOVED = dict(prior="none", teacher="none", init=None, token_drop=0.0, none_weight_near=None, **ARCH)     # D117: options that no longer exist -> the value a stored run must hold (or nothing): today's head and loss are then that run's
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
@@ -82,6 +85,9 @@ def parse_args(argv=None):
     ap.add_argument("--rounds", type=int, choices=(0, 1, 2), default=ARCH_DEFAULTS["rounds"], help="E392: message rounds after layer 1 / layer 2 (0 = the champion)")
     ap.add_argument("--wire-weight", type=float, default=ARCH_DEFAULTS["wire_weight"], dest="wire_weight", help="E392: W, + W x the likelihood of every early wiring read (0 = none; needs --rounds)")
     ap.add_argument("--msg", choices=JK.MSG, default=ARCH_DEFAULTS["msg"], help="E392: the weights of a round: the early read's probabilities (real), the content null (uniform) or no exchange (none: deep supervision only, needs --wire-weight > 0) or the round block on each token's own features (self: the capacity null); not real needs --rounds")
+    ap.add_argument("--pos-head", action="store_true", dest="pos_head", help="E395: the position head (a normal offset per token, zero start); needs --curve-w or --node-w to learn")
+    ap.add_argument("--curve-w", type=float, default=ARCH_DEFAULTS["curve_w"], dest="curve_w", help="E395: W, + W x the Catmull-Rom curve loss of the refined nodes (0 = off; needs --pos-head)")
+    ap.add_argument("--node-w", type=float, default=ARCH_DEFAULTS["node_w"], dest="node_w", help="E395: W, + W x the node loss of the refined nodes (the control of the curve loss; 0 = off; needs --pos-head; not with --curve-w)")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
     a = ap.parse_args(argv)
     check_options(vars(a))
@@ -111,7 +117,7 @@ def add_noise(b, sp, se, seed, step):
 
 def check_options(args):
     """before anything is built or loaded: the teachers of --distill-from have a model.pt and the KD weight is >= 0 (not given without teachers); the early-read weight is >= 0 and neither it nor --msg uniform / none is given without --rounds;
-    --msg none (the champion network with extra reads, trained only through their loss) needs --wire-weight > 0"""
+    --msg none (the champion network with extra reads, trained only through their loss) needs --wire-weight > 0; the E395 weights --curve-w / --node-w are >= 0, need --pos-head, are not given together and not with --distill-from"""
     if args.get("distill_from") is not None:
         ps = distill_paths(args["distill_from"])
         assert ps and all(os.path.isfile(os.path.join(p, "model.pt")) for p in ps), f"--distill-from {args['distill_from']}: run folders with a model.pt"
@@ -123,6 +129,11 @@ def check_options(args):
     assert args.get("rounds", 0) > 0 or (args.get("wire_weight", 0.0) == 0.0 and args.get("msg", "real") == "real"), f"--wire-weight {args.get('wire_weight')} / --msg {args.get('msg')} without --rounds"
     assert args.get("msg", "real") != "none" or args.get("wire_weight", 0.0) > 0.0, "--msg none without --wire-weight > 0 (it would train the champion with extra reads that no loss sees)"
     assert not ((args.get("noise_pos", 0.0) > 0 or args.get("noise_e", 0.0) > 0) and args.get("msg", "real") in ("none", "self") and args.get("wire_weight", 0.0) > 0.0), "--noise-pos / --noise-e with --msg none / self and --wire-weight > 0: the clean first-batch loss runs in eval mode, which has no early read"
+    cw, nw = args.get("curve_w", 0.0), args.get("node_w", 0.0)
+    assert cw >= 0.0 and nw >= 0.0, f"--curve-w {cw} / --node-w {nw}: >= 0"
+    assert args.get("pos_head", False) or not (cw or nw), f"--curve-w {cw} / --node-w {nw} without --pos-head (no position to refine)"
+    assert not (cw and nw), f"--curve-w {cw} and --node-w {nw} together: one loss per arm (the node loss is the control of the curve loss)"
+    assert args.get("distill_from") is None or not (cw or nw), f"--distill-from together with --curve-w {cw} / --node-w {nw}: not supported (the teachers' heads have no position head: their own GT loss would need the curve term)"
 
 
 def _abs(p):
@@ -163,10 +174,10 @@ def to_device(b, dev):
 
 
 def build_head(args):
-    """the head of a run's args (live_inputs, rounds, msg: absent = the default; the architecture `arch`): the one place that builds it, for the trainer, `load_model` and the stage-2 trainer"""
+    """the head of a run's args (live_inputs, rounds, msg, pos_head: absent = the default; the architecture `arch`): the one place that builds it, for the trainer, `load_model` and the stage-2 trainer"""
     d, heads, layers, ffn = arch(args)
     return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, live_inputs=bool(args.get("live_inputs", ARCH_DEFAULTS["live_inputs"])),
-                         rounds=int(args.get("rounds", ARCH_DEFAULTS["rounds"])), msg=args.get("msg", ARCH_DEFAULTS["msg"]))
+                         rounds=int(args.get("rounds", ARCH_DEFAULTS["rounds"])), msg=args.get("msg", ARCH_DEFAULTS["msg"]), pos_head=bool(args.get("pos_head", ARCH_DEFAULTS["pos_head"])))
 
 
 def arch(args):
@@ -175,8 +186,8 @@ def arch(args):
     return ARCH["d"], ARCH["heads"], ARCH["layers"], ARCH["ffn"]
 
 
-def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=1.0, noise_pos=0.0, noise_e=0.0, noise_seed=0, wire_w=0.0):
-    """`jtoken.jtoken_loss` (+ wire_w x the early reads, E392; the teachers' own GT loss without them) + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line); teachers (E379, the frozen heads of `load_teachers`): `teacher_forward` on the
+def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=1.0, noise_pos=0.0, noise_e=0.0, noise_seed=0, wire_w=0.0, curve_w=0.0, node_w=0.0):
+    """`jtoken.jtoken_loss` (+ wire_w x the early reads, E392; + curve_w x the curve loss or node_w x the node loss of the position head, E395: their info in the clock line; the teachers' own GT loss without the early reads) + what the log needs: every step the peak GPU memory; at call 50 and every 100 calls a clock line (seconds per step since the last line); teachers (E379, the frozen heads of `load_teachers`): `teacher_forward` on the
     same batch, + distill_weight x `jtoken.distill_loss` from the first step, its parts in the info; at the first call the parts, the teachers' own GT loss (the student's loss options), `precision_kl` and the frame tokens
     in the first-loss line"""
     n, mark = [0], [time.time(), 0]
@@ -185,7 +196,7 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
     win = collections.deque(maxlen=LOG_WINDOW)                              # (gt, kd) of the last LOG_WINDOW calls: gt_mean / kd_mean of a log row = the means since the row before
 
     def gt_loss(out, b, w=wire_w):
-        return JK.jtoken_loss(out, b, none_weight=none_weight, pos_loss=pos_loss, wire_w=w)
+        return JK.jtoken_loss(out, b, none_weight=none_weight, pos_loss=pos_loss, wire_w=w, curve_w=curve_w, node_w=node_w)
 
     def loss_fn(m, b):
         n[0] += 1
@@ -232,6 +243,7 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
                     f"{info['gt_links']:.0f}, ylong against the token chord class {info['gt_class']:.0f}; loss parts nll_s {info['nll_s']:.3f} nll_l {info['nll_l']:.3f} ce1 {info['ce1']:.3f} ce3 "
                     f"{info['ce3']:.3f} scale_l1 {info.get('scale_l1', float('nan')):.3f}"
                     + (f"; early reads (E392) nll1_s {info['nll1_s']:.3f} nll1_l {info['nll1_l']:.3f}" + (f" nll2_s {info['nll2_s']:.3f} nll2_l {info['nll2_l']:.3f}" if "nll2_s" in info else "") if wire_w else "")
+                    + (f"; position head (E395) curve {info['curve']:.4f} node {info['node']:.4f} (link samples {info['n_curve']:.0f}, GT links {info['n_gl']:.0f}, with both nodes present {info['n_links']:.0f}, of which left out by the chord rule {info['n_excl']:.0f}), mean |dpos| {info['dpos_abs']:.3f} m, at the cap {info['dpos_cap']:.3f}" if curve_w or node_w else "")
                     + (f"; input noise: mean displacement {ns[0]:.4f} m, mean |noise e| {ns[1]:.4f}" if ns is not None else ""))
             mark[:] = [time.time(), n[0]]
         return loss, info
@@ -297,11 +309,12 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
     check_start(args, os.path.join(runs, a.name))
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     teachers = load_teachers(args, dev) if a.distill_from else []
+    geom = bool(a.curve_w or a.node_w)                                      # E395: the loss reads the GT geometry keys
     if a.smoke:
-        loader, batch_fn = None, lambda step: JK.synthetic_batch(a.bs, smoke_k, seed=hs * 100003 + step)
+        loader, batch_fn = None, lambda step: JK.synthetic_batch(a.bs, smoke_k, seed=hs * 100003 + step, geom=geom)
     else:
         import lane_ptok_data as LP  # the lane chat's loader (card 2a); lazily, so that the tests and --smoke need no cache
-        _, loader = LP.loader("train", a.seed, a.bs, a.workers, ident=a.ident, K=a.K, **({"cache": a.cache} if a.cache else {}))
+        _, loader = LP.loader("train", a.seed, a.bs, a.workers, ident=a.ident, K=a.K, **({"cache": a.cache} if a.cache else {}), **({"geom": True} if geom else {}))
         batch_fn = None
     if teachers:
         tl = teacher_start_loss(teachers, first_batches(loader, batch_fn, hs), dev, none_weight=a.none_weight, pos_loss=a.pos_loss)
@@ -314,6 +327,7 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
             + (f"none weight {a.none_weight}, " if a.none_weight != 1.0 else "")
             + (f"positive loss {a.pos_loss}, " if a.pos_loss != "sum" else "")
             + (f"message rounds (E392) {a.rounds}, messages {a.msg}, early wiring loss weight {a.wire_weight}, " if a.rounds else "")
+            + (f"position head (E395) with curve loss weight {a.curve_w}, node loss weight {a.node_w}, " if a.pos_head else "")
             + (f"distill from {a.distill_from} (sha256 {', '.join(s[:12] for s in args['distill_sha256'])}, weight {a.distill_weight}), " if a.distill_from else "")
             + (f"input noise (E381) pos {a.noise_pos} m per axis, e {a.noise_e} (expected mean displacement {a.noise_pos * math.sqrt(math.pi / 2):.4f} m, mean |noise e| {a.noise_e * math.sqrt(2 / math.pi):.4f}), "
                if a.noise_pos or a.noise_e else "")
@@ -321,7 +335,7 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
     if teachers:
         run.log(f"teachers (float32, eval, step counters {[t._step_py for t in teachers]}): their own GT loss (the student's loss options) on the first {START_BATCHES} batches "
                 + "; ".join(f"{p}: mean {row.mean():.4f} (one batch {row.min():.4f} - {row.max():.4f})" for p, row in zip(a.distill_from.split(","), tl)) + f"; the band of the mean {TEACHER_GT}: ok")
-    T.fit(model, make_loss(run, a.none_weight, a.pos_loss, teachers, a.distill_weight, a.noise_pos, a.noise_e, hs, a.wire_weight), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05,
+    T.fit(model, make_loss(run, a.none_weight, a.pos_loss, teachers, a.distill_weight, a.noise_pos, a.noise_e, hs, a.wire_weight, a.curve_w, a.node_w), run, steps=args["steps"], loader=loader, batch_fn=batch_fn, lr=a.lr, sched="cosine", warmup=0.05,
           ckpt_every=ckpt_every, seed=hs, args=args, device=dev, config=dict(design="jtoken"))
     run.log(f"done {a.name}")
 

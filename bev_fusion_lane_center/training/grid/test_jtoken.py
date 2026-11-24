@@ -20,6 +20,9 @@ teachers inside autocast, the student initialised as its teacher has KD 0 at ste
 dumps and the twin of E373 (2 loader workers) on the real cache when they are there).
 noise (E381 card v2 `--noise-pos` / `--noise-e`: `add_noise` on valid tokens only, e / e_raw one draw, the labels the same objects, the global stream untouched, keyed on (seed, step), the logged statistics; textual mutants;
 0 = the champion's 20 smoke steps bit for bit; the noise in the args and the log, the clean first loss; another noise at a resume refused; kill / resume repeats the draws by the restored step counter; no noise in the read-outs).
+E395 (the position head and its curve loss): pos_head (off = the champion's recorded numbers, no posh / dpos; on: zero start, the other parameters as without it, no GT key in the forward, gradients reach posh and the trunk and never pos / dirv; mutants),
+curve_loss (Catmull-Rom by hand and against a basis-matrix numpy form; the node loss and the curve loss by hand, the chord rule, a frame of left-out links adds nothing; numpy reference on random batches + gradcheck; mutants), pos_loss_weights (curve_w =
+node_w = 0 is the call without them; known counts on the geometry toy; info keys; refusals), dump_dpos (`jtoken_eval.batch_dump`), pos_head_trainer (--pos-head / --curve-w / --node-w: refusals, smoke runs, recipe, loader geom, stage 2 refuses).
 """
 import copy
 import json
@@ -1686,10 +1689,10 @@ def test_rounds_trainer():
         assert len(clock) == 1 and ("early reads (E392) nll1_s" in clock[0]) == (W > 0) and ("nll2_s" in clock[0]) == (W > 0 and R == 2), clock
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         got = _rounds_runs(JKT, runs)
-    muts = {"the wire weight is not passed to the loss": [("hs, a.wire_weight), run,", "hs), run,")],
+    muts = {"the wire weight is not passed to the loss": [("hs, a.wire_weight, a.curve_w, a.node_w), run,", "hs, 0.0, a.curve_w, a.node_w), run,")],
             "the rounds are not built": [('rounds=int(args.get("rounds", ARCH_DEFAULTS["rounds"])), msg=', "rounds=0, msg=")],
-            "the messages are not built": [('msg=args.get("msg", ARCH_DEFAULTS["msg"]))', 'msg="real")')],
-            "the recipe lacks wire_weight": [('"noise_e", "rounds", "wire_weight", "msg")', '"noise_e", "rounds", "msg")')]}
+            "the messages are not built": [('msg=args.get("msg", ARCH_DEFAULTS["msg"]), pos_head=', 'msg="real", pos_head=')],
+            "the recipe lacks wire_weight": [('"noise_e", "rounds", "wire_weight", "msg", "pos_head"', '"noise_e", "rounds", "msg", "pos_head"')]}
     for edits in muts.values():
         with tempfile.TemporaryDirectory(dir=SCRATCH) as tmp:
             must_fail(_rounds_runs, _mutant(*edits, of=JKT), tmp)
@@ -1873,9 +1876,455 @@ def test_msg_self():
           f"the rounds act; train mode: R early reads without a gradient from the final loss; mutants ({', '.join(muts)}) fail; the early loss reaches what the real exchange's does; the trainer accepts it at wire weight 0 and 0.5, refuses it without --rounds: ok")
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ E395: the position head and its curve loss
+CR_M = 0.5 * np.array([[0, 2, 0, 0], [-1, 0, 1, 0], [2, -5, 4, -1], [-1, 3, -3, 1]], float)       # the Catmull-Rom basis matrix: [1 t t^2 t^3] @ CR_M @ [P0 P1 P2 P3]: an independent form of `jtoken.cr_points_t`
+TS = (0.0, 0.25, 0.5, 0.75, 1.0)
+
+
+def _np_rho(x, beta):
+    return 0.5 * x * x / beta if abs(x) < beta else abs(x) - 0.5 * beta
+
+
+def _np_losses(refined, gpos, gdir, btok, gl, beta=0.5, ts=TS, chord_max=8.0, ratio_max=2.0):
+    """the independent numpy form of `curve_losses` (loops over frames, links and t; the Catmull-Rom curve by the basis matrix): refined (B, K, 2), gpos / gdir (B, Ng, 2), btok (B, Ng), gl (B, Lg, 4) -> (curve, node, n_curve, n_links, n_excl, n_gl)"""
+    rot = lambda v: np.array([-v[1], v[0]])  # noqa: E731
+    curves, nodes, n_cur, n_lk, n_ex, n_gl = [], [], 0, 0, 0, 0
+    for b in range(len(refined)):
+        Q = {g: refined[b][btok[b][g]] for g in range(len(btok[b])) if btok[b][g] >= 0}
+        ns = [_np_rho(float((Q[g] - gpos[b][g]) @ (rot(gdir[b][g]) / max(np.linalg.norm(gdir[b][g]), 1e-9))), beta) for g in Q]
+        if ns:
+            nodes.append(np.mean(ns))
+        es = []
+        for u, v, pre, suc in gl[b]:
+            n_gl += u >= 0
+            if u < 0 or u not in Q or v not in Q:
+                continue
+            n_lk += 1
+            ap, asu = pre >= 0 and pre in Q, suc >= 0 and suc in Q
+
+            def four(P):
+                return np.stack([P[pre] if ap else 2 * P[u] - P[v], P[u], P[v], P[suc] if asu else 2 * P[v] - P[u]])
+            Pq, Gt = four(Q), four({g: gpos[b][g] for g in range(len(gpos[b]))})
+            ch = [np.linalg.norm(Gt[i + 1] - Gt[i]) for i in range(3)]
+            if not (ch[1] <= chord_max and max(ch) <= ratio_max * min(ch)):
+                n_ex += 1
+                continue
+            for t in ts:
+                tan = np.array([0, 1, 2 * t, 3 * t * t]) @ CR_M @ Gt
+                if np.linalg.norm(tan) < 1e-6:
+                    continue
+                dc = np.array([1, t, t * t, t ** 3]) @ CR_M @ (Pq - Gt)
+                es.append(_np_rho(float(dc @ rot(tan) / np.linalg.norm(tan)), beta))
+        n_cur += len(es)
+        if es:
+            curves.append(np.mean(es))
+    return (np.mean(curves) if curves else 0.0), (np.mean(nodes) if nodes else 0.0), n_cur, n_lk, n_ex, n_gl
+
+
+def _cl(mod, pos, dirv, dpos, gpos, gdir, btok, gl, **k):
+    """`mod.curve_losses` on nested python lists (frames x ...) in float64 -> (curve, node, info, the dpos leaf)"""
+    t = lambda x, dt=torch.float64: torch.tensor(x, dtype=dt)  # noqa: E731
+    dp = t(dpos).requires_grad_()
+    g = dict(gt_pos=t(gpos), gt_dir=t(gdir), gt_btok=t(btok, torch.long), gl=t(gl, torch.long))
+    return (*mod.curve_losses(dp, t(pos), t(dirv), g, **k), dp)
+
+
+NODE_TOY = dict(pos=[[[0, .3], [2, .3], [4, .3], [0, 0]], [[0, 1.0], [2, 5.0], [0, 0], [0, 0]]], dirv=[[[1, 0]] * 4] * 2, gpos=[[[0, 0], [2, 0], [4, 0]], [[0, 0], [2, 0], [0, 0]]], gdir=[[[1, 0]] * 3] * 2,
+                btok=[[0, 1, 2], [0, -1, -1]], gl=[[[-1] * 4]] * 2)
+# two frames, tokens 4 and 4 (the last of each is padding): frame 1 has three GT nodes with tokens 0.3 m to the left of their GT node (the lane heads +x, the left normal is +y); frame 2 one GT node with a token 1.0 m to the left
+# and a second GT node without a token (its far-away token 1, 5 m off, must not count)
+
+
+def _check_node_hand(mod):
+    """the node loss by hand: rho(0.3) = 0.09 at beta 0.5 (frame 1), rho(1.0) = 1.0 - 0.25 = 0.75 (the knee; frame 2), per frame the mean over the present nodes, then over the frames: 0.42; the gradient 0.6 x 1/3 x 1/2 on the three tokens of
+    frame 1, 1 x 1 x 1/2 on the token of frame 2, 0 on the token without a GT node and on the padding; dpos = -0.3 along the token normal puts frame 1 on its GT line (0.09 -> 0): 0.375; no chord rule on the node loss"""
+    c, n, info, dp = _cl(mod, dpos=[[0] * 4] * 2, **NODE_TOY)
+    assert abs(float(n) - 0.42) < 1e-12 and info["node"] == float(n) and float(c) == 0.0 and info["n_curve"] == 0.0, (float(n), info)
+    n.backward()
+    assert np.allclose(dp.grad.numpy(), [[.1, .1, .1, 0], [.5, 0, 0, 0]], atol=1e-12), dp.grad
+    c, n, info, dp = _cl(mod, dpos=[[-.3, -.3, -.3, 0], [0] * 4], **NODE_TOY)
+    assert abs(float(n) - 0.375) < 1e-12, float(n)
+
+
+def _check_curve_hand(mod):
+    """the curve loss by hand on a straight GT lane (nodes 2 m apart along +x, the GT curve is the line y = 0 with the normal +y) with the tokens of the middle two 0.2 m to the left, link (1, 2, pre 0, suc 3): the error of the Catmull-Rom curve is
+    .2 + .1 t - .1 t^2 (so rho = e^2 below the knee): mean over t of its square; a missing ghost (pre -1, or its token missing) is reflected: .2 + .1 t^2 - .1 t^3; both ghosts missing: .2; a token of u or v missing: no link; dpos = -0.2 on the middle
+    tokens cancels it; a GT tangent of length 0 at t = 0 (P0 = P2) drops that sample; the chord rule: chords 2 / 2 / 9 and 2 / 2 / 5 (ratio 2.5) and 12 / 2 / 2 left out, 2 / 2 / 2 and 2 / 2 / 4 (ratio 2) in, counted in n_links / n_excl"""
+    base = dict(pos=[[[0, 0], [2, .2], [4, .2], [6, 0]]], dirv=[[[1, 0]] * 4], dpos=[[0] * 4], gpos=[[[0, 0], [2, 0], [4, 0], [6, 0]]], gdir=[[[1, 0]] * 4], btok=[[0, 1, 2, 3]], gl=[[[1, 2, 0, 3]]])
+    ms = lambda f: float(np.mean(np.square([f(t) for t in TS])))  # noqa: E731
+    both, one = ms(lambda t: .2 + .1 * t - .1 * t * t), ms(lambda t: .2 + .1 * t * t - .1 * t ** 3)
+    for kw, want, n_cur in ((dict(), both, 5), (dict(gl=[[[1, 2, -1, 3]]]), one, 5), (dict(btok=[[-1, 1, 2, 3]]), one, 5), (dict(gl=[[[1, 2, -1, -1]]]), ms(lambda t: .2), 5),
+                            (dict(dpos=[[0, -.2, -.2, 0]]), 0.0, 5)):
+        c, n, info, _ = _cl(mod, **dict(base, **kw))
+        assert abs(float(c) - want) < 1e-12 and info["n_curve"] == n_cur and info["n_gl"] == 1 and info["n_links"] == 1 and info["n_excl"] == 0, (kw, float(c), want, info)
+    for kw in (dict(btok=[[0, -1, 2, 3]]), dict(btok=[[0, 1, -1, 3]]), dict(gl=[[[-1, 2, 0, 3]]]), dict(gl=[[[-1] * 4]])):          # u or v without a token, a padded link: no sample, a finite zero WITH a graph
+        c, n, info, dp = _cl(mod, **dict(base, **kw))
+        assert float(c) == 0.0 and info["n_curve"] == 0 and info["n_links"] == 0 and info["n_gl"] == (0 if "gl" in kw else 1) and c.requires_grad and math.isfinite(float(n)), (kw, info)
+        c.backward()
+        assert float(dp.grad.abs().sum()) == 0.0
+    z = dict(base, gpos=[[[4, 0], [2, 0], [4, 0], [6, 0]]], pos=[[[4, 0], [2, 0], [4, 0], [6, 0]]])                                    # P0 = P2: the GT tangent (P2 - P0) / 2 is 0 at t = 0
+    c, n, info, _ = _cl(mod, **z)
+    assert info["n_curve"] == 4 and float(c) == 0.0, info
+    for last, used in ((2, True), (4, True), (5, False), (9, False)):                                                                  # the last chord
+        gp = [[[0, 0], [2, 0], [4, 0], [4 + last, 0]]]
+        c, n, info, _ = _cl(mod, **dict(base, pos=gp, gpos=gp))
+        assert (info["n_curve"], info["n_links"], info["n_excl"]) == ((5, 1, 0) if used else (0, 1, 1)), (last, info)
+    gp = [[[0, 0], [2, 0], [14, 0], [16, 0]]]                                                                                          # chord_max: the link itself 12 m, the ratios 6
+    assert _cl(mod, **dict(base, pos=gp, gpos=gp))[2]["n_excl"] == 1 and _cl(mod, **dict(base, pos=gp, gpos=gp), chord_max=20.0, ratio_max=7.0)[2]["n_excl"] == 0
+    gp = [[[0, 0], [10, 0], [20, 0], [30, 0]]]                                                                                         # equal chords of 10 m: out by chord_max alone
+    assert _cl(mod, **dict(base, pos=gp, gpos=gp))[2]["n_excl"] == 1
+    # a frame whose links are all left out adds nothing: the mean over the frames is the other frame's, the batch of such frames is a finite zero with a graph
+    two = dict(pos=base["pos"] * 2, dirv=base["dirv"] * 2, dpos=[[0] * 4] * 2, gpos=[base["gpos"][0], [[0, 0], [2, 0], [4, 0], [13, 0]]], gdir=base["gdir"] * 2, btok=base["btok"] * 2, gl=base["gl"] * 2)
+    c, n, info, _ = _cl(mod, **two)
+    assert abs(float(c) - both) < 1e-12 and info["n_curve"] == 5 and info["n_gl"] == 2 and info["n_links"] == 2 and info["n_excl"] == 1, (float(c), info)
+    c, n, info, dp = _cl(mod, **dict(two, gpos=[two["gpos"][1]] * 2))
+    assert float(c) == 0.0 and info["n_curve"] == 0 and info["n_excl"] == 2 and c.requires_grad and math.isfinite(float(c)), info
+    c.backward()
+
+
+def _ref_case(seed, B=3, K=12, Ng=9):
+    """a random batch for `curve_losses`: per frame a bent GT lane (steps of 1 - 4 m, so that the chord rule leaves some links out), a random subset of its nodes with a token near them (the others missing), random other tokens, direction vectors
+    of random length, links along the lane + one fork link, ghosts dropped at random, a padded link row; tokens with offsets (dpos)"""
+    rng = np.random.RandomState(seed)
+    out = dict(pos=[], dirv=[], gpos=[], gdir=[], btok=[], gl=[])
+    for _ in range(B):
+        th = rng.uniform(0, 6.28) + 0.35 * np.arange(Ng)
+        gd = np.stack([np.cos(th), np.sin(th)], 1)
+        gp = rng.uniform(-20, 20, 2) + np.concatenate([[[0.0, 0.0]], np.cumsum(rng.uniform(1.0, 4.0, (Ng - 1, 1)) * gd[:-1], 0)])
+        perm = rng.permutation(K)[:Ng]
+        tp, td = rng.uniform(-30, 30, (K, 2)), gd[rng.randint(0, Ng, K)].copy()
+        tp[perm], td[perm] = gp + rng.normal(0, 0.4, (Ng, 2)), gd + rng.normal(0, 0.2, (Ng, 2))
+        td = td / np.linalg.norm(td, axis=1, keepdims=True) * rng.uniform(0.5, 2.0, (K, 1))
+        rows = [(g, g + 1, g - 1 if g > 0 else -1, g + 2 if g + 2 < Ng else -1) for g in range(Ng - 1)] + [(2, 6, 1, 7)]
+        rows = [(u, v, p if rng.rand() > 0.25 else -1, s if rng.rand() > 0.25 else -1) for u, v, p, s in rows] + [(-1, -1, -1, -1)]
+        for k, v in zip(out, (tp, td, gp, gd * rng.uniform(0.5, 2.0, (Ng, 1)), np.where(rng.rand(Ng) < 0.25, -1, perm), np.array(rows))):
+            out[k].append(v.tolist())
+    out["dpos"] = rng.normal(0, 0.3, (B, K)).tolist()
+    return out
+
+
+def _check_curve_ref(mod):
+    """`curve_losses` against the independent numpy form on random batches (float64, 1e-9; beta 0.5 / 0.3, t in five / three values, the chord rule at its defaults and tightened), the counts, and the gradient against finite differences"""
+    seen = []
+    for seed, kw in ((0, {}), (1, {}), (2, dict(beta=0.3, ts=(0.0, 0.5, 1.0))), (3, dict(chord_max=2.5, ratio_max=1.5))):
+        case = _ref_case(seed)
+        c, n, info, dp = _cl(mod, **case, **kw)
+        pos, dirv = np.array(case["pos"]), np.array(case["dirv"])
+        nrm = np.stack([-dirv[..., 1], dirv[..., 0]], -1) / np.linalg.norm(dirv, axis=-1, keepdims=True)
+        ref = _np_losses(pos + np.array(case["dpos"])[..., None] * nrm, np.array(case["gpos"]), np.array(case["gdir"]), np.array(case["btok"]), np.array(case["gl"]), **kw)
+        assert abs(float(c) - ref[0]) < 1e-9 and abs(float(n) - ref[1]) < 1e-9 and (info["n_curve"], info["n_links"], info["n_excl"], info["n_gl"]) == ref[2:], (seed, float(c), float(n), info, ref)
+        assert info["n_curve"] > 10 and info["n_links"] > 5, (seed, info)
+        seen.append((info["n_excl"], info["n_links"]))
+        g = {k: torch.tensor(np.array(v), dtype=torch.float64 if k in ("gt_pos", "gt_dir") else torch.long) for k, v in (("gt_pos", case["gpos"]), ("gt_dir", case["gdir"]), ("gt_btok", case["btok"]), ("gl", case["gl"]))}
+        d0 = torch.tensor(case["dpos"], dtype=torch.float64).requires_grad_()
+        assert torch.autograd.gradcheck(lambda d: mod.curve_losses(d, torch.tensor(pos), torch.tensor(dirv), g, **kw)[0], (d0,), eps=1e-6, atol=1e-6), seed
+        assert torch.autograd.gradcheck(lambda d: mod.curve_losses(d, torch.tensor(pos), torch.tensor(dirv), g, **kw)[1], (d0,), eps=1e-6, atol=1e-6), seed
+    assert all(0 < e < n for e, n in seen), f"the chord rule must leave some links out and keep some in every case: {seen}"
+
+
+def _check_cut(mod):
+    """no gradient reaches the tokens' pos / dirv through `refined_pos` or `curve_losses` (they are the head's INPUTS); dpos gets one"""
+    t = lambda x: torch.tensor(x, dtype=torch.float64)  # noqa: E731
+    pos, dirv, dpos = t([[[0., .3], [2., .3]]]).requires_grad_(), t([[[1., 0.], [0.6, 0.8]]]).requires_grad_(), t([[.1, -.2]]).requires_grad_()
+    mod.refined_pos(pos, dirv, dpos).sum().backward()
+    assert pos.grad is None and dirv.grad is None and dpos.grad is not None
+    g = dict(gt_pos=t([[[0., 0.], [2., 0.]]]), gt_dir=t([[[1., 0.], [1., 0.]]]), gt_btok=torch.tensor([[0, 1]]), gl=torch.tensor([[[0, 1, -1, -1]]]))
+    c, n, _ = mod.curve_losses(dpos, pos, dirv, g)
+    (c + n).backward()
+    assert pos.grad is None and dirv.grad is None
+
+
+def _check_pos_init(mod):
+    """a position head starts at zero: dpos exactly 0 for every token in train and eval mode, whatever the inputs; the zero last Linear (weight and bias)"""
+    torch.manual_seed(0)
+    m = mod.JTokenHead(pos_head=True)
+    assert all(float(p.abs().sum()) == 0.0 for p in m.posh[2].parameters()) and float(m.posh[0].weight.abs().sum()) > 0
+    for train in (True, False):
+        out = m.train(train)(_batch(2))
+        assert out["dpos"].shape == out["valid"].shape and bool((out["dpos"] == 0).all())
+
+
+def _check_cap(mod):
+    """the cap of the offset: dpos = 3 m x tanh(posh / 3 m). With the weights of posh's last Linear at 0 its output is its bias for every token (padding too): bias 10 gives 3 tanh(10 / 3) = 2.99237, bias -1 gives -3 tanh(1 / 3) = -0.96454, bias 0 gives 0; |dpos| < 3"""
+    assert abs(3.0 * math.tanh(10.0 / 3.0) - 2.99237) < 1e-5 and abs(-3.0 * math.tanh(1.0 / 3.0) + 0.964538) < 1e-6 and mod.POS_CAP == 3.0
+    for bias in (10.0, -1.0, 0.0):
+        torch.manual_seed(0)
+        m = mod.JTokenHead(pos_head=True).eval()
+        with torch.no_grad():
+            m.posh[2].weight.zero_()
+            m.posh[2].bias.fill_(bias)
+            d = m(_batch(2))["dpos"]
+        assert float((d - 3.0 * math.tanh(bias / 3.0)).abs().max()) < 1e-6 and float(d.abs().max()) < 3.0, (bias, float(d.min()), float(d.max()))
+
+
+def _pos_head(rounds=0, step=0, perturb=False, mod=JK):
+    """a seeded head of `mod` with the position head; perturb: its last layer moved off zero (at the zero start the first Linear and the trunk get no gradient from dpos)"""
+    torch.manual_seed(0)
+    m = mod.JTokenHead(rounds=rounds, pos_head=True)
+    m.set_step(step)
+    if perturb:
+        g = torch.Generator().manual_seed(5)
+        with torch.no_grad():
+            for p in m.posh[2].parameters():
+                p.copy_(torch.randn(p.shape, generator=g) * 0.3)
+    return m
+
+
+class _NoGeom(dict):
+    def __getitem__(self, k):
+        if k in JK.GT_KEYS or k in JK.GEOM_KEYS or k.startswith("gt_"):
+            raise KeyError(f"the forward read the GT key {k}")
+        return super().__getitem__(k)
+
+
+def test_pos_head():
+    """E395 `JTokenHead(pos_head=)`: off = the champion bit for bit (the recorded numbers of git HEAD before E392 (`CHAMP_HEAD`), no `posh`, no `dpos`); on: the extra parameters are posh's alone (4225), the champion's (also with rounds) initialise as without it for the same
+    seed, the state keys of posh come last; dpos is exactly 0 at the start (train and eval); the forward needs no GT key and ignores a poisoned one; a gradient from the curve loss reaches posh and the trunk (at the zero start only the last Linear) and never
+    the inputs pos / dirv; the cap (dpos = 3 tanh(posh / 3): bias 10 gives 2.99237, -1 gives -3 tanh(1 / 3)); textual mutants (no zero init, a gradient into pos or dirv, no cap factor, the cap outside only, no tanh) fail"""
+    for step in (0, JK.SWITCH + 5):
+        torch.manual_seed(0)
+        h = JK.JTokenHead(pos_head=False)
+        h.set_step(step)
+        got = _champ_numbers(JK, h)
+        assert all(abs(g - w) <= 1e-9 * abs(w) for g, w in zip(got, CHAMP_HEAD[step])) and not any(k.startswith("posh") for k in h.state_dict()) and JK.count_params(h) == 127131, (step, got)
+        assert "dpos" not in h(_batch(2))
+    for R in (0, 2):
+        torch.manual_seed(0)
+        ch = JK.JTokenHead(rounds=R)
+        ph = _pos_head(R)
+        sc, sp = ch.state_dict(), ph.state_dict()
+        assert list(sp)[:len(sc)] == list(sc) and all(k.startswith("posh.") for k in list(sp)[len(sc):]) and all(torch.equal(v, sp[k]) for k, v in sc.items() if k != "step"), "posh changed the init of an old parameter"
+        assert JK.count_params(ph) - JK.count_params(ch) == 64 * 64 + 64 + 64 + 1 and not any(float(p.abs().sum()) for p in ph.posh[2].parameters())
+        b = _batch(2)
+        assert torch.equal(ph(b)["logp"], ch(b)["logp"]), "a position head at the zero start changes the wiring"
+    _check_pos_init(JK)
+    clean = {k: v for k, v in _batch(2).items() if k in JK.INPUTS}
+    m = _pos_head(step=JK.SWITCH + 5, perturb=True).eval()
+    bg = JK.synthetic_batch(2, 48, seed=0, geom=True)
+    with torch.no_grad():
+        o = m(_NoGeom(clean))
+        assert float(o["dpos"].abs().max()) > 0.1 and torch.equal(m(dict(bg, gt_pos=bg["gt_pos"] * 7 + 3, gt_btok=bg["gt_btok"].flip(-1), gl=-bg["gl"]))["dpos"], o["dpos"]), "the forward depends on a GT key"
+        assert float(o["dpos"].abs().max()) <= JK.POS_CAP
+    x = {k: (v.clone().requires_grad_(True) if k in JK.INPUTS and v.is_floating_point() else v) for k, v in bg.items()}
+    out = m.train()(x)
+    JK.curve_losses(out["dpos"], x["pos"], x["dirv"], {k: x[k] for k in JK.GEOM_KEYS}, valid=out["valid"])[0].backward()
+    got = {n: float(p.grad.abs().sum()) for n, p in m.named_parameters() if p.grad is not None}
+    assert all(got.get(n, 0.0) > 0 for n in ("posh.0.weight", "posh.2.weight", "posh.2.bias", "lnw.weight", "proj.weight", "layers.0.qkv.weight", "layers.2.ffn.0.weight")), got
+    assert all(x[k].grad is None for k in JK.INPUTS if x[k].is_floating_point()), "a gradient reached a cached input"
+    m0 = _pos_head()
+    out = m0(bg)
+    JK.curve_losses(out["dpos"], bg["pos"], bg["dirv"], {k: bg[k] for k in JK.GEOM_KEYS})[0].backward()
+    assert float(m0.posh[2].weight.grad.abs().sum()) > 0 and float(m0.posh[0].weight.grad.abs().sum()) == 0.0 == float(m0.layers[0].qkv.weight.grad.abs().sum()), "at the zero start only the last Linear gets a gradient"
+    mut = {"no zero init": ([("nn.init.zeros_(self.posh[2].weight)", "pass")], _check_pos_init), "a gradient into dirv": ([("pos, dirv = _const(pos), _const(dirv)", "pos = _const(pos)")], _check_cut),
+           "a gradient into pos": ([("pos, dirv = _const(pos), _const(dirv)", "dirv = _const(dirv)")], _check_cut)}
+    cap = 'out["dpos"] = self.pos_cap * torch.tanh(self.posh(xn)[..., 0].float() / self.pos_cap)'
+    mut.update({"tanh(posh) without the cap factor": ([(cap, 'out["dpos"] = torch.tanh(self.posh(xn)[..., 0].float())')], _check_cap),
+                "the cap outside the tanh only": ([(cap, 'out["dpos"] = self.pos_cap * torch.tanh(self.posh(xn)[..., 0].float())')], _check_cap),
+                "raw posh without tanh": ([(cap, 'out["dpos"] = self.posh(xn)[..., 0].float()')], _check_cap)})
+    _check_cut(JK)
+    _check_cap(JK)
+    for edits, check in mut.values():
+        must_fail(check, _mutant(*edits))
+    print(f"pos_head: off = the champion of git HEAD (recorded numbers, 127131 parameters, no posh, no dpos); on: +4225 parameters (the others as without it, also with rounds 2, posh's keys last, the wiring unchanged at the start), dpos exactly 0 at "
+          f"the start, the forward reads no GT key, a gradient from the curve loss reaches posh and the trunk (the zero start: the last Linear only) and no input; mutants ({', '.join(mut)}) fail: ok")
+
+
+def test_curve_loss():
+    """E395 `curve_losses` / `cr_points_t`: the Catmull-Rom segment by hand (passes through P1 and P2, the line for collinear equal steps, the tangent at P1 = (P2 - P0) / 2 and its derivative form); the node loss by hand (rho(0.3) = 0.09, the knee 1.0 -> 0.75, per frame, a node without
+    a token left out, the gradient), dpos = -0.3 puts the node on its GT line; the curve loss by hand on a straight lane (ghosts available, reflected, a token missing, both missing, a missing end, no link = a finite zero with a graph, the zero-tangent sample, the chord rule: 2 / 2 / 9
+    and 2 / 2 / 5 m out, 2 / 2 / 2 and 2 / 2 / 4 in, a frame of left-out links adds nothing); against an independent numpy implementation (basis matrix) on random curved batches with missing ghosts, missing tokens and a fork; textual mutants fail"""
+    t = torch.tensor
+    P0, P1, P2, P3 = (t([[x, y]], dtype=torch.float64) for x, y in ((-1.0, 0.5), (0.0, 0.0), (2.0, 1.0), (5.0, -1.0)))
+    ts = t(TS, dtype=torch.float64)
+    c = JK.cr_points_t(P0, P1, P2, P3, ts)
+    assert c.shape == (1, 5, 2) and torch.equal(c[0, 0], P1[0]) and torch.allclose(c[0, 4], P2[0], atol=1e-15), "the curve passes through P1 and P2"
+    P = np.concatenate([x.numpy() for x in (P0, P1, P2, P3)])
+    assert np.allclose(c[0].numpy(), np.stack([np.array([1, x, x * x, x ** 3]) @ CR_M @ P for x in TS]), atol=1e-14), "cr_points_t is the Catmull-Rom basis matrix"
+    tan = JK.cr_tangent_t(P0, P1, P2, P3, ts)[0]
+    assert np.allclose(tan[0].numpy(), 0.5 * (P2 - P0)[0].numpy()) and np.allclose(tan[4].numpy(), 0.5 * (P3 - P1)[0].numpy()), "the tangent at P1 is (P2 - P0) / 2, at P2 (P3 - P1) / 2"
+    h = 1e-6
+    fd = (JK.cr_points_t(P0, P1, P2, P3, ts + h) - JK.cr_points_t(P0, P1, P2, P3, ts - h))[0] / (2 * h)
+    assert float((fd - tan).abs().max()) < 1e-7, "cr_tangent_t is the derivative of cr_points_t"
+    L = [t([[x * 2.0, 0.0]], dtype=torch.float64) for x in range(4)]
+    assert float(JK.cr_points_t(*L, ts)[0, :, 1].abs().max()) == 0.0 and np.allclose(JK.cr_points_t(*L, ts)[0, :, 0].numpy(), 2.0 + 2.0 * np.array(TS)), "collinear equal steps: the straight line, uniform in t"
+    for check in (_check_node_hand, _check_curve_hand, _check_curve_ref):
+        check(JK)
+    mut = {"the sign of n": ([("return pos + dpos[..., None] * _unit(_rot90(dirv), 1e-9)", "return pos - dpos[..., None] * _unit(_rot90(dirv), 1e-9)")], _check_node_hand),
+           "ghost availability not shared between the curves": ([("G4 = four(gp, a_pre, a_suc)", "G4 = four(gp, pre >= 0, suc >= 0)")], _check_curve_ref),
+           "a missing ghost not reflected": ([("2 * P1 - P2), P1, P2", "P1), P1, P2")], _check_curve_hand),
+           "the knee on the squared error (node)": ([("_rho(e_node, beta)", "_rho(e_node * e_node, beta)")], _check_node_hand),
+           "the knee on the squared error (curve)": ([("_rho(e_cur, beta)", "_rho(e_cur * e_cur, beta)")], _check_curve_hand),
+           "no chord rule": ([("use = ok & (ch[..., 1] <= chord_max) & (ch.amax(-1) <= ratio_max * ch.amin(-1))", "use = ok")], _check_curve_hand),
+           "the ratio rule only": ([("use = ok & (ch[..., 1] <= chord_max) & (ch.amax(-1)", "use = ok & (ch.amax(-1)")], _check_curve_hand),
+           "the chord rule on c1 only": ([("& (ch.amax(-1) <= ratio_max * ch.amin(-1))", "")], _check_curve_hand),
+           "a zero tangent kept": ([("(tan.norm(dim=-1) >= 1e-6)", "(tan.norm(dim=-1) >= -1.0)")], _check_curve_hand),
+           "a link without both tokens used": ([("ok, a_pre, a_suc = has(u) & has(v), has(pre), has(suc)", "ok, a_pre, a_suc = (u >= 0) & (v >= 0), has(pre), has(suc)")], _check_curve_hand),
+           "n_gl counts the links with both nodes": ([("n_gl=float((u >= 0).sum())", "n_gl=float(ok.sum())")], _check_curve_hand)}
+    for edits, check in mut.values():
+        must_fail(check, _mutant(*edits))
+    print(f"curve_loss: Catmull-Rom (through P1 / P2, the tangent, the line, the basis matrix), the node loss by hand (0.42, 0.375, the gradient), the curve loss by hand (ghosts, reflection, missing tokens, empty = a finite zero with a graph, the chord rule, a frame of left-out links adds nothing), "
+          f"against numpy on random batches (1e-9, gradcheck), mutants ({', '.join(mut)}) fail: ok")
+
+
+def test_pos_loss_weights():
+    """E395 `jtoken_loss(curve_w=, node_w=)`: 0 (the default) = the call without them, the value bit for bit and the info keys the same, also with a position head and the geometry keys in the batch; on the synthetic geometry toy known counts (3 frames x 28 links, node 5 without a
+    token: 26 with both ends, the long link 9 -> 10 and its two neighbours left out by the chord rule: 23 x 5 samples), the loss = the base + W x curve (+ V x node), the info keys, dpos_abs / dpos_cap by hand; refused without dpos or without the geometry keys; `synthetic_batch(geom=True)`
+    leaves every other key as geom False"""
+    b0, bg = JK.synthetic_batch(3, 48, seed=2), JK.synthetic_batch(3, 48, seed=2, geom=True)
+    nn_ = lambda x: torch.nan_to_num(x.double(), nan=-777.0)  # noqa: E731   (yscale holds NaN, and torch.equal says NaN != NaN)
+    assert set(bg) == set(b0) | set(JK.GEOM_KEYS) and all(torch.equal(nn_(bg[k]), nn_(b0[k])) for k in b0), "geom=True changes the other keys"
+    assert [tuple(bg[k].shape) for k in JK.GEOM_KEYS] == [(3, 32, 2), (3, 32, 2), (3, 32), (3, 30, 4)] and bg["gt_btok"].dtype == torch.int64 and (bg["gt_btok"][:, 5] == -1).all() and (bg["gl"][:, 28:] == -1).all()
+    m = _pos_head(step=JK.SWITCH + 5, perturb=True)
+    out = m(bg)
+    base = JK.jtoken_loss(out, bg, none_weight=0.25)
+    for kw in (dict(), dict(curve_w=0.0, node_w=0.0), dict(curve_w=0, node_w=0)):
+        l, i = JK.jtoken_loss(out, bg, none_weight=0.25, **kw)
+        assert torch.equal(l, base[0]) and i == base[1] and "curve" not in i, kw
+    ch = JK.JTokenHead()
+    ch.set_step(JK.SWITCH + 5)
+    assert torch.equal(JK.jtoken_loss(ch(b0), b0)[0], JK.jtoken_loss(ch(b0), b0, curve_w=0.0, node_w=0.0)[0]) and "dpos" not in ch(b0)
+    lc, ic = JK.jtoken_loss(out, bg, none_weight=0.25, curve_w=0.5)
+    ln, inn = JK.jtoken_loss(out, bg, none_weight=0.25, node_w=0.25)
+    lb, ib = JK.jtoken_loss(out, bg, none_weight=0.25, curve_w=0.5, node_w=0.25)
+    new = {"curve", "node", "n_curve", "n_gl", "n_links", "n_excl", "dpos_abs", "dpos_cap"}
+    assert set(ic) == set(base[1]) | new == set(inn) == set(ib), set(ic) ^ set(base[1])
+    assert abs(float(lc) - float(base[0]) - 0.5 * ic["curve"]) < 1e-5 and abs(float(ln) - float(base[0]) - 0.25 * inn["node"]) < 1e-5 and abs(float(lb) - float(base[0]) - 0.5 * ib["curve"] - 0.25 * ib["node"]) < 1e-5
+    assert ic["curve"] > 0 and ic["node"] > 0 and (ic["n_gl"], ic["n_links"], ic["n_excl"], ic["n_curve"]) == (84.0, 78.0, 9.0, 345.0), ic
+    dp, vd = out["dpos"].detach().float(), out["valid"]
+    assert abs(ic["dpos_abs"] - float(dp.abs()[vd].mean())) < 1e-6 and abs(ic["dpos_cap"] - float((dp.abs()[vd] >= 0.99 * JK.POS_CAP).float().mean())) < 1e-9 and 0 < ic["dpos_abs"] < JK.POS_CAP
+    must_fail(JK.jtoken_loss, {k: v for k, v in out.items() if k != "dpos"}, bg, curve_w=0.5)                                  # a head without a position head
+    must_fail(JK.jtoken_loss, out, {k: v for k, v in bg.items() if k != "gl"}, node_w=0.5)                                   # a batch without the geometry keys
+    print(f"pos_loss_weights: curve_w = node_w = 0 is the call without them (value and info keys, with a position head and with the champion), geom=True leaves the other keys alone; the synthetic toy has {ic['n_links']:.0f} links with both ends, {ic['n_excl']:.0f} left out by the chord rule, "
+          f"{ic['n_curve']:.0f} samples; loss = base + W x curve (+ V x node), the info keys, dpos_abs / dpos_cap by hand; refused without dpos or the geometry keys: ok")
+
+
+def test_dump_dpos():
+    """E395 `jtoken_eval.batch_dump`: a head with a position head adds the key `dpos` ((K,) float32 = the head's offsets) to every frame and changes no other value; the dump of a head without one has the keys of before, exactly"""
+    import jtoken_eval as JE
+    bg = JK.synthetic_batch(3, 48, seed=1, geom=True)
+    bb = dict(token=[f"t{i}" for i in range(3)], row=torch.arange(3), tokens_np=[dict(cell=np.arange(48)) for _ in range(3)])
+    with torch.no_grad():
+        out = _pos_head(step=JK.SWITCH + 5, perturb=True).eval()(bg)
+        fr, fo = JE.batch_dump(out, bb), JE.batch_dump({k: v for k, v in out.items() if k != "dpos"}, bb)
+    keys = ["argmax", "cand", "cell", "keep", "none_cls", "pnone", "ptype", "rec", "row", "token"]
+    same = lambda a, b: all(same(a[k], b[k]) for k in a) if isinstance(a, dict) else (np.array_equal(a, b) and np.asarray(a).dtype == np.asarray(b).dtype)  # noqa: E731
+    assert all(sorted(f) == keys for f in fo) and all(sorted(f) == sorted(keys + ["dpos"]) for f in fr), (sorted(fo[0]), sorted(fr[0]))
+    for i in range(3):
+        assert fr[i]["dpos"].dtype == np.float32 and fr[i]["dpos"].shape == (48,) and np.array_equal(fr[i]["dpos"], out["dpos"][i].numpy()) and float(np.abs(fr[i]["dpos"]).max()) > 0.1
+        assert same({k: v for k, v in fr[i].items() if k != "dpos"}, fo[i]), "the dump of a head with a position head differs in another key"
+    print("dump_dpos: batch_dump adds dpos (K,) float32 per frame for a head with a position head, nothing else changes; without one the keys are those of before: ok")
+
+
+def _check_pos_trainer(mod):
+    """`mod.train` (jtoken_train or a textual mutant of it) with --pos-head --curve-w 0.5: the smoke run on the synthetic geometry builds the position head and puts the curve term into the loss (its info in the last log row), the weights are in the recipe (another
+    curve weight, or the node loss, in the folder is refused), and a non-smoke run asks the loader for geom=True exactly when a loss weight is given (four cases); the fake loader returns synthetic batches"""
+    argv = ["--name", "p", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--pos-head", "--curve-w", "0.5"]
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        mod.train(mod.parse_args(argv), runs, 500, 48)
+        row = [json.loads(r) for r in open(os.path.join(runs, "p", "log.jsonl")) if "total" in r][-1]
+        state = torch.load(os.path.join(runs, "p", "model.pt"), map_location="cpu", weights_only=False)["state"]
+        assert any(k.startswith("posh") for k in state) and "curve" in row and math.isfinite(row["total"]), row
+        recipe = lambda extra: dict(vars(mod.parse_args(argv[:9] + extra)), steps=20, distill_sha256=None)  # noqa: E731
+        mod.check_start(recipe(["--pos-head", "--curve-w", "0.5"]), os.path.join(runs, "p"))                                       # the same recipe may resume
+        for other in (["--pos-head", "--curve-w", "0.25"], ["--pos-head", "--node-w", "0.5"], ["--pos-head"], []):
+            assert _refused(mod.check_start, recipe(other), os.path.join(runs, "p")), f"another recipe in the same folder was accepted: {other}"
+        os.makedirs(os.path.join(runs, "teacher"))
+        open(os.path.join(runs, "teacher", "model.pt"), "wb").close()                                                              # a teacher folder that passes the existence check of --distill-from
+        dargs = ["--name", "d", "--distill-from", os.path.join(runs, "teacher")]
+        mod.parse_args(dargs)
+        mod.parse_args(dargs + ["--pos-head"])                                                                                      # no position loss: the teachers are fine
+        for w in ("--curve-w", "--node-w"):
+            try:
+                mod.parse_args(dargs + ["--pos-head", w, "0.5"])
+            except AssertionError as e:
+                assert "--distill-from" in str(e), str(e)
+            else:
+                raise AssertionError(f"--distill-from with {w} accepted")
+        seen = {}
+
+        def fake_loader(split, seed, bs, workers, **k):
+            seen.update(k)
+            return None, [JK.synthetic_batch(bs, 48, seed=s, geom=bool(k.get("geom"))) for s in range(3)]
+        for name, extra, want in (("real_c", ["--pos-head", "--curve-w", "0.5"], True), ("real_n", ["--pos-head", "--node-w", "0.5"], True), ("real_0", ["--pos-head"], False), ("real_champ", [], False)):
+            sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
+            seen.clear()
+            try:
+                mod.train(mod.parse_args(["--name", name, "--steps", "4", "--bs", "2", "--workers", "0"] + extra), runs=runs, ckpt_every=3)
+            finally:
+                del sys.modules["lane_ptok_data"]
+            assert seen == dict(ident="e292_a", K=None, **({"geom": True} if want else {})), (name, seen)
+
+
+def test_pos_head_trainer():
+    """E395 `--pos-head` / `--curve-w` / `--node-w` of `jtoken_train`: defaults (absent in an old run's args) = off; refused without --pos-head, together, negative; the smoke run with --pos-head --curve-w 0.5 / --node-w 0.5 (synthetic geometry) trains finite
+    and moves the position head (and a head without a loss keeps dpos at 0), the args / recipe / log hold the options, `load_model` rebuilds the head with posh, another recipe in the folder is refused; the real loader is asked for geom=True exactly then; the stage-2
+    trainer (`jlive_train.resolve`) refuses a head run with a position head"""
+    import jlive_train as JL
+    assert JKT.ARCH_DEFAULTS["pos_head"] is False and JKT.ARCH_DEFAULTS["curve_w"] == JKT.ARCH_DEFAULTS["node_w"] == 0.0 and {"pos_head", "curve_w", "node_w"} <= set(JKT.RECIPE)
+    assert JKT.build_head({}).pos_head is False and JKT.build_head(dict(pos_head=True)).pos_head is True
+    for bad in (["--curve-w", "0.5"], ["--node-w", "0.5"], ["--pos-head", "--curve-w", "0.5", "--node-w", "0.5"], ["--pos-head", "--curve-w", "-1"], ["--pos-head", "--node-w", "-0.1"]):
+        must_fail(JKT.parse_args, ["--name", "x"] + bad)
+    JKT.parse_args(["--name", "x", "--pos-head"])
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
+        base = ["--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25"]
+        infos, real, now = {}, JK.jtoken_loss, [None]
+
+        def recording(out, batch, **k):                                                                                            # the loss info of every step of every run
+            r = real(out, batch, **k)
+            infos[now[0]].append((float(r[0]), r[1]))
+            return r
+        for name, extra in (("champ", []), ("curve", ["--pos-head", "--curve-w", "0.5"]), ("node", ["--pos-head", "--node-w", "0.5"]), ("noloss", ["--pos-head"])):
+            now[0], infos[name] = name, []
+            patched(JK, "jtoken_loss", recording, JKT.train, JKT.parse_args(["--name", name] + base + extra), runs, 500, 48)
+        rows = {n: [json.loads(r) for r in open(os.path.join(runs, n, "log.jsonl")) if "total" in r] for n in infos}
+        assert all(len(v) == 20 and all(math.isfinite(l) for l, _ in v) for v in infos.values()) and "curve" not in infos["champ"][0][1] and "curve" not in infos["noloss"][0][1]
+        assert "curve" in rows["curve"][-1] and "node" in rows["node"][-1] and "curve" not in rows["champ"][-1] and all(k in infos["curve"][0][1] for k in ("curve", "node", "n_curve", "n_gl", "n_links", "n_excl", "dpos_abs", "dpos_cap"))
+        assert (infos["curve"][0][1]["n_curve"], infos["curve"][0][1]["n_gl"], infos["curve"][0][1]["n_links"], infos["curve"][0][1]["n_excl"]) == (2 * 23 * 5, 2 * 28, 2 * 26, 2 * 3) and infos["curve"][0][1]["dpos_abs"] == 0.0 == infos["node"][0][1]["dpos_abs"], "the first step starts at dpos 0 on the toy geometry"
+        assert infos["curve"][-1][1]["dpos_abs"] > 0 and infos["node"][-1][1]["dpos_abs"] > 0 and infos["curve"][-1][0] != infos["node"][-1][0], "the position head did not move"
+        ck = {n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False) for n in infos}
+        assert not any(k.startswith("posh") for k in ck["champ"]["state"]) and all(ck[n]["args"]["pos_head"] and any(k.startswith("posh") for k in ck[n]["state"]) for n in ("curve", "node", "noloss"))
+        assert (ck["curve"]["args"]["curve_w"], ck["curve"]["args"]["node_w"], ck["node"]["args"]["node_w"], ck["champ"]["args"]["pos_head"]) == (0.5, 0.0, 0.5, False)
+        assert all(float(v.abs().sum()) == 0.0 for k, v in ck["noloss"]["state"].items() if k.startswith("posh.2")), "a position head without a loss moved"
+        assert any(float(v.abs().sum()) > 0.0 for k, v in ck["curve"]["state"].items() if k.startswith("posh.2")) and rows["curve"][-1]["total"] != rows["champ"][-1]["total"]
+        m, args = JKT.load_model("curve", "cpu", runs)
+        assert m.pos_head and all(torch.equal(v, ck["curve"]["state"][k]) for k, v in m.state_dict().items()) and "dpos" in m(JK.synthetic_batch(2, 48, seed=1))
+        log = open(os.path.join(runs, "curve", "train.log"), encoding="utf-8").read()
+        assert "position head (E395) with curve loss weight 0.5, node loss weight 0.0" in log and "position head" not in open(os.path.join(runs, "champ", "train.log"), encoding="utf-8").read()
+        sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=lambda split, seed, bs, workers, **k: (None, [JK.synthetic_batch(bs, 48, seed=s, geom=True) for s in range(3)]))
+        try:
+            JKT.train(JKT.parse_args(["--name", "clock", "--steps", "50", "--bs", "2", "--workers", "0", "--pos-head", "--curve-w", "0.5"]), runs=runs, ckpt_every=25)
+        finally:
+            del sys.modules["lane_ptok_data"]
+        clock = open(os.path.join(runs, "clock", "train.log"), encoding="utf-8").read()                                            # the clock line of step 50 holds the position head's numbers
+        assert "position head (E395) curve" in clock and "left out by the chord rule" in clock and "mean |dpos|" in clock, clock[-800:]
+        _check_pos_trainer(JKT)
+        # the stage-2 trainer takes the head run's options from its model.pt: a position head is refused (it neither builds nor trains it)
+        for name in ("champ", "curve"):
+            refused = None
+            try:
+                JL.resolve(JL.parse_args(["--name", "x", "--seed", "0", "--head-run", name, "--train-nodes", "1"]), runs)
+            except AssertionError as e:
+                refused = str(e)
+            except FileNotFoundError:                                                                                              # passed the head run's checks: it wants B''s model.pt (not in this toy)
+                pass
+            assert (refused is not None and "position head" in refused) == (name == "curve") and (refused is None or name == "curve"), (name, refused)
+    muts = {"the head is built without the position head": [('pos_head=bool(args.get("pos_head", ARCH_DEFAULTS["pos_head"])))', "pos_head=False)")],
+            "the loss weights are not passed to the loss": [("wire_w=w, curve_w=curve_w, node_w=node_w)", "wire_w=w)")],
+            "the curve weight is not in the recipe": [('"msg", "pos_head", "curve_w", "node_w")', '"msg", "pos_head", "node_w")')],
+            "the loader is not asked for the geometry": [('**({"geom": True} if geom else {}))', "**{})")],
+            "the loader is always asked for the geometry": [('**({"geom": True} if geom else {}))', '**{"geom": True})')],
+            "the smoke batches have no geometry": [("seed=hs * 100003 + step, geom=geom)", "seed=hs * 100003 + step)")],
+            "--distill-from is allowed with a position loss": [('assert args.get("distill_from") is None or not (cw or nw),', "assert True,")]}
+    for edits in muts.values():
+        must_fail(_check_pos_trainer, _mutant(*edits, of=JKT))
+    print(f"pos_head_trainer: the options default to off, are refused without --pos-head / together / negative; the smoke runs (curve, node, no loss) train finite, the head moves (a head without a loss keeps dpos at 0), the options are in the args, the log "
+          f"and model.pt (load_model rebuilds posh), another recipe is refused, the same one resumes; the loader gets geom=True exactly for a loss weight; the stage-2 trainer refuses a head run with a position head; mutants ({', '.join(muts)}) fail: ok")
+
+
 TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
          test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise,
-         test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none, test_msg_self]
+         test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none, test_msg_self,
+         test_pos_head, test_curve_loss, test_pos_loss_weights, test_dump_dpos, test_pos_head_trainer]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]
     assert all(n in {t.__name__ for t in TESTS} for n in want), want

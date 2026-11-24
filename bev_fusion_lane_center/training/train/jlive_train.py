@@ -112,6 +112,7 @@ def resolve(a, runs):
     g = lambda k: h[k] if h.get(k) is not None else JKT.ARCH_DEFAULTS.get(k)  # noqa: E731   (a key stored as None means the default, as `jtoken_train.arch` reads it)
     assert h.get("seed") == a.seed, f"--seed {a.seed}: the head run {a.head_run} learned on the tokens of B' seed {h.get('seed')}"
     JKT.check_removed(h, f"the head run {a.head_run}")
+    assert not h.get("pos_head"), f"the head run {a.head_run} has a position head (E395): the stage-2 trainer neither builds it nor trains its loss (no GT geometry in the live batch)"
     assert h.get("K") in (None, K) and not h.get("cache"), f"the head run {a.head_run} was trained on K {h.get('K')} / cache root {h.get('cache')}: this trainer builds the tokens of the default cache at K {K}"
     b_run = a.b_run or f"runs/{h.get('ident') or 'e292_a'}_s{a.seed}"
     b_sha = JKT.file_sha256(os.path.join(_abs(b_run), "model.pt"))

@@ -185,18 +185,22 @@ def cand_of(cs, cd, p, longm, scale):
 
 def batch_dump(out, b):
     """the head's output of a batch -> one dict per frame: token, row, cell (the tokens' cells: the score checks them against the cache), pnone / ptype (K,), keep (K,), none_cls (2, K) = p^c(none|i), cand = the candidate links with p >= KEEP_P
-    (src, dst, p, long, a, b; the dumps of before the decode variants lack a, b and hold none_cls in float16), rec / argmax = the links of the two decodes (src, dst, p, long, a, b)"""
+    (src, dst, p, long, a, b; the dumps of before the decode variants lack a, b and hold none_cls in float16), rec / argmax = the links of the two decodes (src, dst, p, long, a, b); dpos (K,) float32 = the normal offsets of a head with a
+    position head (E395; the key is absent for a head without one)"""
     K = out["cand"].shape[-1]
     pr, rec, alt = JK.probs(out), JK.decode(out), JK.decode_argmax(out)
     npy = lambda t: t.detach().cpu().numpy()  # noqa: E731
     pt, p, cand, longm, scale, none_cls = (npy(x) for x in (pr["pt"], pr["p"], pr["cand"], pr["longm"], out["scale"].float(), out["logp"][..., K].float().exp()))
     keep, lrec, lalt = npy(rec["keep"]), npy(rec["link"]), npy(alt["link"])
+    dpos = npy(out["dpos"].float()) if "dpos" in out else None
     frames = []
     for i in range(len(b["token"])):
         cs, cd = np.nonzero((p[i] >= KEEP_P) & cand[i])
         frames.append(dict(token=b["token"][i], row=int(b["row"][i]), cell=np.asarray(b["tokens_np"][i]["cell"], np.int16), pnone=pt[i, :, 0].astype(np.float32), ptype=pt[i].astype(np.float16), keep=keep[i],
                            none_cls=none_cls[i].astype(np.float32), cand=cand_of(cs, cd, p[i], longm[i], scale[i]),
                            rec=links_of(lrec[i], p[i], longm[i], scale[i]), argmax=links_of(lalt[i], p[i], longm[i], scale[i])))
+        if dpos is not None:
+            frames[-1]["dpos"] = dpos[i].astype(np.float32)
     return frames
 
 

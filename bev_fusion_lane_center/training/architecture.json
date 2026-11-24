@@ -351,6 +351,7 @@
    "row": 6,
    "code": [
     "training/data/lane_gt_data.py",
+    "training/data/lane_gtgeom_data.py",
     "training/data/p16_data.py",
     "training/data/p16_common.py",
     "training/data/p8_lib.py",

@@ -27,6 +27,11 @@ msg='none' (deep supervision without exchange): the same early reads and `out["l
 the forward is the champion's bit for bit (no early read, no `logp_rounds`), so a head trained with it is at inference the unchanged champion network.
 msg='self' (the capacity null of the exchange): the same `Round` modules (the parameters of the real rounds) but every token's message is its OWN features, x <- x + MLP([W_v x ; W_u x]): no neighbour is read, the early reads only supervise
 (training mode only, so p_k does not enter x), the rounds act in eval mode too. With wire_w 0 it is the block alone, with wire_w > 0 the block after a supervised read.
+E395 (`JTokenHead(pos_head=True)`, default off = the head above bit for bit: no extra parameter, no state key, no output key): a position head `posh` (MLP d -> d -> 1, GELU, last Linear at zero), built LAST, reads the final features
+(the LayerNorm(x) of the wiring read): `out["dpos"] = POS_CAP tanh(posh / POS_CAP)` (B, K) m, the offset of a token along its normal n = rot90(dirv) (`refined_pos`: pos + dpos n; pos and dirv are the head's inputs, cut from the graph).
+`jtoken_loss(curve_w=W, node_w=V)` (default 0 = nothing read, nothing added): + W x the Catmull-Rom curve loss and / or + V x the node loss of `curve_losses`, on the GT geometry keys of the batch (`GEOM_KEYS`, loader geom=True,
+`lane_gtgeom_data`): the lateral distance, smooth L1 (knee 0.5 m), between the curve through the refined positions of the best tokens of the GT nodes and the curve through the GT nodes (uniform Catmull-Rom, `cr_points_t`), per GT link at
+5 values of t, ghost nodes from the GT neighbours (reflection when one is missing, in both curves), links with a GT chord above 8 m or unequal GT chords (ratio above 2) left out and counted; the node loss is the same distance of each node alone. The forward never reads a GT key. Tests: test_jtoken.py
 """
 import math
 import os
@@ -54,6 +59,8 @@ POS_LOSS = ("sum", "max")                                                   # th
 EXCHANGE = ("real", "uniform")                                              # E392: the weights of a message round (`message_weights`): the early read's own probabilities, or the content null
 SUPERVISE = ("none", "self")                                                # the early reads only supervise (training mode only): p_k does not enter x
 MSG = EXCHANGE + SUPERVISE                                                  # + none: no exchange, no round module (deep supervision); self: the round block on the token's own features (the capacity null)
+POS_CAP = 3.0                                                               # E395: the largest normal offset of the position head (m)
+GEOM_KEYS = ("gt_pos", "gt_dir", "gt_btok", "gl")                           # E395: the GT geometry of a frame (GT nodes, their best tokens, the GT links with their ghost nodes), read by the curve / node loss only, never by the forward
 
 
 def _const(t):
@@ -141,9 +148,9 @@ class Round(nn.Module):
 
 class JTokenHead(nn.Module):
     """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4); rounds / msg: E392 (module docstring), the round modules are built LAST (a seeded init of the head's other parameters is the same as without them);
-    `n_early` = the early reads after layer 1 .. rounds, `rounds` = the Round modules (none for msg 'none')"""
+    `n_early` = the early reads after layer 1 .. rounds, `rounds` = the Round modules (none for msg 'none'); pos_head: E395, the position head `posh` is built after everything else (the same rule)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real"):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real", pos_head=False):
         super().__init__()
         assert 0 <= rounds < layers and msg in MSG, (rounds, layers, msg)
         self.dq = dq
@@ -159,6 +166,11 @@ class JTokenHead(nn.Module):
         self.sc_i, self.sc_j, self.sc_g, self.sc_o = nn.Linear(d, 32), nn.Linear(d, 32, bias=False), nn.Linear(NG, 32, bias=False), nn.Linear(32, 2)      # the first Linear of (x_i, x_j, g_ij) split into three
         self.n_early, self.msg = rounds, msg                                # E392
         self.rounds = nn.ModuleList([Round(d) for _ in range(0 if msg == "none" else rounds)])      # empty at rounds = 0 and for msg 'none': no parameter, no state key
+        self.pos_head, self.pos_cap = pos_head, POS_CAP                     # E395: no module, no state key, no output key when off
+        if pos_head:
+            self.posh = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, 1))
+            nn.init.zeros_(self.posh[2].weight)                             # the head starts at the B' position (dpos = 0)
+            nn.init.zeros_(self.posh[2].bias)
         self.register_buffer("step", torch.zeros((), dtype=torch.long))
         self._step_py = 0                                                   # the Python mirror of `step` (no device sync per forward); kept by forward, set_step and load_state_dict
         self.live_inputs = live_inputs
@@ -229,6 +241,8 @@ class JTokenHead(nn.Module):
         out = dict(logp=logp, cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
         if early:
             out["logp_rounds"] = early
+        if self.pos_head:                                                   # E395: the normal offset of every token, from the final features only
+            out["dpos"] = self.pos_cap * torch.tanh(self.posh(xn)[..., 0].float() / self.pos_cap)
         return out
 
 
@@ -280,11 +294,12 @@ def source_rows(out):
     return out["cand"].any(-1) & out["valid"][:, None]
 
 
-def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum", wire_w=0.0):
+def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="sum", wire_w=0.0, curve_w=0.0, node_w=0.0):
     """the likelihood of the module docstring -> (loss, info); batch: y (B, K, K), ylong (B, K, K), yscale (B, K, K, 2), ytype (B, K). wire_w (E392, default 0 = nothing added, `logp_rounds` not read): + wire_w x (nll_s + nll_l) of every early read
     of `out["logp_rounds"]` (the same `_source_nll`, none weight, pos_loss, rows and per-frame normalisation as the final one), in info nll1_s, nll1_l, nll2_s, nll2_l. info: nll_s, nll_l, ce1, ce3, scale_l1 and the counts gt_links, pos_pairs (in-gate GT
     links), gt_outside (links with no gate), gt_class (in the gate, but `ylong` disagrees with the token chord: a statistic, the class of a link is the token chord's). The long scale target is the fitted yscale
-    of the long-class links (finite where the cache fitted one). none_weight W (default 1: the loss of before): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes, and (ii) the type
+    of the long-class links (finite where the cache fitted one). curve_w / node_w (E395, default 0 = nothing read, nothing added, the value and the info of before): + curve_w x the curve loss and + node_w x the node loss of `curve_losses` on `out["dpos"]`
+    (a head with pos_head) and the GT geometry keys `GEOM_KEYS` of the batch; info gets curve, node, n_curve, dpos_abs, dpos_cap. none_weight W (default 1: the loss of before): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes, and (ii) the type
     cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid tokens of the frame, as torch's weighted mean). pos_loss 'sum' (default: the loss of
     before) or 'max' (E376): the likelihood of the sources with a non-empty G(i), in both classes (`_source_nll`); the empty-G terms, the type cross-entropy and the scale term are the same under both.
     scale_w = 0: no scale term, `yscale` is not read"""
@@ -307,6 +322,11 @@ def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0, pos_loss="
             s_k, l_k = (_frame_mean(nk[:, c], rows[:, c]) for c in range(2))
             loss = loss + wire_w * (s_k + l_k)
             info.update({f"nll{k}_s": float(s_k), f"nll{k}_l": float(l_k)})
+    if curve_w or node_w:                                                   # E395: the position head's loss on the curve through the refined nodes
+        assert "dpos" in out and all(k in batch for k in GEOM_KEYS), f"curve_w / node_w need a head with pos_head (out['dpos']) and the GT geometry keys {GEOM_KEYS} in the batch (loader geom=True)"
+        curve, node, ginfo = curve_losses(out["dpos"], batch["pos"].to(dev), batch["dirv"].to(dev), {k: batch[k].to(dev) for k in GEOM_KEYS}, valid=valid)
+        loss = loss + (curve_w * curve if curve_w else 0.0) + (node_w * node if node_w else 0.0)
+        info.update(ginfo)
     if not scale_w:
         return loss, info
     ys = batch["yscale"].to(dev).float()
@@ -346,10 +366,100 @@ def count_params(model):
     return sum(p.numel() for p in model.parameters())
 
 
+# ------------------------------------------------------------------------------------------------------------------------------ E395: the position head's curve loss
+def cr_points_t(P0, P1, P2, P3, t):
+    """the uniform Catmull-Rom segment from P1 (t = 0) to P2 (t = 1) with the ghost nodes P0 (before P1) and P3 (after P2): P* (..., 2), t (T,) -> (..., T, 2)"""
+    t, c = t.to(P1.dtype)[:, None], lambda x: x[..., None, :]  # noqa: E731
+    return 0.5 * (c(2 * P1) + c(-P0 + P2) * t + c(2 * P0 - 5 * P1 + 4 * P2 - P3) * t ** 2 + c(-P0 + 3 * P1 - 3 * P2 + P3) * t ** 3)
+
+
+def cr_tangent_t(P0, P1, P2, P3, t):
+    """d/dt of `cr_points_t` (same shapes)"""
+    t, c = t.to(P1.dtype)[:, None], lambda x: x[..., None, :]  # noqa: E731
+    return 0.5 * (c(-P0 + P2) + 2 * c(2 * P0 - 5 * P1 + 4 * P2 - P3) * t + 3 * c(-P0 + 3 * P1 - 3 * P2 + P3) * t ** 2)
+
+
+def _rot90(v):
+    return torch.stack([-v[..., 1], v[..., 0]], -1)
+
+
+def _unit(v, eps):
+    return v / v.norm(dim=-1, keepdim=True).clamp_min(eps)
+
+
+def _rho(x, beta):
+    """smooth L1 with the knee beta: 0.5 x^2 / beta below it, |x| - 0.5 beta above"""
+    a = x.abs()
+    return torch.where(a < beta, 0.5 * x * x / beta, a - 0.5 * beta)
+
+
+def refined_pos(pos, dirv, dpos):
+    """(B, K, 2): pos + dpos x n, n = rot90(dirv) / max(|dirv|, 1e-9) the token's left normal. pos and dirv are the head's INPUTS: cut from the graph here (a gradient reaches dpos only)"""
+    pos, dirv = _const(pos), _const(dirv)
+    return pos + dpos[..., None] * _unit(_rot90(dirv), 1e-9)
+
+
+def _mean_frames(x, m, ref):
+    """x (B, N) over the entries of m: per frame the mean, then the mean over the frames that have one entry; no entry anywhere: ref.sum() x 0 (a zero with a graph, never NaN)"""
+    return _frame_mean(torch.where(m, x, torch.zeros_like(x)), m) if m.any() else ref.sum() * 0.0
+
+
+def curve_losses(dpos, pos, dirv, g, beta=0.5, ts=(0.0, 0.25, 0.5, 0.75, 1.0), valid=None, chord_max=8.0, ratio_max=2.0):
+    """E395: the position head's losses -> (curve, node, info). dpos (B, K) the offsets, pos / dirv (B, K, 2) the tokens' inputs (`refined_pos`), g = the GT geometry of the batch (`GEOM_KEYS`): gt_pos / gt_dir (B, Ng, 2), gt_btok (B, Ng) long = the token index
+    of the best token of a GT node (-1 = none, padding), gl (B, Lg, 4) long = (u, v, pre, suc) the GT link u -> v and the GT node before u / after v (-1 = none; u = -1: padding). Q[g] = the refined position of the best token of GT node g (a node without one is missing).
+    node: per present node rho((Q - G) . n_g), n_g = rot90(gt_dir) normalised, beta the knee; per frame the mean over the nodes (no chord rule). curve: per link with Q[u], Q[v] present: the Catmull-Rom curve through (Q[pre], Q[u], Q[v], Q[suc]) against the one through
+    the GT nodes, at the parameters ts, error ((C_pred - C_gt) . n_gt(t)) with n_gt(t) the unit normal of the GT curve (a sample with a GT tangent shorter than 1e-6 is dropped); a ghost is AVAILABLE when its index is >= 0 and its node is present, an
+    unavailable ghost is the reflection (P0 = 2 P1 - P2, P3 = 2 P2 - P1) in BOTH curves; per frame the mean over the link x t samples. Both: then the mean over the frames that have one (none: dpos.sum() x 0). valid (B, K) bool = the tokens of
+    the dpos statistics (default all). Exclusion by chord (the uniform Catmull-Rom curve overshoots with unequal chords): a link enters the curve loss only when, over the GT chords c0 = |G_u - G_pre| (an available ghost), c1 = |G_v - G_u| and
+    c2 = |G_suc - G_v| (an available ghost), c1 <= chord_max and max(c) / min(c) <= ratio_max; the others are left out and counted. What the curve loss is: at t = 0 and t = 1 the node loss (Q - G) . n_gt (of node u / v, on the normal of the GT curve), at the other
+    t a fixed combination, with weights summing to 1, of the lateral errors of four nodes (the curve is linear in the nodes), so in the quadratic regime it is a positive semi-definite quadratic form in the node errors; the target is the Catmull-Rom
+    curve through the GT nodes, not the dense lane. info: curve, node, n_curve (the link x t samples used), n_gl (the GT links of the batch, u >= 0), n_links (those with both nodes present), n_excl (of them left out by the chord rule), dpos_abs (mean |dpos| of the
+    valid tokens), dpos_cap (their share with |dpos| >= 0.99 POS_CAP)"""
+    gp, gd, bt, gl = (g[k] for k in GEOM_KEYS)
+    take = lambda a, i: torch.gather(a, 1, i.clamp_min(0)[..., None].expand(-1, -1, a.shape[-1]))  # noqa: E731   (B, N, C) at (B, L) indices
+    Qg, present = take(refined_pos(pos, dirv, dpos), bt), bt >= 0                                              # (B, Ng, 2) the best tokens' refined positions
+    has = lambda i: (i >= 0) & present.gather(1, i.clamp_min(0))  # noqa: E731   (B, L): the node i exists and has a token
+    e_node = ((Qg - gp) * _unit(_rot90(gd), 1e-9)).sum(-1)
+    node = _mean_frames(_rho(e_node, beta), present, dpos)
+    u, v, pre, suc = gl.unbind(-1)
+    ok, a_pre, a_suc = has(u) & has(v), has(pre), has(suc)
+
+    def four(a, ap, asu):                                                   # (B, Ng, 2) -> the four nodes of every link, a ghost that is not available (ap / asu) reflected
+        P1, P2 = take(a, u), take(a, v)
+        return torch.where(ap[..., None], take(a, pre), 2 * P1 - P2), P1, P2, torch.where(asu[..., None], take(a, suc), 2 * P2 - P1)
+    tt = torch.tensor(ts, dtype=Qg.dtype, device=Qg.device)
+    G4 = four(gp, a_pre, a_suc)                                             # the same availability in both curves
+    tan = cr_tangent_t(*G4, tt)                                             # (B, Lg, T, 2) the GT curve's tangent
+    n_gt = _rot90(tan) / tan.norm(dim=-1, keepdim=True).clamp_min(1e-6)
+    e_cur = ((cr_points_t(*four(Qg, a_pre, a_suc), tt) - cr_points_t(*G4, tt)) * n_gt).sum(-1)
+    ch = torch.stack([(G4[i + 1] - G4[i]).norm(dim=-1) for i in range(3)], -1)      # the GT chords c0, c1, c2 (B, Lg, 3); an unavailable ghost is the reflection, whose chord is c1 again: it changes neither the max nor the min
+    use = ok & (ch[..., 1] <= chord_max) & (ch.amax(-1) <= ratio_max * ch.amin(-1))
+    m = use[..., None] & (tan.norm(dim=-1) >= 1e-6)
+    curve = _mean_frames(_rho(e_cur, beta).flatten(1), m.flatten(1), dpos)
+    vt = torch.ones_like(dpos, dtype=torch.bool) if valid is None else valid.bool()
+    ad, nv = dpos.detach().abs(), vt.sum().clamp_min(1)
+    return curve, node, dict(curve=float(curve), node=float(node), n_curve=float(m.sum()), n_gl=float((u >= 0).sum()), n_links=float(ok.sum()), n_excl=float((ok & ~use).sum()), dpos_abs=float((ad * vt).sum() / nv),
+                             dpos_cap=float(((ad >= 0.99 * POS_CAP) & vt).sum() / nv))
+
+
 # ------------------------------------------------------------------------------------------------------------------------------ a synthetic batch
-def synthetic_batch(B=8, K=48, seed=0):
+def _toy_geom(rng, pos, dirv):
+    """the GT geometry keys of `synthetic_batch(geom=True)` (a consistent toy): GT node g (0 .. 29) = lane token g moved sideways by up to 0.5 m (a refinement has something to learn), its best token = token g (GT node 5 has none),
+    the links of the chain 0 .. 19 (lanes 0 and 1, joined by the long link 9 -> 10) and of the chain 20 .. 29 with the GT neighbours as ghosts (-1 at the ends); padded to 32 nodes and 30 links"""
+    B, Ng, Lg = len(pos), 32, 30
+    gt_pos, gt_dir, gt_btok, gl = np.zeros((B, Ng, 2), np.float32), np.zeros((B, Ng, 2), np.float32), -np.ones((B, Ng), np.int64), -np.ones((B, Lg, 4), np.int64)
+    off = rng.uniform(-0.5, 0.5, (B, 30)).astype(np.float32)
+    gt_pos[:, :30] = pos[:, :30] + off[..., None] * np.stack([-dirv[:, :30, 1], dirv[:, :30, 0]], -1)
+    gt_dir[:, :30], gt_btok[:, :30], gt_btok[:, 5] = dirv[:, :30], np.arange(30), -1
+    links = [(g, g + 1, -1 if g in (0, 20) else g - 1, -1 if g + 1 in (19, 29) else g + 2) for g in list(range(19)) + list(range(20, 29))]
+    gl[:, :len(links)] = links
+    return dict(gt_pos=torch.from_numpy(gt_pos), gt_dir=torch.from_numpy(gt_dir), gt_btok=torch.from_numpy(gt_btok), gl=torch.from_numpy(gl))
+
+
+def synthetic_batch(B=8, K=48, seed=0, geom=False):
     """random frames that follow the batch dict of the card (2a): per frame a lane of 10 tokens 2 m apart, a second lane 12 m behind its end (one long link), a third lane elsewhere, 4 duplicate tokens 0.5 m beside
-    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them"""
+    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them. geom (E395): + the GT geometry keys `GEOM_KEYS` (`_toy_geom`, drawn after
+    everything else: the other keys are those of geom False)"""
     rng = np.random.RandomState(seed)
     f = lambda *s: np.zeros(s, np.float32)  # noqa: E731
     pos, dirv, valid, ytype, y, ylong = f(B, K, 2), f(B, K, 2), np.zeros((B, K), bool), np.zeros((B, K), np.int64), np.zeros((B, K, K), np.uint8), np.zeros((B, K, K), bool)
@@ -378,6 +488,9 @@ def synthetic_batch(B=8, K=48, seed=0):
     e = np.where(ytype > 0, 2.5, np.where(valid, -1.0, -6.0)).astype(np.float32)
     flags = (-3.0 + 6.0 * (np.arange(8) == (ytype[..., None] % 8))).astype(np.float32)
     r = lambda *s: rng.randn(*s).astype(np.float32)  # noqa: E731
-    return dict(tok=torch.from_numpy(r(B, K, TOK) * valid[..., None]), pos=torch.from_numpy(pos), dirv=torch.from_numpy(dirv), e=torch.from_numpy(e), e_raw=torch.from_numpy(e + 0.3 * r(B, K)),
-                flags=torch.from_numpy(flags), s=torch.from_numpy(r(B, K)), uout=torch.from_numpy(r(B, K)), uin=torch.from_numpy(r(B, K)), valid=torch.from_numpy(valid), ytype=torch.from_numpy(ytype),
-                y=torch.from_numpy(y), ylong=torch.from_numpy(ylong), yscale=torch.from_numpy(yscale))
+    batch = dict(tok=torch.from_numpy(r(B, K, TOK) * valid[..., None]), pos=torch.from_numpy(pos), dirv=torch.from_numpy(dirv), e=torch.from_numpy(e), e_raw=torch.from_numpy(e + 0.3 * r(B, K)),
+                 flags=torch.from_numpy(flags), s=torch.from_numpy(r(B, K)), uout=torch.from_numpy(r(B, K)), uin=torch.from_numpy(r(B, K)), valid=torch.from_numpy(valid), ytype=torch.from_numpy(ytype),
+                 y=torch.from_numpy(y), ylong=torch.from_numpy(ylong), yscale=torch.from_numpy(yscale))
+    if geom:
+        batch.update(_toy_geom(rng, pos, dirv))
+    return batch

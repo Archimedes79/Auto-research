@@ -7,7 +7,9 @@
     gt_id, gd, gt_flags, gt_aux for the controls and diagnostics: the model must not read them)
     to_pred(tokens_np[b], keep, e_node, links)                                                                       # the qformat prediction of a frame from tokens + the head's output, no GT field
 Token drop: `token_drop` > 0 removes each token with that probability by a generator seeded with (the loader's seed, the frame's token) (`jtok_eval.keep_nodes`): a removed token is not valid, has type 0 and no target
-pair (the contraction of the targets is NOT recomputed: this is for the degraded read-out only). Tests: grid/test_lane_tokcache.py
+pair (the contraction of the targets is NOT recomputed: this is for the degraded read-out only).
+geom (E395, default False = the items and batches of before): + the flat GT geometry keys of `lane_gtgeom_data` (read from its file, checked against the cache; no token drop): per frame ["gt_pos"], ["gt_dir"] (Ng, 2), ["gt_btok"] (Ng,) the best token of
+each GT node (-1 none), ["gl"] (Lg, 4) = (u, v, pre, suc) the GT links with their ghost nodes (-1 none); `collate` pads them to the batch maximum (pos / dir 0, btok / gl -1: tensors (B, Ng, 2), (B, Ng, 2), (B, Ng) long, (B, Lg, 4) long). Tests: grid/test_lane_tokcache.py
 """
 import glob
 import os
@@ -50,14 +52,22 @@ def densify(ypair, ylong, yscale, K, keep=None):
     return y, yl, ys
 
 
+GEOM_FILL = dict(gt_pos=0, gt_dir=0, gt_btok=-1, gl=-1)                       # E395: the padding of the geometry keys of a batch
+
+
 class PTokData(torch.utils.data.Dataset):
-    def __init__(self, split="train", seed=0, ident="e292_a", K=None, token_drop=0.0, cache=LC.CACHE, dir=None):
+    def __init__(self, split="train", seed=0, ident="e292_a", K=None, token_drop=0.0, cache=LC.CACHE, dir=None, geom=False):
         assert split in ("train", "val"), split
         self.dir = dir or cache_dir(split, seed, ident, K, cache)
         self.c = LC.TokCache(self.dir)
         assert self.c.done == len(self.c), f"{self.dir} is not finished ({self.c.done} of {len(self.c)} frames)"
         self.K, self.seed, self.drop = self.c.K, int(seed), float(token_drop)
         self.rows, self.tokens = self.c.rows, self.c.tokens
+        self.geom = None
+        if geom:                                                                          # E395: the GT geometry of the frames (its file is made from the cache of B' = `lane_gtgeom_data.IDENT`)
+            import lane_gtgeom_data as GG
+            assert ident == GG.IDENT and token_drop == 0.0, f"geom: the GT geometry is made for the cache of {GG.IDENT} without token drop (ident {ident}, drop {token_drop})"
+            self.geom = GG.load(split, seed, GG.cache_id(self.dir), self.tokens)
 
     def __len__(self):
         return len(self.rows)
@@ -77,19 +87,34 @@ class PTokData(torch.utils.data.Dataset):
                    tokens_np=dict(pos=np.array(f["pos"][i], np.float64), dirv=np.array(f["dirv"][i], np.float64), e_p=np.array(f["e_p"][i], np.float64), flags_p=np.array(f["flags_p"][i], np.float64),
                                   s_p=np.array(f["s_p"][i], np.float64), cell=np.array(f["cell"][i]).astype(np.int64), valid=valid.copy()),
                    label=dict(gt_id=np.array(f["gt_id"][i]), gd=np.array(f["gd"][i]), gt_flags=np.array(f["gt_flags"][i]), gt_aux=np.array(f["gt_aux"][i])))
+        if self.geom is not None:
+            n_g, n_l = int(self.geom["n_g"][i]), int(self.geom["n_l"][i])
+            out.update(gt_pos=self.geom["gt_pos"][i, :n_g], gt_dir=self.geom["gt_dir"][i, :n_g], gt_btok=self.geom["gt_btok"][i, :n_g], gl=self.geom["gl"][i, :n_l])
         return out
+
+
+def pad_stack(arrs, fill):
+    """the (n_i, ...) arrays of a batch -> (B, max(n_i, 1), ...) with `fill` in the padding"""
+    out = np.full((len(arrs), max(1, max(len(a) for a in arrs))) + arrs[0].shape[1:], fill, arrs[0].dtype)
+    for i, a in enumerate(arrs):
+        out[i, :len(a)] = a
+    return out
 
 
 def collate(b):
     out = {n: torch.from_numpy(np.stack([o[n] for o in b])) for n in TOKEN_FIELDS + ("ytype", "y", "ylong", "yscale") if n in b[0]}
     out.update(gt_out=torch.tensor([o["gt_out"] for o in b]), token=[o["token"] for o in b], row=torch.tensor([o["row"] for o in b]), tokens_np=[o["tokens_np"] for o in b],
                label={n: torch.from_numpy(np.stack([o["label"][n] for o in b])) for n in b[0]["label"]})
+    if "gl" in b[0]:                                                                      # E395 geom: padded to the batch maximum; the indices as long tensors
+        for n, fill in GEOM_FILL.items():
+            t = torch.from_numpy(pad_stack([o[n] for o in b], fill))
+            out[n] = t.long() if n in ("gt_btok", "gl") else t
     return out
 
 
-def loader(split="train", seed=0, bs=8, workers=4, token_drop=0.0, ident="e292_a", K=None, shuffle=None, cache=LC.CACHE, dir=None):
+def loader(split="train", seed=0, bs=8, workers=4, token_drop=0.0, ident="e292_a", K=None, shuffle=None, cache=LC.CACHE, dir=None, geom=False):
     shuffle = split == "train" if shuffle is None else shuffle
-    ds = PTokData(split, seed, ident, K, token_drop, cache, dir)
+    ds = PTokData(split, seed, ident, K, token_drop, cache, dir, geom)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle, persistent_workers=workers > 0,
                                            prefetch_factor=2 if workers > 0 else None)
 
@@ -151,6 +176,45 @@ def toy_cache_test():
         gone = ~o1["valid"]
         assert gone.sum() > 5 and (o1["ytype"][gone] == 0).all() and not o1["y"][gone].any() and not o1["y"][:, gone].any() and (o1["ytype"][~gone] == arr["gt_type"][0][~gone]).all()
         assert PTokData("val", token_drop=0.0, dir=d)[0]["valid"].all()
+        geom_toy_test(d, ds, K)
+
+
+def geom_toy_test(d, ds, K):
+    """E395 geom on the toy cache of `toy_cache_test` (dir d, dataset ds, K tokens): geom False = the key sets and values of before; geom True = + the four flat keys of the geometry file (made here for 3 frames: 3 GT nodes / 2 links, 1 node / 0 links, 2 nodes / 1 link),
+    sliced per frame, padded in a batch (pos / dir 0, btok / gl -1, long indices, at least one padded row), through `loader` too; refused without the file, for another ident, with token drop"""
+    import tempfile
+    import lane_gtgeom_data as GG
+    keys = sorted(TOKEN_FIELDS + ("ytype", "y", "ylong", "yscale", "gt_out", "token", "row", "tokens_np", "label"))
+    assert sorted(ds[0]) == keys and sorted(collate([ds[0], ds[1]])) == keys, "geom False: the keys of before"
+    gk = ("gt_pos", "gt_dir", "gt_btok", "gl")
+    f32 = lambda *a: np.array(a, np.float32)  # noqa: E731
+    fr = [dict(gt_pos=f32([0, 0], [2, 0], [4, 0]), gt_dir=np.tile(f32([1, 0]), (3, 1)), gt_btok=np.array([5, -1, 7], np.int32), gl=np.array([[0, 1, -1, 2], [1, 2, 0, -1]], np.int32)),
+          dict(gt_pos=f32([9, 9]), gt_dir=f32([0, 1]), gt_btok=np.array([3], np.int32), gl=np.zeros((0, 4), np.int32)),
+          dict(gt_pos=f32([1, 1], [3, 1]), gt_dir=np.tile(f32([1, 0]), (2, 1)), gt_btok=np.array([-1, 4], np.int32), gl=np.array([[0, 1, -1, -1]], np.int32))]
+    with tempfile.TemporaryDirectory() as root:
+        GG.save(GG.pack(fr, ds.tokens, GG.cache_id(d), K), "val", 0, root)
+        real = GG.GEOM
+        GG.GEOM = root
+        try:
+            dg = PTokData("val", dir=d, geom=True)
+            for bad in (dict(ident="e273_p"), dict(token_drop=0.5), dict(seed=7)):                  # another cache, a token drop, a seed without a file
+                try:
+                    PTokData("val", dir=d, geom=True, **bad)
+                except (AssertionError, FileNotFoundError):
+                    continue
+                raise RuntimeError(f"geom accepted {bad}")
+            _, dl = loader("val", 0, 2, 0, dir=d, geom=True, shuffle=False)
+            lb = next(iter(dl))
+        finally:
+            GG.GEOM = real
+    assert sorted(dg[0]) == sorted(keys + list(gk)) and all(np.array_equal(dg[0][n], ds[0][n], equal_nan=True) for n in TOKEN_FIELDS + ("ytype", "y", "ylong", "yscale")), "geom True: the keys of before + the four"
+    assert [dg[i]["gt_pos"].shape for i in range(3)] == [(3, 2), (1, 2), (2, 2)] and [dg[i]["gl"].shape for i in range(3)] == [(2, 4), (0, 4), (1, 4)] and dg[0]["gt_btok"].tolist() == [5, -1, 7]
+    b = collate([dg[0], dg[1]])
+    assert [tuple(b[n].shape) for n in gk] == [(2, 3, 2), (2, 3, 2), (2, 3), (2, 2, 4)] and b["gt_btok"].dtype == torch.int64 and b["gl"].dtype == torch.int64 and b["gt_pos"].dtype == torch.float32
+    assert b["gt_btok"].tolist() == [[5, -1, 7], [3, -1, -1]] and b["gl"][0].tolist() == [[0, 1, -1, 2], [1, 2, 0, -1]] and (b["gl"][1] == -1).all() and (b["gt_pos"][1, 1:] == 0).all() and (b["gt_dir"][1, 1:] == 0).all() and b["gt_pos"][1, 0].tolist() == [9.0, 9.0]
+    b1 = collate([dg[1], dg[1]])
+    assert tuple(b1["gl"].shape) == (2, 1, 4) and (b1["gl"] == -1).all() and b1["gt_btok"].tolist() == [[3], [3]], "no GT link in the batch: one padded row"
+    assert [tuple(lb[n].shape) for n in gk] == [(2, 3, 2), (2, 3, 2), (2, 3), (2, 2, 4)] and lb["gt_btok"].tolist() == b["gt_btok"].tolist(), "the loader passes geom"
 
 
 def chord_long(y, pos):
