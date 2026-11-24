@@ -98,7 +98,16 @@ e - c topo F1 **+0.003** (window -0.02 to +0.02), p - c +0.004, n - c -0.002; ju
 | read | section 1.4 by hand, the result section, ledger notes, the DESIGN.md delta proposal to the lead | Fable | result |
 
 ## 3. Read-out log
-(empty: not run)
+**The re-gate of section 6 (2026-11-24, 22:01 - 22:09, `E393.regate_c_s0` / `E393.regate_e_s0`, diagnostic runs `--no-card`, GPU shared with an E395 training and an E391b training; written by the lane chat before the first pair was started):**
+
+| arm | first loss of the process | step 50 loss | gt_cov | nact_mean | pyr | against the bar |
+|---|---|---|---|---|---|---|
+| c | 0.4162 | 1.8342 | 0.984 | 561.862 | - | EXACT (all printed digits) |
+| e | 0.4162 | 0.3780 (bar 0.3783) | 0.982 (equal) | 560.360 (bar 559.820, +0.1 %) | 0.728 (bar 0.721) | differs beyond the last digit |
+
+The lane chat's launch script compared for e only the first loss, the loss prefix 0.378 and gt_cov (so it let the launch go on); the card's bar also names pyr and nact_mean, and those two differ by more than the last digit. **Cause found before the launch (the token-code chat, checked 22:15; the card's rule 'any other difference: STOP until the cause is found' is met by this):** both e logs show the same frames at steps 2 - 5 and the same step-1 gradients (node head 1.139, pyramid 0.6408), so the forward pass and the first backward pass are identical and the difference builds up only over the 50 updates; the code between the tags `lcr/E393.gate_e_s0` and `lcr/E393.regate_e_s0` changes jlive_train only by an assert (pos_head) and the jtoken changes are new options that are off by default; c uses the same head and loss code and is exact, so none of them acts; e differs from c only in `--train-pyr 1 / --b-weight 0`, the backward pass through the pyramid convolutions, and no cudnn deterministic flag is set (jlive_train docstring: 'no cudnn / TF32 flag is set'), so cuDNN's weight-gradient kernels are non-deterministic. **Label for e and p (and every number read from them):** launched after a re-gate that differed from the bar beyond the last digit (nact_mean +0.1 %, pyr 0.721 -> 0.728, step-50 loss 0.3783 -> 0.3780); cause found before the launch: forward and step-1 gradients identical, c exact, the code diff without effect; the difference is the non-deterministic cuDNN backward through the trained pyramid, so the e / p runs are not bit-reproducible (point 6 of 1.3); the seed twins carry the spread. The pairs c, n use no trained pyramid (train_pyr 0): their path is the one of c. **The pairs were queued by the launch script at 22:09, before this section was written (the card said after); the chain log `temp/e393/chain_e393.log` shows the times.**
+
+(The read-out of the pairs: pending.)
 
 ## 4. Referee
 **First critic pass (2026-11-22, fresh ar-critic, cards): REVISE**, not G2; the question confirmed new and the cited numbers checked (pyramid 2 096 708 and node head 99 304 parameters counted; E372 numbers; E352's 11 s / 11.3 GB). Taken in:
