@@ -995,6 +995,7 @@
   "evaluation/gpu_gate.py": "helper: wait until the GPU has room before a GPU evaluation step (D100)",
   "evaluation/pmap.py": "helper: order-keeping parallel map over a fork pool for CPU scoring",
   "evaluation/jroute_verdict.py": "E389b: the arithmetic of the card's rule from stored score cards (by hand), no part of the chain",
+  "evaluation/pyr_change.py": "E393 read-out: how much a stage-2 run moved B's pyramid (output features on fixed VAL frames, weights) against its start, no part of the chain",
   "evaluation/jcr_eval.py": "E395 (D142): Catmull-Rom read-out of the delivered tokens, oracle positions, scoring of moved nodes and the verdict arithmetic of the card; analysis of stored dumps, no part of the delivered path",
   "evaluation/tests/": "unit tests of the evaluation modules (run by tools/maintenance/run_all_tests.sh)",
   "tools/": "helpers around the chain: pictures, one-off figure scripts, literature catalogue, maintenance, environment; no part of the delivered path",

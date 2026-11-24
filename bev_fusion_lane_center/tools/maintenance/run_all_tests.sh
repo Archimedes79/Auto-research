@@ -22,6 +22,7 @@ run "connectivity / duplicate / range metrics" topo_metrics.py
 run "metric response to controlled errors"  test_metric_response.py
 run "TEST guard + cache key of evaluate.py"  test_evaluate_guard.py
 run "GPU wait gate before the dump / score steps (D100, CPU)" test_gpu_gate.py
+run "pyramid change read-out of E393 (CPU, toy pyramids)" test_pyr_change.py
 run "E345 pruning probe: cost table = FlopCounterMode part by part, saved cost of a set (random init)" jprune_cost.py selftest
 run "E345 pruning probe: unit table (45 units, 84 points), attention-head edit, hooks, dead-hook assert (random init, CPU)" jprune_probe.py selftest
 run "E352 step 0 probe: point table on a random-init model, whole groups, the shim around B's QGraph (random init, CPU, no data)" jprune_b.py selftest

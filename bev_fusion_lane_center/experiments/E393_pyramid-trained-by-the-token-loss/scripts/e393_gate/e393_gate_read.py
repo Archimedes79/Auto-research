@@ -1,6 +1,6 @@
 """read the E393 gate arms: per-step cov / nact from model.pt rec, s/step and reserved memory from log.txt, nvidia-smi peak from smi_<arm>.csv"""
 import os, re, sys, math, torch, statistics as st
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+os.chdir(os.environ.get("BFLC_ROOT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", ".."))   # the problem folder (v1.3: the copy lies in experiments/E393_*/scripts/e393_gate/; the original in temp/e393_gate/ went 2 levels up)
 for a in sys.argv[1:]:
     R = f"runs/e393_gate_{a}_s0"
     if not os.path.exists(f"{R}/model.pt"):
