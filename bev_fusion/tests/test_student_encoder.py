@@ -1,4 +1,4 @@
-"""The student image encoder (training/student_encoder.py) and its offline distillation (training/distill_student.py), t22 stage A. CPU, 2 threads, no GPU, no real data: known
+"""The student image encoder (net/model/student_encoder.py) and its offline distillation (training/distill_student.py), t22 stage A. CPU, 2 threads, no GPU, no real data: known
 answers and a synthetic key-frame tree. It does read the ImageNet weight files under models/pretrained/imagenet/ of the working directory (sections 2 and 6 build the student with them;
 section 2 skips the file it does not find, the CLI runs of section 6 need them).
 
@@ -37,6 +37,7 @@ from PIL import Image
 
 torch.set_num_threads(2)
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import distill_student as D  # noqa: E402
 import student_encoder as S  # noqa: E402
 from feature_cache import write_shard  # noqa: E402

@@ -286,7 +286,7 @@ def refs(path, text):
 
 def resolve(byname, tok, importer, strict=True):
     """the code paths a name or a path written in `importer` stands for: a path with a folder part must match the end of a path (or lie relative to the importer), an absolute
-    one is matched by its longest tail, a bare name means the importer's folder first, then the only file of that name, then the only one outside temp/; a bare name that is still
+    one is matched by its longest tail, a bare name means the importer's folder first, then the only file of that name, then the only one of the importer's problem folder, then the only one outside temp/; a bare name that is still
     ambiguous is dropped when strict (a generic name like show.py would pull in every namesake)"""
     if tok.endswith("/"):
         t, cands = tok.rstrip("/"), byname.get(tok, [])
@@ -308,6 +308,9 @@ def resolve(byname, tok, importer, strict=True):
         return same
     if len(cands) == 1:
         return cands
+    local = [c for c in cands if c.split("/", 1)[0] == importer.split("/", 1)[0] and "/temp/" not in "/" + c]
+    if len(local) == 1:                                                  # the same name in two problem folders (losses.py): the importer's own
+        return local
     out = [c for c in cands if "/temp/" not in "/" + c]
     return out if len(out) == 1 else ([] if strict else cands)
 
@@ -823,6 +826,8 @@ def selftest():
     assert resolve(bn, "show.py", "a/temp/x/main.py") == ["a/temp/x/show.py"], "a bare name: the importer's folder first"
     assert resolve(bn, "show.py", "a/training/m.py") == [] and len(resolve(bn, "show.py", "a/training/m.py", strict=False)) == 2, "a generic name that stays ambiguous is dropped unless the command names it"
     assert resolve(bn, "lib.py", "a/temp/z/m.py") == ["a/training/lib.py"] and resolve(bn, "pkg/", "a/m.py") == ["a/pkg/__init__.py"]
+    two = {"losses.py": ["p1/net/loss/losses.py", "p2/training/losses.py"]}
+    assert resolve(two, "losses.py", "p1/training/train.py") == ["p1/net/loss/losses.py"] and resolve(two, "losses.py", "p3/a.py") == [], "the importer's problem decides"
     assert resolve(bn, "temp/e2/go.sh", "a/x.sh") == ["a/temp/e2/go.sh"] and resolve(bn, "$BFLC/temp/e1/go.sh", "a/x.sh") == ["a/temp/e1/go.sh"]
     assert resolve(bn, "/mnt/c/Auto-research/a/temp/e1/go.sh", "a/x.sh") == ["a/temp/e1/go.sh"] and resolve(bn, "temp/e3/go.sh", "a/x.sh") == []
     assert blob_id(b"hello\n") == "ce013625030ba8dba906f756967f9e9ca394464a"                           # git's own blob id of "hello\n"

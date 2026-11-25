@@ -1,4 +1,4 @@
-"""Binary-data test of the camera-radar fusion (training/fusion.py) in front of the BEV trunk and head.
+"""Binary-data test of the camera-radar fusion (net/model/fusion.py) in front of the BEV trunk and head.
 
 World: a binary BEV truth (random rectangles) on a 64 x 56 grid, x forward (row index i = range). Two sensors observe it:
   camera planes [obs, conf]: obs = truth with each cell flipped with probability q(i); conf = 1 - q(i) (the confidence
@@ -13,6 +13,7 @@ Scenarios: S1 camera informative + radar clutter, S2 camera noise + radar inform
 radar shuffled (hits of another sample). IoU of the positive class at 0.5, near third / far third of the rows.
 Run from bev_fusion: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/check_fusion_binary.py [steps] [batch] [device]
 """
+import os
 import sys
 import time
 
@@ -20,6 +21,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bev_trunk import BEVTrunk  # noqa: E402
 from fusion import ConcatFusion, GateFusion  # noqa: E402
 

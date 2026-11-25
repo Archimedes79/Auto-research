@@ -1,5 +1,5 @@
 """Two helpers that several model gates had a copy of: `flat` (the outputs of a model call as one flat dict of tensors) and `refuser` (does `model.check_config` refuse a config).
-    from model_gates import flat, refuser          # tests/support and training/ on sys.path
+    from model_gates import flat, refuser          # tests/support and the model folders net/{prep,model,loss} on sys.path
     refused = refuser(TINY)                        # refused(cam_buffer="stack") -> True when check_config(ModelConfig(**dict(TINY, cam_buffer="stack"))) raises ValueError"""
 import torch
 

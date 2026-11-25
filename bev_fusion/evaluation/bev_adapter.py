@@ -72,7 +72,9 @@ def setup_paths(run: Optional[str] = None) -> str:
     """the run's code snapshot (runs/<name>/code) or training/ first on sys.path, then the bev_fusion folder and autoresearch;
     returns the code folder"""
     code = os.path.abspath(os.path.join(run, "code")) if run and os.path.isdir(os.path.join(run, "code")) else os.path.join(ROOT, "training")
-    for p in (AUTORESEARCH, ROOT, code):
+    live = code == os.path.join(ROOT, "training")             # the live tree: training/ plus the model folders behind it; a snapshot is flat and complete
+    model = [os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")] if live else []
+    for p in (AUTORESEARCH, ROOT, *model, code):
         if p in sys.path:
             sys.path.remove(p)
         sys.path.insert(0, p)

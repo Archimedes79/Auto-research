@@ -8,7 +8,7 @@ Per cell (or point) p with feature F(p), per sample the ego steps S = (dt_i, v_i
                layers, used only here): r_jm = wrap(v_m . u_j - d_j), wrap = into the unambiguous interval
                [-v_alias, v_alias); s_m += lambda * sum_j valid_j * (-r_jm^2 / (2 sigma_d^2))
   weights      pi_m = softmax_m(s_m)
-  positions    p'_m = chain(p, S, v_m)     the exact geometry of training/splat.py (coordinates chained per step,
+  positions    p'_m = chain(p, S, v_m)     the exact geometry of net/model/splat.py (coordinates chained per step,
                the object velocity rotated with the ego; translation first order in omega, rotation exact)
   splat        out(q) = sum_{p,m} pi_m k(q - p'_m) F(p) / sum_{p,m} pi_m k(q - p'_m) (* min(mass, 1) if mass_gate)
                mass(q) = sum_{p,m} pi_m k(q - p'_m)  (0 = unknown)
@@ -20,7 +20,7 @@ gradient over its width (the bilinear kernel only within one cell), (2) the soft
 between far-apart velocities (non-local credit), (3) Doppler evidence pins the radial part; (4) the static
 hypothesis keeps the static world exact; (5) nothing is lost on the way - every source keeps its mass, unknown cells
 are marked by mass 0. Velocity labels, where available, can still supervise v_mean (aux loss).
-Conventions as training/splat.py: x forward, y left, maps (B, C, X, Y), cell i centre x_min + (i + 0.5) res.
+Conventions as net/model/splat.py: x forward, y left, maps (B, C, X, Y), cell i centre x_min + (i + 0.5) res.
 Basis: softmax splatting (Niklaus & Liu, CVPR 2020, from memory), multiple-hypothesis / winner-takes-all prediction
 (e.g. MCL; from memory), CRT-Fusion's velocity shift and FIERY's ego warp (literature/code/).
 Run the self-test: python studies/early/temporal.py; its checks and speed learning: studies/early/temporal_block.py
@@ -34,6 +34,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "training"))     # lift_pd, splat (the module lived in training/ until 2026-11-10)
+sys.path[1:1] = [os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from splat import grid_points, splat_positions  # noqa: E402
 
@@ -64,7 +65,7 @@ def steps_tensor(steps, B, device=None, dtype=torch.float32):
 
 def chain(p, steps, v):
     """p (B, N, 2) source positions, steps (B, S, 3), v (B, N, 2) velocity in the source axes -> target positions.
-    Coordinates chained step by step (training/splat.py splat_positions), the velocity vector rotated with the ego."""
+    Coordinates chained step by step (net/model/splat.py splat_positions), the velocity vector rotated with the ego."""
     for i in range(steps.shape[1]):
         dt, ve, w = steps[:, i, 0], steps[:, i, 1], steps[:, i, 2]
         p = splat_positions(p, dt, ve, w, v)

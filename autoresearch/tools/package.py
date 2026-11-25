@@ -9,7 +9,7 @@
     python autoresearch/tools/package.py --selftest
 
 A project whose project.json has "package": {"split_record": "<command>"} (the placeholders {run_dir} and {out_dir} are paths relative to the problem folder, which is also the
-working folder of the command, bare or inside quotes; bev_fusion: `python3 training/splits.py split-json {run_dir} {out_dir}`) gets results/<id>/split.json (the scene lists of the
+working folder of the command, bare or inside quotes; bev_fusion: `python3 net/prep/splits.py split-json {run_dir} {out_dir}`) gets results/<id>/split.json (the scene lists of the
 run) in every package. The command writes into a temp folder, the file moves to results/<id>/ only after it was checked and before package.json is written: `package` and `clean` (also
 its dry run) refuse, and leave results/ as it was, when the command fails, leaves no json object or the run folder is missing. A project without the key is unaffected.
 

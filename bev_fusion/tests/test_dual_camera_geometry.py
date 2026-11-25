@@ -21,7 +21,7 @@ import torch
 
 torch.set_num_threads(2)
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")]]
 from bevfusion_camera import bevfusion_ida  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from model import ModelConfig  # noqa: E402

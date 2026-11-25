@@ -18,6 +18,7 @@ BEV = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 for p in (os.path.dirname(BEV), BEV, os.path.join(BEV, "training")):
     if p not in sys.path:
         sys.path.insert(0, p)
+sys.path[1:1] = [os.path.join(BEV, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from nuscenes_dataset import FrontRadarDataset  # noqa: E402
 
 

@@ -5,12 +5,13 @@ Input of the test network (what a BEV trunk would see from the sensors, here ren
 vehicle coverage at t, pedestrian coverage at t, lane lines, and all objects 0.5 s earlier (in the current frame, as
 an ego-aligned past would be) - so the velocity is inferable, the car / truck class from the size, and the heading of
 a moving object from its motion (a static box's heading is ambiguous by 180 deg: yaw is reported modulo pi and modulo
-2 pi). Network: training/bev_trunk.py BEVTrunk(width 0.5).features + training/object_head.py ObjectHead.
+2 pi). Network: net/model/bev_trunk.py BEVTrunk(width 0.5).features + net/model/object_head.py ObjectHead.
 Metrics on held-out scenes: AP per class at centre distances 0.5 / 1 / 2 m (all-point AP, simplified), and for the
 matches at 1 m: centre error, BEV IoU (shapely polygons; circles as polygons), size error, yaw error, radius error,
 velocity error.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/object_head_synth.py [--quick]
 """
+import os
 import math
 import random
 import sys
@@ -20,10 +21,12 @@ import torch
 from shapely.geometry import Point, Polygon
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 from bev_trunk import BEVTrunk  # noqa: E402
 from lift_pd import Grid  # noqa: E402
-from object_head import GROUPS, ObjectHead, build_targets, decode, head_loss  # noqa: E402
+from object_head import GROUPS, ObjectHead, decode  # noqa: E402
+from object_loss import build_targets, head_loss  # noqa: E402,F401
 from synthetic_world import gt_bev, random_scene  # noqa: E402
 
 G = Grid()

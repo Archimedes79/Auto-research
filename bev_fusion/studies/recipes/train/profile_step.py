@@ -1,6 +1,7 @@
 """One-off: where does the main process spend its time in one micro-batch of the combined training? cProfile of run_clip
 (forward + loss + backward) on 1 clip x 3 keyframes, GPU, after 2 warm-up clips; prints the top functions by tottime
 and cumtime, and the wall time per clip split into 'cuda busy' (synchronize) and the rest."""
+import os
 import cProfile
 import json
 import pstats
@@ -10,6 +11,7 @@ import time
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from train import ClipDataset, TrainConfig, build, collate_clips, make_datasets, run_clip   # noqa: E402
 import functools                                                                           # noqa: E402
 from feature_cache import collate_cached                                                  # noqa: E402

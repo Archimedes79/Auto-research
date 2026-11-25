@@ -14,6 +14,7 @@ match errors (studies/early/object_head_synth.evaluate), recall at 2 m of all mo
 Arms: --sweeps 6 (default) or 1 (control); --no-doppler (detections moved by the ego motion only).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/radar_only.py [--quick]
 """
+import os
 import math
 import random
 import sys
@@ -23,10 +24,12 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "training/legacy")                 # radar_decoder (off the chain since 2026-10-31)
 sys.path.insert(0, "tests/support")
 from lift_pd import Grid  # noqa: E402
-from object_head import GROUPS, build_targets, decode, head_loss  # noqa: E402
+from object_head import GROUPS, decode  # noqa: E402
+from object_loss import build_targets, head_loss  # noqa: E402,F401
 from radar_decoder import RadarOnlyDecoder, to_output_time  # noqa: E402
 from synthetic_world import radar, random_scene  # noqa: E402
 from object_head_synth import evaluate, show  # noqa: E402

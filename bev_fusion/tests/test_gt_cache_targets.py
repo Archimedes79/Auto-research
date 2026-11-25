@@ -24,6 +24,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training"))
+sys.path[1:1] = [os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from losses import sample_targets  # noqa: E402
 from nuscenes_dataset import FrontRadarDataset  # noqa: E402

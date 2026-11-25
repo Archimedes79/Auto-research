@@ -1,5 +1,6 @@
 """One-off: where does the loading time of one cached training sample go? (camera frames / radar sweeps / GT npz /
 feature store), single process, 24 train samples."""
+import os
 import json
 import sys
 import time
@@ -7,6 +8,7 @@ import time
 import numpy as np
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from train import TrainConfig, make_datasets  # noqa: E402
 
 cfg = TrainConfig(**json.load(open("training/configs/t1_r0.json")))

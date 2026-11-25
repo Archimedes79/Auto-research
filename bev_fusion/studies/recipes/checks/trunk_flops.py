@@ -8,6 +8,7 @@ a LOWER bound, its rectify / cross-attention modules and the DPT head are not in
 Timing: the GPU is shared with the lane project's jobs, so the milliseconds are an upper bound, not a timing number.
 Run from bev_fusion: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/trunk_flops.py
 """
+import os
 import sys
 import time
 
@@ -16,6 +17,7 @@ import torch.nn as nn
 from torch.utils.flop_counter import FlopCounterMode
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bev_trunk import BEVTrunk, n_params  # noqa: E402
 
 

@@ -19,6 +19,7 @@ fill may paint - the fill never changes a cell with mass >= 1, studies/early/tem
 Image: temp/checks/temporal_stages.png (one held-out scene: source, target, the stages, the hole mask).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/temporal_stages.py [--quick]
 """
+import os
 import math
 import random
 import sys
@@ -27,6 +28,7 @@ import time
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from temporal import GapFill, TemporalPropagation, gaussian_splat  # noqa: E402
 

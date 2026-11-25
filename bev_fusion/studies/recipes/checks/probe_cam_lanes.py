@@ -1,8 +1,10 @@
 """probe: after overfitting one scene, what lane probabilities does the camera-only decoder output on lane cells vs
 other cells (is it a threshold / thin-structure problem or is nothing learned)?"""
+import os
 import sys, torch
 sys.argv += ["--quick"]
 sys.path.insert(0, "studies/early"); sys.path.insert(0, "training"); sys.path.insert(0, "training/legacy")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import camera_only as T
 from camera_decoder import CameraOnlyDecoder
 train, _ = torch.load("temp/checks/camera_only_data_150_16_thr0.05_0.5_0.25.pt")

@@ -12,6 +12,7 @@ motion). Evaluated on held-out scenes (other seed): centre error per moving obje
 (window, no chaining) - the reference.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/train_splat_correction.py <out.png>
 """
+import os
 import math
 import random
 import sys
@@ -23,6 +24,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import torch  # noqa: E402
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from splat import CorrectionHead, VelocityHead, grid_points, splat, splat_positions  # noqa: E402
 

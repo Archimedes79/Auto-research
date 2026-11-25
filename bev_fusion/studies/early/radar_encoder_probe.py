@@ -1,4 +1,4 @@
-"""The radar encoder MODULE (training/radar_encoder.py) on real nuScenes mini: does it keep the detections, and what does the TASK do to that?
+"""The radar encoder MODULE (net/model/radar_encoder.py) on real nuScenes mini: does it keep the detections, and what does the TASK do to that?
 
 The owner, 2026-10-26: use the reconstruction as a side loss to help first, but the side loss is not the goal. So three trainings of the
 same module (2000 steps, 8 train scenes, 2 held-out scenes, C = 64), each followed by the same honest measurement:
@@ -14,6 +14,7 @@ information with the task: it has to stay close to "task only".
 Gate (printed, exit code): task + aux keeps >= 0.9 x the oracle on held-out scenes and its task F1 is within 0.03 of task only.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/radar_encoder_probe.py [steps]
 """
+import os
 import sys
 
 import numpy as np
@@ -22,7 +23,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import radar_encoder as re  # noqa: E402
+from radar_loss import aux_weight, slot_aux_loss  # noqa: E402
 import radar_recon_test as rt  # noqa: E402
 
 DEV = rt.DEV
@@ -60,9 +63,9 @@ def train(mode, steps, frames, seed=0):
         f, st = enc(det, 8, with_state=True)
         mov, occ = moving_target(det, 8, enc.grid)
         task = (F.binary_cross_entropy_with_logits(head(f)[:, 0], mov, reduction="none") * occ).sum() / occ.sum().clamp(min=1)
-        w_aux = {"aux only": 1.0, "task only": 0.0, "task + aux": re.aux_weight(it, 1.0, 0.05, 500)}[mode]
+        w_aux = {"aux only": 1.0, "task only": 0.0, "task + aux": aux_weight(it, 1.0, 0.05, 500)}[mode]
         w_task = 0.0 if mode == "aux only" else 1.0
-        loss = w_task * task + w_aux * (enc.aux_loss(f, st) if w_aux > 0 else 0.0)
+        loss = w_task * task + w_aux * (slot_aux_loss(enc, f, st) if w_aux > 0 else 0.0)
         opt.zero_grad()
         loss.backward()
         opt.step()
@@ -93,7 +96,7 @@ def probe(enc, steps, train_frames, seed=0):
         det = rt.batch([train_frames[i] for i in g.choice(len(train_frames), 8, replace=False)])
         with torch.no_grad():
             f, st = enc(det, 8, with_state=True)
-        loss = enc.aux_loss(f, st, decoder=dec)
+        loss = slot_aux_loss(enc, f, st, decoder=dec)
         opt.zero_grad()
         loss.backward()
         opt.step()

@@ -10,6 +10,7 @@ import sys
 import numpy as np
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from nuscenes.nuscenes import NuScenes  # noqa: E402
 
 nusc = NuScenes("v1.0-mini", dataroot=os.path.expanduser("~/data/nuscenes"), verbose=False)

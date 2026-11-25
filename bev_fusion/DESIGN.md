@@ -11,20 +11,23 @@ precompute     deterministic, no gradient: calibration, ego steps, radar points 
   -> output interface   dense and differentiable, per time offset dt: maps, object maps, velocity field
   -> post-processing    hard box selection and line threshold, for metrics and the prototype only
 ```
-| module | job | code (`training/`) |
-|---|---|---|
-| Precompute | calibration, ego steps and gaps, radar detections moved to now, frozen image features, the visibility maps (camera now, radar fan, fusion area) | `precompute.py`, `nuscenes_dataset.py`, `feature_cache.py` |
-| Input interface | the batch dict and the forward arguments, each named with shape, unit and frame | `interface.py` |
-| Camera encoder | images + calibration -> a camera BEV: frozen DualBEV / BEVFusion features (cached), a lift that keeps the depth distribution; option: a small trained student encoder | `camera_encoder.py`, `lift_pd.py`, `bevfusion_camera.py`, `student_encoder.py` |
-| Radar encoder | radar points (position, Doppler, RCS) -> a BEV: a raster before any weight, or lossless delta slots | `radar_encoder.py`, `radar_bev.py` |
-| Temporal fusion | the past enters as a state moved with the ego motion (splat), one block per branch | `temporal_fusion.py`, `splat.py` |
-| Fusion + backbone | concat of the two BEVs, the DualBEV trunk -> features S | `fusion.py`, `bev_trunk.py` |
-| Motion block | two camera BEVs, ego steps and radar points -> the velocity field in a three-level pyramid | `motion_block.py` |
-| Time mover + heads | S moved to each dt by ego motion and the velocity field, then the map head (areas, line masks and distance fields, dense footprints, a 1 m centre-line head), the object head (heat map, offset, size, heading, moving flag, velocity) | `timed_head.py`, `bev_trunk.py`, `object_head.py`, `layers.py` |
-| Loss | one term per head layer from the layer table, learned weights between the four groups, masks from the visibility maps | `losses.py`, `loss_extras.py` |
-| Post-processing | the one box extractor and the line threshold | `extract.py` |
+The model lives in `net/` in three layers, apart from the training system: `net/prep/` (preprocessing) < `net/model/` (the network) < `net/loss/` (losses and targets) < `training/` (the training system); starting, stopping and watching runs is the tooling in `../autoresearch/` (R13).
 
-The whole chain is `model.py` (builder tables, one kind per slot chosen in `ModelConfig`); a configuration names a system (`training/configs/`, the base `t20_base_nol4.json`); the trainer is `train.py` on the engine `../autoresearch/trainkit/`. Frozen image heads, the cached features and the ground truth (`../GtGenerator/`, release v14) are inputs, not part of the network. The planner is not part of the system: it reads the output interface.
+| module | job | code |
+|---|---|---|
+| Preprocessing | datasets and batches, camera geometry (grid, projection tables, visibility), image transforms, augmentation, feature / image caches, the visibility maps (camera now, radar fan, fusion area), the targets read from the ground truth | `net/prep/`: `nuscenes_dataset.py`, `batches.py`, `geometry.py`, `images.py`, `precompute.py`, `augment.py`, `feature_cache.py`, `image_cache.py`, `targets.py` |
+| Input interface | the batch dict and the forward arguments, each named with shape, unit and frame | `net/model/interface.py` |
+| Camera encoder | images + calibration -> a camera BEV: frozen DualBEV / BEVFusion features (cached), a lift that keeps the depth distribution; option: a small trained student encoder | `net/model/`: `camera_encoder.py`, `lift_pd.py`, `bevfusion_camera.py`, `student_encoder.py` |
+| Radar encoder | radar points (position, Doppler, RCS) -> a BEV: a raster before any weight, or lossless delta slots | `net/model/`: `radar_encoder.py`, `radar_bev.py` |
+| Temporal fusion | the past enters as a state moved with the ego motion (splat), one block per branch | `net/model/`: `temporal_fusion.py`, `splat.py` |
+| Fusion + backbone | concat of the two BEVs, the DualBEV trunk -> features S | `net/model/`: `fusion.py`, `bev_trunk.py` |
+| Motion block | two camera BEVs, ego steps and radar points -> the velocity field in a three-level pyramid | `net/model/motion_block.py` |
+| Time mover + heads | S moved to each dt by ego motion and the velocity field, then the map head (areas, line masks and distance fields, dense footprints, a 1 m centre-line head), the object head (heat map, offset, size, heading, moving flag, velocity) | `net/model/`: `timed_head.py`, `bev_trunk.py`, `object_head.py`, `layers.py` |
+| Losses | one term per head layer from the layer table, learned weights between the four groups, masks from the visibility maps; the object, radar and velocity losses in their own files | `net/loss/`: `losses.py`, `object_loss.py`, `radar_loss.py`, `motion_loss.py`, `loss_extras.py` |
+| Post-processing | the one box extractor and the line threshold | `net/model/extract.py` |
+| Training system | the trainer on the engine `../autoresearch/trainkit/`, run configs and their start check, probes | `training/`: `train.py`, `startable.py`, `configs/` |
+
+The whole chain is `net/model/model.py` (builder tables, one kind per slot chosen in `ModelConfig`); a configuration names a system (`training/configs/`, the base `t20_base_nol4.json`). Frozen image heads, the cached features and the ground truth (`../GtGenerator/`, release v14) are inputs, not part of the network. The planner is not part of the system: it reads the output interface.
 
 ## Rules
 | rule | why | open to attack when |
@@ -41,6 +44,7 @@ The whole chain is `model.py` (builder tables, one kind per slot chosen in `Mode
 | R10 **Lanes and centre-lines are trained end to end,** no rule step on the training path; dense maps are allowed as auxiliary targets, probes and side outputs, not as a stage that must come first; the stride-4 lane branch (L4) is off for new from-scratch runs | the owner: D47, D65 | a lane head that needs a rule step to work |
 | R11 **Loss weighting:** learned (Kendall) weights between the four groups (areas, lines, objects, motion), time weights w(dt) 1 / 0.5 / 0.25 with a warm-up | D27 (revisit after the trainable-encoder run) | the run with trainable image features |
 | R12 **Separate codebase and protocol:** this system and the lane project do not import each other (shared: `autoresearch/`, `GtGenerator/`); the network always runs warm (no cold run), the Runner reads no ground truth; TEST once with the owner's recorded OK | the owner: D50, D70, D72; hard rule 1 | the owner |
+| R13 **The model is apart from the training system:** preprocessing (`net/prep`) < network (`net/model`) < losses (`net/loss`) < `training/`; nothing of `net/` imports `training/` or the training tooling; runs are started, stopped and watched by the tooling in `../autoresearch/` only (`tests/test_net_layering.py` checks the layers) | the owner: D152 | the owner |
 
 ## How this file moves
 A card names the rules it attacks or changes (its Design delta); the coder is given this file plus the delta. KEEP: the delta becomes the rule and the card's id the reason (the old text stays in git); CUT or TIE: the rule stays and records the result of the attack. An instruction of the owner that fixes how the system must be becomes a rule, his words or the decision id in the reason; permissions go to the decisions record named at the top. The evidence stays in the cards and the ledger.

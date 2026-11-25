@@ -29,6 +29,7 @@ import torchvision
 _TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
 if _TRAINING not in sys.path:
     sys.path.insert(0, _TRAINING)
+    sys.path[1:1] = [os.path.join(_TRAINING, os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bev_trunk import BEVBackbone, FPNLSS  # noqa: E402
 from camera_encoder import CustomFPN, DepthNet  # noqa: E402
 

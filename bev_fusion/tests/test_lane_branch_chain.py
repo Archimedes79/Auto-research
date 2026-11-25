@@ -17,10 +17,12 @@ import torch
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "training"))
+sys.path[1:1] = [os.path.join(os.path.join(HERE, "..", "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 os.chdir(os.path.join(HERE, ".."))
 
-import lane_branch as LB                                                  # noqa: E402
-from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, build, collate_cached   # noqa: E402
+import image_cache as IC  # noqa: E402
+from build_feature_cache import build
+from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, collate_cached   # noqa: E402
 from model import ModelConfig                                             # noqa: E402
 from nuscenes_dataset import FrontRadarDataset                            # noqa: E402
 
@@ -33,13 +35,13 @@ def main(kind="res4"):
     tokens = [ds.samples[10], ds.samples[200]]
     with tempfile.TemporaryDirectory() as feat_dir, tempfile.TemporaryDirectory() as img_dir:
         store = build(ds, feat_dir, tokens, device="cpu", batch=4, verbose=False)
-        LB._DS = ds
-        LB._fill((img_dir, tokens))
+        IC._DS = ds
+        IC._fill((img_dir, tokens))
         # 1. cache = dataset image within JPEG error
         for t in tokens:
             sd = ds.gt.cam(t)
             ref = torch.tensor(ds._image_uint8(sd)).permute(2, 0, 1).float()
-            got = LB.load_image(img_dir, sd["token"]).float()
+            got = IC.load_image(img_dir, sd["token"]).float()
             err = (got - ref).abs().mean().item()
             assert got.shape == ref.shape == (3, 256, 704) and err < 3.0, (got.shape, err)
         print(f"1. image cache = dataset image within JPEG error (mean abs {err:.2f} of 255): ok")

@@ -13,6 +13,7 @@ from scipy.ndimage import gaussian_filter
 
 sys.path.insert(0, ".")
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from evaluation import bev_probe as ev  # noqa: E402
 from evaluation.metrics import DetMeter, report  # noqa: E402
 from losses import NUSC_GROUPS  # noqa: E402

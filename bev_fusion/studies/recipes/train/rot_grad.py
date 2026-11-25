@@ -1,11 +1,13 @@
 """One-off: does the object head's rot branch train? (1) change of its weights between the run's checkpoints next to the
 size branch; (2) gradient norm of the rot loss term on its parameters for one train batch."""
+import os
 import glob
 import sys
 
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, ".")
 from evaluation.bev_probe import load_run  # noqa: E402
 from train import forward_loss, make_datasets, make_loader, val_subset  # noqa: E402

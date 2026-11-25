@@ -1,4 +1,4 @@
-"""The radar slot "delta_slots" (training/radar_encoder.py::RadarEncoder) inside the whole chain: wiring, side loss, monitor, old path.
+"""The radar slot "delta_slots" (net/model/radar_encoder.py::RadarEncoder) inside the whole chain: wiring, side loss, monitor, old path.
 
 Real nuScenes mini (2 mid-scene keyframes, GT of k-1 / k / k+1), CPU, camera off (the radar branch alone carries the BEV), width 0.5:
   1. check_config refuses c_rad < 61 for delta_slots (the pass-through start needs one channel per input channel)
@@ -16,11 +16,13 @@ import sys
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from interface import check_outputs  # noqa: E402
 from losses import BEVLoss, sample_targets  # noqa: E402
 from model import BEVFusionModel, ModelConfig, check_config  # noqa: E402
 from nuscenes_dataset import FrontRadarDataset, collate  # noqa: E402
-from radar_encoder import aux_weight, n_channels  # noqa: E402
+from radar_encoder import n_channels  # noqa: E402
+from radar_loss import aux_weight  # noqa: E402
 from train import TrainConfig, forward_loss  # noqa: E402
 
 torch.manual_seed(0)

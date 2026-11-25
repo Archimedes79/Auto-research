@@ -41,7 +41,7 @@ _PREDICTION_FILES = (os.path.join(ROOT, "evaluation", "bev_adapter.py"), os.path
 
 
 def _claim_code(net: str) -> str:
-    """the code of this run (its snapshot, else the live training/) is imported into this process once and for all: any later network with other code is refused, whatever it is asked for
+    """the code of this run (its snapshot, else the live training/ and net/) is imported into this process once and for all: any later network with other code is refused, whatever it is asked for
     (a task, a timing, a probe, a source). -> the code folder"""
     from Evaluation.api import EvaluationError
     code = os.path.abspath(os.path.join(_abs(net), "code")) if os.path.isdir(os.path.join(_abs(net), "code")) else os.path.join(ROOT, "training")
@@ -95,10 +95,10 @@ def _file_hash(path: str) -> str:
     return h.hexdigest()[:12]
 
 
-def _tree_hash(folder: str) -> str:
-    """the hash of the python files of a folder (name and content, line endings ignored): the code a run without a snapshot is evaluated with"""
+def _tree_hash(*folders: str) -> str:
+    """the hash of the python files of the folders (name and content, line endings ignored): the code a run without a snapshot is evaluated with"""
     h = hashlib.sha1()
-    for p in sorted(glob.glob(os.path.join(folder, "*.py"))):
+    for p in (p for folder in folders for p in sorted(glob.glob(os.path.join(folder, "*.py")))):
         with open(p, "rb") as f:
             h.update(os.path.basename(p).encode() + hashlib.sha1(f.read().replace(b"\r\n", b"\n")).digest())
     return h.hexdigest()[:12]
@@ -106,7 +106,7 @@ def _tree_hash(folder: str) -> str:
 
 def identity(net: str) -> Dict[str, Any]:
     """what the predictions of this network depend on, read without loading it: the last checkpoint (name and the hash of the whole file), the config, the code (the snapshot's record, or a
-    hash of the live training/ code for a run that has none: it is imported then), and Subject.predict / the output decoding in bev_adapter.py and bev_free.py (the two paths give the same predictions)"""
+    hash of the live code for a run that has none: it is imported then), and Subject.predict / the output decoding in bev_adapter.py and bev_free.py (the two paths give the same predictions)"""
     net = _abs(net)
     ckpts = sorted(glob.glob(os.path.join(net, "ckpt_*.pt")))
     if not ckpts:
@@ -116,7 +116,7 @@ def identity(net: str) -> Dict[str, Any]:
         with open(os.path.join(net, "code", "SNAPSHOT.txt"), encoding="utf-8") as f:
             code = f.read().strip()
     except OSError:
-        code = "live training/ " + _tree_hash(os.path.join(ROOT, "training"))
+        code = "live code " + _tree_hash(*[os.path.join(ROOT, d) for d in ("training", "net", "net/prep", "net/model", "net/loss")])
     adapter = hashlib.sha1("".join(_file_hash(p) for p in _PREDICTION_FILES).encode()).hexdigest()[:12]
     return {"run": name(net), "checkpoint": os.path.basename(last), "sha1": _file_hash(last), "config": _file_hash(os.path.join(net, "config.json")), "code": code, "adapter": adapter}
 

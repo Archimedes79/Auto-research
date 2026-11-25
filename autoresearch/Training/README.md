@@ -107,7 +107,7 @@ Variants are values, not code. A **preset** is a JSON of overrides (`bev_fusion/
 What a run records, next to its checkpoints:
 - `runs/<id>/config.json`: the config the trainer ran with. `check` / `run` replace `split` by the exact scene lists, so the run is pinned to the lists, not to the split file.
 - `runs/<id>/gt.json`: the ground-truth signature and version it trained on.
-- `runs/<id>/manifest.json`: the identity in one small file. It is made after the launch (the commit exists only then), from `bev_fusion/`: `python training/splits.py manifest runs/<id> --card records/runs/<id>/run.json`. For `t16_full_s0` it holds
+- `runs/<id>/manifest.json`: the identity in one small file. It is made after the launch (the commit exists only then), from `bev_fusion/`: `python net/prep/splits.py manifest runs/<id> --card records/runs/<id>/run.json`. For `t16_full_s0` it holds
 ```
 {"run": "t16_full_s0",
  "split": {"name": "large", "train": {"n": 428, "hash": "b694b2e11f43"}, "val": {"n": 82, "hash": "e290142492cd"}},

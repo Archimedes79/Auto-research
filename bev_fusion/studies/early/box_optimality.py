@@ -11,6 +11,7 @@ answer is (nearly) determined, so the trained head should approach it. This scri
      optimisation / data) or stay away from it (then capacity, loss or decoding)?
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/box_optimality.py [--configs 200:400,800:2000] [--quick]
 """
+import os
 import math
 import random
 import sys
@@ -23,6 +24,7 @@ from shapely import affinity
 from shapely.geometry import Point, box as sbox
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 import object_head_synth as T  # noqa: E402
 from synthetic_world import random_scene  # noqa: E402

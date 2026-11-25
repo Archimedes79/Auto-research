@@ -1,4 +1,4 @@
-"""Synthetic check of the temporal splat (training/splat.py): do pixels with their own speed vector land where expected?
+"""Synthetic check of the temporal splat (net/model/splat.py): do pixels with their own speed vector land where expected?
 
 Scene on the BEV grid (x 0..60 m, y -26..26 m, 0.5 m): two static lane lines and four objects (rectangles). Every map
 carries the channels: occupancy, vx, vy (the object's velocity in its cells, 0 elsewhere), then one coverage channel per
@@ -14,6 +14,7 @@ background) and "carry" = each cell keeps its exact sub-cell position as two ext
 of what arrived), so the next step starts from it instead of the cell centre.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/check_splat_scenes.py <out.png>
 """
+import os
 import math
 import sys
 
@@ -23,6 +24,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import torch  # noqa: E402
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from splat import VelocityHead, grid_points, splat, splat_positions  # noqa: E402
 

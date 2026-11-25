@@ -1,4 +1,4 @@
-"""The launch- and sync-saving variants (D53; training/launch_saving.py, records/speed_options_2026-11-03.md levers 1 - 3): each one does the arithmetic of its plain twin.
+"""The launch- and sync-saving variants (D53; net/model/launch_saving.py, records/speed_options_2026-11-03.md levers 1 - 3): each one does the arithmetic of its plain twin.
 CPU, no data, no GPU, a minute. Every switch is off by default and a plain call must not know the switches exist.
 
   1. splat: the fused scatter (all four corners in one index_add) equals the loop bit for bit on the CPU (float64 and float32, sources outside the grid, importance, mass gate),
@@ -19,7 +19,7 @@ import sys
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "..")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "..")]
 import launch_saving as LS  # noqa: E402
 import layers as LY  # noqa: E402
 import losses as L  # noqa: E402

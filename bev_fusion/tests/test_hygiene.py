@@ -1,6 +1,6 @@
 """LossConfig.hygiene_2026_11_02 and the splat precision (records/open_findings_2026-11-02.md #1 - #4, #6; lead's order 2026-11-02); CPU, seconds, toy tensors.
 
-  1. neutral inputs (every weight 1, every velocity known): the flag changes nothing, bit for bit (object_head_terms, MotionHead.loss, motion_term)
+  1. neutral inputs (every weight 1, every velocity known): the flag changes nothing, bit for bit (object_head_terms, motion_loss, motion_term)
   2. #3 w_obj is a WEIGHT: the regression terms of the object head are weighted means over the objects (checked against single-object runs), the focal loss weights every cell (a cell of weight 0.5
      gets half the gradient, the others the same), the motion L1 is a weighted mean; the flag off keeps the plain means
   3. #2 an object of unknown velocity (vel_known False, velocity target 0) is out of the moving / static BCE and of the velocity L1, and its logit gets no gradient; off, it trains "static"
@@ -10,15 +10,18 @@
   7. #1 batch_ego raises for a dt other than +-0.5 s when strict, and not otherwise
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_hygiene.py   (PYTHONPATH = the repository root for GtGenerator)
 """
+import os
 import sys
 
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 import losses as L  # noqa: E402
 import splat as S  # noqa: E402
 import timed_head as TH  # noqa: E402
+from motion_loss import motion_loss  # noqa: E402
 import train as T  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 
@@ -75,12 +78,12 @@ for with_mov in (False, True):
     check(set(a) == set(b) and all(torch.equal(a[k], b[k]) for k in a), f"object_head_terms: flag on with neutral inputs = off, bit for bit (mov head: {with_mov}; terms {sorted(a)})")
 torch.manual_seed(0)
 v_hat, v_gt, objm = torch.randn(1, 2, 40, 1), torch.randn(1, 2, 40, 1) * 3, (torch.rand(1, 1, 40, 1) > 0.5).float()
-plain = TH.MotionHead.loss(v_hat, v_gt, objm, 1.0, 0.1)
+plain = motion_loss(v_hat, v_gt, objm, 1.0, 0.1)
 m_ = objm
 vg = torch.where(v_gt.norm(dim=1, keepdim=True) < 1.0, torch.zeros_like(v_gt), v_gt)
 by_hand = ((v_hat - vg).abs() * m_).sum() / (m_.sum() * 2).clamp(min=1) + 0.1 * (v_hat.abs() * (1 - m_)).sum() / ((1 - m_).sum() * 2).clamp(min=1)
-check(torch.equal(plain, by_hand) and torch.equal(plain, TH.MotionHead.loss(v_hat, v_gt, objm, 1.0, 0.1, weight=None)), "MotionHead.loss without weight: the plain means (against the formula by hand)")
-check(torch.equal(plain, TH.MotionHead.loss(v_hat, v_gt, objm, 1.0, 0.1, weight=torch.ones(1, 1, 40, 1))), "MotionHead.loss with weight 1 everywhere = without, bit for bit")
+check(torch.equal(plain, by_hand) and torch.equal(plain, motion_loss(v_hat, v_gt, objm, 1.0, 0.1, weight=None)), "motion_loss without weight: the plain means (against the formula by hand)")
+check(torch.equal(plain, motion_loss(v_hat, v_gt, objm, 1.0, 0.1, weight=torch.ones(1, 1, 40, 1))), "motion_loss with weight 1 everywhere = without, bit for bit")
 
 # ---------------------------------------------------------------- 2 weights
 specs = [("vehicle", 20.0, -3.0, (3.0, 0.0)), ("vehicle", 30.0, 4.0, (0.0, 2.0)), ("vehicle", 40.0, -8.0, (1.0, 1.0))]
@@ -137,7 +140,8 @@ tg[0, 0, 3, 3] = tg[0, 1, 10, 7] = tg[1, 2, 15, 15] = 1.0                    # t
 ww = torch.rand(2, 1, 20, 20) + 0.2
 ww[0, 0, 3, 3] = 0.5                                                          # a down-weighted POSITIVE
 import object_head as oh  # noqa: E402
-check(torch.allclose(oh.focal_loss(lg, tg, ww), focal_ref(lg, tg, ww.expand_as(lg)), rtol=1e-6) and torch.equal(oh.focal_loss(lg, tg), oh.focal_loss(lg, tg, None)), "focal_loss(weight=): the weighted loss against its reference, positives included; no weight = the plain loss")
+import object_loss as OL  # noqa: E402
+check(torch.allclose(OL.focal_loss(lg, tg, ww), focal_ref(lg, tg, ww.expand_as(lg)), rtol=1e-6) and torch.equal(OL.focal_loss(lg, tg), OL.focal_loss(lg, tg, None)), "focal_loss(weight=): the weighted loss against its reference, positives included; no weight = the plain loss")
 
 # every regression term, also dir and rad, is a weighted mean of the single-object terms
 mixed = [("vehicle", 20.0, -3.0, (3.0, 0.0)), ("pedestrian", 12.0, 8.0, (0.6, 0.8)), ("vehicle", 40.0, -8.0, (1.0, 1.0)), ("pedestrian", 33.0, 2.0, (0.0, 1.0))]
@@ -154,10 +158,10 @@ hand_rad = sum(wm[i] * sing[i]["rad"] for i in ped) / sum(wm[i] for i in ped)
 check(torch.allclose(onm["dir"], hand_dir, rtol=1e-5) and torch.allclose(onm["rad"], hand_rad, rtol=1e-5), "the direction (vehicles) and radius (pedestrians) terms are weighted means too")
 
 # build_targets: the keys of the flag, and what a box without them means
-tb = oh.build_targets([[{"group": "vehicle", "cx": 20.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.1, "vel_known": False, "loss_w": 0.3},
+tb = OL.build_targets([[{"group": "vehicle", "cx": 20.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.1, "vel_known": False, "loss_w": 0.3},
                         {"group": "vehicle", "cx": 30.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.1},
                         {"group": "vehicle", "cx": 40.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.1, "vel_known": True, "loss_w": 0.7}]], grid, G, 8)
-tp = oh.build_targets([[{"group": "vehicle", "cx": 20.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.1}]], grid, G, 8)
+tp = OL.build_targets([[{"group": "vehicle", "cx": 20.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.1}]], grid, G, 8)
 check(tb["known"][0, :3].tolist() == [0.0, 1.0, 1.0] and [round(x, 6) for x in tb["mask"][0, :3].tolist()] == [0.3, 1.0, 0.7] and "known" not in tp and tp["mask"][0, 0].item() == 1.0,
       "build_targets: vel_known False -> 0, a box without the key -> 1, loss_w -> mask; no vel_known anywhere = no `known` key and mask 1")
 
@@ -191,9 +195,9 @@ check(unk.any() and gr[0].min() > 0 and float(gr[1].abs().max()) == 0.0, f"motio
 # motion L1, weighted
 torch.manual_seed(2)
 wv = torch.rand(1, 1, 40, 1) + 0.2
-wt = TH.MotionHead.loss(v_hat, v_gt, objm, 1.0, 0.1, weight=wv)
+wt = motion_loss(v_hat, v_gt, objm, 1.0, 0.1, weight=wv)
 hand = ((v_hat - vg).abs() * m_ * wv).sum() / (m_ * wv * 2).sum().clamp(min=1) + 0.1 * (v_hat.abs() * (1 - m_) * wv).sum() / ((1 - m_) * wv * 2).sum().clamp(min=1)
-check(torch.allclose(wt, hand, rtol=1e-6) and not torch.allclose(wt, plain), "MotionHead.loss with a weight: the weighted means by hand")
+check(torch.allclose(wt, hand, rtol=1e-6) and not torch.allclose(wt, plain), "motion_loss with a weight: the weighted means by hand")
 torch.manual_seed(3)
 Tm = {"w_obj": wmap() * torch.rand(1, 1, X, Y).clamp(min=0.3), "velocity": torch.randn(1, 2, X, Y) * 3, "obj_cells": (torch.rand(1, 1, X, Y) > 0.7).float()}
 vh = torch.randn(1, 2, X, Y)

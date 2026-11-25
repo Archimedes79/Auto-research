@@ -25,7 +25,7 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [ROOT, os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "training"), os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
+sys.path[:0] = [ROOT, os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
 from evaluation import bev_adapter as A, bev_gtcheck as GC, bev_suite, bev_views as V, metrics as M  # noqa: E402
 import evaluation.bev_task as BT  # noqa: E402
 from evaluation.bev_task import BEVTask, BevSegMetric, add_sample  # noqa: E402

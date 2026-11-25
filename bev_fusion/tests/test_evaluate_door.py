@@ -307,6 +307,7 @@ def check_sets_real(run, n, device):
     set that is not the run's own (small.val inside large.val) evaluates exactly its scenes"""
     assert glob.glob(os.path.join(run, "ckpt_*.pt")) and os.path.isfile(os.path.join(run, "config.json")), f"{run} has no checkpoint here: the check was asked for and cannot run"
     sys.path.insert(0, os.path.join(ROOT, "training"))
+    sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
     cfg = json.load(open(os.path.join(run, "config.json")))
     import bev_sets  # noqa: E402  (evaluation/ is on the path)
     sp = bev_sets.names()

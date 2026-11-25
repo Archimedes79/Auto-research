@@ -19,6 +19,10 @@ files of `training/` are listed (the launcher's snapshot is a copy of the workin
 `--require-clean` makes them a problem. Findings are problems (exit 1) or notes (exit 0). Run from `bev_fusion/` in the WSL with the gcar
 environment.
 """
+import os as _os
+import sys as _sys
+_sys.path.insert(1, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), _os.pardir, "net"))  # net/ (a flat run snapshot holds netpath.py next to this file)
+import netpath  # noqa: E402,F401
 import argparse
 import numbers
 import ast
@@ -41,7 +45,7 @@ import freeze as freeze_mod                                     # noqa: E402
 import losses                                                   # noqa: E402
 import model as M                                               # noqa: E402
 import train as T                                               # noqa: E402
-from lane_branch import KEY, build_settings, key_built, key_missing_scenes, older_built, older_key, older_missing_scenes, older_root      # noqa: E402
+from image_cache import KEY, build_settings, key_built, key_missing_scenes, older_built, older_key, older_missing_scenes, older_root      # noqa: E402
 from student_encoder import newest_checkpoint                   # noqa: E402
 
 SMOKE = dict(steps=20, warmup=5, eval_every=10, save_every=10, keep=1, log_every=5, keep_steps=[])      # keep_steps: the engine refuses a step above `steps` or off the save_every grid (t26 lists 6000 .. 36000)
@@ -65,9 +69,9 @@ def _git(args, cwd, text=True):
 
 
 def dirty(root):
-    """uncommitted files of training/ (names relative to it; renames give the new name, untracked folders are listed file by file), or
+    """uncommitted files of training/ (names relative to it) and of net/ (names "net/..."), renames with the new name, untracked folders listed file by file, or
     None when the state cannot be read (not a repository, no git)"""
-    out = _git(["status", "--porcelain", "-z", "-uall", "--", "training"], root)
+    out = _git(["status", "--porcelain", "-z", "-uall", "--", "training", "net"], root)
     if out is None:
         return None
     names, parts = [], out.split("\0")
@@ -75,7 +79,8 @@ def dirty(root):
     while i < len(parts):
         e = parts[i]
         if len(e) > 3:
-            names.append(e[3:].split("training/", 1)[-1])
+            path = e[3:]
+            names.append(path.split("training/", 1)[-1] if "training/" in path else path[path.find("net/"):])
             if e[0] in "RC":                                     # -z: the old name of a rename / copy follows as its own entry
                 i += 1
         i += 1
@@ -160,17 +165,17 @@ def older_cache_findings(lane_images, cfg):
     a half-built cache fails at its first missing frame, perhaps only in the first evaluation, hours into the run"""
     scenes, built, key = set(cfg.train_scenes) | set(cfg.val_scenes), older_built(lane_images), older_key(cfg.n_cam, cfg.cam_stride)
     if not os.path.isdir(older_root(lane_images)):
-        return [f"model.student_frames 'all' reads the older frames' images from {cfg.lane_images}/sweeps: it does not exist (python training/lane_branch.py build-cache-older <config>)"]
+        return [f"model.student_frames 'all' reads the older frames' images from {cfg.lane_images}/sweeps: it does not exist (python training/build_image_cache.py build-cache-older <config>)"]
     if not scenes:
         return ["model.student_frames 'all': the config names no scenes (a split), so the older-frame cache cannot be checked against them: use a split"]
     if key not in built:
-        return [f"model.student_frames 'all': {cfg.lane_images}/sweeps has no finished build for {key} (BUILT.json lists {sorted(built) or 'nothing'}; python training/lane_branch.py build-cache-older <config>)"]
+        return [f"model.student_frames 'all': {cfg.lane_images}/sweeps has no finished build for {key} (BUILT.json lists {sorted(built) or 'nothing'}; python training/build_image_cache.py build-cache-older <config>)"]
     if built[key].get("settings") != build_settings():
         return [f"model.student_frames 'all': the build of {key} in {cfg.lane_images}/sweeps was made with {built[key].get('settings', 'no recorded settings (a marker of an older builder)')}, the builder now makes "
-                f"{build_settings()}: build it again (python training/lane_branch.py build-cache-older <config> in a new folder)"]
+                f"{build_settings()}: build it again (python training/build_image_cache.py build-cache-older <config> in a new folder)"]
     missing = older_missing_scenes(lane_images, cfg.n_cam, cfg.cam_stride, scenes)
     return [f"model.student_frames 'all': the finished build of {key} in {cfg.lane_images}/sweeps lacks {len(missing)} of the config's {len(scenes)} scenes, e.g. {missing[:3]} "
-            "(python training/lane_branch.py build-cache-older <config> with this config)"] if missing else []
+            "(python training/build_image_cache.py build-cache-older <config> with this config)"] if missing else []
 
 
 def key_cache_findings(lane_images, cfg):
@@ -180,14 +185,14 @@ def key_cache_findings(lane_images, cfg):
     if not scenes:
         return []                                                       # older_cache_findings says so
     if KEY not in built:
-        return [f"model.student_frames 'all': {cfg.lane_images} has no finished key-frame build (BUILT.json lists {sorted(built) or 'nothing'}; python training/lane_branch.py build-cache <config>: "
+        return [f"model.student_frames 'all': {cfg.lane_images} has no finished key-frame build (BUILT.json lists {sorted(built) or 'nothing'}; python training/build_image_cache.py build-cache <config>: "
                 "resumable, it writes the marker when every sample is through)"]
     if built[KEY].get("settings") != build_settings():
         return [f"model.student_frames 'all': the key frames in {cfg.lane_images} were made with {built[KEY].get('settings', 'no recorded settings (a marker of an older builder)')}, the builder now makes "
-                f"{build_settings()}: build them again (python training/lane_branch.py build-cache <config> in a new folder)"]
+                f"{build_settings()}: build them again (python training/build_image_cache.py build-cache <config> in a new folder)"]
     missing = key_missing_scenes(lane_images, scenes)
     return [f"model.student_frames 'all': the finished key-frame build in {cfg.lane_images} lacks {len(missing)} of the config's {len(scenes)} scenes, e.g. {missing[:3]} "
-            "(python training/lane_branch.py build-cache <config> with this config)"] if missing else []
+            "(python training/build_image_cache.py build-cache <config> with this config)"] if missing else []
 
 
 def read_resolved(path):
@@ -496,7 +501,7 @@ def _selftest():
         os.makedirs(os.path.join(tmp, "rel_cache"))
         pr, _ = check(write(feature_cache="rel_cache"), tmp)
         assert pr == [], pr
-        # uncommitted files of training/: renames, spaces, untracked folders; no repository = unknown
+        # uncommitted files of training/ and net/: renames, spaces, untracked folders; no repository = unknown
         repo = os.path.join(tmp, "repo")
         os.makedirs(os.path.join(repo, "training"))
         git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
@@ -509,7 +514,9 @@ def _selftest():
         os.makedirs(os.path.join(repo, "training", "sub dir"))
         open(os.path.join(repo, "training", "sub dir", "c d.py"), "w").write("y = 1\n")
         subprocess.run(git + ["mv", "training/old.py", "training/new.py"], cwd=repo, check=True, capture_output=True)
-        assert sorted(dirty(repo)) == ["a.py", "new.py", "sub dir/c d.py"], dirty(repo)
+        os.makedirs(os.path.join(repo, "net", "model"))
+        open(os.path.join(repo, "net", "model", "m.py"), "w").write("z = 1\n")
+        assert sorted(dirty(repo)) == ["a.py", "net/model/m.py", "new.py", "sub dir/c d.py"], dirty(repo)
         assert dirty(os.path.join(tmp, "data")) is None or isinstance(dirty(os.path.join(tmp, "data")), list)    # inside the outer repo or not: no crash
         # GT identity against a tagged released version
         os.makedirs(os.path.join(repo, "GtGenerator"))
@@ -559,7 +566,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("config", nargs="?")
     ap.add_argument("--write-smoke", metavar="DIR")
-    ap.add_argument("--require-clean", action="store_true", help="uncommitted files of training/ are a problem")
+    ap.add_argument("--require-clean", action="store_true", help="uncommitted files of training/ or net/ are a problem")
     ap.add_argument("--expect-gt", default="", help="GT signature the base was trained on (when the config has no init_from)")
     a = ap.parse_args()
     if not a.config:

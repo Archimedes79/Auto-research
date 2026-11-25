@@ -16,6 +16,7 @@ import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bevfusion_camera import DEPTHS, bevfusion_ida  # noqa: E402
 from camera_encoder import nuscenes_front_ida  # noqa: E402
 from feature_cache import FEAT_HW, N_CTX, N_PROB, CachedBEVFusionModel  # noqa: E402

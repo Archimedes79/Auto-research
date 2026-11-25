@@ -14,7 +14,7 @@ features - the oracle gate at stride 8 was too kind, plan 10.1):
 Lane lines vary per sample (offset, spacing, yaw): a fixed position would let a per-cell prior solve them.
 Stored in `temp/cache/s1_synth.pt` (derived data, not in git). Build: python studies/early/synthetic_s1_data.py build [n_train n_val] (without arguments: the self-test)
 The real data gets the same dict layout (prob, ctx, K, T_cam_car, hw, gt, mask, scene) in the S1a driver (to build, from
-training/feature_cache.py and training/gt_bev.py).
+net/prep/feature_cache.py and net/prep/gt_bev.py).
 """
 import os
 import random
@@ -25,6 +25,7 @@ import torch.nn.functional as F
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))     # the bev_fusion folder
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.join(ROOT, "tests"))                           # test_oracle_lift (a gate)
 sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
 from lift_pd import Grid, LiftPD  # noqa: E402

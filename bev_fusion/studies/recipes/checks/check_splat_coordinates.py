@@ -15,11 +15,13 @@ Variants (all with the same velocity head reading the feature channels vx, vy):
 Measured per case: centre error of the four objects (m), mean IoU of the three cars at 0.5, lane lines' mean lateral
 error (m). Run from bev_fusion: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/check_splat_coordinates.py
 """
+import os
 import sys
 
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "temp/checks")
 from check_splat_scenes import (DT, G, expected_scene, measure, pass_through_head,  # noqa: E402
                                 source_scene)

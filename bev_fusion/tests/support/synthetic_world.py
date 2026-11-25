@@ -12,6 +12,7 @@ frame (x forward, y left, z up), plus the ego speed v and yaw rate omega. From i
   the EXACT constant-turn-rate ego motion, headings and velocity vectors rotated into the new axes
 Run the self-test: python tests/support/synthetic_world.py   (from the bev_fusion folder)
 """
+import os
 import math
 import random
 from dataclasses import dataclass, field, replace
@@ -230,6 +231,7 @@ def gt_bev(scene, grid, ss=4):
 def _selftest():
     import sys
     sys.path.insert(0, "training")
+    sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
     from lift_pd import Grid
     rng = random.Random(3)
     sc = Scene([Box(20.0, 0.0, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0),

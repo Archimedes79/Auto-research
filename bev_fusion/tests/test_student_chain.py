@@ -43,7 +43,7 @@ import torch
 import torch.nn as nn
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), ROOT, os.path.join(ROOT, "..")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), ROOT, os.path.join(ROOT, "..")]
 import model as M  # noqa: E402
 import student_encoder as S  # noqa: E402
 import synthetic_world as sw  # noqa: E402
@@ -667,13 +667,13 @@ tr.train()
 print("K: the dataset item's lane_img is the image of frames[0]")
 from torchvision.io import decode_jpeg, encode_jpeg, write_file  # noqa: E402
 import feature_cache as FC  # noqa: E402
-import lane_branch as LB  # noqa: E402
+import image_cache as IC  # noqa: E402
 img_root = os.path.join(tmp, "imgs")
 toks = ["aa" + "0" * 30, "bb" + "1" * 30]                                   # current frame, older frame (sample_data tokens)
 rng = torch.Generator().manual_seed(3)
 disk = {}
 for tok in toks:
-    pth = LB.image_path(img_root, tok)
+    pth = IC.image_path(img_root, tok)
     os.makedirs(os.path.dirname(pth), exist_ok=True)
     jp = encode_jpeg(torch.randint(0, 256, (3, 16, 24), dtype=torch.uint8, generator=rng), quality=95)
     write_file(pth, jp)

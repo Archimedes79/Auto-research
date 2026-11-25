@@ -23,6 +23,7 @@ import torch
 from torch import nn
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 import toy_train as TT  # noqa: E402
 import train as T  # noqa: E402
@@ -160,16 +161,17 @@ with tempfile.TemporaryDirectory() as d:
     # end to end, train.py as a script with a config that does not exist (the check comes before the config is read)
     live_ar = os.path.abspath(os.path.join(BF, "..", "autoresearch"))
     shutil.copy(os.path.join(BF, "training", "train.py"), os.path.join(code, "train.py"))
-    refuse = ("import runpy, sys\nlive, siblings, script = sys.argv[1:4]\nsys.path[:0] = [live, siblings]\nsys.argv = [script, 'no_such_config.json']\n"
+    refuse = ("import runpy, sys\nlive, siblings, script = sys.argv[1:4]\nsys.path[:0] = [live, *siblings.split(__import__('os').pathsep)]\nsys.argv = [script, 'no_such_config.json']\n"
               "runpy.run_path(script, run_name='__main__')\n")
-    p = subprocess.run([sys.executable, "-c", refuse, live_ar, os.path.join(BF, "training"), os.path.join(code, "train.py")], capture_output=True, text=True, cwd=BF)
+    p = subprocess.run([sys.executable, "-c", refuse, live_ar, os.pathsep.join([os.path.join(BF, "training"), *[os.path.join(BF, "net", d) for d in ("", "prep", "model", "loss")]]), os.path.join(code, "train.py")],
+                       capture_output=True, text=True, cwd=BF)
     check(p.returncode != 0 and "a pinned trainkit lies next to the script" in p.stderr and "no_such_config" not in p.stderr, "as a script: the live trainkit imported over a pinned copy -> refused before the config is read")
     p = subprocess.run([sys.executable, os.path.join("training", "train.py"), "no_such_config.json"], capture_output=True, text=True, cwd=BF)
     check(p.stdout.startswith("trainkit: the live copy ") and "no pinned copy" in p.stdout.splitlines()[0], "as a script, no pinned copy: the first line of the log names the live trainkit")
     shutil.rmtree(os.path.join(code, "trainkit"))
     shutil.copytree(os.path.join(live_ar, "trainkit"), os.path.join(code, "trainkit"), ignore=shutil.ignore_patterns("__pycache__"))
     p = subprocess.run([sys.executable, os.path.join(code, "train.py"), "no_such_config.json"], capture_output=True, text=True, cwd=BF,
-                       env={**os.environ, "PYTHONPATH": os.path.join(BF, "training")})
+                       env={**os.environ, "PYTHONPATH": os.pathsep.join([os.path.join(BF, "training"), *[os.path.join(BF, "net", d) for d in ("", "prep", "model", "loss")]])})
     check(p.stdout.startswith("trainkit: the pinned copy " + os.path.join(code, "trainkit")), "as a script from a snapshot with the copy next to it: the pinned copy runs and the log says so")
 
 print("TRAIN GUARDS: " + ("PASS" if not fails else f"FAIL ({len(fails)})"))

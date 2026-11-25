@@ -1,4 +1,4 @@
-"""The split lists (`splits/*.json`), `training/splits.py` (resolve, manifest, split.json) and the Training hook that calls it. Known answers, no data, no GPU.
+"""The split lists (`splits/*.json`), `net/prep/splits.py` (resolve, manifest, split.json) and the Training hook that calls it. Known answers, no data, no GPU.
 
   1. the files: `large` = exactly the lists of the stored config t16_full.json (428 / 82 scenes), `xl` = those of t17_data.json (700 / 82, large inside it), `small` a
      subset of `large` (60 / 10); train and val never share a scene; every file names a GtGenerator version of GtGenerator/versions.csv; train scenes are official nuScenes train scenes, val scenes official val scenes
@@ -19,6 +19,7 @@ import tempfile
 
 ROOT = os.getcwd()
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.join(ROOT, "..", "autoresearch"))
 import splits as S  # noqa: E402
 
@@ -94,19 +95,19 @@ try:
 except ImportError as e:
     check(False, f"train.py not importable here ({e}): run the test in the gcar environment")
 with tempfile.TemporaryDirectory() as tmp:
-    p = subprocess.run([sys.executable, "training/splits.py", "resolve"], input=json.dumps(dict(inline, split="xl")), capture_output=True, text=True)
+    p = subprocess.run([sys.executable, "net/prep/splits.py", "resolve"], input=json.dumps(dict(inline, split="xl")), capture_output=True, text=True)
     check(p.returncode == 0 and json.loads(p.stdout) == S.resolve(dict(inline, split="xl")), "the command line (stdin -> stdout) gives the same as resolve()")
-    p = subprocess.run([sys.executable, "training/splits.py", "names", "small"], capture_output=True, text=True)
+    p = subprocess.run([sys.executable, "net/prep/splits.py", "names", "small"], capture_output=True, text=True)
     check(p.returncode == 0 and p.stdout.split("\n")[:-1] == small["train"] + small["val"], "names: the scenes of a split, train then val, one per line (the format of gt_scenes.py names)")
-    p = subprocess.run([sys.executable, "training/splits.py", "resolve"], input=json.dumps(dict(inline, split="nope")), capture_output=True, text=True)
+    p = subprocess.run([sys.executable, "net/prep/splits.py", "resolve"], input=json.dumps(dict(inline, split="nope")), capture_output=True, text=True)
     check(p.returncode == 1 and "no split 'nope'" in p.stderr and "large" in p.stderr, "an unknown split on the command line: exit 1, the message names the splits that exist")
 
 # 3 the Training hook
 from Training import compose as C  # noqa: E402
 with tempfile.TemporaryDirectory() as tmp:
     block = json.load(open("project.json"))["training"]
-    check(block.get("resolve") == "python3 training/splits.py resolve", "project.json: training.resolve is the splits.py command (the hook is live)")
-    check(json.load(open("project.json")).get("package", {}).get("split_record") == "python3 training/splits.py split-json {run_dir} {out_dir}", "project.json: package.split_record is the splits.py command (package.py writes results/<id>/split.json with it)")
+    check(block.get("resolve") == "python3 net/prep/splits.py resolve", "project.json: training.resolve is the splits.py command (the hook is live)")
+    check(json.load(open("project.json")).get("package", {}).get("split_record") == "python3 net/prep/splits.py split-json {run_dir} {out_dir}", "project.json: package.split_record is the splits.py command (package.py writes results/<id>/split.json with it)")
     base = os.path.join(tmp, "base.json")
     json.dump(dict(inline, split="small"), open(base, "w"))
     plan = C.plan_start(ROOT, block, base, "split.test", [], [], no_card=True)

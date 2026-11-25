@@ -1,12 +1,14 @@
 """One-off: why is the zero-crossing line F1 near 0? On val samples of a run's last checkpoint: the predicted distance field
 on the GT line cells (GT distance <= 0.25 m) and elsewhere, the share of GT line cells where the prediction is <= 0.25 m
 (the decoder's threshold), and the line-mask probability on GT line cells vs other camera cells."""
+import os
 import sys
 
 import numpy as np
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, ".")
 from evaluation.bev_probe import load_run, predictions  # noqa: E402
 from train import forward_loss, make_datasets, make_loader, val_subset  # noqa: E402

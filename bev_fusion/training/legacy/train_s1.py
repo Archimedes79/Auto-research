@@ -21,6 +21,7 @@ import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))                        # training/legacy/ (moved 2026-10-31)
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))    # training/: the live blocks
+sys.path[1:1] = [os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir), "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))   # the bev_fusion folder: evaluation/
 from evaluation.metrics import RANGE_BINS, SegMeter, bin_label  # noqa: E402
 from losses import soft_bce, soft_iou_loss  # noqa: E402

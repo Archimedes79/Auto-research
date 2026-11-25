@@ -1,12 +1,14 @@
 """One-off: the oracle lift (tests/test_oracle_lift.py) at the REAL encoder's resolution - DualBEV's features are at
 stride 16 of the 256 x 704 input (16 x 44), the gate test runs at stride 8 (32 x 88). Same 6 scenes, same scoring.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/check_oracle_lift_stride16.py"""
+import os
 import random
 import sys
 
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests")
 sys.path.insert(0, "tests/support")
 from lift_pd import Grid  # noqa: E402

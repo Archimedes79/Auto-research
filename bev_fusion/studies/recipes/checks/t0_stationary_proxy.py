@@ -15,7 +15,7 @@ import cv2
 import numpy as np
 import torch
 
-sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
+sys.path[:0] = [".", "training", "net/prep", "net/model", "net/loss"]                    # the bev_fusion folder (autogt) and training/
 from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 

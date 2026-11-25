@@ -9,7 +9,7 @@ numbers) and is keyed by the prediction time offset dt (seconds; dt = 0 is the c
   IoU_t = TP / (TP + FP + FN) with TP the mean of the two true-positive counts (t = 0 is the plain IoU).
 - lines (SegMeter.add_lines): the line is decoded from the unsigned distance field (metres) as its minimum across the
   line ("zero crossing" of the field's slope): cells that are a local minimum along x or y and <= res / 2 (the GT
-  mask rule of training/gt_bev.py); precision / recall / F1 of those cells at the same tolerances, plus the mean
+  mask rule of net/prep/gt_bev.py); precision / recall / F1 of those cells at the same tolerances, plus the mean
   absolute field error on cells with GT distance < 1 m (the sub-cell accuracy the loss trains, plan 8.4).
 - directions (SegMeter.add_directions, the 1 m centre-line head): the mean absolute signed angle (rad, 0 .. pi) between the predicted (cos, sin) and the GT
   direction over the GT cells of the layer, `<layer>:dir` / angle_mae.
@@ -27,8 +27,8 @@ numbers) and is keyed by the prediction time offset dt (seconds; dt = 0 is the c
   DetMeter.frame_velocity / reduce_velocity (scope: all boxes of the class, no range bins), because most vehicles stand and the plain AVE hides it.
 - latency: ms_per_frame (warm-up, CUDA synchronize, median over N, batch 1); only valid on an idle GPU.
 - report: one flat dict "task/dt+0.00/name/.../metric" (flatten / unflatten round trip) and a printable table.
-Box dicts as training/object_head.py decode(): group, score, cx, cy (m, ego frame), length, width, yaw or radius, vx,
-vy; gt_boxes_from_meta() converts training/gt_bev.py meta["boxes"].
+Box dicts as net/model/object_head.py decode(): group, score, cx, cy (m, ego frame), length, width, yaw or radius, vx,
+vy; gt_boxes_from_meta() converts net/prep/gt_bev.py meta["boxes"].
 The comparison itself (cell counts and tolerant counts, matching, the errors of a matched pair, average precision) is not here but in
 autoresearch/Evaluation/comparison/ (maps.py, boxes.py; read its README.md): this file adds what is specific to the BEV system (range bins,
 field of view, circles for pedestrians, dt keys, the known / unknown split, the lines) and calls that core. `match`, `ap_nuscenes`,
@@ -210,7 +210,7 @@ class SegMeter:
 
 # ------------------------------------------------------------------------------------------------ detection
 def gt_boxes_from_meta(boxes, circle_groups=CIRCLE_GROUPS, observed_only=True):
-    """training/gt_bev.py meta['boxes'] -> box dicts (size = [w, l, h]); circle groups get radius max(l, w) / 2.
+    """net/prep/gt_bev.py meta['boxes'] -> box dicts (size = [w, l, h]); circle groups get radius max(l, w) / 2.
     observed_only: drop boxes without any lidar / radar point (meta 'observed' == False), as the nuScenes detection
     evaluation does; the training labels ignore them too (review 2026-10-26)."""
     out = []
@@ -458,6 +458,7 @@ def _selftest():
     import os
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training"))
+    sys.path[1:1] = [os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
     from lift_pd import Grid
     g = Grid()                                            # x 0..60, y -26..26, 0.5 m: 120 x 104 cells
     X, Y = g.nx, g.ny

@@ -10,7 +10,7 @@ import sys
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")]]
 from camera_encoder import depth_centres  # noqa: E402
 from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset  # noqa: E402
 from model import ModelConfig  # noqa: E402

@@ -3,13 +3,13 @@ the fusion network (an extra loss per sensor, and a probe for sensor-specific fa
 
 Same techniques as the fusion decoder (plan.md sections 2, 6-8), only the radar branch is missing:
 - image encoder (swappable): SmallImageEncoder (ResNet-18 stages to stride 8, from scratch, for the synthetic world)
-  or the pre-trained FrontCameraEncoder of training/camera_encoder.py (nuScenes); both give a depth distribution over
+  or the pre-trained FrontCameraEncoder of net/model/camera_encoder.py (nuScenes); both give a depth distribution over
   the depth bins and context channels per feature cell
-- lift PD (training/lift_pd.py) with a height slice at z = 0 and vertical oversampling (the oracle-lift gate's fix)
+- lift PD (net/model/lift_pd.py) with a height slice at z = 0 and vertical oversampling (the oracle-lift gate's fix)
 - time: the past frames' BEVs are moved to the current time by the ego motion with ONE splat each
-  (training/splat.py splat_window, mass channel kept); the trunk learns object motion from the displacement
-- trunk: training/bev_trunk.py; heads: a semantic head (lane lines, vehicles, pedestrians) and the object head of
-  training/object_head.py for ALL objects (static and moving: a camera sees both)
+  (net/model/splat.py splat_window, mass channel kept); the trunk learns object motion from the displacement
+- trunk: net/model/bev_trunk.py; heads: a semantic head (lane lines, vehicles, pedestrians) and the object head of
+  net/model/object_head.py for ALL objects (static and moving: a camera sees both)
 Run the self-test: python training/legacy/camera_decoder.py
 """
 import os
@@ -22,6 +22,7 @@ import torchvision
 _TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
 if _TRAINING not in sys.path:
     sys.path.insert(0, _TRAINING)
+    sys.path[1:1] = [os.path.join(_TRAINING, os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bev_trunk import BEVTrunk  # noqa: E402
 from lift_pd import Grid, LiftPD  # noqa: E402
 from object_head import GROUPS, ObjectHead  # noqa: E402

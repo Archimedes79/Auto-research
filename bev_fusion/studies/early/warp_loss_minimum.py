@@ -18,6 +18,7 @@ Result 2026-10-26: none holds - warp MSE falls 20x (drift 0.32), + pooled 16x (0
 + smoothness 7x (0.21), Gaussian splat + blurred target 10x (0.63), coarse velocity 1 m 7x (0.52), 2 m 4x (0.88).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/warp_loss_minimum.py
 """
+import os
 import random
 import sys
 
@@ -25,6 +26,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 from temporal import gaussian_splat, landing, propagate, steps_tensor  # noqa: E402
 from flow_refine import G, sample, smoothness, true_flow  # noqa: E402

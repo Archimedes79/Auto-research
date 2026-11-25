@@ -704,7 +704,7 @@ def cmd_report(a, rest) -> int:
                 print(f"report: `{' '.join(cmd)}` failed ({code}); the page is made without those pictures")
     env = dict(os.environ, AR_PROJECT=ROOT)
     tool = os.path.join(ROOT, "..", "autoresearch", "tools", "run_report.py")
-    extra = ["--extra-gops", "frozen DualBEV image heads (71 GFLOPs per frame as stated in training/feature_cache.py, unit not verified: if they are MACs the figure doubles; the BEVFusion heads of a dual chain are not counted)=71"]
+    extra = ["--extra-gops", "frozen DualBEV image heads (71 GFLOPs per frame as stated in net/prep/feature_cache.py, unit not verified: if they are MACs the figure doubles; the BEVFusion heads of a dual chain are not counted)=71"]
     return subprocess.call([sys.executable, tool, a.run, "--note", REPORT_NOTE] + extra + (["--vs"] + r.vs if r.vs else [])
                            + (["--val-table", r.val_table] if r.val_table else []) + (["--train-table", r.train_table] if r.train_table else []), env=env)
 

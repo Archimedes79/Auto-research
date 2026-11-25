@@ -10,12 +10,14 @@ oversampling (4 sub-heights per 0.5 m slice, averaged). Feature resolution: full
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_oracle_lift.py [out.png]
 """
 import random
+import os
 import sys
 
 import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 from lift_pd import Grid, build_table, lift_pd  # noqa: E402
 from synthetic_world import camera, front_camera, random_scene  # noqa: E402

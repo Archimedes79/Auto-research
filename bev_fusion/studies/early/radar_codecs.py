@@ -18,6 +18,7 @@ leaky + identity start); cv = 5-fold cross-validation over scenes, paired codec 
 Results: tests/README.md and plan.md section 3.4.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python -u studies/early/radar_codecs.py [steps] [e | f | cv [seeds]]
 """
+import os
 import math
 import sys
 
@@ -27,6 +28,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import radar_bev as rb  # noqa: E402
 import radar_recon_test as rt  # noqa: E402
 from lift_pd import Grid  # noqa: E402

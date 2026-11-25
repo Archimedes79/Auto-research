@@ -38,6 +38,7 @@ brightness, on occupied cells).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_refine.py [--quick] [--seed N] [--prior 1e-3] [--ent 5e-3]
     [--arms H,H+R4,0+R4,H+R4+prior,S,S+R4,0+P4,S+P4,S+D,S+D+P4,W,S+R4+smooth,H+R4+label,S+D+R4+smooth,S+DD+R4+smooth] [--smooth 0.05]
 """
+import os
 import random
 import sys
 import time
@@ -45,6 +46,7 @@ import time
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 from flow_viz import flow_rgb, wheel  # noqa: E402
 from temporal import FlowPyramid, FlowRefine, TemporalPropagation, doppler_update, propagate  # noqa: E402

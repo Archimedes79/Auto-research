@@ -1,4 +1,4 @@
-"""Synthetic check of the window splat (training/splat.py: chain_positions + splat_window, the owner 2026-10-25):
+"""Synthetic check of the window splat (net/model/splat.py: chain_positions + splat_window, the owner 2026-10-25):
 each of the last K original frames is brought into the current time with ONE splat, its coordinates chained
 analytically over the per-frame ego steps (speed and yaw rate may change every frame). Compared with chaining the
 resampled maps frame by frame.
@@ -11,6 +11,7 @@ unknown cells: the share of the grid with mass 0, and how many of the cells the 
 grid) were reported as known (should be 0).
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python temp/checks/check_splat_window.py <out.png>
 """
+import os
 import math
 import sys
 
@@ -20,6 +21,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 import torch  # noqa: E402
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from splat import VelocityHead, splat, splat_bev, splat_window  # noqa: E402
 

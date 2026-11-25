@@ -30,7 +30,7 @@ import tempfile
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")]]
 os.chdir(ROOT)
 sys.path.append(ROOT)
 sys.path.append(os.path.dirname(ROOT))                          # GtGenerator (synthetic GT of losses.synthetic_gt): the repo root since its move out of bev_fusion
@@ -41,7 +41,8 @@ import train as tr  # noqa: E402
 from trainkit.checkpoint import warm_start  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from losses import NUSC_GROUPS, BEVLoss, LossConfig, synthetic_gt  # noqa: E402
-from object_head import ObjectHead, _gather, build_targets, decode, head_loss, targets_as_output  # noqa: E402
+from object_head import ObjectHead, decode, targets_as_output  # noqa: E402
+from object_loss import _gather, build_targets, head_loss  # noqa: E402,F401
 
 torch.set_num_threads(2)
 torch.manual_seed(0)

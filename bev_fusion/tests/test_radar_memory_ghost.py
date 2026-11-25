@@ -12,11 +12,13 @@ origin, ego standing still, a dense radar: a detection in every cell), a blob of
                   or the vectors of several radars have to cover. The test pins the size of this ghost so a change shows.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test_radar_memory_ghost.py
 """
+import os
 import sys
 
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from lift_pd import Grid  # noqa: E402
 from splat import grid_points  # noqa: E402
 from temporal_fusion import TemporalFusion, _observe, pattern  # noqa: E402

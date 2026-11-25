@@ -7,6 +7,7 @@ import time
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from train import TrainConfig, make_datasets, make_loader  # noqa: E402
 
 cfg = TrainConfig(**json.load(open("temp/train/speed_b4.json")))

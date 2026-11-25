@@ -75,7 +75,7 @@ def quick():
                 assert bev_eval.identity(run)["adapter"] != a["adapter"], f"{edited} is part of the identity"
             finally:
                 bev_eval._file_hash = file_hash
-        assert a["code"].startswith("live training/ "), "a run without a code snapshot is identified by the live training/ code it will be imported from"
+        assert a["code"].startswith("live code "), "a run without a code snapshot is identified by the live training/ and net/ code it will be imported from"
         data = bytearray(open(ck, "rb").read())
         data[25_000] ^= 1                                                                                 # a byte in the MIDDLE of the file
         open(ck, "wb").write(bytes(data))

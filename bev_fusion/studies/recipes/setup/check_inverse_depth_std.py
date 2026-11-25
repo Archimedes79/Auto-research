@@ -14,6 +14,7 @@ from PIL import Image
 from pyquaternion import Quaternion
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from camera_encoder import (FrontCameraEncoder, IMG_MEAN, IMG_STD, camera_vector, depth_centres,  # noqa: E402
                             nuscenes_front_ida)
 from nuscenes.nuscenes import NuScenes  # noqa: E402

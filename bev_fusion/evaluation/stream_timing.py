@@ -22,7 +22,7 @@ import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 OUT = os.environ.get("STREAM_OUT") or os.path.join(ROOT, "temp", "stream")      # where the json of a run is written (scratch)
-for sub in ("tests", "training"):
+for sub in ("tests", "training", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from model import ModelConfig  # noqa: E402

@@ -15,6 +15,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from camera_encoder import depth_centres  # noqa: E402
 from feature_cache import CachedFrontRadarDataset, FeatureStore  # noqa: E402
 from lift_pd import Grid, LiftPD  # noqa: E402

@@ -20,10 +20,13 @@ import time
 
 import torch
 
+import os
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 from bev_trunk import BEVTrunk  # noqa: E402
-from object_head import ObjectHead, TimeObjectHead, build_targets, decode, head_loss, propagate_boxes  # noqa: E402
+from object_head import ObjectHead, TimeObjectHead, decode, propagate_boxes  # noqa: E402
+from object_loss import build_targets, head_loss  # noqa: E402,F401
 from synthetic_world import random_scene  # noqa: E402
 from object_head_synth import DEV, G, evaluate, scene_boxes, scene_inputs  # noqa: E402
 

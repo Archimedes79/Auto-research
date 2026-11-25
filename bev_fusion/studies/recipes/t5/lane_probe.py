@@ -26,6 +26,7 @@ from PIL import Image
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))   # the bev_fusion folder
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, ROOT)
 from camera_encoder import IMG_MEAN, IMG_STD, FrontCameraEncoder, camera_vector, nuscenes_front_ida   # noqa: E402
 from evaluation.metrics import SegMeter, dilate                                                      # noqa: E402

@@ -25,6 +25,10 @@ Exit codes: 3 = a resource is short (free host RAM < 3 GB or more than 6 GB of t
 checkpoints and --resume is missing (eval-only: has none).
 Test: tests/test_student_encoder.py
 """
+import os as _os
+import sys as _sys
+_sys.path.insert(1, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), _os.pardir, "net"))  # net/ (a flat run snapshot holds netpath.py next to this file)
+import netpath  # noqa: E402,F401
 import argparse
 import contextlib
 import json
@@ -50,7 +54,7 @@ from trainkit.util import check_engine, prepare_run_dir, seed_all  # noqa: E402
 
 import splits  # noqa: E402
 from feature_cache import FeatureStore  # noqa: E402
-from lane_branch import image_path, load_image  # noqa: E402
+from image_cache import image_path, load_image  # noqa: E402
 from student_encoder import StudentEncoder, cell_maps, distill_terms, h8_warp_grid, load_trained, newest_checkpoint, total_of  # noqa: E402
 
 MIN_RAM_MB, MAX_GPU_MB = 3000, 6144                    # the resource gate: free host RAM, GPU memory already in use by others

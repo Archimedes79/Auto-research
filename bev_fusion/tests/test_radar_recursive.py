@@ -16,7 +16,7 @@
   F  plumbing of batch["radar_seq"]: interface.check_inputs knows it, train.to_device moves every set, augment.flip_batch mirrors every set (y, psi) of the flipped
      samples only, and the trainer's own loop (train.run_clip, flip_aug 1.0, loss stubbed) hands the model the mirrored sets; Precompute.radar_mask = the old maps.
      (The real-data part - radar_seq[0] = the radar_window 0.09 radar, each frame's newest sweep, about 54 points in the grid per key frame - is in the self-test of
-     training/nuscenes_dataset.py.)
+     net/prep/nuscenes_dataset.py.)
   G  mutants: nine planted bugs (radar carry ignored, radar frames in the wrong order, masks in the wrong order, radar state not carried, fused radar BEV cut by a
      detach, radar side loss without features / from the oldest frame, wrong sign of v / of omega in the radar's ego chains) each fail a check; the last four were
      found unguarded by the review of 2026-11-14.
@@ -31,7 +31,7 @@ import time
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests", "tests/support", "training", ".."):
+for sub in ("tests", "tests/support", "training", "net/prep", "net/model", "net/loss", ".."):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import model as M  # noqa: E402
 import train as T  # noqa: E402
@@ -452,7 +452,7 @@ for name, (src, top, model) in WANT.items():
     want_top = {"_about", "name"} | set(top) | ({"model"} if model else set())
     check(got["name"] == name and diff == want_top and all(got[k] == v for k, v in top.items()) and mdiff == set(model) and all(got["model"][k] == v for k, v in model.items()),
           f"{name}: differs from {'t21_pair4' if src is p4 else 't21_rec'} in {sorted(want_top - {'_about', 'name'})} and {sorted(model)} only")
-    cfg = T.TrainConfig(**{k: v for k, v in got.items() if not k.startswith("_") and k != "split"})      # ("split" is resolved to scene lists by training/splits.py before the trainer reads it)
+    cfg = T.TrainConfig(**{k: v for k, v in got.items() if not k.startswith("_") and k != "split"})      # ("split" is resolved to scene lists by net/prep/splits.py before the trainer reads it)
     check(not check_config(ModelConfig(**cfg.model)) and cfg.steps == 1500 and cfg.seed == 0 and cfg.init_from == "runs/t20_base_s0/ckpt_00006000.pt" and cfg.batch_size * cfg.accum == 6,
           f"{name}: its keys are TrainConfig fields, passes check_config, 1500 steps, seed 0, warm start t20_base_s0, 6 clips per step")
 

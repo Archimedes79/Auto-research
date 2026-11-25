@@ -41,10 +41,7 @@ import time
 
 import torch
 
-try:
-    from . import train as T
-except ImportError:                                   # run as a script
-    import train as T
+import train as T
 from trainkit.amp import make_scaler              # noqa: E402  (importing train put autoresearch/ on sys.path)
 from trainkit.checkpoint import warm_start        # noqa: E402
 

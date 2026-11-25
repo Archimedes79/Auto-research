@@ -39,10 +39,12 @@ MAP_KINDS = ("area", "line", "object", "dist", "centreline", "stationary")     #
 def use_code(run, code):
     """put the code folder first on sys.path: `code` if given, else RUN/code (it must hold precompute.py); returns its path"""
     folder = os.path.abspath(code) if code else os.path.join(os.path.abspath(run), "code")
-    if not os.path.exists(os.path.join(folder, "precompute.py")):
+    live = os.path.normpath(folder) == os.path.normpath(os.path.join(ROOT, "training"))     # the live code: training/ and the model folders behind it
+    model = [os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")] if live else []
+    if not os.path.exists(os.path.join(ROOT, "net", "prep", "precompute.py") if live else os.path.join(folder, "precompute.py")):
         raise SystemExit(f"{folder} has no precompute.py: a snapshot from before the five-layer build cannot be run here - "
                          f"use `--code training` to run its checkpoint under the live code")
-    for p in (os.path.join(ROOT, ".."), folder):                   # the repository (GtGenerator/) behind the code folder
+    for p in (os.path.join(ROOT, ".."), *model, folder):           # the repository (GtGenerator/) and the live model folders behind the code folder
         if p in sys.path:
             sys.path.remove(p)
         sys.path.insert(0, p)
@@ -140,7 +142,7 @@ def network_inputs(config, split="val", n=8, scene="", first=0, with_gt=True):
     item through the precompute step, without the ground truth, and passes interface.check_inputs; row = {index, token, next (the token of the
     next keyframe of the scene, "" at its end), cover_<map>, fan_equals_gt (when the ground truth was read)}. `config` = a training config
     (training/configs/*.json or runs/<name>/config.json): data, caches and the model's grid. The data loaders and the trainer come from the
-    code folder in use (use_code); they are not part of the network, which is why this lives here and not in training/precompute.py."""
+    code folder in use (use_code); they are not part of the network, which is why this lives here and not in net/prep/precompute.py."""
     import train as T
     from feature_cache import collate_cached
     from interface import check_inputs
@@ -189,7 +191,7 @@ def precompute_frames(config, split, n, scene, first, out, write_frames):
             torch.save(batch, os.path.join(out, f"{row['token']}.pt"))
     fan_gt = [r["fan_equals_gt"] for r in rows if "fan_equals_gt" in r]
     commit = subprocess.run(["git", "-C", ROOT, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
-    dirty = bool(subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "--", "training"], capture_output=True, text=True).stdout.strip())
+    dirty = bool(subprocess.run(["git", "-C", ROOT, "status", "--porcelain", "--", "training", "net"], capture_output=True, text=True).stdout.strip())
     summary = {"config": config, "split": split, "frames": len(rows), "code": commit + ("+dirty" if dirty else ""), "maps": list(MAPS),
                "radar_static_vr": cfg.model.get("rad_static_vr", 1.0), "radar_fan": "GtGenerator.coverage.radar_cells of the calibrated radar poses", "rows": rows}
     if write_frames:

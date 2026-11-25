@@ -56,7 +56,7 @@ from evaluation.bev_views import gt_boxes as _gt_boxes  # noqa: E402
 
 
 def gt_boxes(g, groups=None):
-    """the GT boxes of one sample (training/gt_bev.py meta) of the NUSC_GROUPS classes"""
+    """the GT boxes of one sample (net/prep/gt_bev.py meta) of the NUSC_GROUPS classes"""
     return _gt_boxes(g, [x for x, _ in chain().NUSC_GROUPS] if groups is None else groups)
 
 

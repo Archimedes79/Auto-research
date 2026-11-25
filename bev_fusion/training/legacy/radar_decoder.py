@@ -2,13 +2,13 @@
 
 Same techniques as the fusion decoder (plan.md sections 4-8), only the camera branch is missing:
 - time: every detection of the last sweeps is moved ONCE to the output time with the splat mathematics
-  (training/splat.py chain_positions): exact ego motion of its sweep's steps plus its measured radial motion
+  (net/model/splat.py chain_positions): exact ego motion of its sweep's steps plus its measured radial motion
   (Doppler along the original ray); the ray direction is rotated into the output axes; its age dt is kept
-- encoder: training/radar_bev.py (detections into their cells with count, mean properties - range, ray direction,
+- encoder: net/model/radar_bev.py (detections into their cells with count, mean properties - range, ray direction,
   Doppler as a circular code, RCS, age - and sub-cell offset; two 3 x 3 convs)
-- trunk: training/bev_trunk.py (3-stage ResNet pyramid + FPN back to 0.5 m)
+- trunk: net/model/bev_trunk.py (3-stage ResNet pyramid + FPN back to 0.5 m)
 - heads: a stationary-map head (1 logit per cell: occupied by something that does not move - road edges, guard rails,
-  parked objects) and the object head of training/object_head.py for MOVING objects (oriented boxes, circles, velocity)
+  parked objects) and the object head of net/model/object_head.py for MOVING objects (oriented boxes, circles, velocity)
 Run the self-test: python training/legacy/radar_decoder.py
 """
 import math
@@ -21,6 +21,7 @@ import torch.nn as nn
 _TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
 if _TRAINING not in sys.path:
     sys.path.insert(0, _TRAINING)
+    sys.path[1:1] = [os.path.join(_TRAINING, os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bev_trunk import BEVTrunk  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from object_head import GROUPS, ObjectHead  # noqa: E402

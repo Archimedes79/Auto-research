@@ -1,4 +1,4 @@
-"""Probe (plan 10.2 'depth head'): is BEVFusion's camera-only image side (training/bevfusion_camera.py, Swin-T + FPN + 1 x 1 depth conv at stride 8)
+"""Probe (plan 10.2 'depth head'): is BEVFusion's camera-only image side (net/model/bevfusion_camera.py, Swin-T + FPN + 1 x 1 depth conv at stride 8)
 wired right, and how does its depth compare with DualBEV's frozen DepthNet on the same real front images?
 Check: for cells in the central third of the image below the horizon, the flat-road depth (exact ray / ground-plane intersection from the calibrated
 camera, ego z = 0) against the network's expected depth; median expected depth per flat-road-depth band (cars on the road make the medians a bit
@@ -14,6 +14,7 @@ from PIL import Image
 from pyquaternion import Quaternion
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from bevfusion_camera import DEPTHS, BEVFusionImageSide, bevfusion_ida, frustum_pixels, load_image  # noqa: E402
 from camera_encoder import IMG_MEAN, IMG_STD, FrontCameraEncoder, camera_vector, depth_centres, nuscenes_front_ida  # noqa: E402
 

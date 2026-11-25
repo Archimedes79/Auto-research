@@ -37,16 +37,19 @@ import torch
 import torch.nn as nn
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), ROOT, os.path.join(ROOT, "..")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), ROOT, os.path.join(ROOT, "..")]
 import augment as AU  # noqa: E402
 import feature_cache as FC  # noqa: E402
 import interface as IF  # noqa: E402
-import lane_branch as LB  # noqa: E402
+import image_cache as IC  # noqa: E402
+import build_image_cache as BIC  # noqa: E402
 import model as M  # noqa: E402
 import startable as ST  # noqa: E402
 import student_encoder as S  # noqa: E402
 import train as T  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
+import batches as BT  # noqa: E402
+import cached_model as CM  # noqa: E402
 from model import CAMERAS, ModelConfig, check_config  # noqa: E402
 from test_slots import BASE, batch_for  # noqa: E402
 
@@ -678,26 +681,26 @@ for name, v in train_jitter_checks().items():
 print("F: window images on nuScenes mini")
 MINI = os.path.expanduser("~/data/nuscenes")
 HAVE_MINI = os.path.isdir(os.path.join(MINI, "v1.0-mini"))
-SWEEPS = "sweeps"                                                    # written out here, not LB.OLDER: a changed folder name must fail the test
+SWEEPS = "sweeps"                                                    # written out here, not IC.OLDER: a changed folder name must fail the test
 
 
 def data_checks():
     """the window images on the mini set: builder, marker, dataset item, collate; name -> bool (the temporary folder is removed by the caller)"""
     ok = {}
     root = tempfile.mkdtemp(prefix="imgs_", dir=tmp)
-    LB._DS = mini
-    LB._fill((root, toks))
-    LB._fill_older((root, toks))
+    IC._DS = mini
+    IC._fill((root, toks))
+    IC._fill_older((root, toks))
     want = {sd["token"] for t in toks for sd in walk(t, 2, 2)}
     got = {f[:-4] for d, _, fs in os.walk(os.path.join(root, SWEEPS)) for f in fs if f.endswith(".jpg")}
     ok["builder: _fill_older writes one JPEG per older frame (-2 and -4 sweeps of each sample) under <root>/sweeps, named by the frame's sample_data token (independent walk along prev)"] = got == want and len(want) == 6
     keys = {mini.gt.cam(t)["token"] for t in toks}
     ok["builder: the key frames are in <root>, not in sweeps, and the two sets are disjoint (the next key frame's oldest frame is at -6: no gap, no overlap)"] = \
-        all(os.path.exists(LB.image_path(root, k)) for k in keys) and not (keys & got) and not any(os.path.exists(LB.image_path(os.path.join(root, SWEEPS), k)) for k in keys)
+        all(os.path.exists(IC.image_path(root, k)) for k in keys) and not (keys & got) and not any(os.path.exists(IC.image_path(os.path.join(root, SWEEPS), k)) for k in keys)
     errs = [float((decode(os.path.join(root, SWEEPS), sd["token"]).float() - torch.tensor(mini._image_uint8(sd)).permute(2, 0, 1).float()).abs().mean()) for t in toks for sd in walk(t, 2, 2)]
     ok[f"builder: every older JPEG is the dataset's own image of that frame (resize + crop 256 x 704) within JPEG error (max {max(errs):.2f} of 255)"] = max(errs) < 3.0
-    before = {p: os.path.getmtime(p) for p in (LB.image_path(os.path.join(root, SWEEPS), sd["token"]) for t in toks for sd in walk(t, 2, 2))}
-    LB._fill_older((root, toks))
+    before = {p: os.path.getmtime(p) for p in (IC.image_path(os.path.join(root, SWEEPS), sd["token"]) for t in toks for sd in walk(t, 2, 2))}
+    IC._fill_older((root, toks))
     ok["builder: resumable (a second run rewrites nothing, no temporary file is left)"] = all(os.path.getmtime(p) == t_ for p, t_ in before.items()) and not any(".tmp" in f for _, _, fs in os.walk(root) for f in fs)
     # the dataset item
     cds = FC.CachedFrontRadarDataset(MINI, "v1.0-mini", store=StubStore(), n_cam=3, cam_stride=2, with_gt=False, lane_images=root, lane_images_older=True, nusc=mini.nusc)
@@ -713,7 +716,7 @@ def data_checks():
     ok["collate_cached: lane_img_old is (B, F - 1, 3, H, W) uint8 in item order, lane_img (B, 3, H, W)"] = tuple(batch["lane_img_old"].shape) == (2, 2, 3, 256, 704) and batch["lane_img_old"].dtype == torch.uint8 \
         and all(torch.equal(batch["lane_img_old"][i], items[i]["lane_img_old"]) for i in range(2)) and tuple(batch["lane_img"].shape) == (2, 3, 256, 704)
     miss = tempfile.mkdtemp(prefix="imgs_missing_", dir=tmp)
-    LB._fill((miss, toks[:1]))                                                      # the key frame, no sweeps
+    IC._fill((miss, toks[:1]))                                                      # the key frame, no sweeps
     d_miss = FC.CachedFrontRadarDataset(MINI, "v1.0-mini", store=StubStore(), n_cam=3, cam_stride=2, with_gt=False, lane_images=miss, lane_images_older=True, nusc=mini.nusc)
     ok["dataset: a missing older image is a FileNotFoundError that names build-cache-older"] = raises(FileNotFoundError, lambda: d_miss[d_miss.samples.index(toks[0])], "build-cache-older")
     ok["dataset: lane_images_older without lane_images, and with n_cam 1, is refused"] = \
@@ -725,25 +728,25 @@ def data_checks():
 def marker_checks():
     """the finished-build marker (BUILT.json) of build_cache(older=True): scenes, merged by a second build; startable.older_cache_findings reads it"""
     ok = {}
-    root, key = tempfile.mkdtemp(prefix="marker_", dir=tmp), LB.older_key(3, 2)
+    root, key = tempfile.mkdtemp(prefix="marker_", dir=tmp), IC.older_key(3, 2)
     s1, s2 = {scene_of(t) for t in toks[:2]}, {scene_of(toks[2])}
     with contextlib.redirect_stdout(_Capture()):
-        LB.build_cache([_subset(toks[:2])], root, 1, older=True)
-    bt = LB.older_built(root)
+        IC.build_cache([_subset(toks[:2])], root, 1, older=True)
+    bt = IC.older_built(root)
     ok["marker: build_cache(older=True) writes BUILT.json with the window and the scenes of the datasets, after every sample"] = set(bt) == {key} and bt[key]["scenes"] == sorted(s1) and "when" in bt[key]
     with contextlib.redirect_stdout(_Capture()):
-        LB.build_cache([_subset(toks[2:])], root, 1, older=True)
-    ok["marker: a second build of the same window is merged (the scenes of both)"] = LB.older_built(root)[key]["scenes"] == sorted(s1 | s2)
+        IC.build_cache([_subset(toks[2:])], root, 1, older=True)
+    ok["marker: a second build of the same window is merged (the scenes of both)"] = IC.older_built(root)[key]["scenes"] == sorted(s1 | s2)
     ok["marker: older_missing_scenes names the scenes no finished build of this window covers (an unknown scene, another stride, all of them without a marker)"] = \
-        LB.older_missing_scenes(root, 3, 2, s1 | s2) == [] and LB.older_missing_scenes(root, 3, 2, s1 | {"scene-9999"}) == ["scene-9999"] \
-        and LB.older_missing_scenes(root, 3, 4, s1) == sorted(s1) and LB.older_missing_scenes(os.path.join(tmp, "nothing"), 3, 2, s1) == sorted(s1)
+        IC.older_missing_scenes(root, 3, 2, s1 | s2) == [] and IC.older_missing_scenes(root, 3, 2, s1 | {"scene-9999"}) == ["scene-9999"] \
+        and IC.older_missing_scenes(root, 3, 4, s1) == sorted(s1) and IC.older_missing_scenes(os.path.join(tmp, "nothing"), 3, 2, s1) == sorted(s1)
     kroot = tempfile.mkdtemp(prefix="marker_keys_", dir=tmp)
     with contextlib.redirect_stdout(_Capture()):
-        LB.build_cache([_subset(toks[:1])], kroot, 1)
+        IC.build_cache([_subset(toks[:1])], kroot, 1)
     ok["marker: the key-frame build writes <root>/BUILT.json (key key_frames, its scenes), not a sweeps folder or an older-frame marker"] = \
-        LB.older_built(kroot) == {} and not os.path.exists(os.path.join(kroot, SWEEPS)) and set(LB.key_built(kroot)) == {LB.KEY} and LB.key_built(kroot)[LB.KEY]["scenes"] == [scene_of(toks[0])]
-    ok["marker: it records the builder's constants (JPEG quality, crop): the ones of the code now"] = LB.key_built(kroot)[LB.KEY]["settings"] == LB.build_settings() and bt[key]["settings"] == LB.build_settings() \
-        and LB.build_settings()["jpeg_quality"] == LB.JPEG_QUALITY and LB.build_settings()["hw"] == [256, 704]
+        IC.older_built(kroot) == {} and not os.path.exists(os.path.join(kroot, SWEEPS)) and set(IC.key_built(kroot)) == {IC.KEY} and IC.key_built(kroot)[IC.KEY]["scenes"] == [scene_of(toks[0])]
+    ok["marker: it records the builder's constants (JPEG quality, crop): the ones of the code now"] = IC.key_built(kroot)[IC.KEY]["settings"] == IC.build_settings() and bt[key]["settings"] == IC.build_settings() \
+        and IC.build_settings()["jpeg_quality"] == IC.JPEG_QUALITY and IC.build_settings()["hw"] == [256, 704]
     cfg = T.TrainConfig(name="x", device="cpu", lane_images="x", n_cam=3, cam_stride=2, train_scenes=tuple(s1), val_scenes=tuple(s2))
     ok["startable: a finished build that covers the config's scenes is no problem; a scene it lacks, another stride, no sweeps folder and no scene list are named"] = \
         ST.older_cache_findings(root, cfg) == [] \
@@ -754,20 +757,20 @@ def marker_checks():
     ok["startable: the key-frame marker is asked for too: one that covers the scenes is no problem, a scene it lacks, no marker and a cache made with other constants are named"] = \
         ST.key_cache_findings(kroot, kcfg) == [] and any("lacks 1 of the config's" in x and "scene-9999" in x for x in ST.key_cache_findings(kroot, dataclasses.replace(kcfg, val_scenes=("scene-9999",)))) \
         and any("no finished key-frame build" in x for x in ST.key_cache_findings(root, kcfg)) \
-        and any("were made with" in x for x in ST.key_cache_findings(_marker_with(kroot, settings=dict(LB.build_settings(), jpeg_quality=50)), kcfg)) \
-        and any("was made with" in x for x in ST.older_cache_findings(_marker_with(root, older=True, settings=dict(LB.build_settings(), hw=[1, 1])), cfg))
+        and any("were made with" in x for x in ST.key_cache_findings(_marker_with(kroot, settings=dict(IC.build_settings(), jpeg_quality=50)), kcfg)) \
+        and any("was made with" in x for x in ST.older_cache_findings(_marker_with(root, older=True, settings=dict(IC.build_settings(), hw=[1, 1])), cfg))
     return ok
 
 
 def _marker_with(src, older=False, **extra):
     """a copy of a cache folder's BUILT.json (key frames or the older frames) with `extra` added to its entry: the folder of the copy"""
     folder = tempfile.mkdtemp(prefix="marker_copy_", dir=tmp)
-    built = LB.older_built(src) if older else LB.key_built(src)
+    built = IC.older_built(src) if older else IC.key_built(src)
     for k in built:
         built[k] = dict(built[k], **extra)
     target = os.path.join(folder, SWEEPS) if older else folder
     os.makedirs(target, exist_ok=True)
-    json.dump({"built": built}, open(os.path.join(target, LB.BUILT), "w"))
+    json.dump({"built": built}, open(os.path.join(target, IC.BUILT), "w"))
     return folder
 
 
@@ -786,14 +789,14 @@ def crash_checks():
             return real(sd)
         d._image_uint8 = flaky
         with contextlib.redirect_stdout(_Capture()):
-            died = raises(RuntimeError, lambda: LB.build_cache([d], root, 1, older=older), "disk full")
+            died = raises(RuntimeError, lambda: IC.build_cache([d], root, 1, older=older), "disk full")
         folder = os.path.join(root, SWEEPS) if older else root
         made = {os.path.join(dp, f): os.path.getmtime(os.path.join(dp, f)) for dp, _, fs in os.walk(folder) for f in fs if f.endswith(".jpg") and (older or SWEEPS not in dp)}
-        marker = (LB.older_built if older else LB.key_built)(root)
+        marker = (IC.older_built if older else IC.key_built)(root)
         d._image_uint8 = real
         with contextlib.redirect_stdout(_Capture()):
-            LB.build_cache([d], root, 1, older=older)
-        marker2 = (LB.older_built if older else LB.key_built)(root)
+            IC.build_cache([d], root, 1, older=older)
+        marker2 = (IC.older_built if older else IC.key_built)(root)
         ok[f"{'an older-frame' if older else 'a key-frame'} build that crashes on its image after the first sample leaves no marker and keeps what it wrote; the rerun keeps those files and writes the marker"] = \
             died and marker == {} and len(made) == n_ok and bool(marker2) and all(os.path.getmtime(k) == t_ for k, t_ in made.items())
     return ok
@@ -806,22 +809,22 @@ def lock_checks():
     folder = tempfile.mkdtemp(prefix="lock_", dir=tmp)
     nusc = types.SimpleNamespace(get=lambda table, tok: {"scene_token": tok} if table == "sample" else {"name": tok})
     ds = lambda scene: types.SimpleNamespace(n_cam=3, cam_stride=2, samples=[scene], nusc=nusc)       # noqa: E731
-    real_read = LB._built
+    real_read = IC._built
 
     def slow_read(f):
         r = real_read(f)
         time.sleep(0.5)
         return r
-    LB._built = slow_read
+    IC._built = slow_read
     try:
-        procs = [mp.get_context("fork").Process(target=LB._mark_built, args=(folder, LB.KEY, [ds(sc)])) for sc in ("scene-A", "scene-B")]
+        procs = [mp.get_context("fork").Process(target=IC._mark_built, args=(folder, IC.KEY, [ds(sc)])) for sc in ("scene-A", "scene-B")]
         for q in procs:
             q.start()
         for q in procs:
             q.join()
     finally:
-        LB._built = real_read
-    ok["two builds marking one folder at once keep both scenes (lock file)"] = all(q.exitcode == 0 for q in procs) and real_read(folder)[LB.KEY]["scenes"] == ["scene-A", "scene-B"]
+        IC._built = real_read
+    ok["two builds marking one folder at once keep both scenes (lock file)"] = all(q.exitcode == 0 for q in procs) and real_read(folder)[IC.KEY]["scenes"] == ["scene-A", "scene-B"]
     return ok
 
 
@@ -834,7 +837,7 @@ def _subset(ts):
 
 
 def cli_checks():
-    """python training/lane_branch.py build-cache[-older] / check-cache[-older] end to end on one train and one val scene of mini, with the scene lists in the config"""
+    """python net/model/lane_branch.py build-cache[-older] / check-cache[-older] end to end on one train and one val scene of mini, with the scene lists in the config"""
     ok = {}
     from nuscenes.utils.splits import create_splits_scenes
     sp = create_splits_scenes()
@@ -844,13 +847,13 @@ def cli_checks():
     say = {}
     for cmd in ("build-cache", "build-cache-older", "check-cache", "check-cache-older"):
         with contextlib.redirect_stdout(_Capture()) as cap:
-            LB._cli([cmd, cfg_path, "--n", "3"])
+            BIC._cli([cmd, cfg_path, "--n", "3"])
         say[cmd] = cap.text
     n_key = len(os.listdir(root)) - 1 if os.path.isdir(os.path.join(root, SWEEPS)) else len(os.listdir(root))
     sweeps = [f for d, _, fs in os.walk(os.path.join(root, SWEEPS)) for f in fs if f.endswith(".jpg")]
     keys = [f for d, _, fs in os.walk(root) for f in fs if f.endswith(".jpg") and SWEEPS not in d]
     ok[f"cli: build-cache-older fills sweeps/ with two JPEGs per sample ({len(sweeps)} older images for {len(keys)} key frames) and BUILT.json covers both scenes of the config"] = \
-        len(sweeps) == 2 * len(keys) and set(LB.older_built(root)[LB.older_key(3, 2)]["scenes"]) == {sp["mini_train"][0], sp["mini_val"][0]} and "older frames of" in say["build-cache-older"]
+        len(sweeps) == 2 * len(keys) and set(IC.older_built(root)[IC.older_key(3, 2)]["scenes"]) == {sp["mini_train"][0], sp["mini_val"][0]} and "older frames of" in say["build-cache-older"]
     ok["cli: check-cache-older compares the val frames with the dataset's own image and the marker with the config's scenes; check-cache the key frames"] = \
         "older-frame cache vs dataset image" in say["check-cache-older"] and "BUILT.json covers all 2 scenes" in say["check-cache-older"] and "cache vs dataset image" in say["check-cache"] and "older" not in say["check-cache"]
     cfg2_path = os.path.join(tmp, "cli_config_student.json")                              # the t26 kind: a student 'all', feature caches named (that do not exist here), n_cam 3
@@ -859,23 +862,23 @@ def cli_checks():
     try:
         for cmd in ("build-cache", "build-cache-older", "check-cache", "check-cache-older"):
             with contextlib.redirect_stdout(_Capture()):
-                LB._cli([cmd, cfg2_path, "--n", "2"])
+                BIC._cli([cmd, cfg2_path, "--n", "2"])
         student_ok = True
     except Exception as e:                                                                # noqa: BLE001 - the finding is the message
         student_ok = f"{type(e).__name__}: {e}"
     ok[f"cli: all four commands also run on a config with a student 'all' and feature caches named (the t26 config; the builders read plain datasets) {'' if student_ok is True else student_ok}"] = student_ok is True
-    ok["cli: build-cache wrote <root>/BUILT.json with both scenes of the config, check-cache compared it"] = set(LB.key_built(root)[LB.KEY]["scenes"]) == {sp["mini_train"][0], sp["mini_val"][0]} and "BUILT.json covers all 2 scenes" in say["check-cache"]
-    kb = LB.key_built(root)
-    kb[LB.KEY]["scenes"] = kb[LB.KEY]["scenes"][:1]
-    json.dump({"built": kb}, open(os.path.join(root, LB.BUILT), "w"))
-    ok["cli: check-cache fails when the key-frame marker lacks a scene of the config"] = raises(AssertionError, lambda: LB._cli(["check-cache", cfg_path, "--n", "2"]), "no finished build of key_frames")
-    bt = LB.older_built(root)
-    bt[LB.older_key(3, 2)]["scenes"] = bt[LB.older_key(3, 2)]["scenes"][:1]
-    json.dump({"built": bt}, open(os.path.join(root, SWEEPS, LB.BUILT), "w"))
-    ok["cli: check-cache-older fails when the marker lacks a scene of the config"] = raises(AssertionError, lambda: LB._cli(["check-cache-older", cfg_path, "--n", "2"]), "no finished build")
+    ok["cli: build-cache wrote <root>/BUILT.json with both scenes of the config, check-cache compared it"] = set(IC.key_built(root)[IC.KEY]["scenes"]) == {sp["mini_train"][0], sp["mini_val"][0]} and "BUILT.json covers all 2 scenes" in say["check-cache"]
+    kb = IC.key_built(root)
+    kb[IC.KEY]["scenes"] = kb[IC.KEY]["scenes"][:1]
+    json.dump({"built": kb}, open(os.path.join(root, IC.BUILT), "w"))
+    ok["cli: check-cache fails when the key-frame marker lacks a scene of the config"] = raises(AssertionError, lambda: BIC._cli(["check-cache", cfg_path, "--n", "2"]), "no finished build of key_frames")
+    bt = IC.older_built(root)
+    bt[IC.older_key(3, 2)]["scenes"] = bt[IC.older_key(3, 2)]["scenes"][:1]
+    json.dump({"built": bt}, open(os.path.join(root, SWEEPS, IC.BUILT), "w"))
+    ok["cli: check-cache-older fails when the marker lacks a scene of the config"] = raises(AssertionError, lambda: BIC._cli(["check-cache-older", cfg_path, "--n", "2"]), "no finished build")
     split_cfg = os.path.join(tmp, "split_config.json")
     json.dump({"_about": "x", "name": "x", "split": "small", "lane_images": root, "device": "cpu"}, open(split_cfg, "w"))
-    c = LB.load_config(split_cfg)
+    c = BIC.load_config(split_cfg)
     ok["cli: a config with a \"split\" is resolved to its scene lists (small: 60 train, 10 val), the comment key is ignored"] = len(c.train_scenes) == 60 and len(c.val_scenes) == 10
     return ok
 
@@ -900,7 +903,7 @@ else:
         return out
 
     def decode(folder, tok):
-        return decode_jpeg(read_file(LB.image_path(folder, tok)))
+        return decode_jpeg(read_file(IC.image_path(folder, tok)))
 
     class StubStore:
         def feature_hw(self):
@@ -941,16 +944,16 @@ class RecDS:
 
 
 fake_nusc = types.SimpleNamespace(scene=[], get=lambda *a: {"name": "x"})
-real = (T.CachedFrontRadarDataset, T.FeatureStore, T.available_scenes)
+real = (BT.CachedFrontRadarDataset, BT.FeatureStore, BT.available_scenes)
 prev_mods = {k: sys.modules.get(k) for k in ("nuscenes", "nuscenes.nuscenes")}
 sys.modules["nuscenes"], sys.modules["nuscenes.nuscenes"] = types.ModuleType("nuscenes"), types.SimpleNamespace(NuScenes=lambda *a, **k: fake_nusc)
-T.CachedFrontRadarDataset, T.FeatureStore, T.available_scenes = RecDS, lambda p: None, lambda n, s: []
+BT.CachedFrontRadarDataset, BT.FeatureStore, BT.available_scenes = RecDS, lambda p: None, lambda n, s: []
 try:
     for frames in ("all", "current"):
         T.make_datasets(T.TrainConfig(name="x", device="cpu", feature_cache="c", feature_cache2="c2", lane_images="img", model={**DUAL, "camera_student": "stub", "student_frames": frames}))
     T.make_datasets(T.TrainConfig(name="x", device="cpu", feature_cache="c", model=dict(BASE)))
 finally:
-    T.CachedFrontRadarDataset, T.FeatureStore, T.available_scenes = real
+    BT.CachedFrontRadarDataset, BT.FeatureStore, BT.available_scenes = real
     for k, v in prev_mods.items():
         if v is None:
             sys.modules.pop(k, None)
@@ -1042,12 +1045,12 @@ def jitter_unseeded_noise(img, j, salt=0):                                      
 
 
 real_clip, real_collate = T.run_clip, FC.collate_cached
-real_build = LB.build_cache
+real_build = IC.build_cache
 
 
 def marks_first(datasets, root, workers=1, older=False):                          # the bug: the marker written before the work
     if datasets:
-        LB._mark_built(LB.older_root(root), LB.older_key(datasets[0].n_cam, datasets[0].cam_stride), datasets) if older else LB._mark_built(root, LB.KEY, datasets)
+        IC._mark_built(IC.older_root(root), IC.older_key(datasets[0].n_cam, datasets[0].cam_stride), datasets) if older else IC._mark_built(root, IC.KEY, datasets)
     return real_build(datasets, root, workers, older)
 
 
@@ -1074,25 +1077,25 @@ MUTANTS = {
     "the student reads frame 1's image for frame 0 (and so does the anchor)": ([], inst("_student_images", student_on_frame_one), MODEL_G),
     "the older images are ignored (frames >= 1 stay the cached teachers')": ([], inst("_student_images", lambda orig, self, batch, Fn: (orig(batch, Fn)[0], None)), MODEL_G),
     "the jitter does not look at the training mode": ([], inst("_student_images", jit_in_eval), JIT_G),
-    "the jitter is drawn per frame instead of per sample": ([(AU, "jitter_images", jitter_per_frame), (FC, "jitter_images", jitter_per_frame)], None, JIT_G),
-    "the pixel noise comes from the global random state": ([(AU, "jitter_images", jitter_unseeded_noise), (FC, "jitter_images", jitter_unseeded_noise)], None, JIT_G),
+    "the jitter is drawn per frame instead of per sample": ([(AU, "jitter_images", jitter_per_frame), (CM, "jitter_images", jitter_per_frame)], None, JIT_G),
+    "the pixel noise comes from the global random state": ([(AU, "jitter_images", jitter_unseeded_noise), (CM, "jitter_images", jitter_unseeded_noise)], None, JIT_G),
     "the draw comes from the global random state, not from (seed, step, micro)": ([(T, "draw_jitter", lambda B, s, seed, key=0: {"u": torch.rand(4, B) * 2 - 1, "strength": float(s), "noise_seed": int(seed) * 64 + key})], None, JIT_G),
     "the draw ignores the step": ([(T, "jitter_seed", lambda seed, step, micro: int(seed) * 1009 + int(micro))], None, JIT_G),
     "img_jitter_from is ignored (the jitter is on from step 0)": ([(T, "run_clip", always_from_start)], None, JIT_G),
     "the brightness / contrast / saturation range is 0.2, not 0.4": ([(AU, "JITTER_RANGE", 0.2)], None, JIT_G),
     "the gamma range is 1.5, not 1.25": ([(AU, "JITTER_GAMMA", 1.5)], None, JIT_G),
-    "the older frames' noise uses frame 0's stream (salt 0)": ([(FC, "jitter_images", lambda img, j, salt=0: real_jitter(img, j, 0))], None, ("jmodel",)),
+    "the older frames' noise uses frame 0's stream (salt 0)": ([(CM, "jitter_images", lambda img, j, salt=0: real_jitter(img, j, 0))], None, ("jmodel",)),
     "train() does not pass the step and the micro-batch to run_clip": ([(T, "run_clip", clip_without_step)], None, ("train",)),
 }
 if HAVE_MINI:
     MUTANTS.update({
         "collate_cached drops lane_img_old": ([(FC, "collate_cached", lambda items: {k: v for k, v in real_collate(items).items() if k != "lane_img_old"})], None, ("data",)),
         "collate_cached stacks the older images in the wrong order": ([(FC, "collate_cached", collate_flipped)], None, ("data",)),
-        "the builder caches the key frame again instead of the older frames": ([(LB, "older_records", lambda ds, t: [ds.gt.cam(t)] * (ds.n_cam - 1))], None, ("data",)),
-        "the older frames go into the key-frame folder (no sweeps/)": ([(LB, "older_root", lambda root: root)], None, ("data",)),
-        "the marker covers every scene": ([(LB, "older_missing_scenes", lambda *a: []), (ST, "older_missing_scenes", lambda *a: [])], None, ("marker",)),
-        "the key-frame marker covers every scene": ([(ST, "key_missing_scenes", lambda *a: []), (LB, "key_missing_scenes", lambda *a: [])], None, ("marker",)),
-        "the marker is written before the work (a crash leaves one)": ([(LB, "build_cache", marks_first)], None, ("crash",)),
+        "the builder caches the key frame again instead of the older frames": ([(IC, "older_records", lambda ds, t: [ds.gt.cam(t)] * (ds.n_cam - 1))], None, ("data",)),
+        "the older frames go into the key-frame folder (no sweeps/)": ([(IC, "older_root", lambda root: root)], None, ("data",)),
+        "the marker covers every scene": ([(IC, "older_missing_scenes", lambda *a: []), (ST, "older_missing_scenes", lambda *a: [])], None, ("marker",)),
+        "the key-frame marker covers every scene": ([(ST, "key_missing_scenes", lambda *a: []), (IC, "key_missing_scenes", lambda *a: [])], None, ("marker",)),
+        "the marker is written before the work (a crash leaves one)": ([(IC, "build_cache", marks_first)], None, ("crash",)),
         "the marker is written without the lock": ([(sys.modules["fcntl"], "flock", lambda *a: None)], None, ("lock",)),
     })
 GROUPS = {"model": model_checks, "stream": stream_batch_checks, "jfn": jitter_fn_checks, "jmodel": jitter_model_checks, "clip": clip_checks, "train": train_jitter_checks}

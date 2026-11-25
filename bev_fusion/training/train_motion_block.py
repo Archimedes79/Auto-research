@@ -1,4 +1,4 @@
-"""t12: train ONLY the motion block (training/motion_block.py) on a frozen, trained base model, and compare its velocity with
+"""t12: train ONLY the motion block (net/model/motion_block.py) on a frozen, trained base model, and compare its velocity with
 the base's own velocity head on the same validation frames (Mirko 2026-11-01: "use an existing training and just train
 this block if it improves anything").
 
@@ -20,6 +20,10 @@ loss terms of the base's loss (groups, the +-0.5 s terms). -> <out>/metrics.json
 Usage (from the bev_fusion folder): python training/train_motion_block.py --base runs/t10_dual_s0 --ckpt ckpt_00003000.pt
     --out runs/t12_mb_s0 [--seed 0] [--steps 1500] [--old 2] [--val 300] [--lr 1e-3]
 """
+import os as _os
+import sys as _sys
+_sys.path.insert(1, _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), _os.pardir, "net"))  # net/ (a flat run snapshot holds netpath.py next to this file)
+import netpath  # noqa: E402,F401
 import argparse
 import json
 import math

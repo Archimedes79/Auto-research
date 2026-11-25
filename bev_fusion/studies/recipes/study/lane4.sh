@@ -16,7 +16,7 @@ while ! grep -q "lane finished" temp/study/lane3b.log; do
   sleep 60
 done
 echo "== extraction $(date +%T)"
-OMP_NUM_THREADS=2 $PY -u training/cache_bevfusion_features.py build --src data/cache/cam_feats --out data/cache/cam_feats_bevfusion --device cuda \
+OMP_NUM_THREADS=2 $PY -u net/prep/cache_bevfusion_features.py build --src data/cache/cam_feats --out data/cache/cam_feats_bevfusion --device cuda \
   >> temp/study/bevfeat_extract.log 2>&1
 rc=$?
 echo "extraction exit $rc $(date +%T)"

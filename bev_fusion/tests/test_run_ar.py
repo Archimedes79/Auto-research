@@ -1,6 +1,6 @@
 """tools/run_ar.sh, the launcher that trains one config under autoresearch/tools/run.py (D73: it was a scratch script until then, and the pinned engine rested on one line of it that was
 not committed). A throw-away git repository (training/ with a toy trainer, a toy autoresearch/trainkit), CPU, a few seconds, no GPU:
-  1. the snapshot: training/ and autoresearch/trainkit of the commit are unpacked into runs/<name>/code/, SNAPSHOT.txt names the commit, the log gets the header line, the trainer
+  1. the snapshot: training/, the model folders net/{prep,model,loss} (flat) and autoresearch/trainkit of the commit are unpacked into runs/<name>/code/, SNAPSHOT.txt names the commit, the log gets the header line, the trainer
      runs from the copy and imports ITS trainkit (the pin), the exit code of the trainer is the exit code of the launcher, `.done` exists only for 0
   2. a run trains the commit it was given (AR_COMMIT, else the second argument, else HEAD), never the working tree, with the config copy of that commit; an unknown commit stops
      the launch; a config outside training/ is used as given
@@ -18,6 +18,8 @@ import tempfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCRIPT = os.path.join(os.path.dirname(HERE), "tools", "run_ar.sh")
 TRAINER = ('import json, os, sys\nimport trainkit\nprint("trainkit from", os.path.realpath(trainkit.__file__))\nprint("version", "%s")\n'
+           'try:\n    import netpath, toy_prep, toy_model, toy_loss\n    print("model from", " ".join(os.path.dirname(os.path.realpath(m.__file__)) for m in (netpath, toy_prep, toy_model, toy_loss)))\n'
+           'except ImportError:\n    print("model from nowhere")\n'
            'sys.exit(json.load(open(sys.argv[1])).get("exit", 0))\n')
 
 
@@ -44,6 +46,10 @@ def main():
         open(os.path.join(repo, "bev_fusion", "training", "ok.json"), "w").write('{"exit": 0}')
         open(os.path.join(repo, "bev_fusion", "training", "bad.json"), "w").write('{"exit": 3}')
         open(os.path.join(repo, "autoresearch", "trainkit", "__init__.py"), "w").write("")
+        for rel in ("netpath.py", "prep/toy_prep.py", "model/toy_model.py", "loss/toy_loss.py"):        # D152: a toy model in the three layers
+            p = os.path.join(repo, "bev_fusion", "net", rel)
+            os.makedirs(os.path.dirname(p), exist_ok=True)
+            open(p, "w").write("")
         git(repo, "init", "-q")
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", "one")
@@ -57,6 +63,8 @@ def main():
         assert os.path.exists(os.path.join(run, "ok", "code", "train.py")) and os.path.exists(os.path.join(run, "ok", "code", "trainkit", "__init__.py")), "training/ and trainkit are unpacked"
         assert c1[:10] in open(os.path.join(run, "ok", "code", "SNAPSHOT.txt")).read() and f"commit {c1[:10]}" in log and "run t.run" in log, "the header line names the commit and the run"
         assert os.path.realpath(os.path.join(run, "ok", "code", "trainkit", "__init__.py")) in log, f"the trainer imports the trainkit next to it (the pin): {log[-300:]}"
+        code_dir = os.path.realpath(os.path.join(run, "ok", "code"))
+        assert f"model from {code_dir} {code_dir} {code_dir} {code_dir}" in log, f"the model folders are copied flat next to the trainer and imported from there: {log[-400:]}"
         assert "version V1" in out and "ok exit 0" in out, f"the last lines of train.log and the exit line are printed (run.py's CUDA retry and last_lines read them): {out[-300:]}"
         rc, out = launch(repo, "training/bad.json")
         assert rc == 3 and not os.path.exists(os.path.join(run, "bad", ".done")), "the exit code of the trainer is the exit code of the launcher, .done only for 0"
@@ -114,6 +122,7 @@ def main():
         assert proj["training"]["train"] == "bash tools/run_ar.sh {config}" and proj["fingerprint_extra"] == ["tools/run_ar.sh"], "project.json names tools/run_ar.sh"
         assert "tools" in proj["structure"]["root_dirs"] and os.path.isfile(SCRIPT)
         sys.path.insert(0, os.path.join(os.path.dirname(HERE), "training"))
+        sys.path[1:1] = [os.path.join(os.path.join(os.path.dirname(HERE), "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
         import startable
         line = startable.start_lines(os.path.join(os.path.dirname(HERE), "training", "configs", "x.json"), "t99_x_s0")
         assert "-- bash tools/run_ar.sh training/configs/x.json" in line, line

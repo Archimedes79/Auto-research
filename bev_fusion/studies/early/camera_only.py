@@ -21,6 +21,7 @@ import torch
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "training/legacy")                 # camera_decoder (off the chain since 2026-10-31)
 sys.path.insert(0, "tests")                                        # test_oracle_lift (a gate)
 sys.path.insert(0, "tests/support")
@@ -29,7 +30,8 @@ from camera_decoder import DEPTH_CENTRES, SEM_CLASSES, Z_LEVELS, CameraOnlyDecod
 SEM_THR = (0.05, 0.5, 0.25)             # coverage threshold per class of SEM_CLASSES (a 0.6 m pedestrian often
                                         # covers four 0.5 m cells by about 0.36 each: 0.5 left some without a cell)
 from lift_pd import Grid  # noqa: E402
-from object_head import GROUPS, build_targets, decode, head_loss  # noqa: E402
+from object_head import GROUPS, decode  # noqa: E402
+from object_loss import build_targets, head_loss  # noqa: E402,F401
 from synthetic_world import camera, front_camera, gt_bev, random_scene  # noqa: E402
 from object_head_synth import evaluate, show  # noqa: E402
 from test_oracle_lift import depth_hist  # noqa: E402

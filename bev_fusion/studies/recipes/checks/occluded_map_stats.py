@@ -1,6 +1,6 @@
 """How much of the map GT is hidden behind objects? (decision 1 of plan 8.4: weight of occluded map cells)
 
-Real nuScenes mini, every 3rd keyframe, GT of training/gt_bev.py on the 0.5 m front grid. Among the cells the front camera reaches
+Real nuScenes mini, every 3rd keyframe, GT of net/prep/gt_bev.py on the 0.5 m front grid. Among the cells the front camera reaches
 (camera mask): the share occluded (behind a GT box seen from the camera), overall and per range bin, and the same share among the
 cells of each map layer (drivable area > 0.5 coverage, lane / road divider cells, centre-line cells); and how much of the occluded
 map lies in radar coverage.
@@ -11,7 +11,7 @@ import sys
 
 import numpy as np
 
-sys.path[:0] = [".", "training"]                    # the bev_fusion folder (autogt) and training/
+sys.path[:0] = [".", "training", "net/prep", "net/model", "net/loss"]                    # the bev_fusion folder (autogt) and training/
 from autogt.nuscenes_gt import NuScenesGT  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 

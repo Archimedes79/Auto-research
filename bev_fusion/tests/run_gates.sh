@@ -19,23 +19,24 @@ run() {  # run <block> <command...>
   fi
 }
 run "synthetic world"   "$PY" tests/support/synthetic_world.py
-run "lift PD"           "$PY" training/lift_pd.py
-run "camera encoder"    "$PY" training/camera_encoder.py
-run "radar encoder"     "$PY" training/radar_bev.py
-run "radar encoder, lossless" "$PY" training/radar_encoder.py     # delta-coded slot raster: exact round trip, side loss, monitor
-run "splat"             "$PY" training/splat.py
-run "BEV trunk"         "$PY" training/bev_trunk.py
-run "temporal fusion"   "$PY" training/temporal_fusion.py
-run "fusion"            "$PY" training/fusion.py
-run "timed heads"       "$PY" training/timed_head.py
-run "object head"       "$PY" training/object_head.py
+run "lift PD"           "$PY" net/model/lift_pd.py
+run "image transforms"  "$PY" net/prep/images.py                       # the two normalisations and pixel transforms on a known image; CPU, seconds
+run "camera encoder"    "$PY" net/model/camera_encoder.py
+run "radar encoder"     "$PY" net/model/radar_bev.py
+run "radar encoder, lossless" "$PY" net/model/radar_encoder.py     # delta-coded slot raster: exact round trip, side loss, monitor
+run "splat"             "$PY" net/model/splat.py
+run "BEV trunk"         "$PY" net/model/bev_trunk.py
+run "temporal fusion"   "$PY" net/model/temporal_fusion.py
+run "fusion"            "$PY" net/model/fusion.py
+run "timed heads"       "$PY" net/model/timed_head.py
+run "object head"       "$PY" net/model/object_head.py
 run "metrics"           "$PY" evaluation/metrics.py
 run "front compare"     "$PY" evaluation/front_compare.py
 run "junction rows"     "$PY" evaluation/bev_junction_check.py         # D66: the intersection cells out of the divider rows (rule, dilation barrier, add_sample rows, mask reader and mask id); no data
 run "SOA maps scorer"   "$PY" evaluation/soa_maps.py --selftest        # GaussianCaR maps against ours: mapping by hand, claim region, known answers, the scene bootstrap draw by draw; no data
 run "SOA maps mutants"  "$PY" evaluation/soa_maps.py --mutants         # the 13 planted bugs of that scorer must all be caught
 run "CRN export"        "$PY" tests/test_crn_export.py                 # t26 G0: CRN json -> our frames (planted box, 11 planted bugs, toy chain), TF32 / overlay / devkit-filter gates; no data
-run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" training/fallbacks.py
+run "paper fallbacks"   env OMP_NUM_THREADS=1 "$PY" net/model/fallbacks.py
 run "oracle lift"       "$PY" tests/test_oracle_lift.py
 run "Doppler"           "$PY" tests/test_doppler.py
 run "GT cache, targets" "$PY" tests/test_gt_cache_targets.py
@@ -65,7 +66,7 @@ if ls data/cache/gt/*_15efbde2d1.npz > /dev/null 2>&1; then    # the evaluation 
 else
   echo "SKIP  GT against GT  | no cached GT of signature 15efbde2d1 in data/cache/gt"
 fi
-run "fusion-area loss" "$PY" training/losses.py --fusion-area              # D38 (b) option: weights, ignored objects, the gradient through BEVLoss; CPU, seconds, no optimiser step
+run "fusion-area loss" "$PY" net/loss/losses.py --fusion-area              # D38 (b) option: weights, ignored objects, the gradient through BEVLoss; CPU, seconds, no optimiser step
 run "fusion area, real" "$PY" tests/test_fusion_area_real.py               # the same option on real cached GT frames (skips without data/cache/gt); seconds
 run "host targets"     "$PY" tests/test_host_targets.py                    # D52: build_targets / GT stacking bit for bit against the old code; CPU, seconds
 run "launch saving"    "$PY" tests/test_launch_saving.py                   # D53: share_mover / splat_fused / sync_free equal to the plain code (bit for bit on the CPU); CPU, about 30 s
@@ -73,8 +74,8 @@ run "host batch"       "$PY" tests/test_host_batch.py                      # D54
 run "A/B timer"        "$PY" tests/test_ab_timing.py                       # the in-process A/B timing of the speed switches: arms, schedule, paired difference, a tiny model on the CPU; about 30 s
 run "startable"        "$PY" training/startable.py                        # static config check, GT identity, smoke twin; CPU, seconds
 run "orientation"      "$PY" tests/test_orientation.py             # every drawer: x up, +y left, arrows, colour keys, overlays
-run "nuScenes dataset"  "$PY" training/nuscenes_dataset.py          # nuScenes mini; about 20 s
-run "mirror augment"    "$PY" training/augment.py                   # nuScenes mini; about 30 s
+run "nuScenes dataset"  "$PY" net/prep/nuscenes_dataset.py          # nuScenes mini; about 20 s
+run "mirror augment"    "$PY" net/prep/augment.py                   # nuScenes mini; about 30 s
 run "bundle"            "$PY" tests/test_bundle.py                  # model.py + losses.py import no loader and no trainer (the network is a closed bundle); 1 s
 run "camera features"   "$PY" tests/test_camera_features.py         # the CAMERAS table, feature swap, dual branches, refusals; CPU, 12 s
 run "dual camera geometry" "$PY" tests/test_dual_camera_geometry.py   # both branches put an image pixel at the same BEV cell (< 0.5 px); CPU, 5 s
@@ -83,15 +84,16 @@ run "GT prepare"        "$PY" tests/test_gt_prepare.py              # scene list
 run "run_ar launcher"   "$PY" tests/test_run_ar.py                  # D73: tools/run_ar.sh unpacks training/ and trainkit of the commit, the trainer imports the pinned copy, exit code, .done; a toy repo, 5 s
 run "radar memory ghost" "$PY" tests/test_radar_memory_ghost.py     # the Doppler write mask keeps a radial mover out of the radar memory; 3 s
 run "motion block, joint" "$PY" tests/test_motion_joint.py          # the t15 motion block through the trainer's path; CPU, 7 s
-run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, training/splits.py, the Training hook; no data, 7 s
-run "layer table"       "$PY" tests/test_layers.py                  # training/layers.py: the table changes no number, the 1 m centre-line row; CPU, 7 s
+run "split lists"       "$PY" tests/test_splits.py                  # splits/*.json, net/prep/splits.py, the Training hook; no data, 7 s
+run "layer table"       "$PY" tests/test_layers.py                  # net/model/layers.py: the table changes no number, the 1 m centre-line row; CPU, 7 s
 run "line BCE"          "$PY" tests/test_line_bce.py                # t23: the tolerance-aware BCE on the line presence (analytic value, gradients, head isolation, default path = dice + huber); CPU, seconds
 run "centre-line eval"  "$PY" tests/test_centreline_eval.py         # the 1 m centre-line head in the evaluation (D48): oracle / null / shuffled on real cached GT, hand examples, old runs' counts unchanged, 19 mutants killed; CPU, about 100 s
 run "lane branch, dual" "$PY" tests/test_lane_branch_dual.py        # L4 on camera_features 'dual' (t20): the rule, state_dict as before, zero start, gradient, geometry inputs, mirror, t20_base.json diff; CPU, no data
 run "lane pull"         "$PY" tests/test_lane_pull.py                # t24: ModelConfig.lane_use_depth (lift P instead of lift PD in the lane branch): default, same tensors, weighting, oracle, gradient, mirror, config; CPU, about 15 s, no data
-run "precompute"        "$PY" training/precompute.py               # layer 1: camera map, radar fan, fusion area, radar hits / static cells against their sources; CPU, seconds, no data
-run "feature store"     "$PY" training/feature_cache.py shards-selftest         # atomic shard round trip, feature-size guard, a cut build is refused and rebuilt; CPU, 8 s
-run "camera off"        "$PY" training/feature_cache.py camera-off-selftest     # camera_off on the cached model: zero camera BEV; CPU, 8 s
+run "precompute"        "$PY" net/prep/precompute.py               # layer 1: camera map, radar fan, fusion area, radar hits / static cells against their sources; CPU, seconds, no data
+run "feature store"     "$PY" net/prep/feature_cache.py shards-selftest         # atomic shard round trip, feature-size guard, a cut build is refused and rebuilt; CPU, 8 s
+run "camera off"        "$PY" net/model/cached_model.py                          # camera_off on the cached model: zero camera BEV; CPU, 8 s
+run "layering"          "$PY" tests/test_net_layering.py                        # D152: preprocessing < network < losses < training; no module of net/ reads the training system
 run "stream temporal"  "$PY" tests/test_stream_temporal.py         # cam_buffer pair / recurrent (t21): stream = batch, buffer rules, gradient through the carry, window unchanged, 8 mutants; CPU, about 2 min, no data
 run "radar recursive"  "$PY" tests/test_radar_recursive.py          # radar_per_frame (t25): one sweep per step, radar past in the feature state: stream = batch, identity start, gradient, per-frame mask, plumbing, 9 mutants, t25 configs; CPU, about 3 min, no data
 run "stream tools"     "$PY" tests/test_stream_tools.py              # the promoted t21 diagnostics (stream_drift, stream_timing, arm_guards): drift smoke on nuScenes mini, timing smoke, guards table; CPU, about 30 s
@@ -107,8 +109,8 @@ run "trainkit selftest" bash -c "cd ../autoresearch && $PY -m trainkit.selftest"
 run "train guards"     "$PY" tests/test_train_guards.py                 # D73: stop + resume of the real train() = the uninterrupted run (EpochLoader), evaluate with non-finite batches, check_engine; CPU, toy, 13 s
 run "trainkit equivalence" "$PY" tests/test_trainkit_equivalence.py # train() of commit df9d437 against the live one (trainkit): rows, weights, EMA, optimiser, RNG, files, exit codes; CPU, toy network
 if [ "${1:-}" = "--all" ]; then
-  run "whole chain"    "$PY" training/model.py                     # nuScenes mini, CPU; minutes
-  run "losses"          "$PY" training/losses.py                    # CPU; minutes (overfit 100 steps)
+  run "whole chain"    "$PY" net/model/model.py                     # nuScenes mini, CPU; minutes
+  run "losses"          "$PY" net/loss/losses.py                    # CPU; minutes (overfit 100 steps)
   run "radar slot"      "$PY" tests/test_radar_slot.py              # delta_slots in the whole chain: side loss, gradients, old path unchanged; about 2 min
   run "trainer"         "$PY" training/train.py                     # nuScenes mini + data/cache/cam_feats_mini, CPU; minutes
   run "autoGT"          "$PY" -m GtGenerator selftest

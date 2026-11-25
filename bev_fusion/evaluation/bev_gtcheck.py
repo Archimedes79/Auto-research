@@ -26,7 +26,7 @@ import sys
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [ROOT, os.path.join(ROOT, "training"), os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
+sys.path[:0] = [ROOT, os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
 SIDE_DT = {"cur": 0.0, "prev": -0.5, "next": 0.5}
 LINES = ("lane_divider", "road_divider")
 

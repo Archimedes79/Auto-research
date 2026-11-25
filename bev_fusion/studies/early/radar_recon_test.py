@@ -10,6 +10,7 @@ error of the decoded vector at its cell (slot) against its own values - physical
 "oracle" rows decode the raster itself (no learning): the information ceiling of the representation.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/radar_recon_test.py [steps]
 """
+import os
 import math
 import sys
 
@@ -19,6 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import radar_bev as rb  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 

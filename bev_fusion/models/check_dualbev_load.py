@@ -14,6 +14,7 @@ import torch
 from PIL import Image
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join(os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir), "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from camera_encoder import (FrontCameraEncoder, IMG_MEAN, IMG_STD, camera_vector, depth_centres,  # noqa: E402
                             nuscenes_front_ida)
 

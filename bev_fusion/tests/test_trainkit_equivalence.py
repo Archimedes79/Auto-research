@@ -35,6 +35,7 @@ from torch import nn
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 OLD_COMMIT = "df9d4370723116462e879a335da9d3ec83841229"            # the last commit of training/train.py before the engine moved out (hygiene flag, lr_groups)
 WALL = ("t", "s_per_step", "t_data", "t_step")                   # wall-clock fields of a log row
 ADDED = ("student_anchor", "student_anchor_floor", "student_anchor_until", "img_jitter", "img_jitter_from", "radar_window", "keep_steps")      # TrainConfig fields added after OLD_COMMIT (t22 stage B, t25 radar_window, t26 image jitter and keep_steps, default off): the old trainer has none, so they are left out of every config compared
@@ -59,6 +60,10 @@ def load_old(tmp):
     path = os.path.join(tmp, "train_before_trainkit.py")
     with open(path, "wb") as f:
         f.write(src)
+    import radar_encoder
+    import radar_loss
+    radar_encoder.aux_weight = radar_loss.aux_weight                # D152 moved the radar side loss to net/loss; the old trainer reads it from the encoder
+    radar_encoder.RadarEncoder.aux_loss = lambda self, features, state, decoder=None: radar_loss.slot_aux_loss(self, features, state, decoder)
     spec = importlib.util.spec_from_file_location("train_before_trainkit", path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = mod

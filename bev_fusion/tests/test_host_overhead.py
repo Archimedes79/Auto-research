@@ -11,14 +11,17 @@ Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python tests/test
 """
 import math
 import random
+import os
 import sys
 
 import torch
 from torch import nn
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import losses as L  # noqa: E402
 import object_head as oh  # noqa: E402
+import object_loss as OL  # noqa: E402
 import train as T  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 
@@ -54,10 +57,10 @@ def build_targets_whole_grid(boxes_batch, grid, groups=oh.GROUPS, max_obj=64, mi
             g = gidx[bx["group"]]
             kind = groups[g][1]
             if kind == "box":
-                r = oh.gaussian_radius(bx["length"] / grid.res, bx["width"] / grid.res)
+                r = OL.gaussian_radius(bx["length"] / grid.res, bx["width"] / grid.res)
             else:
                 d = 2 * bx["radius"] / grid.res
-                r = oh.gaussian_radius(d, d)
+                r = OL.gaussian_radius(d, d)
             r = max(min_radius, int(r))
             sigma = (2 * r + 1) / 6
             peak = torch.exp(-((gx - ix) ** 2 + (gy - iy) ** 2) / (2 * sigma * sigma))
@@ -99,11 +102,11 @@ for trial in range(60):
     batch = [[random_box(near_edge=rng.random() < 0.3) for _ in range(rng.choice([0, 1, 6, 30]))] for _ in range(rng.choice([1, 3]))]
     cap = rng.choice([4, 128])
     ref = build_targets_whole_grid(batch, grid, L.NUSC_GROUPS, cap)
-    new = oh.build_targets(batch, grid, L.NUSC_GROUPS, cap)
+    new = OL.build_targets(batch, grid, L.NUSC_GROUPS, cap)
     same &= all(torch.equal(ref[k], new[k]) for k in ref) and set(ref) == set(new)
     n_boxes += sum(len(b) for b in batch)
 check(same, f"build_targets: window == whole grid, bit for bit, on {n_boxes} random boxes (edges, outside the grid, radius 0.05 m ... 60 m, max_obj cap)")
-one = oh.build_targets([[{"group": "vehicle", "cx": 20.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.3}]], grid, L.NUSC_GROUPS, 8)
+one = OL.build_targets([[{"group": "vehicle", "cx": 20.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "length": 4.5, "width": 1.9, "yaw": 0.3}]], grid, L.NUSC_GROUPS, 8)
 check(float(one["hm"].max()) == 1.0 and float(one["hm"][0, 0, int(20 / grid.res), int(26 / grid.res)]) > 0.99 and int((one["hm"] > 0).sum()) > 4, "a single box: peak 1 at its centre cell, a blob around it")
 
 
@@ -126,12 +129,12 @@ def object_head_terms_per_box(out, boxes_batch, w_obj, grid, groups=L.NUSC_GROUP
         keep.append(k)
         drop.append(d)
     dev = out["hm"].device
-    t = oh.build_targets(keep, grid, groups, max_obj)
+    t = OL.build_targets(keep, grid, groups, max_obj)
     ign = (w_obj <= 0).expand_as(out["hm"])
     if any(drop):
-        ign = ign | ((oh.build_targets(drop, grid, groups, max_obj)["hm"].to(dev) > 0) & (t["hm"].to(dev) == 0))
+        ign = ign | ((OL.build_targets(drop, grid, groups, max_obj)["hm"].to(dev) > 0) & (t["hm"].to(dev) == 0))
     hm = torch.where(ign, torch.full_like(out["hm"], -1e4), out["hm"])
-    return oh.head_loss(dict(out, hm=hm), t, w_vel, w_mov=w_mov), t
+    return OL.head_loss(dict(out, hm=hm), t, w_vel, w_mov=w_mov), t
 
 
 def gt_box(group, cx, cy, observed=True):

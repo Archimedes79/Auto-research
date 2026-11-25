@@ -24,6 +24,7 @@ import torchvision.models as tvm
 _TRAINING = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))     # moved to training/legacy/ (2026-10-31): the live blocks
 if _TRAINING not in sys.path:
     sys.path.insert(0, _TRAINING)
+    sys.path[1:1] = [os.path.join(_TRAINING, os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from camera_encoder import Mlp, SELayer, depth_centres  # noqa: E402
 
 WEIGHTS = {"resnet18": "resnet18-f37072fd.pth", "efficientnet_b0": "efficientnet_b0_rwightman-7f5810bc.pth",

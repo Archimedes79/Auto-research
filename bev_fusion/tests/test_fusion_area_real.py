@@ -20,6 +20,7 @@ import torch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.dirname(ROOT))
 import losses as L                                              # noqa: E402
 from lift_pd import Grid                                        # noqa: E402

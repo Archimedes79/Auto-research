@@ -40,6 +40,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 import scratch  # noqa: E402
 from lift_pd import Grid  # noqa: E402
@@ -107,7 +108,7 @@ def frames(rng):
 
 
 def nuscenes_item(path, with_v1=False):
-    """one cached GT sample (training/gt_bev.py via nuscenes_dataset: keyframes k - 1, k, k + 1 at 0.5 m) -> the item of
+    """one cached GT sample (net/prep/gt_bev.py via nuscenes_dataset: keyframes k - 1, k, k + 1 at 0.5 m) -> the item of
     this test: maps (3, 3, X, Y) = (lanes = lane / road divider, vehicles = vehicle + two-wheeler, pedestrians) of F0 =
     k - 1, F1 = k, F2 = k + 1; GT velocity (2, X, Y) of F0 (ground velocity, F0 axes; stationary boxes 0); instance map
     of F0; ego steps F0 -> F1 (the 'prev' chain of k reversed: k -> k - 1 runs with negative dt) and F1 -> F2 (the 'next'

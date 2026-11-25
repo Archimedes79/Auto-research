@@ -13,6 +13,7 @@ from shapely.geometry import LineString, box as sbox
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 from nuscenes.map_expansion.map_api import NuScenesMap   # noqa: E402
 
 DATA = os.path.expanduser("~/data/nuscenes_full")

@@ -1,4 +1,4 @@
-"""The sets the evaluation runs on: one definition, the one of the training (`splits/<name>.json`, read by `training/splits.py`). No second list of scenes.
+"""The sets the evaluation runs on: one definition, the one of the training (`splits/<name>.json`, read by `net/prep/splits.py`). No second list of scenes.
 
     python evaluation/bev_sets.py [--list]       the sets that exist (name, scenes, GT version, what it is)
     python evaluation/bev_sets.py --selftest     known answers on the real files and on a throw-away splits folder
@@ -30,8 +30,8 @@ RESERVED = ("val", "train", "test")                      # the bare names and TE
 
 
 def _splits():
-    """training/splits.py, loaded by its path (a plain `import splits` would meet the folder bev_fusion/splits first)"""
-    spec = importlib.util.spec_from_file_location("bev_training_splits", os.path.join(ROOT, "training", "splits.py"))
+    """net/prep/splits.py, loaded by its path (a plain `import splits` would meet the folder bev_fusion/splits first)"""
+    spec = importlib.util.spec_from_file_location("bev_training_splits", os.path.join(ROOT, "net", "prep", "splits.py"))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
@@ -100,7 +100,7 @@ def counts(splits_dir: str = None) -> dict:
 
 
 def set_hash(name: str, splits_dir: str = None) -> str:
-    """12 hex digits of the scene names of a NAMED set (training/splits.py list_hash of the file's part): the identity of the set, so a split file edited under the same name is seen"""
+    """12 hex digits of the scene names of a NAMED set (net/prep/splits.py list_hash of the file's part): the identity of the set, so a split file edited under the same name is seen"""
     split, part = parse(name)
     if split is None:
         raise ValueError(f"set {name!r} is the run's own list: it has no file to hash")

@@ -21,6 +21,7 @@ import torch
 from torch import nn
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.join("..", "autoresearch"))
 import debug  # noqa: E402
 import freeze  # noqa: E402

@@ -33,6 +33,7 @@ import torch
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))                      # the bev_fusion folder
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.join(ROOT, "training", "legacy"))                # s1_camera, train_s1 (off the chain since 2026-10-31)
 sys.path.insert(0, HERE)
 sys.path.insert(0, ROOT)

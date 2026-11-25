@@ -28,7 +28,7 @@ import time
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests", "tests/support", "training", ".."):
+for sub in ("tests", "tests/support", "training", "net/prep", "net/model", "net/loss", ".."):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import model as M  # noqa: E402
 import synthetic_world as sw  # noqa: E402

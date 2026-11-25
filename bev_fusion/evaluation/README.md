@@ -19,7 +19,7 @@ Also `--seed S` (default 1) and bev_suite's `--device cuda|cpu --workers N --spl
 
 ## The sets: one definition, the training's
 
-Every evaluation runs on a set of scenes. **There is one definition of the scene lists in the repository: `splits/<name>.json`** (a split = a `train` and a `val` list; `large`, `small`, `xl`; the file the training config's `"split"` names, read by `training/splits.py`). The evaluation adds no list of its own: a set is `<split>.<part>`, `part` = `train` or `val`. `python evaluation/evaluate.py --sets` (= `python evaluation/bev_sets.py`) prints them:
+Every evaluation runs on a set of scenes. **There is one definition of the scene lists in the repository: `splits/<name>.json`** (a split = a `train` and a `val` list; `large`, `small`, `xl`; the file the training config's `"split"` names, read by `net/prep/splits.py`). The evaluation adds no list of its own: a set is `<split>.<part>`, `part` = `train` or `val`. `python evaluation/evaluate.py --sets` (= `python evaluation/bev_sets.py`) prints them:
 
 | set | scenes | what |
 |---|---|---|

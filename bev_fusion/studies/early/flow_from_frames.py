@@ -14,6 +14,7 @@ Evaluated on held-out sequences (other seed): mean end-point error (m/s) of v_ha
 > 0.5 m/s), the same per box (mean over its cells), and the null baseline v_hat = 0.
 Run from the bev_fusion folder: wsl ~/miniconda3/envs/gcar/bin/python studies/early/flow_from_frames.py
 """
+import os
 import math
 import random
 import sys
@@ -24,6 +25,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, "tests/support")
 from lift_pd import Grid  # noqa: E402
 from splat import grid_points, splat, splat_bev, splat_positions  # noqa: E402

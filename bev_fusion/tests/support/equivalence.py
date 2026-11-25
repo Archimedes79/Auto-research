@@ -23,6 +23,8 @@ ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))                   # the b
 CODE = os.environ.get("EQUIV_CODE", os.path.join(ROOT, "training"))     # the training code to run: the live tree or an old snapshot
 DEV = os.environ.get("EQUIV_DEVICE", "cuda")                             # cpu: deterministic (no GPU scatter-order noise)
 sys.path.insert(0, CODE)
+if os.path.normpath(CODE) == os.path.normpath(os.path.join(ROOT, "training")):     # the live tree: the model folders behind training/ (a snapshot is flat)
+    sys.path[1:1] = [os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")]
 os.chdir(ROOT)
 import train as T  # noqa: E402
 from augment import flip_batch  # noqa: E402

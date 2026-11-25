@@ -20,7 +20,7 @@ import torch
 import torch.nn.functional as F
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests/support", "tests", "training"):
+for sub in ("tests/support", "tests", "training", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import losses as L  # noqa: E402
 

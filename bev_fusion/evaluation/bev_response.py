@@ -36,7 +36,7 @@ import sys
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [ROOT, os.path.join(ROOT, "training"), os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
+sys.path[:0] = [ROOT, os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, ".."), os.path.join(ROOT, "..", "autoresearch")]
 from evaluation import bev_gtcheck as G  # noqa: E402
 from evaluation.bev_views import gt_boxes, masks  # noqa: E402
 from evaluation.metrics import gt_boxes_from_meta, in_front  # noqa: E402

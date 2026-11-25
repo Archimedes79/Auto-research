@@ -21,12 +21,15 @@ import torch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "training"))
+sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 sys.path.insert(0, os.path.join(ROOT, "tests", "support"))
 sys.path.insert(0, os.path.dirname(ROOT))
 import losses as L                                              # noqa: E402
 import object_head as O                                         # noqa: E402
+import object_loss as OL  # noqa: E402
 from lift_pd import Grid                                        # noqa: E402
-from object_head import GROUPS, direction_class, gaussian_radius   # noqa: E402,F401
+from object_head import GROUPS, direction_class 
+from object_loss import gaussian_radius   # noqa: E402,F401
 
 
 # ---- the oracle: build_targets as it was before 2026-11-03 (torch.tensor per field per box), copied unchanged
@@ -134,25 +137,25 @@ def edge_cases(grid):
     base = random_frames(rng, grid, G, n_frames=3, n_boxes=30)
     mixed = [[dict(bx, **({"loss_w": float(rng.uniform(0.1, 1))} if rng.random() < 0.5 else {}),
                    **({"vel_known": bool(rng.random() < 0.5)} if rng.random() < 0.5 else {})) for bx in fr] for fr in base]
-    same(build_targets_old(mixed, grid, G, 64), O.build_targets(mixed, grid, G, 64), "loss_w / vel_known mixed in the frames")
+    same(build_targets_old(mixed, grid, G, 64), OL.build_targets(mixed, grid, G, 64), "loss_w / vel_known mixed in the frames")
     one_frame = [base[0], [dict(bx, vel_known=False, loss_w=0.5) for bx in base[1]], base[2]]
-    same(build_targets_old(one_frame, grid, G, 64), O.build_targets(one_frame, grid, G, 64), "a key in one frame of the batch only")
-    same(build_targets_old(base, grid, G, 64), O.build_targets(base, grid, G, 64), "no loss_w / vel_known at all")
-    assert "known" not in O.build_targets(base, grid, G, 64) and "known" in O.build_targets(one_frame, grid, G, 64)
+    same(build_targets_old(one_frame, grid, G, 64), OL.build_targets(one_frame, grid, G, 64), "a key in one frame of the batch only")
+    same(build_targets_old(base, grid, G, 64), OL.build_targets(base, grid, G, 64), "no loss_w / vel_known at all")
+    assert "known" not in OL.build_targets(base, grid, G, 64) and "known" in OL.build_targets(one_frame, grid, G, 64)
     alien = [[{"group": "alien", "cx": grid.x_min - 40.0, "cy": 0.0, "vx": 0.0, "vy": 0.0, "radius": 0.5}] + base[0][:5]]
-    same(build_targets_old(alien, grid, G, 64), O.build_targets(alien, grid, G, 64), "an unknown group outside the grid is skipped")
+    same(build_targets_old(alien, grid, G, 64), OL.build_targets(alien, grid, G, 64), "an unknown group outside the grid is skipped")
     twin = [[dict(base[0][0], cx=10.02, cy=1.01), dict(base[0][0], cx=10.02, cy=1.01, length=2.0, vx=3.0)]]
-    same(build_targets_old(twin, grid, G, 64), O.build_targets(twin, grid, G, 64), "two boxes in one cell")
+    same(build_targets_old(twin, grid, G, 64), OL.build_targets(twin, grid, G, 64), "two boxes in one cell")
     f32 = [[{k: (np.float32(v) if isinstance(v, float) else v) for k, v in bx.items()} for bx in fr] for fr in base]
-    same(build_targets_old(f32, grid, G, 64), O.build_targets(f32, grid, G, 64), "numpy float32 values")
+    same(build_targets_old(f32, grid, G, 64), OL.build_targets(f32, grid, G, 64), "numpy float32 values")
     for name, bad in (("length 0", dict(length=0.0)), ("width -1", dict(width=-1.0)), ("NaN centre", dict(cx=float("nan")))):
         bx = dict(base[0][0], cx=10.0, cy=1.0, group="vehicle", length=4.0, width=2.0, yaw=0.1)
         bx.update(bad)
         fr = [[bx]]
-        e_old, e_new = raises(build_targets_old, fr, grid, G, 64), raises(O.build_targets, fr, grid, G, 64)
+        e_old, e_new = raises(build_targets_old, fr, grid, G, 64), raises(OL.build_targets, fr, grid, G, 64)
         assert e_old is not None and e_new == e_old, (name, e_old, e_new)
     fr = [[{"group": "pedestrian", "cx": 10.0, "cy": 1.0, "vx": 0.0, "vy": 0.0, "radius": -0.2}]]
-    assert raises(build_targets_old, fr, grid, G, 64) is not None and raises(O.build_targets, fr, grid, G, 64) == raises(build_targets_old, fr, grid, G, 64)
+    assert raises(build_targets_old, fr, grid, G, 64) is not None and raises(OL.build_targets, fr, grid, G, 64) == raises(build_targets_old, fr, grid, G, 64)
     print("build_targets == old also for loss_w / vel_known (mixed, one frame only, none), unknown groups outside the grid, two boxes in one cell, "
           "numpy float32 values; length 0, width < 0, radius < 0 and a NaN centre still raise the same error")
 
@@ -163,11 +166,11 @@ def test_build_targets(n_real, cache):
     for groups in (L.NUSC_GROUPS, GROUPS):
         fr = random_frames(rng, grid, groups)
         for cap in (64, 7):                                    # the second one cuts the lists
-            same(build_targets_old(fr, grid, groups, cap), O.build_targets(fr, grid, groups, cap), f"random {groups[0][0]} cap {cap}")
+            same(build_targets_old(fr, grid, groups, cap), OL.build_targets(fr, grid, groups, cap), f"random {groups[0][0]} cap {cap}")
     # boxes exactly on the edge cells
     edge = [[{"group": "vehicle", "cx": grid.x_min + 0.01, "cy": grid.y_min + 0.01, "vx": 1.0, "vy": 2.0, "length": 4.0, "width": 2.0, "yaw": 0.3},
              {"group": "pedestrian", "cx": grid.x_max - 0.01, "cy": grid.y_max - 0.01, "vx": 0.0, "vy": 0.0, "radius": 0.4}]]
-    same(build_targets_old(edge, grid, L.NUSC_GROUPS), O.build_targets(edge, grid, L.NUSC_GROUPS), "edge cells")
+    same(build_targets_old(edge, grid, L.NUSC_GROUPS), OL.build_targets(edge, grid, L.NUSC_GROUPS), "edge cells")
     edge_cases(grid)
     files = sorted(glob.glob(os.path.join(cache, "*_0.5_4_*.npz")))[::97][:n_real]
     if not files:
@@ -176,9 +179,9 @@ def test_build_targets(n_real, cache):
     gts = [np.load(f, allow_pickle=True)["gt"].item()["cur"] for f in files]
     fr = [[b for b in (L.head_box(x) for x in g["meta"]["boxes"]) if b] for g in gts]
     n = sum(len(f) for f in fr)
-    same(build_targets_old(fr, grid, L.NUSC_GROUPS, 128), O.build_targets(fr, grid, L.NUSC_GROUPS, 128), "real frames")
+    same(build_targets_old(fr, grid, L.NUSC_GROUPS, 128), OL.build_targets(fr, grid, L.NUSC_GROUPS, 128), "real frames")
     t_old = med(lambda: build_targets_old(fr, grid, L.NUSC_GROUPS, 128))
-    t_new = med(lambda: O.build_targets(fr, grid, L.NUSC_GROUPS, 128))
+    t_new = med(lambda: OL.build_targets(fr, grid, L.NUSC_GROUPS, 128))
     print(f"build_targets == old, bit for bit: random (2 group sets, cap 64 and 7, empty and outside frames), edge cells, {n} boxes of {len(fr)} real frames;"
           f" {t_old:.1f} -> {t_new:.1f} ms for the real frames")
     return gts

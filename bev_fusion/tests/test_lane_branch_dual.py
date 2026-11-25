@@ -1,4 +1,4 @@
-"""The stride-4 lane branch (L4, training/lane_branch.py) on the dual camera features (card t20, plan 2026-11-03 section 2); CPU, seconds, no data.
+"""The stride-4 lane branch (L4, net/model/lane_branch.py) on the dual camera features (card t20, plan 2026-11-03 section 2); CPU, seconds, no data.
 
   A  the rule (model.check_config): the branch reads the current image, the depth and the calibration of the FIRST feature source, so that source
      must be the DualBEV family: 'dualbev' and 'dual' pass, 'bevfusion' alone is refused; camera_off and lift 's' stay refused.
@@ -24,7 +24,7 @@ import time
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests", "tests/support", "training"):
+for sub in ("tests", "tests/support", "training", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from model import ModelConfig, check_config  # noqa: E402

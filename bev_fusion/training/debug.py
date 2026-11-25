@@ -15,10 +15,7 @@ from contextlib import contextmanager
 
 import torch
 
-try:
-    from . import freeze
-except ImportError:                                   # run as a script, like train.py
-    import freeze
+import freeze
 
 
 def overfit_one_batch(model, loss_fn, batch, steps=60, lr=1e-3, optimizer=None):

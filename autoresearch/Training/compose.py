@@ -13,7 +13,7 @@ project's project.json: {"presets": dir, "out": dir for the composed files, "che
 `check` / `run` run the prepare checks; a missing item stops it unless the job says `"prepare": true`: then the build is its own run (`<id>.prep_<name>`, run.py --no-card, so it shows in the schedule and the ledger)
 and the training is started with `--after` it, so a failed build blocks the training instead of letting it start without its data.
 `"resolve"` (optional): a command (cwd = the project folder) that reads the composed config as json on stdin and writes the resolved one on stdout, for names that the project turns into values
-(bev_fusion: `"split": "large"` becomes its scene lists, `training/splits.py`); a non-zero exit refuses the start. The resolved config is what is written, checked, compared with a run's earlier
+(bev_fusion: `"split": "large"` becomes its scene lists, `net/prep/splits.py`); a non-zero exit refuses the start. The resolved config is what is written, checked, compared with a run's earlier
 config and trained, so the run pins the values, not the name.
 """
 import copy

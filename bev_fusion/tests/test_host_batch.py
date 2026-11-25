@@ -26,11 +26,13 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [os.path.join(ROOT, "training"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "..")]
+sys.path[:0] = [os.path.join(ROOT, "training"), *[os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")], os.path.join(ROOT, "tests"), os.path.join(ROOT, "tests", "support"), os.path.join(ROOT, "..")]
 import launch_saving as LS  # noqa: E402
 import lift_pd as LP  # noqa: E402
+import geometry as GEO  # noqa: E402
 import losses as L  # noqa: E402
 import object_head as OH  # noqa: E402
+import object_loss as OL  # noqa: E402
 import model as M  # noqa: E402
 import precompute as PC  # noqa: E402
 import synthetic_world as sw  # noqa: E402
@@ -141,22 +143,22 @@ LP.lift_key = _lk
 z = tuple(grid.z_levels)
 dcb = torch.linspace(1.0, 60.0, 119)
 for zl, over in ((z, 1), (torch.tensor(z), 1), (torch.tensor(z), 2)):
-    LP._VIS_CACHE.clear()
-    LP._HOST_CONST.clear()
+    GEO._VIS_CACHE.clear()
+    GEO._HOST_CONST.clear()
     a = LP.camera_visibility(grid, zl, dcb, Kc, Tc, hw, ida, over)
-    LP._VIS_CACHE.clear()
+    GEO._VIS_CACHE.clear()
     bm = LP.camera_visibility(grid, zl, dcb, Kc, Tc, hw, ida, over, host=(Kc.clone(), Tc.clone(), ida.clone()))
     again = LP.camera_visibility(grid, zl, dcb, Kc, Tc, hw, ida, over, host=(Kc.clone(), Tc.clone(), ida.clone()))
-    check(torch.equal(a, bm) and bm is again and len(LP._HOST_CONST) == 1, f"camera_visibility with the host copies = the plain mask (heights {type(zl).__name__}, oversample {over}); a second call hits the cache and the host constants")
+    check(torch.equal(a, bm) and bm is again and len(GEO._HOST_CONST) == 1, f"camera_visibility with the host copies = the plain mask (heights {type(zl).__name__}, oversample {over}); a second call hits the cache and the host constants")
 zt = torch.tensor(z)
-LP._VIS_CACHE.clear()
-LP._HOST_CONST.clear()
+GEO._VIS_CACHE.clear()
+GEO._HOST_CONST.clear()
 m0 = LP.camera_visibility(grid, zt, dcb, Kc, Tc, hw, ida, 1, host=(Kc, Tc, ida))
 zt[0] += 0.5                                                 # a buffer changed in place: the host constants must be read again
-LP._VIS_CACHE.clear()
+GEO._VIS_CACHE.clear()
 m1 = LP.camera_visibility(grid, zt, dcb, Kc, Tc, hw, ida, 1, host=(Kc, Tc, ida))
-LP._VIS_CACHE.clear()
-check(torch.equal(m1, LP.camera_visibility(grid, zt, dcb, Kc, Tc, hw, ida, 1)) and len(LP._HOST_CONST) == 2, "a height buffer changed in place is noticed (the host constants follow, the mask equals the plain one)")
+GEO._VIS_CACHE.clear()
+check(torch.equal(m1, LP.camera_visibility(grid, zt, dcb, Kc, Tc, hw, ida, 1)) and len(GEO._HOST_CONST) == 2, "a height buffer changed in place is noticed (the host constants follow, the mask equals the plain one)")
 # a cache hit must never serve another calibration: K, T_cam_car, the crop transform and the image size each decide the key (the calls follow one another, no cache clear between them)
 K_b = Kc.clone()
 K_b[0, 0], K_b[1, 1] = 300.0, 300.0
@@ -166,10 +168,10 @@ base = dict(K=Kc, T=Tc, ida=ida, hw=hw)
 variants = {"base": base, "K": dict(base, K=K_b), "T_cam_car": dict(base, T=T_b), "ida": dict(base, ida=ida_b), "image size": dict(base, hw=(224, 400))}
 plain_m, host_m = {}, {}
 for name, v in variants.items():
-    LP._VIS_CACHE.clear()
+    GEO._VIS_CACHE.clear()
     plain_m[name] = LP.camera_visibility(grid, z, dcb, v["K"], v["T"], v["hw"], v["ida"], 1)
-LP._VIS_CACHE.clear()
-LP._HOST_CONST.clear()
+GEO._VIS_CACHE.clear()
+GEO._HOST_CONST.clear()
 for name, v in variants.items():
     host_m[name] = LP.camera_visibility(grid, z, dcb, v["K"], v["T"], v["hw"], v["ida"], 1, host=(v["K"].clone(), v["T"].clone(), v["ida"].clone()))
 check(all(not torch.equal(plain_m[n], plain_m["base"]) for n in variants if n != "base"), "(sensitivity) each of K, T_cam_car, ida, image size changes the visibility mask of this test")
@@ -224,7 +226,7 @@ def part5(m, batch, loss, tag):
         for mod in m.modules():
             if isinstance(mod, LP.LiftPD):
                 mod._cache = None
-        LP._VIS_CACHE.clear()
+        GEO._VIS_CACHE.clear()
         SEEN.update(key_made_inside=0, lift=[], vis=[])
         m.zero_grad()
         torch.manual_seed(0)
@@ -315,10 +317,10 @@ with LS.enabled(sync=True):
     t_fast = L._t(a32, "cpu")
 check(torch.equal(t_fast, L._t(a32, "cpu")) and t_fast.dtype == torch.float32 and torch.equal(t_fast, torch.from_numpy(a32)), "losses._t with the switch on gives the float32 values exactly")
 zz = torch.tensor(z)                                         # the SAME buffer asked for with two oversamplings
-LP._HOST_CONST.clear()
-h1, h2 = LP._host_consts(zz, dcb, 1, 0.5), LP._host_consts(zz, dcb, 2, 0.5)
+GEO._HOST_CONST.clear()
+h1, h2 = GEO._host_consts(zz, dcb, 1, 0.5), GEO._host_consts(zz, dcb, 2, 0.5)
 check(h1[0] == tuple(zz.tolist()) and len(h2[0]) == 2 * len(h1[0]) and h1[1:] == h2[1:], "_host_consts: the oversampling is part of its key (the heights of oversample 2 are the sub-heights)")
-LP._HOST_CONST.clear()
+GEO._HOST_CONST.clear()
 t_ = torch.randn(3, 4)
 check(LS.to_dev(t_, "cpu") is t_ and LS.index([2, 0], "cpu") == [2, 0], "switch off: to_dev is .to(device), index is the list")
 with LS.enabled(sync=True):
@@ -397,8 +399,8 @@ if torch.cuda.is_available():
     lift_g(f_g, p_g, Kg, Tg, hw, idag, key=key)             # builds the table
     check(not waits(lambda: lift_g(f_g, p_g, Kg, Tg, hw, idag, key=key)), "the keyed lift with a cached table: no wait for the GPU")
     check(waits(lambda: lift_g(f_g, p_g, Kg, Tg, hw, idag)), "(detector) the lift that makes its key from the GPU tensors waits")
-    LP._VIS_CACHE.clear()
-    LP._HOST_CONST.clear()
+    GEO._VIS_CACHE.clear()
+    GEO._HOST_CONST.clear()
     zl, dcg = torch.tensor(z, device=dev), dc.to(dev)
     LP.camera_visibility(grid, zl, dcg, Kg, Tg, hw, idag, 1, host=(Kc, Tc, ida))
     check(not waits(lambda: LP.camera_visibility(grid, zl, dcg, Kg, Tg, hw, idag, 1, host=(Kc, Tc, ida))), "camera_visibility with the host copies and a cached mask: no wait for the GPU")
@@ -426,7 +428,7 @@ if torch.cuda.is_available():
     with LS.enabled(sync=True):
         c_fast = L.consistency_term(ov, vh, tm)
     mm, ii = tm["mask"].to(dev).unsqueeze(-1), tm["ind"].to(dev)
-    c_ref = ((OH._gather(ov, ii) - OH._gather(vh, ii)).abs() * mm).sum() / (2 * mm.sum()).clamp(min=1)       # the formula written out, on the GPU
+    c_ref = ((OL._gather(ov, ii) - OL._gather(vh, ii)).abs() * mm).sum() / (2 * mm.sum()).clamp(min=1)       # the formula written out, on the GPU
     check(torch.allclose(c_fast, c_ref, rtol=1e-6) and torch.equal(c_fast, L.consistency_term(ov, vh, tm)) and c_fast.device.type == "cuda",
           "consistency_term on the GPU: equals the formula written out, with the switch on and off")
     with LS.enabled(sync=True):

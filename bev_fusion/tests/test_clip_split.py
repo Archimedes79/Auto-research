@@ -15,7 +15,9 @@ import sys
 import torch
 from torch import nn
 
+import os
 sys.path.insert(0, "training")
+sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
 import train as T  # noqa: E402
 from trainkit import optim as tk_optim  # noqa: E402
 

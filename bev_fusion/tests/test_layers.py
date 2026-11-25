@@ -1,4 +1,4 @@
-"""The layer table of the map head (training/layers.py) and the 1 m centre-line row (plan 2026-11-03 section 2, "Head spec by kind"); CPU, seconds.
+"""The layer table of the map head (net/model/layers.py) and the 1 m centre-line row (plan 2026-11-03 section 2, "Head spec by kind"); CPU, seconds.
 
   STEP A, the table changes no number: every old layout (centrelines x dense_objects x stationary) gives the same channel list as the OLD layer_spec
      body (a reference copy below), the OLD map_terms body (a reference copy) gives the same terms and groups as the table-driven one on a synthetic batch
@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests/support", "tests", "training"):
+for sub in ("tests/support", "tests", "training", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import layers as LY  # noqa: E402
 import losses as L  # noqa: E402
