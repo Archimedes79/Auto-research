@@ -47,7 +47,7 @@ from lg_model import LaneGraphNet; from lg_features import FeatureStore, split_r
 net = LaneGraphNet.from_runs(seed=0)                          # runs/e273_p_s0/model.pt (B) + runs/e324_s_s0/model.pt; eval mode; raises on other options
 graphs = net.graphs(FeatureStore()(split_rows("val")[:4]))
 ```
-Weights stay in `runs/`. A float16 copy of seed 0 is `results/Ergebnis_Spurmitte_2026-11-15/champion_weights_fp16.pt` (5.8 MB, a dict
+Weights stay in `runs/`. A float16 copy of seed 0 is `runs/e324s_fp16/champion_weights_fp16.pt` (5.8 MB, a dict
 `{"state": LaneGraphNet state dict in float16, "note": ...}`; load with `{k: v.float()}`; float16 weights move the pair logits by up to 0.1).
 
 ## What is reproduced (VAL)
