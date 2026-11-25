@@ -1,0 +1,29 @@
+{
+ "seed": 0,
+ "level": "dec",
+ "min_tok": 30,
+ "frames": 873,
+ "candidates": 848,
+ "pooled": {
+  "old": 0.8223,
+  "new": 0.822
+ },
+ "cases": {
+  "typical": {
+   "frame": 143,
+   "scene": 3,
+   "tokens": 210,
+   "file": "e391b_frame_typical.png",
+   "acc_old": 0.852,
+   "acc_new": 0.833
+  },
+  "loss": {
+   "frame": 466,
+   "scene": 11,
+   "tokens": 68,
+   "file": "e391b_frame_loss.png",
+   "acc_old": 0.882,
+   "acc_new": 0.721
+  }
+ }
+}

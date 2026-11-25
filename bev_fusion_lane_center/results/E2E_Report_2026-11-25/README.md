@@ -8,10 +8,20 @@ What ran since the report of 2026-11-23: E395 (Catmull-Rom read-out, position he
 | `report.json` | yes | title, abstract, chapter list, the source list the number check reads |
 | `parts/*.md` | yes | the chapters; `02_gt.md` is the ground-truth article, copied unchanged from the report of 2026-11-23 |
 | `data/runs/<name>/<file>` | yes | small result files (json / md / txt) copied unchanged from the run folders of both projects: the E395 step-2 verdicts, the E393 token cards, the E391b cards, the warm score tables of the t25 runs; one exception: `e391b_partB/verdict_d.md` is the verdict line of the run log of `E391b.verdict_d`, unchanged, under a heading |
+| `parts/figures/*` | **no** (generated pictures are never in git) | the system drawing cut, four charts and two example frames, made by `bev_fusion_lane_center/tools/night_report_figs.py` |
 | `E2E_Bericht_2026-11-25.html` | **no** (generated) | the report, built by `reporter/reporter.py` |
 
 ## Rebuilding it
-From the repository top, in WSL, environment `gcar`:
+First the pictures (from `bev_fusion_lane_center/`, WSL, environment `gcar`; CPU only):
+
+```
+bash tools/env/_py14.sh night_report_figs.py --out <absolute path of this folder>/parts/figures            # drawing cut and charts: from files that are in git
+bash tools/env/_py14.sh night_report_figs.py --out <absolute path of this folder>/parts/figures --frames   # also the two frames: needs runs/ (E391, E391b), the E365 / E373 / E390 / E391 caches and nuScenes
+```
+
+A checkout without the run folders and caches cannot draw the two frames; `--strict` then refuses the build (two missing pictures), the build without `--strict` marks them PENDING. `data/runs/e391b_frames/e391b_frames.json` (in git) holds the numbers of those two frames.
+
+Then, from the repository top:
 
 ```
 python reporter/reporter.py build bev_fusion_lane_center/results/E2E_Report_2026-11-25 --strict     # refuses a PENDING number or an unknown placeholder

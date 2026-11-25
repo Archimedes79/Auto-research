@@ -11,12 +11,26 @@
   {"id": "e393", "title": "5. E393: die Pyramide mittrainieren", "part": "05_e393.md"},
   {"id": "e394", "title": "6. E394: Vertrauen in die Karte", "part": "06_e394.md"},
   {"id": "t25", "title": "7. BEV t25: ein Bild, ein Scan", "part": "07_t25.md"},
-  {"id": "stand", "title": "8. Stand des Systems", "part": "08_stand.md"},
+  {"id": "stand", "title": "8. Stand des Systems", "part": "08_stand.md", "svg": "figures/champion_architecture.svg", "svg_caption": "Das gelieferte System (Champion, D120) als Zeichnung: Ausschnitt aus training/architecture.svg mit Inferenzpfad, Auswertung, Trainingsstufen und Legende; Seitenzweige und Referenzsysteme sind weggelassen. Orange und rot sind die benannten harten Schritte, alles andere ist weich."},
   {"id": "offen", "title": "9. Schnitte und offene Punkte", "part": "09_offen.md"},
   {"id": "repro", "title": "10. Reproduzierbarkeit", "part": "10_repro.md"},
   {"id": "repeat", "title": "A. Wiederholung", "part": "A1_wiederholung.md"}
  ],
- "values": {},
+ "values": {
+  "e391bfr_candidates": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "candidates"},
+  "e391bfr_pooled_old": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "pooled.old", "fmt": "{:.4f}"},
+  "e391bfr_pooled_new": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "pooled.new", "fmt": "{:.4f}"},
+  "e391bfr_typ_scene": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.typical.scene"},
+  "e391bfr_typ_frame": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.typical.frame"},
+  "e391bfr_typ_n": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.typical.tokens"},
+  "e391bfr_typ_old": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.typical.acc_old", "fmt": "{:.3f}"},
+  "e391bfr_typ_new": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.typical.acc_new", "fmt": "{:.3f}"},
+  "e391bfr_loss_scene": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.loss.scene"},
+  "e391bfr_loss_frame": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.loss.frame"},
+  "e391bfr_loss_n": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.loss.tokens"},
+  "e391bfr_loss_old": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.loss.acc_old", "fmt": "{:.3f}"},
+  "e391bfr_loss_new": {"file": "data/runs/e391b_frames/e391b_frames.json", "key": "cases.loss.acc_new", "fmt": "{:.3f}"}
+ },
  "sources": [
   "../../experiments/E2*/experiment.md",
   "../../experiments/E3*/experiment.md",
@@ -28,6 +42,7 @@
   "../E2E_Report_2026-11-23/report.json",
   "../E2E_Report_2026-11-23/parts/*.md",
   "data/runs/**/*.json",
+  "../E2E_Report_2026-11-23/data/runs/e391_F1_s*/card_val.json",
   "data/runs/**/*.md",
   "data/runs/**/*.txt"
  ]
