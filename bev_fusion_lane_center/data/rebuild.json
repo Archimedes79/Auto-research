@@ -53,7 +53,7 @@
       "__pycache__",
       ".gpu_slots"
     ],
-    "allow_why": "explicit exceptions (2026-11-23): the architecture drawings are small text svg files drawn by code from the real modules and linked from the READMEs (the only svg in git); the ledger and its markdown are single-file text records over 1 MB that are read complete (CLAUDE.md: single-file records are not split or rolled); the data/ folder of the latest report (D139 / D140, 2026-11-23: all data that the latest report needs stays available): the 106 small result files (json / md cards, 1.5 MB) that its numbers are read from, copied from runs/ so that a clone rebuilds the text and checks every number",
+    "allow_why": "explicit exceptions (2026-11-23): the architecture drawings are small text svg files drawn by code from the real modules and linked from the READMEs (the only svg in git); the ledger and its markdown are single-file text records over 1 MB that are read complete (CLAUDE.md: single-file records are not split or rolled); the data/ folder of the latest report (D139 / D140, 2026-11-23: all data that the latest report needs stays available): the 106 small result files (json / md cards, 1.5 MB) that its numbers are read from, copied from runs/ so that a clone rebuilds the text and checks every number; likewise the data/ folder of the night report of 2026-11-25 (D148: small json / md / txt result files copied from the run folders of both projects)",
     "allow": [
       "GtGenerator/architecture.svg",
       "autoresearch/architecture.svg",
@@ -65,7 +65,8 @@
       "bev_fusion_lane_center/training/architecture.svg",
       "bev_fusion_lane_center/experiment_execution/LEDGER.csv",
       "bev_fusion_lane_center/experiment_execution/LEDGER.md",
-      "bev_fusion_lane_center/results/E2E_Report_2026-11-23/data/*"
+      "bev_fusion_lane_center/results/E2E_Report_2026-11-23/data/*",
+      "bev_fusion_lane_center/results/E2E_Report_2026-11-25/data/*"
     ]
   },
   "clone_checks": [

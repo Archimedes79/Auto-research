@@ -1,0 +1,34 @@
+{
+ "title": "Spurmitte- und BEV-Projekt, Nachtbericht 2026-11-25: E395, E391b, E393, E394 und BEV t25",
+ "output": "E2E_Bericht_2026-11-25.html",
+ "subtitle": "Nachtbericht nach der Anordnung D148 |seit dem Bericht vom 2026-11-23 | VAL (E391b Teil A und E394 nur TRAIN), TEST von keinem Experiment gelesen | Champion unverändert (D120)",
+ "abstract": "Seit dem Bericht vom 2026-11-23 liefen die offenen Experimente beider Projekte allein weiter. Keines führt zu einer Änderung am gelieferten System: der Champion (D120) bleibt (VAL topo F1 0.6682 / 0.6813). **E395:** Catmull-Rom-Kurven schlagen den Hermite-Verbinder nicht (topo F1 -0.0302 / -0.0372); ein Positionskopf mit Knoten-Loss verschiebt die Knoten stabil um +0.018 / +0.023 F1@0.5, unter der Latte 0.033 (Zusatz A1: reproduziert unter der Latte). **E393:** die Pyramide mit dem Token-Loss zu trainieren bringt messbar nichts (gegen den Arm ohne Anker +0.0012 / -0.0004); der Nebenbefund, dass ohne Knoten-Anker topo F1 leicht steigt, bleibt unter der Latte. **E394:** ein label-freies Tor gegen falsche Karten ist mit vier Frame-Merkmalen nicht erreichbar. **E391b:** dass sich falsche Token an der Latte von einem Tor trennen lassen, ist nicht gezeigt (Teil A, TRAIN-Holdout), und E391s NO FUSION wird durch das Training auf der gelieferten Population nicht umgekehrt (Teil B: Zuordnung 0.8220 / 0.8239 unter der Latte 0.8427 / 0.8397). **BEV t25:** in der entscheidenden kalten Wertung verlieren ein Bild und ein Radar-Scan gegen die Kontrolle (A2: `detf` mAP -0.0343, Geschwindigkeit +0.21 m/s; warm gewertet (12 Szenen, 456 Frames, ohne Intervall) liegt A2 bei der mittleren `detf` mAP vorn, 0.4548 gegen 0.4429, vor allem durch die Zweiräder; bei Fahrzeugen liegt A2 auch warm hinten, und die Geschwindigkeit bleibt schlechter, 1.2835 gegen 1.0283 m/s); das Radar-Gedächtnis hilft der Erkennung, zählt nach der Regel aber als TIE; die rekursive Kamera allein (R, Radar 0.5 s) hält die Erkennung (`detf` mAP -0.0013), verletzt aber eine Schutzregel und besteht dem Wortlaut nach nicht.",
+ "sections": [
+  {"id": "intro", "title": "1. Einleitung", "part": "01_intro.md"},
+  {"id": "gt", "title": "2. Ground Truth", "part": "02_gt.md"},
+  {"id": "e395", "title": "3. E395: Catmull-Rom und Positionskopf", "part": "03_e395.md"},
+  {"id": "e391b", "title": "4. E391b: Zuordnung zur Karte", "part": "04_e391b.md"},
+  {"id": "e393", "title": "5. E393: die Pyramide mittrainieren", "part": "05_e393.md"},
+  {"id": "e394", "title": "6. E394: Vertrauen in die Karte", "part": "06_e394.md"},
+  {"id": "t25", "title": "7. BEV t25: ein Bild, ein Scan", "part": "07_t25.md"},
+  {"id": "stand", "title": "8. Stand des Systems", "part": "08_stand.md"},
+  {"id": "offen", "title": "9. Schnitte und offene Punkte", "part": "09_offen.md"},
+  {"id": "repro", "title": "10. Reproduzierbarkeit", "part": "10_repro.md"},
+  {"id": "repeat", "title": "A. Wiederholung", "part": "A1_wiederholung.md"}
+ ],
+ "values": {},
+ "sources": [
+  "../../experiments/E2*/experiment.md",
+  "../../experiments/E3*/experiment.md",
+  "../../../bev_fusion/experiments/t25_one_frame_one_scan/*.md",
+  "../../../bev_fusion/experiments/t25_one_frame_one_scan/*.txt",
+  "../../../bev_fusion/records/d145_account_2026-11-25.md",
+  "../../experiment_execution/DECISIONS.md",
+  "../../HANDOVER.md",
+  "../E2E_Report_2026-11-23/report.json",
+  "../E2E_Report_2026-11-23/parts/*.md",
+  "data/runs/**/*.json",
+  "data/runs/**/*.md",
+  "data/runs/**/*.txt"
+ ]
+}
