@@ -21,6 +21,7 @@ Since D23 a bev_fusion training starts through the launcher of the research syst
 | `open_findings_2026-11-02.md` | triage of the bug hunt's open findings (real? severity? fix size? what was checked and what is per report) for the module-iteration list after the baseline pair; nothing fixed |
 | `speed_options_2026-11-03.md` | where the host-bound step spends its ~45 thousand operators (counted on CPU per section), the sync-like operations, what `torch.compile` can take, and the ranked speed levers with the GPU measurement that would confirm each; nothing changed |
 | `night_2026-11-08.md` | the night of 2026-11-08 / 09 (unattended, no questions): the GPU chain (t23 seed 1 read: TIE on two seeds), the CPU diagnostics on the t20 network (L4 contribution, decoding, misses, earlier-frame probe), t24 closed as not run, what waits for a decision; the page is the artifact named in it |
+| `d145_account_2026-11-25.md` | the BEV chat's account of the unattended work of 2026-11-24 / 25 (D145, D148): the t25 verdicts, what was skipped and why, the deviations |
 | `BOARD.md` | the board made by `python evaluation/board.py --write`: every open arm against the base, all heads, from the stored `metrics.json` files; regenerate it, do not edit it |
 | `keep3.json` | the best three networks of this problem with their checkpoint hashes (below) |
 | `grants.csv` | the grants of the gate hook for the protected files of this problem (path, decided D<n>, until, note); read by `autoresearch/tools/guard_hook.py` |
