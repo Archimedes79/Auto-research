@@ -31,16 +31,16 @@ run "config -> trainer command line (run_config)" run_config.py --selftest
 run "graph metric (identity, DP sparsity)"  sparse_lanes/selftest.py
 run "grid metric reproduces stored numbers" lane_grid/selftest.py
 # the lane head of E273 and later (CPU, synthetic frames; the tests on stored lane GT frames are in run_all_tests.sh)
-run "head: targets, nodes, links, Hermite oracle"        grid/qtargets.py
-run "head: prediction contract"                          grid/qformat.py
-run "head: map simulator"                                grid/map_sim.py
-run "head: junction ends and pairs of the lane GT (E284)" grid/qends.py
-run "head: end head, loss, counts (E284)"                grid/qendnet.py
+run "head: targets, nodes, links, Hermite oracle"        net/prep/qtargets.py
+run "head: prediction contract"                          net/model/qformat.py
+run "head: map simulator"                                net/prep/map_sim.py
+run "head: junction ends and pairs of the lane GT (E284)" net/prep/qends.py
+run "head: end head, loss, counts (E284)"                net/model/qendnet.py
 run "head: end read-out (connectors, rule) (E284)"       qends_eval.py selftest
-run "head: junction GT layer, order rule (E285)"         grid/jgt.py
-run "head: junction map targets (E285)"                  grid/qjunction.py
-run "head: junction maps head, loss, keypoints (E286)"   grid/jmaps.py
-run "head: pair head v2, order penalty (E287)"            grid/jends.py
+run "head: junction GT layer, order rule (E285)"         net/prep/jgt.py
+run "head: junction map targets (E285)"                  net/prep/qjunction.py
+run "head: junction maps head, loss, keypoints (E286)"   net/model/jmaps.py
+run "head: pair head v2, order penalty (E287)"            net/model/jends.py
 run "head: pair head v2 read-out (E287)"                 jends_eval.py selftest
 run "head: rule control of the pair decision (E287)"      jrule_control.py selftest
 run "head: pair precision at a fixed recall (E302)"       jpair_pr.py selftest
@@ -48,19 +48,19 @@ run "head: maneuver coverage of a delivered graph (E310)"   jmaneuver.py selftes
 run "head: diagnostics of the junction thread (E307 - E313)"  jdiag.py selftest
 run "head: wiring of the connectors, oracle gate (E322)"  jwiring.py selftest
 run "head: previous-keyframe ceiling and replay (E299 step 0)"  jtime.py selftest
-run "head: wiring twin of the nearest-piece rule, kept ends (E325)"  grid/jwire.py
-run "head: wiring head Wire, features, labels, places, leak tests (E325)"  grid/jwire_head.py
+run "head: wiring twin of the nearest-piece rule, kept ends (E325)"  net/model/jwire.py
+run "head: wiring head Wire, features, labels, places, leak tests (E325)"  net/model/jwire_head.py
 run "head: wiring head data, records, agreement (E325)"  jwire_data.py selftest
 run "head: wiring head training, ablation (E325)"  jwire_train.py selftest
 run "head: wiring head checks: twin card and live records, planted differences (E350)"  jwire_check.py selftest
 run "head: wiring head verdict: sign classes, kill, shift flag, planted cards (E350)"  jwire_verdict.py selftest
 run "timing: junction system ms per frame, section markers on a toy JEnds (E342 part B, CPU)"  jtiming.py selftest
 run "timing: CUDA graph of the junction front, equality driver, dump directories, score dry check, planted differences (E351, CPU)"  jgraph.py selftest
-run "head: torch Matrix-NMS layer (E292)"                 grid/qmnms.py
-run "head: Matrix-NMS switch, phase 9, mutations (E292)"  grid/test_mnms_layer.py
-run "head: all phases, gradients, E274 switches"         grid/qgraph.py
-run "head: pixel targets"                                grid/qraster.py
-run "head: tier loss switches (defaults = E273 loss)"    grid/test_tier_loss.py
+run "head: torch Matrix-NMS layer (E292)"                 net/model/qmnms.py
+run "head: Matrix-NMS switch, phase 9, mutations (E292)"  net/tests/test_mnms_layer.py
+run "head: all phases, gradients, E274 switches"         net/model/qgraph.py
+run "head: pixel targets"                                net/prep/qraster.py
+run "head: tier loss switches (defaults = E273 loss)"    net/tests/test_tier_loss.py
 run "head: close-node read-out (rule cases, 300 frames)" test_qgraph_readout.py
 run "head: pictures selftest"                            viz/qgraph_view.py --selftest
 echo "gates: $npass PASS, $nskip SKIP (stored data not in this checkout), $nfail FAIL"

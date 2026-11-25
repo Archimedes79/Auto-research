@@ -41,8 +41,8 @@ run() {                                                    # run <name> <command
 }
 if [ -z "${ONLY_IMPORTS:-}" ]; then
   cd "$P" || exit 2
-  for t in grid/test_jtoken.py test_jtoken_eval.py grid/test_lane_tokcache.py grid/test_jlive_train.py grid/test_lane_live.py \
-           grid/test_sdgraph.py grid/test_mapassoc.py grid/test_maperror.py grid/test_jroute.py grid/test_lane_route.py; do
+  for t in net/tests/test_jtoken.py test_jtoken_eval.py net/tests/test_lane_tokcache.py net/tests/test_jlive_train.py net/tests/test_lane_live.py \
+           net/tests/test_sdgraph.py net/tests/test_mapassoc.py net/tests/test_maperror.py net/tests/test_jroute.py net/tests/test_lane_route.py; do
     run "$t" $PY "$t"
   done
   run "jarm selftest" $PY jarm.py selftest

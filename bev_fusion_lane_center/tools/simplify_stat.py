@@ -1,7 +1,7 @@
 """simplify_stat.py - what a simplification removed, measured from git: files and lines of named path groups at a BEFORE ref (an archive tag or a commit) and at an AFTER ref, written as a json the reporter reads (`values` of report.json),
 so the "simplification" table of a report fills itself.
 
-    wsl python3 tools/simplify_stat.py --before archive/s2-s3-blocks-2026-11-18~1 --after HEAD --group token=training/grid/jtoken.py,training/train/jtoken_train.py --group tests=training/grid/test_jtoken*.py --out temp/simplify.json
+    wsl python3 tools/simplify_stat.py --before archive/s2-s3-blocks-2026-11-18~1 --after HEAD --group token=net/model/jtoken.py,training/train/jtoken_train.py --group tests=net/tests/test_jtoken*.py --out temp/simplify.json
     wsl python3 tools/simplify_stat.py selftest
 
 A group is `NAME=pathspec,pathspec,...` (git pathspecs, `*` matches inside a name, relative to the repository root; NAME without dots). Only text files that git tracks are counted (`*.py` and what the pathspec names). Per group the json holds

@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training/data", "training/grid", "training/train"):
+for sub_ in ("evaluation", "training/data", "net/prep", "net/model", "net/loss", "training/train"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtoken as JK  # noqa: E402
 

@@ -12,6 +12,8 @@ What it writes into <out>/<name>/: code/ (the files, relative to --strip), READM
 are, the source commit), MANIFEST.json (file, size, sha256; source paths; git commit and whether the sources had uncommitted changes; date).
 Refuses: weight-like files (.pt .pth .ckpt .npy .npz .pkl .bin .safetensors), a single file over 300 KB, a folder over --limit bytes, sources with uncommitted
 changes (unless --allow-dirty, which is written into the manifest). Standalone: python 3.8+, git optional."""
+import io
+import contextlib
 import argparse, datetime, glob, hashlib, json, os, shutil, subprocess, sys, tempfile
 
 WEIGHTS = (".pt", ".pth", ".ckpt", ".npy", ".npz", ".pkl", ".bin", ".safetensors", ".onnx", ".h5")
@@ -80,7 +82,7 @@ def export(a):
 
 def verify(folder):
     m = json.load(open(os.path.join(folder, "MANIFEST.json"), encoding="utf-8"))
-    bad, drift = [], []
+    bad, drift, gone = [], [], []
     for e in m["files"]:
         p = os.path.join(folder, e["file"])
         if not os.path.exists(p) or sha(p) != e["sha256"]:
@@ -88,11 +90,16 @@ def verify(folder):
         s = e.get("source")
         if s and os.path.exists(s) and sha(s) != e["sha256"]:
             drift.append(e["file"])
-    print("%s: %d file(s); %d changed inside the folder; %d differ from their source now (drift)" % (folder, len(m["files"]), len(bad), len(drift)))
+        elif s and not os.path.exists(s):
+            gone.append(e["file"])
+    print("%s: %d file(s); %d changed inside the folder; %d differ from their source now (drift); %d whose source is gone (moved or removed)"
+          % (folder, len(m["files"]), len(bad), len(drift), len(gone)))
     for f in bad:
         print("  changed:", f)
     for f in drift:
         print("  source has moved on:", f)
+    for f in gone:
+        print("  source is gone:", f)
     return len(bad)
 
 
@@ -109,6 +116,12 @@ def selftest():
         assert verify(dest) == 0
         open(os.path.join(d, "src", "a.py"), "w").write("print('changed')\n")          # drift is reported, the folder itself stays valid
         assert verify(dest) == 0
+        os.rename(os.path.join(d, "src", "sub", "b.py"), os.path.join(d, "src", "b2.py"))   # a moved source is named, not passed over in silence
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            assert verify(dest) == 0
+        assert "source is gone: code/sub/b.py" in out.getvalue(), out.getvalue()
+        os.rename(os.path.join(d, "src", "b2.py"), os.path.join(d, "src", "sub", "b.py"))
         open(os.path.join(d, "src", "w.pt"), "wb").write(b"0")
         ns.src = [os.path.join(d, "src", "*")]
         try:

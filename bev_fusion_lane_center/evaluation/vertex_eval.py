@@ -179,7 +179,7 @@ def run_null(per100, seed, n):
 
 # ------------------------------------------------------------------------------------------------------------------ a trained grid head
 def _grid_imports():
-    sys.path.insert(0, os.path.join(ROOT, "training", "grid"))
+    sys.path[:0] = [os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")]
     sys.path.insert(0, os.path.join(ROOT, "training", "data"))
     import data as GD
     import head as GH

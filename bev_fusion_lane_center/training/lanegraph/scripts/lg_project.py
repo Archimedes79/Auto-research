@@ -16,7 +16,7 @@ from lg_config import PROJECT
 
 @functools.cache
 def use_project_code() -> None:
-    dirs = [PROJECT.parent] + [d for top in ("training", "evaluation", "tools") for d in [PROJECT / top, *(PROJECT / top).rglob("*")]
+    dirs = [PROJECT.parent] + [d for top in ("net", "training", "evaluation", "tools") for d in [PROJECT / top, *(PROJECT / top).rglob("*")]
                                if d.is_dir() and "__pycache__" not in d.parts and not any(p.startswith("_session_scratch_") for p in d.parts)]
     for d in dirs:
         if str(d) not in sys.path:

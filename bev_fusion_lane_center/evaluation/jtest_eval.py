@@ -61,7 +61,7 @@ import time
 import numpy as np
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", "tools/viz", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "tools/viz", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 sys.path.append(os.path.normpath(os.path.join(ROOT, "..", "autoresearch")))
 
@@ -265,11 +265,11 @@ def _imports(path, lazy=True):
 
 
 def code_dirs():
-    """the folders a bare module name is looked up in, as the process sees them: what tools/env/bflc_env.sh puts on PYTHONPATH (every folder up to 4 deep under training/, evaluation/, tools/ and reports/build/, no scratch) plus
+    """the folders a bare module name is looked up in, as the process sees them: what tools/env/bflc_env.sh puts on PYTHONPATH (every folder up to 4 deep under net/, training/, evaluation/, tools/ and reports/build/, no scratch) plus
     the problem root, the repository root and autoresearch/ (the paths the modules insert themselves)"""
     repo = os.path.realpath(os.path.join(ROOT, ".."))
     dirs = [os.path.realpath(ROOT), repo, os.path.join(repo, "autoresearch")]
-    for top in ("training", "evaluation", "tools", os.path.join("reports", "build")):
+    for top in ("net", "training", "evaluation", "tools", os.path.join("reports", "build")):
         base = os.path.join(ROOT, top)
         for dp, dn, _ in os.walk(base):
             rel = os.path.relpath(dp, base)

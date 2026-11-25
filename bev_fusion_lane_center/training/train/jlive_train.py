@@ -1,4 +1,4 @@
-"""Trainer of E372 (stage S4 of the token champion, D113): the JOINT fine-tune of the champion token head with B' in the loop (`data/lane_live_tok.LiveSource`: B''s tokens and the labels made live in every step). Start it through `autoresearch/tools/run.py`.
+"""Trainer of E372 (stage S4 of the token champion, D113): the JOINT fine-tune of the champion token head with B' in the loop (`training/train/lane_live_tok.LiveSource`: B''s tokens and the labels made live in every step). Start it through `autoresearch/tools/run.py`.
 
     wsl bash tools/env/_pyr.sh jlive_train.py --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--none-weight W] [--pos-loss sum|max] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
 
@@ -23,7 +23,7 @@ preconditioned share |g_head / (sqrt(v_hat) + eps)| / (that + |g_b / (sqrt(v_hat
 Pairing: the frame tokens of the first 5 batches are logged; a resume and a roll-back of fit's guard (lr x 0.7) are logged and listed in status.json (`resumed_at`, `rollbacks_at`): the pair with the twin arm is broken from there.
 model.pt: the head in the format of `jtoken_train` (state, args with live_inputs: `jtoken_train.load_model` rebuilds it) + b_state (the complete `QGraph` state of B' after training) + b_args (the B' run's args) + rec; `load_b` reads B'. It is written, read back and checked
 (the head and B' as trained, bit for bit; B' outside the node head, and in z all of B', as at the start); a failure renames fit's .done to .done.FALSE and sets status.json `state` failed. A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU (no smoke run: the
-50-step gate runs the real data); `train(a, runs, ckpt_every)` is the loop without that check (`ckpt_every` TEST-ONLY). Tests: grid/test_jlive_train.py
+50-step gate runs the real data); `train(a, runs, ckpt_every)` is the loop without that check (`ckpt_every` TEST-ONLY). Tests: net/tests/test_jlive_train.py
 
 E393 (the pyramid trained by the token loss): `--b-state-from R` starts B' from R's b_state (R made on the same base B' file `--b-run`, whose sha256 still checks the cache; R's file sha256 in the recipe); `--train-pyr 1` trains B''s pyramid too
 (`LiveSource(train_pyr=)`: out of no_grad, no pixel loss) in its own AdamW group at `--pyr-lr-mult` x the schedule's lr (`trainer.fit`'s per-group lr_mult) and its own clip group (CLIP); at the first step its gradient from the head's loss must be
@@ -44,7 +44,7 @@ import torch.nn as nn
 from torch.optim.optimizer import register_optimizer_step_pre_hook
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "training/grid", "training/data", "training/data/prep", "training/train", "evaluation"):
+for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtoken_train as JKT  # noqa: E402
 import lane_live_tok as LLT  # noqa: E402

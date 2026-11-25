@@ -16,6 +16,9 @@ CHAMPION since D120 (E372 S4-HOLDS): VAL 873 frames, topo F1 0.6682 / 0.6813 (s0
 NEEDS the repository (it imports qgraph, qpredict, qtargets, qgraph_eval, trainer, jtok): copy code/ over bev_fusion_lane_center/ and run from there. Stage 1: bash tools/env/_py14.sh jtoken_train.py --name e373_cb_s<S> --seed S --ident e292_a --none-weight 0.25 --steps 12000 --bs 8 --lr 1e-3 --workers 4. Stage 2: bash tools/env/_py14.sh jlive_train.py --head-run e373_cb_s<S> --train-nodes 1 --live-inputs 1 --steps 3000 --bs 8 --lr 1e-4 (name the run e372_s4_s<S>). Read out LIVE: jtoken_eval.py dump --live --run e372_s4_s<S> --seed S; jtoken_eval.py score --live --run e372_s4_s<S> --seed S --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.6 --no-none-gate. Tests: bash tools/env/_py14.sh training/grid/test_jtoken.py, test_lane_tokcache.py, test_lane_live.py, test_jlive_train.py, evaluation/tests/test_jtoken_eval.py.
 ```
 
+The paths in `code/` and in the command are those of the source commit. Since D152 (2026-11-25) the model lives in `net/`: do not copy `code/` over a newer tree
+(two modules of one name would stand beside each other); check out the source commit and run there.
+
 ## Weights
 
 runs/e372_s4_s0 / s1 (head + node head of B', b_state); stage 1: runs/e373_cb_s0 / s1; frozen lane head B': runs/e292_a_s0 / s1; token cache runs/e365_cache (derived). All in the repository runs, not in git.

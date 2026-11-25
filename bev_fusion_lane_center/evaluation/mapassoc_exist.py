@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub_ in ("training/data", "training/data/prep", "training/grid", "training/train", "evaluation", ".."):
+for sub_ in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", "training/train", "evaluation", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import lane_mapassoc_data as MA  # noqa: E402
 import lane_sdgraph_data as SG  # noqa: E402

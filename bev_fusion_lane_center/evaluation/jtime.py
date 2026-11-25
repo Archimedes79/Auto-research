@@ -21,7 +21,7 @@ import sys
 import numpy as np
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "tools/viz", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "tools/viz", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 
 THR = 0.1                      # the delivered read-out: p >= 0.1 (logit -2.197)

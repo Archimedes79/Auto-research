@@ -1,5 +1,5 @@
-"""Draws the architecture of the E389 route-association head (RouteHead) as an svg, FROM THE REAL MODULE: the parameter counts are read from an instance of `training/grid/jroute.py::RouteHead` and the cap of
-the route table from `training/data/lane_route_data.py`, so the picture cannot drift from the code (a block that is renamed or removed fails the lookup). Few words in the boxes and large type (the report is
+"""Draws the architecture of the E389 route-association head (RouteHead) as an svg, FROM THE REAL MODULE: the parameter counts are read from an instance of `net/model/jroute.py::RouteHead` and the cap of
+the route table from `net/prep/lane_route_data.py`, so the picture cannot drift from the code (a block that is renamed or removed fails the lookup). Few words in the boxes and large type (the report is
 read on narrow screens); the numbers per block are printed as a markdown table by `--table`.
 
     python tools/draw_route_head.py <out.svg>          # run from bev_fusion_lane_center/ with the gcar python (torch); prints the module list it drew
@@ -18,7 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))                                    # bev_fusion_lane_center/
-sys.path.insert(0, os.path.join(ROOT, "training", "grid"))
+sys.path[:0] = [os.path.join(ROOT, "net", d) for d in ("prep", "model", "loss")]
 import jroute as J  # noqa: E402
 
 sys.path.insert(0, os.path.join(ROOT, "training", "data"))
@@ -99,7 +99,7 @@ def main(out):
 def selftest():
     import tempfile
     cf, cg = counts("full"), counts("geo")
-    assert cf["total"] == 33738 and cg["total"] == 21130, (cf["total"], cg["total"])           # pinned in grid/test_jroute.py
+    assert cf["total"] == 33738 and cg["total"] == 21130, (cf["total"], cg["total"])           # pinned in net/tests/test_jroute.py
     assert sum(v for k, v in cf.items() if k != "total") == cf["total"], cf
     assert table_md().count("\n") == 12
     with tempfile.TemporaryDirectory() as d:

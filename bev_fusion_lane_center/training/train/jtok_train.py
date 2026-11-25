@@ -2,7 +2,7 @@
 
     wsl bash tools/env/_py14.sh jtok_train.py --name e357_p_s0 --seed 0 --lattice 2.5 --steps 3000 --bs 8 --lr 1e-3 --workers 4 [--smoke]
 
-The pyramid of the baseline `runs/e273_p_s<seed>/model.pt` is frozen and runs without gradient; only the head `grid/jtok.JTok` trains (tokens = the GT nodes of the lattice, `data/lane_tok_data.py`; loss `jtok.tok_loss`).
+The pyramid of the baseline `runs/e273_p_s<seed>/model.pt` is frozen and runs without gradient; only the head `net/model/jtok.JTok` trains (tokens = the GT nodes of the lattice, `net/prep/lane_tok_data.py`; loss `jtok.tok_loss`).
 The node tables come from the cache (`lane_tok_data.py build-cache --split train`): a run with an incomplete cache is refused (`--smoke`, 20 steps, computes what it misses).
 Output `runs/<name>/` as `trainer.fit` writes it (log.txt / train.log, log.jsonl, status.json, config.json, ckpt.pt every 500 steps with resume, model.pt = the state + args (seed, lattice, d, base), .done). The scored model is the
 final one (nothing is chosen on VAL). Every logged step carries the peak GPU memory of the process so far, allocated and reserved (`gpu_gb`, `gpu_res_gb`), and the nodes of the largest frame of the batch (`nodes`); at step 50 and
@@ -18,9 +18,10 @@ import time
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "training/grid", "training/data", "training/data/prep", "evaluation"):
+for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtok as JT  # noqa: E402
+import loss_jtok as LJT  # noqa: E402
 import lane_tok_data as TD  # noqa: E402
 import trainer as T  # noqa: E402
 
@@ -57,7 +58,7 @@ def make_loss(run):
 
     def loss_fn(m, b):
         n[0] += 1
-        loss, info = JT.tok_loss(JT.forward_batch(m, b), b)
+        loss, info = LJT.tok_loss(JT.forward_batch(m, b), b)
         info.update(nodes=float(b["valid"].sum(1).max()), gpu_gb=gb(torch.cuda.max_memory_allocated), gpu_res_gb=gb(torch.cuda.max_memory_reserved))        # the two peaks are the process's: over ALL steps so far
         top[0] = max(top[0], info["nodes"])
         if n[0] == 10:

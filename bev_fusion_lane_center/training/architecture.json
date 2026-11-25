@@ -99,8 +99,8 @@
    "col": 2,
    "row": 0,
    "code": [
-    "training/grid/pyramid.py::PyramidHead",
-    "training/grid/head.py"
+    "net/model/pyramid.py::PyramidHead",
+    "net/model/head.py"
    ],
    "note": "one encoder-decoder with three taps: 0.5 m lines, 1 m centres + event heats, 2 m road / intersection; features of the node grid; frozen in both stages",
    "why": "the pixel stage of the lane head B' (E273 stage A, trained before, checkpoint runs/e292_a_s<seed>) is frozen: in stage 2 only its node head trains",
@@ -115,9 +115,9 @@
    "col": 3,
    "row": 0,
    "code": [
-    "training/grid/qnodes.py::NodeHead",
-    "training/grid/qgraph.py::QGraph",
-    "training/grid/qpredict.py"
+    "net/model/qnodes.py::NodeHead",
+    "net/model/qgraph.py::QGraph",
+    "net/model/qpredict.py"
    ],
    "note": "per cell: existence logit, offset, direction, 8 flag logits, section-start and long-link scores, a 64-d node token; in stage 2 the loss of the token head reaches it (D120), B' keeps its own node loss"
   },
@@ -128,7 +128,7 @@
    "col": 4,
    "row": 0,
    "code": [
-    "training/grid/qmnms.py::matrix_nms_logit"
+    "net/model/qmnms.py::matrix_nms_logit"
    ],
    "note": "E292: the close-node suppression as a layer of the forward path, no parameters, computed in log space so the gradient is alive; replaces the hard close-node step of the earlier system",
    "sub": "qmnms.py"
@@ -140,8 +140,8 @@
    "col": 5,
    "row": 0,
    "code": [
-    "training/data/lane_tokcache.py::select_tokens",
-    "training/data/lane_live_tok.py::live_tokens"
+    "net/prep/lane_tokcache.py::select_tokens",
+    "training/train/lane_live_tok.py::live_tokens"
    ],
    "note": "the K = 512 cells with the largest existence logit (a stable argsort) become tokens; cells with sigmoid(e) <= 0.05 are padding",
    "why": "a hard index choice on the existence of B' (the named compute budget of R5): no gradient goes through the choice, the picked tokens carry the gradient to the node head in stage 2",
@@ -156,7 +156,7 @@
    "col": 6,
    "row": 0,
    "code": [
-    "training/data/lane_live_tok.py::LiveSource"
+    "training/train/lane_live_tok.py::LiveSource"
    ],
    "note": "the delivered path and stage 2: B' runs inside the step, the K tokens are made from its live output with the graph kept (token rounded to float16 as the cache stores it, gradient passed straight through)",
    "sub": "lane_live_tok.py"
@@ -168,7 +168,7 @@
    "col": 4,
    "row": 1,
    "code": [
-    "training/grid/jtok.py::pair_geometry"
+    "net/model/jtok.py::pair_geometry"
    ],
    "note": "also the source of the 13 pair features of the attention bias; the attention bias and the wiring softmax range over the allowed pairs only",
    "w": 2,
@@ -185,8 +185,8 @@
    "col": 6,
    "row": 2,
    "code": [
-    "training/grid/jtoken.py::JTokenHead",
-    "training/grid/jtoken.py::fourier"
+    "net/model/jtoken.py::JTokenHead",
+    "net/model/jtoken.py::fourier"
    ],
    "note": "x0 = LayerNorm(Linear(tok) + MLP(Fourier(pos), dirv, e, e_raw, flags, s, uout, uin)); 0.127 M parameters in the whole head",
    "sub": "jtoken.py::JTokenHead"
@@ -198,8 +198,8 @@
    "col": 5,
    "row": 2,
    "code": [
-    "training/grid/jtoken.py::SelfLayer",
-    "training/grid/jtoken.py::pair_mlp"
+    "net/model/jtoken.py::SelfLayer",
+    "net/model/jtoken.py::pair_mlp"
    ],
    "note": "d 64, 4 heads, FFN 128; logit = q.k / 4 + bias(13 pair features) + log(key weight); the key weight is sigmoid(e) of B' for the first 1000 steps, then 1 - p_none of the head itself: no token is dropped inside"
   },
@@ -210,8 +210,8 @@
    "col": 4,
    "row": 2,
    "code": [
-    "training/grid/jtoken.py::wiring_logp",
-    "training/grid/jtoken.py::JTokenHead"
+    "net/model/jtoken.py::wiring_logp",
+    "net/model/jtoken.py::JTokenHead"
    ],
    "note": "the wiring IS the attention of the last layer: per source and class a softmax over the allowed destinations and one learned none slot; two handle scales per pair give the connector curve",
    "sub": "jtoken.py::wiring_logp"
@@ -223,7 +223,7 @@
    "col": 5,
    "row": 3,
    "code": [
-    "training/grid/jtoken.py::JTokenHead.read_types"
+    "net/model/jtoken.py::JTokenHead.read_types"
    ],
    "note": "none, lane point, fork, merge, junction entry, junction exit, boundary; read after layer 1 and after layer 3 by the same linear layer",
    "sub": "jtoken.py::read_types"
@@ -237,7 +237,7 @@
    "code": [
     "evaluation/jtoken_eval.py::decode_variant",
     "evaluation/jtoken_eval.py::D115",
-    "training/grid/jtoken.py::decode"
+    "net/model/jtoken.py::decode"
    ],
    "note": "a link is delivered when its probability reaches the threshold of its class (short: chord <= 8 m, long: above) and both ends are kept; three of the four named thresholds",
    "why": "hand-tuned on TRAIN and named (R7, D115): the decode of the champion is link short 0.3, link long 0.2, node keep p_none < 0.6, none gate off",
@@ -254,7 +254,7 @@
    "code": [
     "evaluation/jtoken_eval.py::node_e",
     "evaluation/jtoken_eval.py::frame_prediction",
-    "training/data/lane_ptok_data.py::to_pred"
+    "net/prep/lane_ptok_data.py::to_pred"
    ],
    "note": "a token becomes a node of the graph when the none probability of its own type softmax is below 0.6; the fourth named threshold",
    "why": "the same hand-tuned and named read-out (R7, D115); the existence written for a kept node is 1 - p_none shifted by keep_thr - 0.5",
@@ -269,8 +269,8 @@
    "col": 2,
    "row": 2,
    "code": [
-    "training/grid/qformat.py",
-    "training/data/lane_ptok_data.py::to_pred"
+    "net/model/qformat.py",
+    "net/prep/lane_ptok_data.py::to_pred"
    ],
    "note": "the qformat prediction of a frame: nodes (position, direction, existence, flags), links with their Hermite connectors, node types; no GT field",
    "h": 2
@@ -350,15 +350,15 @@
    "col": 1,
    "row": 6,
    "code": [
-    "training/data/lane_gt_data.py",
-    "training/data/lane_gtgeom_data.py",
+    "net/prep/lane_gt_data.py",
+    "net/prep/lane_gtgeom_data.py",
     "training/data/p16_data.py",
     "training/data/p16_common.py",
     "training/data/p8_lib.py",
     "training/data/assoc_lib.py",
-    "training/grid/qtargets.py",
-    "training/grid/qraster.py",
-    "training/grid/qzones.py"
+    "net/prep/qtargets.py",
+    "net/prep/qraster.py",
+    "net/prep/qzones.py"
    ],
    "note": "the 39 frozen channels of a frame and the targets drawn from the lane GT (nodes on a 2 m grid, links, pixel maps); the splits and cached files still come through p16_data.BuilderData of the old chain (a dependency of the removal of D97)"
   },
@@ -371,10 +371,10 @@
    "code": [
     "training/train/qgraph_train.py",
     "training/train/qgates.py",
-    "training/grid/qgraph.py::qgraph_loss",
-    "training/grid/losses.py",
-    "training/grid/soft_lines.py",
-    "training/grid/targets.py"
+    "net/loss/loss_qgraph.py::qgraph_loss",
+    "net/loss/losses.py",
+    "net/model/soft_lines.py",
+    "net/prep/targets.py"
    ],
    "note": "pixel maps -> nodes in gated phases, then phase 9 with the Matrix-NMS layer; the checkpoint runs/e292_a_s<seed> is the B' of the champion"
   },
@@ -385,9 +385,9 @@
    "col": 3,
    "row": 6,
    "code": [
-    "training/data/lane_tokcache.py",
-    "training/data/lane_ptok_data.py",
-    "training/data/lane_tok_data.py",
+    "net/prep/lane_tokcache.py",
+    "net/prep/lane_ptok_data.py",
+    "net/prep/lane_tok_data.py",
     "evaluation/jtok_eval.py::sub_table"
    ],
    "note": "derived data, not in git: the K = 512 tokens of the frozen B' on every TRAIN and VAL frame with the labels of every token (assignment to the GT nodes, contracted link targets); the loader batches it"
@@ -411,7 +411,7 @@
    "row": 6,
    "code": [
     "training/train/jlive_train.py",
-    "training/data/lane_live_tok.py::b_loss"
+    "training/train/lane_live_tok.py::b_loss"
    ],
    "note": "B' runs in the step (live tokens), its node head trains on the token loss plus its own node loss; the champion recipe of D120 (E372), no past block, no map block"
   },
@@ -439,7 +439,7 @@
    "col": 5,
    "row": 7,
    "code": [
-    "training/grid/jtoken.py::jtoken_loss"
+    "net/loss/loss_jtoken.py::jtoken_loss"
    ],
    "note": "per class and per source the negative log of the summed probability of the GT successors (the none slot when there is none); the none target and class weighted 0.25 in the champion; matching inside the loss only (D55)",
    "w": 2,
@@ -453,7 +453,7 @@
    "col": 2,
    "row": 9,
    "code": [
-    "training/data/lane_route_data.py::route_of",
+    "net/prep/lane_route_data.py::route_of",
     "training/data/sd_lib.py"
    ],
    "note": "the driven route from the lane GT, at most 160 samples (the nearest to the ego are kept), the map-error modes exact / error / train / none / wrong / gross; no piece id or node label enters a route token",
@@ -466,7 +466,7 @@
    "col": 3,
    "row": 9,
    "code": [
-    "training/grid/jroute.py::RouteHead"
+    "net/model/jroute.py::RouteHead"
    ],
    "note": "reads the cached tokens of the frozen B' and the SD route; 33,738 parameters; outputs road and lane logits per token; separate stage, not in the delivered path"
   },
@@ -477,7 +477,7 @@
    "col": 4,
    "row": 9,
    "code": [
-    "training/grid/jroute.py::route_loss"
+    "net/loss/loss_jroute.py::route_loss"
    ],
    "note": "result E389: TIE (no gain): the gain over the no-map head, +0.094 / +0.097 F1_road, missed the bar +0.10; not safe under a wrong map; 2 - 3 ms on a busy GPU"
   },
@@ -510,8 +510,8 @@
    "col": 0,
    "row": 9,
    "code": [
-    "training/data/lane_sdgraph_data.py",
-    "training/grid/jsdgraph.py",
+    "net/prep/lane_sdgraph_data.py",
+    "net/model/jsdgraph.py",
     "evaluation/sdgraph_probe.py"
    ],
    "note": "roads with logical lanes per direction and their connections, encoded first, then fusion, then error models (R9); card v7 of 2026-11-21: step 1 SOUND by its written rule; the association of the champion's tokens to it is E391 (the box below: NO FUSION); not in the champion",
@@ -540,16 +540,21 @@
    "col": 2,
    "row": 12,
    "code": [
-    "training/grid/jmaps.py",
-    "training/grid/jends.py",
-    "training/grid/jgt.py",
-    "training/grid/qjunction.py",
-    "training/grid/qendnet.py",
-    "training/grid/qends.py",
-    "training/grid/jwire.py",
-    "training/grid/jwire_head.py",
-    "training/grid/jnarrow.py",
-    "training/data/prep/junction_paint.py",
+    "net/model/jmaps.py",
+    "net/model/jend_model.py",
+    "net/loss/loss_jmaps.py",
+    "net/model/jends.py",
+    "net/loss/loss_jends.py",
+    "net/prep/jgt.py",
+    "net/prep/qjunction.py",
+    "net/model/qendnet.py",
+    "net/loss/loss_qendnet.py",
+    "net/prep/qends.py",
+    "net/model/jwire.py",
+    "net/model/jwire_head.py",
+    "net/loss/loss_jwire_head.py",
+    "training/train/jnarrow.py",
+    "net/prep/junction_paint.py",
     "training/train/jmaps_train.py",
     "training/train/jends_train.py",
     "training/train/jwire_train.py",
@@ -616,10 +621,11 @@
    "col": 0,
    "row": 13,
    "code": [
-    "training/grid/qlinks.py",
-    "training/grid/sections.py",
-    "training/grid/qassign.py",
-    "training/grid/map_sim.py"
+    "net/model/qlinks.py",
+    "net/model/sections.py",
+    "net/loss/loss_sections.py",
+    "net/model/qassign.py",
+    "net/prep/map_sim.py"
    ],
    "note": "the lane head B is trained with these stages (phases 4 - 6); the token head replaces them; the map side simulates lane-level maps with errors",
    "w": 2,
@@ -633,11 +639,12 @@
    "col": 2,
    "row": 13,
    "code": [
-    "training/grid/chain.py",
-    "training/grid/chain_data.py",
-    "training/grid/hold.py",
-    "training/grid/assign.py",
-    "training/grid/data.py",
+    "net/model/chain.py",
+    "net/loss/loss_chain.py",
+    "net/prep/chain_data.py",
+    "net/model/hold.py",
+    "net/model/assign.py",
+    "net/prep/data.py",
     "training/train/grid_train.py",
     "evaluation/vertex_eval.py",
     "evaluation/lane_grid/"
@@ -652,8 +659,9 @@
    "col": 3,
    "row": 13,
    "code": [
-    "training/grid/jtok.py::JTok",
-    "training/grid/jtok.py::JTokModel",
+    "net/model/jtok.py::JTok",
+    "net/model/jtok.py::JTokModel",
+    "net/loss/loss_jtok.py",
     "training/train/jtok_train.py",
     "evaluation/jtok_eval.py"
    ],
@@ -667,8 +675,8 @@
    "col": 4,
    "row": 13,
    "code": [
-    "training/data/lane_past_data.py",
-    "training/data/lane_seq_data.py"
+    "net/prep/lane_past_data.py",
+    "net/prep/lane_seq_data.py"
    ],
    "note": "the champion has no state (R2); the data of the previous keyframe and of keyframe sequences stay for a new mechanism",
    "sub": "lane_past_data.py +1"
@@ -697,10 +705,10 @@
    "w": 2,
    "hpx": 52,
    "code": [
-    "training/data/lane_mapassoc_data.py",
-    "training/grid/jmapassoc.py",
+    "net/prep/lane_mapassoc_data.py",
+    "net/model/jmapassoc.py",
     "evaluation/mapassoc_probe.py",
-    "training/grid/test_mapassoc.py"
+    "net/tests/test_mapassoc.py"
    ],
    "note": "the champion's delivered tokens are assigned to the E390 road-graph segments (or 'unassigned') by a learned cross-attention (arms P, F1, F2, F3 on the frozen E390 encoder; every token input detached, so the map cannot change the delivered graph); result of card v2.1 (2026-11-21): NO FUSION by its written rule: association accuracy 0.822 / 0.823 below the bars 0.843 / 0.840, 13 % of the true tokens left unassigned; the lanes per direction read through the map 0.948 / 0.952 against 0.891 / 0.873 without it; not in the champion",
    "sub": "jmapassoc.py +3"
@@ -714,10 +722,10 @@
    "w": 2,
    "hpx": 52,
    "code": [
-    "training/data/lane_maperror_data.py",
+    "net/prep/lane_maperror_data.py",
     "evaluation/maperror_probe.py",
     "evaluation/maptrust_gate.py",
-    "training/grid/test_maperror.py"
+    "net/tests/test_maperror.py"
    ],
    "note": "the catalogue of map errors as nested, calibrated draws on the E390 road graph (pure shift and turn, bigger count errors, ghost segments, spurious or swapped links, an outdated map, a wrong route, the map of another scene) and the TRAIN mix with wrong maps; the step-0 probe measures how each error degrades the E391 association and the lanes read through it (nulls and headroom first); a wrong map must not be worse than no map (R9); saved, not run (D138 pauses new experiments); not in the champion",
    "sub": "lane_maperror_data.py +3"
@@ -980,6 +988,10 @@
  },
  "covers": [
   {
+   "dir": "net",
+   "glob": "*.py"
+  },
+  {
    "dir": "training",
    "glob": "*.py"
   },
@@ -993,6 +1005,8 @@
   }
  ],
  "not_drawn": {
+  "net/tests/merged_source.py": "helper of the textual mutants: a model module and its losses as one text (D152)",
+  "net/tests/test_net_layering.py": "test of the layers of net/ (D152)",
   "evaluation/gpu_gate.py": "helper: wait until the GPU has room before a GPU evaluation step (D100)",
   "evaluation/pmap.py": "helper: order-keeping parallel map over a fork pool for CPU scoring",
   "evaluation/jroute_verdict.py": "E389b: the arithmetic of the card's rule from stored score cards (by hand), no part of the chain",
@@ -1023,27 +1037,27 @@
   "training/data/prep/reg_precompute.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
   "training/data/prep/sd_precompute.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
   "training/data/prep/sd_reg_precompute.py": "splits, poses, token lists and precomputed map registration of the loops 2 - 8 and the D7 extension: they wrote the files that p16_data and the caches read",
-  "training/grid/test_grid.py": "tests of the E271 / E272 grid chain (reference)",
-  "training/grid/test_jlive_train.py": "test of the stage-2 trainer (jlive_train.py)",
-  "training/grid/test_jmaps_dirx.py": "test of the junction maps head DirX exchange (E324 s reference)",
-  "training/grid/test_jmaps_simplify.py": "test of the junction maps head simplification flags (E324 s reference)",
-  "training/grid/test_jnarrow.py": "test of the E353 narrowing (E324 s reference)",
-  "training/grid/test_jroute.py": "test of the E389 route head and its trainer",
-  "training/grid/test_sdgraph.py": "test of the E390 road-graph encoder and data",
-  "training/grid/test_jtok.py": "test of the E357 GT-token pair head (jtok.py)",
-  "training/grid/test_jtoken.py": "test of the token head (jtoken.py)",
-  "training/grid/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
-  "training/grid/test_lane_past.py": "test of the past data (E368, reference)",
-  "training/grid/test_lane_route.py": "test of the E389 route data",
-  "training/grid/test_lane_tokcache.py": "test of the token cache and its loader",
-  "training/grid/test_mnms_layer.py": "test of the Matrix-NMS layer (qmnms.py, E292)",
-  "training/grid/test_oracle.py": "G0 oracle test of the grid chain (reference)",
-  "training/grid/test_qraster.py": "test of the pixel targets of B (qraster.py)",
-  "training/grid/test_qtargets.py": "test of the node and link targets of B (qtargets.py)",
-  "training/grid/test_soft_nms.py": "test of the soft close-node suppression of B (E277)",
-  "training/grid/test_tier_loss.py": "test of the E276 tier loss switches of B",
-  "training/grid/test_tiers_sparse.py": "test of the E276 sparse node target of B",
-  "training/grid/test_zones.py": "test of the zone targets of B (qzones.py)",
+  "net/tests/test_grid.py": "tests of the E271 / E272 grid chain (reference)",
+  "net/tests/test_jlive_train.py": "test of the stage-2 trainer (jlive_train.py)",
+  "net/tests/test_jmaps_dirx.py": "test of the junction maps head DirX exchange (E324 s reference)",
+  "net/tests/test_jmaps_simplify.py": "test of the junction maps head simplification flags (E324 s reference)",
+  "net/tests/test_jnarrow.py": "test of the E353 narrowing (E324 s reference)",
+  "net/tests/test_jroute.py": "test of the E389 route head and its trainer",
+  "net/tests/test_sdgraph.py": "test of the E390 road-graph encoder and data",
+  "net/tests/test_jtok.py": "test of the E357 GT-token pair head (jtok.py)",
+  "net/tests/test_jtoken.py": "test of the token head (jtoken.py)",
+  "net/tests/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
+  "net/tests/test_lane_past.py": "test of the past data (E368, reference)",
+  "net/tests/test_lane_route.py": "test of the E389 route data",
+  "net/tests/test_lane_tokcache.py": "test of the token cache and its loader",
+  "net/tests/test_mnms_layer.py": "test of the Matrix-NMS layer (qmnms.py, E292)",
+  "net/tests/test_oracle.py": "G0 oracle test of the grid chain (reference)",
+  "net/tests/test_qraster.py": "test of the pixel targets of B (qraster.py)",
+  "net/tests/test_qtargets.py": "test of the node and link targets of B (qtargets.py)",
+  "net/tests/test_soft_nms.py": "test of the soft close-node suppression of B (E277)",
+  "net/tests/test_tier_loss.py": "test of the E276 tier loss switches of B",
+  "net/tests/test_tiers_sparse.py": "test of the E276 sparse node target of B",
+  "net/tests/test_zones.py": "test of the zone targets of B (qzones.py)",
   "training/trainer_selftest.py": "selftest of trainer.fit (crash and resume give the same weights)"
  }
 }

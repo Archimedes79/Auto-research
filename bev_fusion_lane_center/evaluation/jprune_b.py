@@ -37,7 +37,7 @@ import torch
 import torch.nn as nn
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jends_eval as JEV  # noqa: E402
 import jprune_cost as PC  # noqa: E402

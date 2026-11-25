@@ -35,7 +35,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 
 FORWARD_SHA = "b2fabf9ca5bddd114e1bd6234398ef061bacd8ab71abff79c1289af090749f3d"                     # sha256 of the source of `JEndModel.forward` (lines right-stripped), 2026-11-15: `_front` mirrors it

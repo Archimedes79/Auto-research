@@ -35,7 +35,7 @@ from types import SimpleNamespace
 import numpy as np
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", "tools/viz", ".."):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "tools/viz", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jprune_probe as PP  # noqa: E402
 from jprune_cost import Cost  # noqa: E402

@@ -36,6 +36,7 @@
 !/bev_fusion_lane_center/DESIGN.md
 !/bev_fusion_lane_center/winner/
 # code
+!/bev_fusion_lane_center/net/
 !/bev_fusion_lane_center/training/
 !/bev_fusion_lane_center/evaluation/
 !/bev_fusion_lane_center/tools/

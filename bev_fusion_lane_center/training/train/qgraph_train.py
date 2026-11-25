@@ -23,10 +23,11 @@ import sys
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training", "training/grid", "training/data", "evaluation"):
+for sub in ("training", "net/prep", "net/model", "net/loss", "training/data", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import lane_gt_data as LD  # noqa: E402
 import qgraph as QG  # noqa: E402
+import loss_qgraph as LQG  # noqa: E402
 import trainer as T  # noqa: E402
 
 STEPS = {2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000, 8: 3000, 9: 1000}
@@ -72,9 +73,9 @@ def main():
     a = ap.parse_args()
     a.soft_nms = resolve_soft_nms(a.soft_nms, a.soft_nms_mnms)                                    # the form that QGraph and qpredict.load_model read (travels in args['soft_nms'])
     T.seed_all(a.seed)
-    QG.CFG.update(ev_w=a.ev_w, node_w_evt=a.node_w_evt, node_w_inter=a.node_w_inter, long_match=a.long_match)               # E274 switches (defaults = E273)
-    QG.CFG.update(tier_w=a.tier_w, vis_w=a.vis_w, neg_w=a.neg_w, link_tier_w=a.link_tier_w)                                 # E276 switches (defaults = E273)
-    QG.CFG.update(node_loss=a.node_loss, zone_bias=a.zone_bias)                                                            # E282 switches (default = E273)
+    LQG.CFG.update(ev_w=a.ev_w, node_w_evt=a.node_w_evt, node_w_inter=a.node_w_inter, long_match=a.long_match)               # E274 switches (defaults = E273)
+    LQG.CFG.update(tier_w=a.tier_w, vis_w=a.vis_w, neg_w=a.neg_w, link_tier_w=a.link_tier_w)                                 # E276 switches (defaults = E273)
+    LQG.CFG.update(node_loss=a.node_loss, zone_bias=a.zone_bias)                                                            # E282 switches (default = E273)
     if a.sparse:
         LD.QData.DEFAULT_SPARSE = tuple(a.sparse)
     if a.node_loss == "zone":
@@ -117,7 +118,7 @@ def main():
         ps = QG.trainable_params(model, k)
         for p in ps:
             p.requires_grad_(True)
-        T.fit(model, lambda m, b, k=k: QG.qgraph_loss(m, b, k), run, steps=sk, loader=dl, lr=LR[k], ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="qgraph", phase=k, width=a.width, cfg=dict(QG.CFG)))
+        T.fit(model, lambda m, b, k=k: LQG.qgraph_loss(m, b, k), run, steps=sk, loader=dl, lr=LR[k], ckpt_every=500, seed=a.seed, args=vars(a), params=ps, config=dict(design="qgraph", phase=k, width=a.width, cfg=dict(LQG.CFG)))
         res = QGt.gate(model, k, run, n=8 if a.smoke else 150)
         run.log("GATE", json.dumps(res, default=float))
         run.status(gate=res)

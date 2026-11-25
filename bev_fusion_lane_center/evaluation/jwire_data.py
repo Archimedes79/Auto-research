@@ -1,4 +1,4 @@
-"""E325 step 2: the data of the wiring head `Wire` (`training/grid/jwire_head.py`): per frame a compact RECORD of what a connector end sees (the kept pieces of the delivered graph and their attributes, the pairs, the keypoint probabilities,
+"""E325 step 2: the data of the wiring head `Wire` (`net/model/jwire_head.py`): per frame a compact RECORD of what a connector end sees (the kept pieces of the delivered graph and their attributes, the pairs, the keypoint probabilities,
 the GT ends the keypoints match), and the instances / agreement statistics made from it.
 
     wsl bash tools/env/_py14.sh jwire_data.py val --seed 0 [--pair-run e312_p_s0] [--ends kp|att] [--thr 0.1] [--max N]  # VAL records from the stored dumps (CPU: runs/<pair run>/ends_val.pkl, B's full dump runs/kept/e276/predfull_e273_p_s<seed>.pkl, the GT ends
@@ -29,7 +29,7 @@ import time
 import numpy as np
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import jwire as JW  # noqa: E402
 import jwire_head as JH  # noqa: E402

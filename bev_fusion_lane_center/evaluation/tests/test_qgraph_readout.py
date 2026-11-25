@@ -11,7 +11,7 @@ import sys
 import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-for sub in ("..", "../../training/grid"):
+for sub in ("..", "../../net/prep", "../../net/model", "../../net/loss"):
     sys.path.insert(0, os.path.normpath(os.path.join(HERE, sub)))
 import qformat  # noqa: E402
 import qgraph_eval as QE  # noqa: E402

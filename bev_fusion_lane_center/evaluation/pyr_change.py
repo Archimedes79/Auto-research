@@ -22,7 +22,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/train"):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/train"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 
 FEATS = ("feat2", "feat1", "feat05")                     # what the node head reads (E393 section 1.2)

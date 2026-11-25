@@ -2,7 +2,7 @@
 
 A clean re-implementation of the inference path of the system of record: camera + radar BEV features in, a lane-centre-line graph out
 (lane pieces with their successors, connectors through junctions). It loads the trained checkpoints unchanged and gives **bit-identical** outputs
-to the original modules (`training/grid`, `evaluation/`) on CPU. Training code is not part of it. The modules are imported flat (the project's
+to the original modules (`net/`, `evaluation/`) on CPU. Training code is not part of it. The modules are imported flat (the project's
 convention) and carry the prefix `lg_` so that no name collides with another module on the project path.
 
 ## Architecture
@@ -78,7 +78,7 @@ lines, none over 170; scripts 233, tests 278. The original path spans 4,409 line
 
 ## Limitations
 - No training code and no losses (dual softmax, crossing penalty, geometry loss, attachment cross entropy): `training/train/qgraph_train.py`,
-  `training/train/jmaps_train.py`, `training/train/jends_train.py`, `training/grid/jends.py`. Recipe: B = E273 p; maps E307 n (3000 steps); pair head 6000 steps
+  `training/train/jmaps_train.py`, `training/train/jends_train.py`, `net/model/jends.py`. Recipe: B = E273 p; maps E307 n (3000 steps); pair head 6000 steps
   `--e2e --scales --maps-w 1.0 --geom-w 0.5 --attach` on the frozen pyramid.
 - float32 only (training used bf16 autocast). Nothing on TEST.
 - The evidence of the link head is sampled frame by frame (one host sync per frame).

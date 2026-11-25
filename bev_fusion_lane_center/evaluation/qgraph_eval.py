@@ -2,7 +2,7 @@
 protocol are untouched; the graph part is scored by the SAME functions as `evaluate.py` and the lane suite (`lane_suite.py graphs:<name>`), so the reference graph d and the new graph p are
 read by one ruler (tested: the stored graphs of recall_sp0_dp give the counts of the stored suite run exactly).
 
-    pred = qformat.oracle_prediction(lane_gt_graph)         # or the head's output: the dict of training/grid/qformat.py (nodes, links, assign)
+    pred = qformat.oracle_prediction(lane_gt_graph)         # or the head's output: the dict of net/model/qformat.py (nodes, links, assign)
     graph, bk = readout(pred)                                # the output step: e >= 0.5, p >= 0.5, one piece per section -> LaneGraph + bookkeeping
     frames = val_frames()                                    # the 873 VAL frames (lane suite order): frame.gt = old graph GT, frame.lane() = lane GT of GtGenerator
     graph_metrics(graph, frames[0])                          # HEADLINE: Q, F1@1.0, lanes_found, topo P / R / F1, junction P / R / F1, dup_frac, R@1_far, vert100, pieces_per_gt_piece ...

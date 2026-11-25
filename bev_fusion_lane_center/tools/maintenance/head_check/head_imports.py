@@ -41,7 +41,7 @@ def in_env(name):
 
 live_index = {}                                                              # the code folders of the live tree only (runs / data / caches are not walked)
 LP = os.path.join(LIVE, "bev_fusion_lane_center")
-for top in [os.path.join(LP, x) for x in ("training", "evaluation", "tools", "reports/build", "temp")] + [os.path.join(LIVE, x) for x in ("autoresearch", "GtGenerator", "temp")]:
+for top in [os.path.join(LP, x) for x in ("net", "training", "evaluation", "tools", "reports/build", "temp")] + [os.path.join(LIVE, x) for x in ("autoresearch", "GtGenerator", "temp")]:
     for d, ds, fs in os.walk(top):
         ds[:] = [x for x in ds if x not in ("__pycache__", ".git", "runs", "data", "out", "cache")]
         for f in fs:

@@ -17,7 +17,7 @@ from types import SimpleNamespace
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 
 

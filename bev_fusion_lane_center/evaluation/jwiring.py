@@ -26,7 +26,7 @@ import time
 import numpy as np
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 from qends_eval import WIRE_ANG, WIRE_POS, KEYS, _ang, _tan, add_connectors, make_pairs  # noqa: E402
 

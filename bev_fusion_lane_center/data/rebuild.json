@@ -1,6 +1,7 @@
 {
   "_about": "Decision D11. What is in git, what is not, and how everything that is not in git is made again. Read by tools/maintenance/reproducible.py (wsl python3 tools/maintenance/reproducible.py). Script paths are relative to the problem folder. status: scripted = a tracked script makes it from its inputs; recipe = made again by a run (ledger row + tag + run.json); partial = scripted in part, see note; missing = no script yet.",
   "code_dirs": [
+    "net",
     "training",
     "evaluation",
     "tools",
@@ -72,7 +73,7 @@
   "clone_checks": [
     {
       "name": "compile all code (python 3.12, gcar)",
-      "cmd": "source ~/miniconda3/etc/profile.d/conda.sh && conda activate gcar && PYTHONDONTWRITEBYTECODE=1 python -m compileall -q training evaluation tools reports/build",
+      "cmd": "source ~/miniconda3/etc/profile.d/conda.sh && conda activate gcar && PYTHONDONTWRITEBYTECODE=1 python -m compileall -q net training evaluation tools reports/build",
       "timeout": 300
     },
     {

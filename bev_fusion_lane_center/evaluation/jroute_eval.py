@@ -1,4 +1,4 @@
-"""Read-out, scoring and reference rows of E389 (A6, D127: the route-association head `training/grid/jroute.py` on the cached B' tokens of the champion); the data is `training/data/lane_route_data.py`, the card is
+"""Read-out, scoring and reference rows of E389 (A6, D127: the route-association head `net/model/jroute.py` on the cached B' tokens of the champion); the data is `net/prep/lane_route_data.py`, the card is
 `experiments/E389_sd-route-association-of-champion-tokens/experiment.md` (section 0, the rule and the read-outs).
 
     wsl bash tools/env/_py14.sh jroute_eval.py dump  --run R --seed S --mode exact|error|none|wrong|gross [--cpu] [--bs 8] [--workers 0] [--max N]          # the head on the VAL frames -> runs/R/route_<mode>[_n<N>].pkl (never overwritten)
@@ -35,7 +35,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", "../autoresearch"):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "../autoresearch"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 from Evaluation import stats as ST  # noqa: E402  (the shared scene bootstrap)
 

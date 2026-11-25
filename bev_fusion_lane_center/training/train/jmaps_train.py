@@ -4,7 +4,7 @@
 
 `--joint` also trains the pixel stage (the pyramid, with its own pixel loss kept so that B's maps do not drift; the nodes / links of B no longer match such a pixel stage, so a joint run is judged on the
 maps only); without it the pyramid is frozen and the junction head reads B's own features. Frames: TRAIN through `lane_gt_data.QData(junction=True)` (the paint sidecars of
-`data/prep/junction_paint.py` must exist for TRAIN and VAL); TEST never. Output: `runs/<name>/model.pt` (JModel state + args), scored by `evaluation/jmaps_eval.py` until its removal on 2026-11-21 (in the git history (commit `4c6ddf52`)).
+`net/prep/junction_paint.py` must exist for TRAIN and VAL); TEST never. Output: `runs/<name>/model.pt` (JModel state + args), scored by `evaluation/jmaps_eval.py` until its removal on 2026-11-21 (in the git history (commit `4c6ddf52`)).
 """
 import argparse
 import os
@@ -13,11 +13,13 @@ import sys
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training", "training/grid", "training/data", "training/data/prep", "evaluation"):
+for sub in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import jmaps as JM  # noqa: E402
+import loss_jmaps as LJM  # noqa: E402
 import lane_gt_data as LD  # noqa: E402
 import qgraph as QG  # noqa: E402
+import loss_qgraph as LQG  # noqa: E402
 import trainer as T  # noqa: E402
 
 
@@ -70,10 +72,10 @@ def main():
         dev = next(m.parameters()).device
         x = b["x"].to(dev, non_blocking=True).float()
         P, out = m(x, joint=a.joint)
-        loss, info = JM.jmaps_loss(out, b, far_w=a.far_w)
+        loss, info = LJM.jmaps_loss(out, b, far_w=a.far_w)
         info = {"j_" + k: v for k, v in info.items()}
         if a.joint:
-            lp, ip = QG.pixel_loss(P, b)
+            lp, ip = LQG.pixel_loss(P, b)
             loss = loss + lp
             info.update({"px_" + k: v for k, v in ip.items()})
         return loss, info

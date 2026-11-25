@@ -1,0 +1,126 @@
+"""Targets of the junction maps (E285 / E286, D82): the junction GT of `jgt.py` and the painted evidence of `net/prep/junction_paint.py` as arrays on the grids of the pixel stage.
+
+    t, jg = junction_targets(g, paint)     # g = lane GT graph of a frame, paint = `junction_paint.load(token)` or None
+    t["jz"]      (2, 100, 100) float32   junction zone and conflict core (1 m cells, row = x, column = y, origin -50 m)
+    t["jheat"]   (2, 100, 100) float32   entry / exit heat: Gaussian (sigma 1.5 m) at the entry / exit points
+    t["jdir"]    (4, 100, 100) float32   entry heading (tx, ty), exit heading (tx, ty) at the cells within 2 sigma of an end, 0 elsewhere
+    t["jpaint"]  (2, 200, 200) float32   0.5 m masks: stop lines, pedestrian crossings (the map expansion's polygons; thin stop lines are also drawn as a 1 cell line)
+All by location: no matching, nothing predicted. A frame without a junction gets zero maps (`jg` is None). Run the self-test: python qjunction.py
+"""
+import numpy as np
+
+import jgt as JG
+
+N05, RES05, HALF = 200, 0.5, 50.0
+
+
+def _fill(mask, poly):
+    pts = ((np.asarray(poly, float) + HALF) / RES05)[:, ::-1]                                   # (column = y, row = x) for cv2
+    if len(pts) >= 3:
+        JG.fill_poly(mask, pts, line=True)
+
+
+def junction_targets(g, paint=None):
+    jg = JG.junction_gt(g)
+    zone, heat, head = JG.fields(jg)
+    stop = np.zeros((N05, N05), np.uint8)
+    ped = np.zeros((N05, N05), np.uint8)
+    if paint:
+        for s in paint["stop_line"]:
+            _fill(stop, s["poly"])
+        for p in paint["ped_crossing"]:
+            _fill(ped, p)
+    return dict(jz=zone, jheat=heat, jdir=head, jpaint=np.stack([stop, ped]).astype(np.float32)), jg
+
+
+def fit_pair_scales(jg, scales=(0.05, 0.15, 0.3, 0.45, 0.6, 0.8, 1.0, 1.25)):
+    """E303: the two handle scales (sa, sb, in chords) of the Hermite curve of every true pair, fitted to the GT connector points of the pair (grid search, the cost of `qtargets.fit_long_scales`) -> (P, 2) float32 in the order of
+    `jg['pairs']` (NaN when a pair has no connector points). What the pair head's scale outputs are trained towards."""
+    import qends as QE
+    from scipy.spatial import cKDTree
+    out = np.full((0 if jg is None else len(jg["pairs"]), 2), np.nan, np.float32)
+    if jg is None:
+        return out
+    for n, (r, pts) in enumerate(zip(jg["pairs"], jg["pair_pts"])):
+        a, b = int(r[0]), int(r[1])
+        pa, ta, pb, tb = jg["ent"][a, :2], jg["ent"][a, 2:], jg["ext"][b, :2], jg["ext"][b, 2:]
+        tgt = np.asarray(pts, float)
+        if len(tgt) < 3 or np.linalg.norm(pb - pa) < 1.0:
+            continue
+        tt = cKDTree(tgt)
+        best = 1e9
+        for sa in scales:
+            for sb in scales:
+                cur = QE.curve_s(pa, ta, pb, tb, sa, sb, step=0.5)
+                m = tt.query(cur)[0].mean() + 0.2 * cKDTree(cur).query(tgt)[0].mean()
+                if m < best:
+                    best, out[n] = m, (sa, sb)
+    return out
+
+
+PPTS_N = 16
+
+
+def pair_polylines(jg, n=PPTS_N):
+    """E317: the GT connector polyline of every true pair (the first connector run of the pair, `jg['pair_pts']`) resampled to `n` points of equal arc length, in the order of `jg['pairs']` -> (P, n, 2) float32, all NaN
+    for a pair whose run has no length. What the geometry loss of the pair head (`jends.geom_loss`) compares the delivered curve with."""
+    out = np.full((0 if jg is None else len(jg["pairs"]), n, 2), np.nan, np.float32)
+    if jg is None:
+        return out
+    for k, pts in enumerate(jg["pair_pts"]):
+        q = np.asarray(pts, float).reshape(-1, 2)
+        seg = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(q, axis=0), axis=1))]
+        if len(q) < 2 or seg[-1] < 1e-3:
+            continue
+        s = np.linspace(0.0, seg[-1], n)
+        out[k] = np.stack([np.interp(s, seg, q[:, 0]), np.interp(s, seg, q[:, 1])], 1)
+    return out
+
+
+def painted_flags(jg, paint, stop_m=3.0, ped_m=4.0):
+    """(ent_painted (E,), ext_painted (X,)) bool: an end is PAINTED when a stop line of a type other than the turn stop (turn stops lie inside the junction, they are waiting points, not entries) lies within `stop_m`
+    or a pedestrian crossing within `ped_m`; an EXIT is painted by a crossing only (critic 2026-11-11: the stop line of the arm's own entry side lies next to its exits) (E285: only part of the ends are painted: the rest has to be inferred from context)"""
+    if jg is None:
+        return np.zeros(0, bool), np.zeros(0, bool)
+    from shapely.geometry import Point, Polygon
+    stops = [Polygon(s["poly"]).buffer(0) for s in (paint or {}).get("stop_line", []) if s["type"] != 0 and len(s["poly"]) > 2]
+    peds = [Polygon(p).buffer(0) for p in (paint or {}).get("ped_crossing", []) if len(p) > 2]
+
+    def flag(E, use_stops):
+        out = np.zeros(len(E), bool)
+        for i, e in enumerate(E):
+            pt = Point(float(e[0]), float(e[1]))
+            out[i] = (use_stops and any(p.distance(pt) <= stop_m for p in stops)) or any(p.distance(pt) <= ped_m for p in peds)
+        return out
+    return flag(jg["ent"], True), flag(jg["ext"], False)
+
+
+def _selftest():
+    def run(a, b, n=12):
+        return np.stack([np.linspace(a[0], b[0], n), np.linspace(a[1], b[1], n)], 1)
+    s, nth = run((0, -30), (0, -8)), run((0, 8), (0, 30))
+    conn = run(s[-1], nth[0], 16)
+    pts = np.vstack([s, conn, nth])
+    g = dict(pieces=[dict(piece="p0", pts=pts, tier=np.full(len(pts), 3),
+                          segments=[dict(kind="lane", i0=0, i1=len(s) - 1), dict(kind="connector", i0=len(s), i1=len(s) + len(conn) - 1), dict(kind="lane", i0=len(s) + len(conn), i1=len(pts) - 1)])])
+    paint = dict(stop_line=[dict(poly=np.array([[-2, -8.2], [2, -8.2], [2, -7.8], [-2, -7.8]], np.float32), type=3)], ped_crossing=[np.array([[-3, 6], [3, 6], [3, 8], [-3, 8]], np.float32)])
+    t, jg = junction_targets(g, paint)
+    assert jg is not None and t["jz"].shape == (2, 100, 100) and t["jheat"].shape == (2, 100, 100) and t["jdir"].shape == (4, 100, 100) and t["jpaint"].shape == (2, 200, 200)
+    assert t["jz"][0].sum() > 20 and t["jpaint"][0].sum() >= 8 and t["jpaint"][1].sum() > 20
+    # the stop line lies at x = 0, y = -8: row 100, column 84 / 85 of the 0.5 m grid
+    assert t["jpaint"][0][100, 83:86].sum() > 0
+    sc = fit_pair_scales(jg)
+    assert sc.shape == (len(jg["pairs"]), 2) and np.isfinite(sc).all() and (sc >= 0.05).all(), sc
+    pp = pair_polylines(jg)                                                                   # E317: one equal-arc-length polyline per true pair, from the entry run point to the exit run point
+    assert pp.shape == (len(jg["pairs"]), PPTS_N, 2) and np.isfinite(pp).all(), pp.shape
+    assert np.abs(pp[:, 0] - np.array([r[0] for r in jg["pair_pts"]])).max() < 1e-4 and np.abs(pp[:, -1] - np.array([r[-1] for r in jg["pair_pts"]])).max() < 1e-4
+    assert pair_polylines(None).shape == (0, PPTS_N, 2)
+    pe, px = painted_flags(jg, paint)
+    assert len(pe) == len(jg["ent"]) and pe[0] and px[0], (pe, px)                         # stop sign line at the entry, crossing at the exit
+    t0, jg0 = junction_targets(dict(pieces=[]), None)
+    assert jg0 is None and t0["jz"].sum() == 0 and t0["jpaint"].sum() == 0
+    print("qjunction selftest ok")
+
+
+if __name__ == "__main__":
+    _selftest()

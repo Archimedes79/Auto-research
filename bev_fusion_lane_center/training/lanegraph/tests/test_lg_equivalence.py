@@ -1,4 +1,4 @@
-"""Equivalence with the ORIGINAL modules (training/grid, evaluation) on stored VAL frames, CPU, float32, EXACT (no tolerance): every stage's outputs, the
+"""Equivalence with the ORIGINAL modules (net/, evaluation) on stored VAL frames, CPU, float32, EXACT (no tolerance): every stage's outputs, the
 delivered graphs of both read-outs (pieces, points, edges, node ids, kinds), the Douglas-Peucker path against the project's `_dp_keep`, golden digests
 of three delivered graphs, and a fuzz of the read-out alone against the original read-out on synthetic frames.
 The original runs at batch 4 (as B's stored dump): bit identity holds while no batch of 4 exceeds the original's 80,000 link candidates (above it the

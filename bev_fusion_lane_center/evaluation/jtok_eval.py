@@ -1,4 +1,4 @@
-"""Controls, read-out and scoring of E357 (the GT nodes as tokens, one pair head for every edge; `training/grid/jtok.py`). The delivered graph of every arm = the GT nodes of the lattice + the arm's links.
+"""Controls, read-out and scoring of E357 (the GT nodes as tokens, one pair head for every edge; `net/model/jtok.py`). The delivered graph of every arm = the GT nodes of the lattice + the arm's links.
 
     wsl bash tools/env/_py14.sh jtok_eval.py ctl --lattice 2.5 [--max N] [--drop 0.17 --drop-seed 0]      # CPU: the arms lo, lo_near, lo_all, hi -> runs/eval/e357_<arm>_<readout>/val.json (never overwritten)
     wsl bash tools/env/_py14.sh jtok_eval.py ctl --lattice 2.0 --check [--max N --ref CARD]              # the kill check: arm hi (GT-section read-out) against runs/eval/e346_l2/val.json to 1e-6 -> PASS / FAIL, writes nothing
@@ -21,7 +21,7 @@ table; the scorer's 'nodes' block is not reported) and the LINK TABLES (the same
   false positive of short = a predicted link with chord <= 8 m that is no GT link; by chord (below 8, 8 - 20, above 20 m) the same with the chord of the pair. `link_junction_P / _R / _F1` is the second gate metric of the card.
   `_gate_out` = share of the GT links of the group outside the allowed gate (the head cannot deliver them); `scale_err_a / _b` = mean |predicted - fitted handle scale| over the true-positive long links with a fit.
 Degraded nodes (`--drop`): a share of the nodes of every VAL frame is removed at random (`keep_nodes`: seeded by the frame's token, the same removal for the head and the rules) before anything reads them; the GT links of such
-a frame are the GT links contracted over the removed nodes (`sub_table`). Tests: training/grid/test_jtok.py
+a frame are the GT links contracted over the removed nodes (`sub_table`). Tests: net/tests/test_jtok.py
 """
 import argparse
 import json
@@ -37,7 +37,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", ".."):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtok as JT  # noqa: E402
 import lane_tok_data as TD  # noqa: E402

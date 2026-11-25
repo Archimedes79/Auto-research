@@ -1,4 +1,4 @@
-"""Read-out, scoring and checks of E365 S1 (the token head on the predicted nodes of the frozen lane head B', `training/grid/jtoken.py`); the cache and the loader are `training/data/lane_tokcache.py` / `lane_ptok_data.py`.
+"""Read-out, scoring and checks of E365 S1 (the token head on the predicted nodes of the frozen lane head B', `net/model/jtoken.py`); the cache and the loader are `net/prep/lane_tokcache.py` / `lane_ptok_data.py`.
 
     wsl bash tools/env/_py14.sh jtoken_eval.py dump  --run R --seed S [--split val|train] [--drop 0.17 --drop-seed 0] [--every N] [--cpu] [--max N]   # GPU: the head on the cache tokens -> runs/R/token_<split>[_drop..].pkl
     wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [--split val|train] [--drop 0.17 --drop-seed 0] [--every N] [--max N]                     # CPU -> runs/R/token_card_<decode>[_train][_drop..].json (rec, argmax; never overwritten)
@@ -50,7 +50,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtok as JT  # noqa: E402
 import jtok_eval as JV  # noqa: E402

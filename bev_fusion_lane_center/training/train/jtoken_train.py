@@ -2,7 +2,7 @@
 
     wsl bash tools/env/_pyr.sh jtoken_train.py --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--cache <cache root>] [--K 384] [--distill-from runs/A,runs/B [--distill-weight 1.0]] [--smoke]
 
-The model is `grid/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `jtoken.jtoken_loss`. Batches come from `data/lane_ptok_data.loader("train", seed, bs, workers, ident=, K=,
+The model is `net/model/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `jtoken.jtoken_loss`. Batches come from `net/prep/lane_ptok_data.loader("train", seed, bs, workers, ident=, K=,
 cache=)` (imported only when the loop starts): `--cache` = the cache ROOT (default `runs/e365_cache`), `--ident` = the frozen head whose tokens are cached (`e292_a` = B', `e273_p` = plain B), `--K` only when the root
 holds more than one K for the seed. `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache, no loader): the plumbing test and the memory check.
 The loop, the run-directory contract, the checkpoint every 500 steps with resume, the roll-back guard and the `clock` line are those of `trainer.fit`; AdamW lr 1e-3, 5 % warm-up, cosine to 0.
@@ -27,7 +27,7 @@ the read-outs (`jtoken_eval.py`) take no noise. In the recipe.
 trained head is the champion network at inference; needs --rounds >= 1 and --wire-weight > 0) / `--wire-weight W` (default 0): the head's message rounds after layer 1 / 2 (`jtoken.JTokenHead`) and the weight of the likelihood of
 their early wiring reads (`jtoken.jtoken_loss(wire_w=)`); in the recipe and in model.pt's args, so `build_head` (the trainer, `load_model`, the stage-2 trainer) rebuilds the head with them; absent in an old run's args = the default.
 `--pos-head` / `--curve-w W` / `--node-w W` (E395 card, default off = the champion bit for bit): the position head of the token head (`jtoken.JTokenHead(pos_head=)`, a normal offset per token, zero start) and the weight of its loss, the Catmull-Rom curve loss
-(`--curve-w`) or the node loss (`--node-w`, the control; not both), `jtoken.jtoken_loss(curve_w=, node_w=)` on the GT geometry of `data/lane_gtgeom_data` (the loader is built with geom=True; `--smoke`: the synthetic toy geometry); both weights need --pos-head and are refused with --distill-from;
+(`--curve-w`) or the node loss (`--node-w`, the control; not both), `jtoken.jtoken_loss(curve_w=, node_w=)` on the GT geometry of `net/prep/lane_gtgeom_data` (the loader is built with geom=True; `--smoke`: the synthetic toy geometry); both weights need --pos-head and are refused with --distill-from;
 the log row of such a run also holds `pos_mean` (the mean of the trained position loss over the last LOG_WINDOW calls) and `pos_n` (the calls in that mean), the reading of the card's no-learning kill from addendum A1 on (`curve` / `node` are one batch);
 in the recipe and in model.pt's args (absent in an old run's args = off), so `build_head` rebuilds the head with it. The stage-2 trainer (`jlive_train`) refuses a head run that has a position head.
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
@@ -47,9 +47,10 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "training/grid", "training/data", "training/data/prep", "evaluation"):
+for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtoken as JK  # noqa: E402
+import loss_jtoken as LJK  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "cache", "ident", "K", "bs", "steps", "lr", "none_weight", "pos_loss", "head_seed",
@@ -77,7 +78,7 @@ def parse_args(argv=None):
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--none-weight", type=float, default=ARCH_DEFAULTS["none_weight"], dest="none_weight", help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
-    ap.add_argument("--pos-loss", choices=JK.POS_LOSS, default=ARCH_DEFAULTS["pos_loss"], dest="pos_loss", help="E376: the likelihood of a source with GT successors, -log sum over its group (sum) or -log max (max)")
+    ap.add_argument("--pos-loss", choices=LJK.POS_LOSS, default=ARCH_DEFAULTS["pos_loss"], dest="pos_loss", help="E376: the likelihood of a source with GT successors, -log sum over its group (sum) or -log max (max)")
     ap.add_argument("--head-seed", type=int, default=None, dest="head_seed", help="the seed of the head's initialisation and the data order (default: --seed); --seed keeps choosing the B' cache")
     ap.add_argument("--distill-from", default=ARCH_DEFAULTS["distill_from"], dest="distill_from", help="E379: comma list of run folders (relative to the problem folder) whose frozen heads are the teachers of the KD term")
     ap.add_argument("--distill-weight", type=float, default=ARCH_DEFAULTS["distill_weight"], dest="distill_weight", help="E379: W, the loss = the GT loss + W x the KD term (only with --distill-from)")
@@ -198,7 +199,7 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
     pwin = collections.deque(maxlen=LOG_WINDOW)                             # E395 addendum A1: the position loss that is trained (curve with --curve-w, else node) of the last LOG_WINDOW calls: pos_mean / pos_n of a log row
 
     def gt_loss(out, b, w=wire_w):
-        return JK.jtoken_loss(out, b, none_weight=none_weight, pos_loss=pos_loss, wire_w=w, curve_w=curve_w, node_w=node_w)
+        return LJK.jtoken_loss(out, b, none_weight=none_weight, pos_loss=pos_loss, wire_w=w, curve_w=curve_w, node_w=node_w)
 
     def loss_fn(m, b):
         n[0] += 1
@@ -228,7 +229,7 @@ def make_loss(run, none_weight=1.0, pos_loss="sum", teachers=(), distill_weight=
             if n[0] == 1:
                 assert all(torch.equal(o["cand"], out["cand"]) and torch.equal(o["valid"], out["valid"]) for o in outs_t), "a teacher saw other tokens than the student"
                 first.update(gt=[float(gt_loss(o, b, 0.0)[0]) for o in outs_t], prec=precision_kl(outs_t, teacher_forward(teachers, b, amp=True)), tokens=list(b.get("token") or []))
-            kd, kd_info = JK.distill_loss(out, outs_t)
+            kd, kd_info = LJK.distill_loss(out, outs_t)
             info.update(kd_info, gt=float(loss))                                    # gt: the GT loss alone (the total, hist and final_loss hold W x kd too)
             win.append((info["gt"], info["kd"]))
             info.update(gt_mean=float(np.mean([g for g, _ in win])), kd_mean=float(np.mean([k for _, k in win])))
@@ -286,7 +287,7 @@ def teacher_forward(teachers, b, amp=False):
 
 def precision_kl(outs, outs_amp):
     """(short, long): KL(the teachers' mean in float32 || their mean under bf16 autocast), the precision effect of autocast on the targets (`jtoken.distill_loss` with the autocast mean as the student)"""
-    i = JK.distill_loss(dict(outs_amp[0], logp=JK.teacher_logp([o["logp"] for o in outs_amp])), outs)[1]
+    i = LJK.distill_loss(dict(outs_amp[0], logp=LJK.teacher_logp([o["logp"] for o in outs_amp])), outs)[1]
     return i["kd_s"], i["kd_l"]
 
 
@@ -303,7 +304,7 @@ def first_batches(loader, batch_fn, seed, n=START_BATCHES):
 
 def teacher_start_loss(teachers, batches, dev, **loss_kw):
     """E379 hard start check: each teacher's own GT loss (`jtoken.jtoken_loss` with the student's loss options; `teacher_forward`: float32, eval) on each batch -> (teachers, batches) array"""
-    return np.array([[float(JK.jtoken_loss(o, b, **loss_kw)[0]) for o in teacher_forward(teachers, b)] for b in (to_device(x, dev) for x in batches)]).T
+    return np.array([[float(LJK.jtoken_loss(o, b, **loss_kw)[0]) for o in teacher_forward(teachers, b)] for b in (to_device(x, dev) for x in batches)]).T
 
 
 def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):

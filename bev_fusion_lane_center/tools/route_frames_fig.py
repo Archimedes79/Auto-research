@@ -23,7 +23,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, ".."))
-for sub_ in ("evaluation", "training/grid", "training/data", "tools/viz"):
+for sub_ in ("evaluation", "net/prep", "net/model", "net/loss", "training/data", "tools/viz"):
     sys.path.insert(0, os.path.join(ROOT, sub_))
 MIN_NODES = 30
 LINK_THR, LINK_LONG, KEEP = 0.3, 0.2, 0.6                                           # the E375 decode of the champion (D115 keep 0.6)

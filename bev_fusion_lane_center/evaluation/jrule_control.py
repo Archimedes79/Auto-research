@@ -19,7 +19,7 @@ import sys
 import numpy as np
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "tools/viz", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "tools/viz", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import jgt as J  # noqa: E402
 

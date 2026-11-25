@@ -29,7 +29,7 @@ import numpy as np
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import route_frames_fig as RF  # noqa: E402  (also puts evaluation/, training/grid, training/data, tools/viz on sys.path)
+import route_frames_fig as RF  # noqa: E402  (also puts evaluation/, net/, training/data, tools/viz on sys.path)
 from route_frames_fig import AMBER, GREY, PALETTE, camera_of, delivered_graph, limits, load_gt_lines, piece_color  # noqa: E402
 
 MIN_TOK = 30                                                                         # delivered labelled tokens a candidate frame needs

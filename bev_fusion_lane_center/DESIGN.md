@@ -13,13 +13,16 @@ camera + radar (ONE frame, ONE radar scan)
   -> 5 Read-out       four named thresholds
   -> lane graph       nodes, links, types in the ego frame
 ```
+The model lives in `net/` in three layers, apart from the training system: `net/prep/` (targets, datasets, caches) < `net/model/` (the networks) < `net/loss/` (the losses) < `training/` (R13).
+
 | module | job | code |
 |---|---|---|
 | 1 Foundation | camera + radar -> a BEV feature map (39 channels, 200 x 200, 0.5 m); frozen, cached | GaussianCaR (frozen) |
-| 2 Lane head B' | the pyramid and the node head: existence, position, heading and type flags of a node per 2 m cell | `training/grid/qgraph.py` (`QGraph`), `training/grid/pyramid.py` |
-| 3 Tokens | the top-K (512) nodes become tokens (position, direction, existence, node token) | stage 1 cached: `training/data/lane_tokcache.py`; stage 2 live, node head trainable: `training/data/lane_live_tok.py` |
-| 4 Token head | three self-attention layers (relative-geometry bias, allowed-pair gate); per source a softmax over successors plus a `none` slot, for short (<= 8 m) and long links; a seven-way node-type softmax | `training/grid/jtoken.py` (`JTokenHead`) |
+| 2 Lane head B' | the pyramid and the node head: existence, position, heading and type flags of a node per 2 m cell | `net/model/qgraph.py` (`QGraph`), `net/model/pyramid.py` |
+| 3 Tokens | the top-K (512) nodes become tokens (position, direction, existence, node token) | stage 1 cached: `net/prep/lane_tokcache.py`; stage 2 live, node head trainable: `training/train/lane_live_tok.py` |
+| 4 Token head | three self-attention layers (relative-geometry bias, allowed-pair gate); per source a softmax over successors plus a `none` slot, for short (<= 8 m) and long links; a seven-way node-type softmax | `net/model/jtoken.py` (`JTokenHead`) |
 | 5 Read-out | link short 0.3, link long 0.2, node kept when p_none < 0.6, none gate off -> the graph | `evaluation/jtoken_eval.py` |
+| Losses (training) | the token likelihood with the `none` slot, node types and handle scales; B''s own node loss | `net/loss/loss_jtoken.py`, `net/loss/loss_qgraph.py` |
 
 Training: stage 1 trains the head on cached tokens (`training/train/jtoken_train.py`); stage 2 trains the head and the node head of B' together through the token loss (`training/train/jlive_train.py`).
 Not in the chain: the SD-map route and a past state (rules R2 and R9). The earlier system E324 s (`training/lanegraph/`) is a reference, never a bar.
@@ -40,6 +43,7 @@ Headline, VAL 873 frames: topo F1 0.668 / 0.681 (two seeds), 16.2 ms on an RTX 3
 | R10 **Heads keep their width (64 channels);** how small they can be is measured by importance pruning, not by narrowing | the owner: D92, D99 | the size-against-loss table of D99 |
 | R11 **Ground truth:** junction entry and exit points as late as possible, but only where the network can see them | the owner: D71; E283: later than the end of the map's lane has no support in the data | a definition of 'can see' |
 | R12 **Protocol:** TEST once per finished design with the owner's recorded OK; select and tune on TRAIN / VAL only; the D115 cell (batch 4, 873 VAL frames), noise band 0.010 topo F1, 2 seeds, paired scene bootstrap | hard rule 1; D115; CLAUDE.md "Numbers" | the owner |
+| R13 **The model is apart from the training system:** preprocessing (`net/prep`) < network (`net/model`) < losses (`net/loss`) < `training/`; a new import against this order is refused (`net/tests/test_net_layering.py`), the older ones are named there and may only shrink; runs are started, stopped and watched by the tooling in `../autoresearch/` | the owner: D152 | the owner |
 
 ## How this file moves
 A card names the rules it attacks or changes (its Design delta); the coder is given this file plus the delta. KEEP: the delta becomes the rule and the card's id the reason (the old text stays in git); CUT or TIE: the rule stays and records the result of the attack. An instruction of the owner that fixes how the system must be becomes a rule, his words or the decision id in the reason; permissions go to `DECISIONS.md`. The evidence stays in the cards and the ledger; the first, evidence-heavy version of this file is at git `6b160e66`.

@@ -1,4 +1,4 @@
-"""E325 step 2: training and diagnostics of the wiring head `Wire` (`training/grid/jwire_head.py`) on records of `evaluation/jwire_data.py`.
+"""E325 step 2: training and diagnostics of the wiring head `Wire` (`net/model/jwire_head.py`) on records of `evaluation/jwire_data.py`.
 
     wsl bash tools/env/_py14.sh jwire_train.py cv --seed 0 [--pair-run e312_p_s0] [--ends kp|att] [--folds 5] [--epochs 60]   # DIAGNOSTIC (card section 1, step 2 of the guard): a scene-wise cross-validation on the VAL records: the head is
                                                                                                  # trained on the labelled ends of a part of the VAL scenes and judged on the rest: IN-SAMPLE on VAL, never a claim; it only
@@ -28,10 +28,11 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/train", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import jwire_data as JD  # noqa: E402
 import jwire_head as JH  # noqa: E402
+import loss_jwire_head as LJH  # noqa: E402
 
 DIST_ONLY = (0, 1, 2)                                                                                  # the ablation: distance and the two offsets
 
@@ -52,7 +53,7 @@ def fit(feat, mask, label, epochs=60, lr=3e-3, bs=512, seed=0, cols=None, wd=1e-
         for i in range(0, len(perm), bs):
             b = perm[i:i + bs]
             opt.zero_grad()
-            loss = JH.wire_loss(w(feat[b], mask[b]), label[b])
+            loss = LJH.wire_loss(w(feat[b], mask[b]), label[b])
             if not bool(torch.isfinite(loss)):
                 raise FloatingPointError("E325 kill: the loss is not finite")                              # the run fails (exit != 0): the kill criterion of the card
             loss.backward()

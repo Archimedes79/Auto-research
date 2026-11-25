@@ -31,23 +31,23 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import jends as JEN  # noqa: E402
 
-# (line of training/grid/jends.py in front of which a marker is inserted, name of the boundary, the text the line starts with: the check)
-FIRST_LINE = 155                                                                                                  # the line of `def forward(self, jout, P, ...)` in jends.py
+# (line of net/model/jends.py in front of which a marker is inserted, name of the boundary, the text the line starts with: the check)
+FIRST_LINE = 128                                                                                                  # the line of `def forward(self, jout, P, ...)` in jends.py
 BOUNDARIES = (
-    (156, "b0_start", "j1, f1 = jout"),
-    (180, "b1_after_peaks", "pos, D, pr, feat = [], [], [], []"),
-    (198, "b2_after_softargmax", "K_ = self.k"),
-    (203, "b3_after_kind", "t = self.kp("),
-    (206, "b4_after_tokens", "ta_t, tb_t = t[:, :K_]"),
-    (222, "b5_after_geometry", "if self.evidence:"),
-    (231, "b6_after_evidence", "ga = ra = gb = rb = None"),
-    (235, "b7_after_rank", "ls = None"),
-    (242, "b8_after_pair_mlp", "out = dict("),
-    (252, "b9_before_return", "return out"),
+    (129, "b0_start", "j1, f1 = jout"),
+    (153, "b1_after_peaks", "pos, D, pr, feat = [], [], [], []"),
+    (171, "b2_after_softargmax", "K_ = self.k"),
+    (176, "b3_after_kind", "t = self.kp("),
+    (179, "b4_after_tokens", "ta_t, tb_t = t[:, :K_]"),
+    (195, "b5_after_geometry", "if self.evidence:"),
+    (204, "b6_after_evidence", "ga = ra = gb = rb = None"),
+    (208, "b7_after_rank", "ls = None"),
+    (215, "b8_after_pair_mlp", "out = dict("),
+    (225, "b9_before_return", "return out"),
 )
 SECTION_NAMES = ("peaks_topk", "softargmax_gather", "kind_h2d", "tokens_setblocks", "pair_geometry", "evidence", "rank_matrix_host", "pair_mlp", "outputs_scales_attach")   # between consecutive boundaries
 

@@ -13,7 +13,7 @@
   "headline_metrics": ["Q", "topo_F1", "lanes_found", "R@1_far"],
   "_lower_is_better": "the directions of cards written before their \"better\" map (2026-10-31); new cards declare it themselves (evaluation/sparse_lanes/sparse_metrics.py LOWER_IS_BETTER)",
   "lower_is_better": ["vert100", "verts_per_frame", "false_len_frac", "dup_frac", "asm_ms", "map_err", "path_err", "ece"],
-  "code_dirs": ["training", "evaluation", "tools", "reports/build"],
+  "code_dirs": ["net", "training", "evaluation", "tools", "reports/build"],
   "fingerprint_extra": ["data/splits.json", "models/registry.json"],
   "scratch": "temp",
   "_training": "the block of the class Training (autoresearch/Training, `python3 -m Training check|run job.json`; compose.py): presets are json files of overrides, the composed config goes to out, check is the static check of training/startable.py, train is the command run.py wraps (training/train/run_config.py turns the config into the trainer's command line); the BEV system's block, adapted (2026-11-03)",
@@ -24,7 +24,7 @@
     "check": "bash tools/env/_py14.sh startable.py {config}",
     "train": "bash tools/env/_py14.sh run_config.py {config}"
   },
-  "live_code": ["training", "evaluation", "tools", "reports/build"],
+  "live_code": ["net", "training", "evaluation", "tools", "reports/build"],
   "trash": "_to_delete",
   "decisions": "experiment_execution/DECISIONS.md",
   "grants": "experiment_execution/grants.csv",
@@ -36,11 +36,11 @@
   "loops": {"18": [209, 233], "19": [234, 251], "20": [252, 256], "21": [257, 260], "22": [261, null]},
   "structure": {
     "root_files": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "DESIGN.md", "project.json"],
-    "root_dirs": ["data", "evaluation", "experiment_execution", "experiments", "literature", "models", "reports", "results", "runs", "temp", "tools", "training", "winner", "_to_delete"],
-    "folders_with_readme": ["data", "evaluation", "evaluation/sparse_lanes", "evaluation/lane_grid", "experiment_execution", "experiments", "literature", "models", "reports", "reports/build", "results", "runs", "tools", "training", "winner"],
-    "living": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "DESIGN.md", "data", "evaluation", "experiment_execution", "models", "reports", "runs", "tools", "training", "winner", "experiments", "literature/README.md"],
+    "root_dirs": ["data", "evaluation", "experiment_execution", "experiments", "literature", "models", "net", "reports", "results", "runs", "temp", "tools", "training", "winner", "_to_delete"],
+    "folders_with_readme": ["data", "evaluation", "evaluation/sparse_lanes", "evaluation/lane_grid", "experiment_execution", "experiments", "literature", "models", "net", "reports", "reports/build", "results", "runs", "tools", "training", "winner"],
+    "living": ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "DESIGN.md", "data", "evaluation", "experiment_execution", "models", "net", "reports", "runs", "tools", "training", "winner", "experiments", "literature/README.md"],
     "skip_parts": ["CLEANUP_LIST.md", "/history/", "/logs/", "/runs/", "/plans/", "/_to_delete/", "/papers/", "/__pycache__/", "/literature_backup", "METRIC_RESPONSE.md", "LEDGER.md", "STRUCTURE.md", "/source/", "register.md", "CATALOGUE.md", "DECISIONS.md", "/results/"],
-    "index_dirs": ["training", "evaluation", "tools", "reports", "temp", "experiment_execution", "models", "literature", "experiments", "../GtGenerator"],
+    "index_dirs": ["net", "training", "evaluation", "tools", "reports", "temp", "experiment_execution", "models", "literature", "experiments", "../GtGenerator"],
     "extra_bases": ["runs", "runs/e17"]
   }
 }

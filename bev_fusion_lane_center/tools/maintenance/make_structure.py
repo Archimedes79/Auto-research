@@ -26,7 +26,12 @@ PURPOSE = {
     "evaluation/sparse_lanes": "graph_eval.py + sparse_metrics.py: graph metrics, sparsity, composite score S; selftest",
     "reports": "weekly/ = the reports and decks to read; build/ = builders; source/ = figures and digests the builders use",
     "reports/source": "figures and number digests the builders read",
-    "training": "the system: models, data (+prep), losses, train, pipeline, search; trainer.py = general trainer with checkpoint + resume",
+    "net": "the model, apart from the training system (D152): prep, model, loss, tests",
+    "net/prep": "preprocessing: targets from the ground truth, datasets, loaders, caches, the SD map side",
+    "net/model": "the networks",
+    "net/loss": "the losses",
+    "net/tests": "tests of net/ and the check of its layers",
+    "training": "the training system and the reference chain: trainer.py, train, the legacy data / models / pipeline / losses",
     "training/models": "network definitions (builder D1-D8, trace network E94, junction / piece heads, refinement E120)",
     "training/data": "datasets, constants, libraries; prep/ = builders of the cached data",
     "training/train": "training entry points (builder, route head, consumer, dense head, control arm)",
@@ -68,7 +73,7 @@ def fmt(b):
 def main():
     lines = ["# Structure of bev_fusion_lane_center", "", f"Generated {time.strftime('%Y-%m-%d %H:%M')} by `tools/maintenance/make_structure.py`. Sizes and file counts are recursive.", "", "```"]
     top = sorted(d for d in os.listdir(ROOT) if not d.startswith("."))
-    order = ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "project.json", "literature", "experiment_execution", "experiments", "training", "evaluation", "tools", "reports", "temp", "runs", "models", "data", "_to_delete"]
+    order = ["README.md", "CLAUDE.md", "HANDOVER.md", "PROBLEM.md", "project.json", "literature", "experiment_execution", "experiments", "net", "training", "evaluation", "tools", "reports", "temp", "runs", "models", "data", "_to_delete"]
     top = [t for t in order if t in top] + [t for t in top if t not in order]
     for t in top:
         p = os.path.join(ROOT, t)

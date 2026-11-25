@@ -15,7 +15,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training", "training/grid", "training/data", "evaluation"):
+for sub in ("training", "net/prep", "net/model", "net/loss", "training/data", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import data as GD  # noqa: E402
 import head as GH  # noqa: E402

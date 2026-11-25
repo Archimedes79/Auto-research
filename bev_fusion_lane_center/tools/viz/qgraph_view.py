@@ -1,5 +1,5 @@
 """Pictures and videos of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels on the
-same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of `training/grid/qformat.py` (the contract) and the
+same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of `net/model/qformat.py` (the contract) and the
 lane GT of the frame (`GtGenerator.lane_gt`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
 dict through `pred_fn(token)`.
 
@@ -51,7 +51,7 @@ from scipy.ndimage import maximum_filter  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for _sub in ("..", "training/grid", "tools/video", "evaluation"):
+for _sub in ("..", "net/prep", "net/model", "net/loss", "tools/video", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, _sub))
 import qformat as QF  # noqa: E402
 import qraster as QR  # noqa: E402

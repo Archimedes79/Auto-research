@@ -19,12 +19,13 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training", "training/grid", "training/data", "evaluation"):
+for sub in ("training", "net/prep", "net/model", "net/loss", "training/data", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import lane_gt_data as LD  # noqa: E402
 import qassign as QA  # noqa: E402
 import qnodes as QN  # noqa: E402
 import sections as SE  # noqa: E402
+import loss_sections as LSE  # noqa: E402
 import targets as TG  # noqa: E402
 
 REF = {}
@@ -256,7 +257,7 @@ def gate_sections(model, run, n):
         for b in _batches("exact", n):
             out = model(b, upto="sections", frozen=("pyr", "nodes", "links", "sections"), gt=True)
             gtd = dict(piece=b["piece"].to(dev), sstart=b["sstart"].to(dev))
-            tgt, pa = SE.start_targets(gtd, out["L"])
+            tgt, pa = LSE.start_targets(gtd, out["L"])
             v = out["L"]["valid"] & (pa >= 0) & (tgt >= 0)
             ok += int(((out["M"].argmax(-1) == tgt) & v).sum())
             tot += int(v.sum())

@@ -93,7 +93,7 @@ def test_cost():
     import torch
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     sys.path.insert(0, os.path.join(HERE, ".."))
-    for sub_ in ("training", "training/grid", "training/data", "training/data/prep", "training/train"):
+    for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train"):
         sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
     import jroute as JR
     import jroute_eval as E
@@ -165,7 +165,7 @@ def test_real_cache(n=24):
     import torch
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
     sys.path.insert(0, os.path.join(HERE, ".."))
-    for sub_ in ("training", "training/grid", "training/data", "training/data/prep", "training/train"):
+    for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train"):
         sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
     import jroute as JR
     import jroute_eval as E

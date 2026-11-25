@@ -1,4 +1,4 @@
-"""E394 step 3 (card experiments/E394_*): how every map error of the catalogue (`training/data/lane_maperror_data.py`) degrades the association of the champion's delivered tokens to the map segments and the lanes per direction read
+"""E394 step 3 (card experiments/E394_*): how every map error of the catalogue (`net/prep/lane_maperror_data.py`) degrades the association of the champion's delivered tokens to the map segments and the lanes per direction read
 through it. CPU. Step 0 of the card: the nulls and the headroom, so that the bars are derived from measurements.
 
     wsl bash tools/env/_py14.sh maperror_probe.py degrade --seed S [--split holdout|val] [--modes a,b|all] [--every N] [--heads p6zero,F1,z]   # -> runs/e394_step0/degrade_<split>_s<S>[_<tag>].json (never overwritten)
@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("training/data", "training/data/prep", "training/grid", "training/train", "evaluation", ".."):
+for sub_ in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", "training/train", "evaluation", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jmapassoc as JM  # noqa: E402,F401
 import lane_mapassoc_data as MA  # noqa: E402

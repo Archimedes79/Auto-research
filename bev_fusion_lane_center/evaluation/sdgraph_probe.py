@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("training/data", "training/grid", "evaluation", ".."):
+for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jsdgraph as JS  # noqa: E402
 import lane_sdgraph_data as SG  # noqa: E402

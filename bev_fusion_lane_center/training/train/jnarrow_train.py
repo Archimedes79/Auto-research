@@ -21,11 +21,13 @@ import sys
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train"):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jends as JE  # noqa: E402
+import loss_jends as LJE  # noqa: E402
 import jgt as JG  # noqa: E402
 import jmaps as JM  # noqa: E402
+import loss_jmaps as LJM  # noqa: E402
 import jnarrow as JN  # noqa: E402
 import jprune_probe as PP  # noqa: E402
 import lane_gt_data as LD  # noqa: E402
@@ -136,11 +138,11 @@ def make_loss(a, run):
         x = b["x"].to(dev, non_blocking=True).float()
         gt = {k: b[k].to(dev) for k in ("ent", "ext", "ent_m", "ext_m")}
         _, jout, out = m(x, gt=gt)
-        loss, info = JE.jends_loss(out, b, cross_w=a.cross_w, driven_w=a.driven_w, geom_w=a.geom_w)
+        loss, info = LJE.jends_loss(out, b, cross_w=a.cross_w, driven_w=a.driven_w, geom_w=a.geom_w)
         calls[0] += 1
         if a.geom_w > 0 and calls[0] == 100:                                                              # critic 2026-11-12: a wrong pair alignment of the GT polylines shows as geom_n far below pos_pairs
             run.log(f"step 100 check of the geometry loss: geom_n {info.get('geom_n', 0.0):.0f} pairs with a GT polyline of pos_pairs {info.get('pos_pairs', 0.0):.0f} positives, geom_end_d {info.get('geom_end_d', float('nan')):.2f} m" + (f", attachment over {info['att_n']:.0f} keypoints with a candidate: att_acc {info['att_acc']:.2f} (nearest-candidate baseline {info['att_acc_nearest']:.2f}), att_ce {info['att_ce']:.2f}, attached end error {info['att_d']:.2f} m against the keypoint's {info['att_kp_d']:.2f} m" if "att_ce" in info else ""))
-        lm, im = JM.jmaps_loss(jout, b)
+        lm, im = LJM.jmaps_loss(jout, b)
         loss = loss + a.maps_w * lm
         info.update({"j_" + k: v for k, v in im.items()})
         return loss, info

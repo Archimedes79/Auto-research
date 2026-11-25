@@ -15,7 +15,7 @@ import sys
 
 os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "training/grid", "training/data", "training/data/prep", "training/train", "tools/viz", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "tools/viz", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 
 import numpy as np  # noqa: E402

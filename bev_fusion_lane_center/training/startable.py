@@ -6,8 +6,8 @@
 
 A config is the JSON of one run of a design in `DESIGNS` (a table of the keys the trainer of that design reads, with type and range): an unknown key is an error, a wrong type or
 a value out of range is an error; the cached inputs the trainer reads must exist (the frozen foundation features `~/exp_gcar_b123/feats`, the split file, the run folder's earlier
-state: a finished run is refused, a run with a stored config that differs from this one cannot be resumed), the disk has room, and the uncommitted files of `training/` and
-`evaluation/` are listed (the launcher's snapshot is a copy of the working tree, so the arms of a matched control can differ in code); `--require-clean` makes them a problem.
+state: a finished run is refused, a run with a stored config that differs from this one cannot be resumed), the disk has room, and the uncommitted files of `net/`, `training/`
+and `evaluation/` are listed (the launcher's snapshot is a copy of the working tree, so the arms of a matched control can differ in code); `--require-clean` makes them a problem.
 Findings are problems (exit 1) or notes (exit 0). The commands `python -m Training check job.json` and `run job.json` (project.json "training") run this check first.
 Run from the problem folder: `wsl bash tools/env/_py14.sh startable.py <config.json>`.
 """
@@ -151,12 +151,12 @@ def check(cfg, require_clean=False, root=ROOT, inputs=None):
     if free < 5:
         problems.append(f"only {free:.1f} GB free on the disk of the project")
     try:
-        dirty = subprocess.run(["git", "status", "--porcelain", "--", "training", "evaluation"], cwd=root, capture_output=True, text=True, timeout=60).stdout.split("\n")
+        dirty = subprocess.run(["git", "status", "--porcelain", "--", "net", "training", "evaluation"], cwd=root, capture_output=True, text=True, timeout=60).stdout.split("\n")
         dirty = [ln[3:] for ln in dirty if ln.strip()]
     except Exception:  # noqa: BLE001
         dirty = []
     if dirty:
-        (problems if require_clean else notes).append(f"{len(dirty)} uncommitted file(s) in training/ evaluation/ go into the run's snapshot: {', '.join(dirty[:6])}{' ...' if len(dirty) > 6 else ''}")
+        (problems if require_clean else notes).append(f"{len(dirty)} uncommitted file(s) in net/ training/ evaluation/ go into the run's snapshot: {', '.join(dirty[:6])}{' ...' if len(dirty) > 6 else ''}")
     return problems, notes
 
 
@@ -210,6 +210,15 @@ def selftest():
     json.dump(good, open(os.path.join(tmp, "runs", "e271_a_s0", "config.json"), "w"))
     p, n = check(good, root=tmp, inputs=[])
     assert not any("another" in x for x in p) and any("resumes" in x for x in n), (p, n)
+    repo = tempfile.mkdtemp()                                  # the uncommitted code that goes into a snapshot: the model in net/ too (D152)
+    subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+    os.makedirs(os.path.join(repo, "net", "model"))
+    open(os.path.join(repo, "net", "model", "m.py"), "w").write("x = 1\n")
+    p, n = check(good, root=repo, inputs=[])
+    assert not p and any("uncommitted" in x and "net/" in x.split(": ", 1)[1] for x in n), (p, n)
+    p, _ = check(good, require_clean=True, root=repo, inputs=[])
+    assert any("uncommitted" in x for x in p), p
+    shutil.rmtree(repo, ignore_errors=True)
     shutil.rmtree(tmp, ignore_errors=True)
     shutil.rmtree(tmp0, ignore_errors=True)
     print("startable selftest passed")

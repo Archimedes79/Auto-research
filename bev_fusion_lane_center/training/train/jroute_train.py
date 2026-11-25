@@ -1,4 +1,4 @@
-"""Trainer of E389 (A6, D127): the route-association head `grid/jroute.RouteHead` on the cached B' tokens of a frame (`data/lane_route_data.loader`, the batch of `lane_ptok_data` + the SD route tokens with the protocol's map errors + the labels
+"""Trainer of E389 (A6, D127): the route-association head `net/model/jroute.RouteHead` on the cached B' tokens of a frame (`net/prep/lane_route_data.loader`, the batch of `lane_ptok_data` + the SD route tokens with the protocol's map errors + the labels
 on_road / on_lane); start it through `autoresearch/tools/run.py`.
 
     wsl bash tools/env/_pyr.sh jroute_train.py --name e389_m_s0 --seed 0 --arm m --steps 3000 --bs 8 --lr 1e-3 --workers 4 --ident e292_a [--inputs full|geo] [--attn ab|a|plain] [--init-seed I] [--cache <cache root>] [--K 384] [--smoke]
@@ -11,7 +11,7 @@ batches of the loader (`estimate_pos_weight`; stored in the args of config.json,
 5 % warm-up, cosine to 0, bf16 autocast on the GPU. Logged every 100 steps (`trainer.fit`'s row): the loss, bce_road / bce_lane, acc_road / acc_lane, lab_road / lab_lane = the share of the valid tokens that carry a label, pos_road / pos_lane = the share of the
 labelled tokens that are positive (the last four are the means of the last 100 steps). `--smoke` = 20 steps on synthetic batches (K 512, M 64, no cache): the plumbing test and the memory check. A folder that holds another recipe is refused; the same recipe is
 resumed (a resumed run re-seeds the loader order: `trainer.fit` logs `resumed from ckpt.pt at step N`). `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check (`ckpt_every` / `smoke_k` are TEST-ONLY arguments).
-Tests: grid/test_jroute.py
+Tests: net/tests/test_jroute.py
 """
 import argparse
 import collections
@@ -24,9 +24,10 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "training/grid", "training/data", "training/data/prep", "evaluation"):
+for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jroute as JR  # noqa: E402
+import loss_jroute as LJR  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "init_seed", "cache", "ident", "K", "bs", "steps", "lr", "arm", "inputs", "attn")
@@ -121,7 +122,7 @@ def make_loss(arm, inputs, pos_weight):
             JR.check_batch(b)
         if arm == "z":
             b = strip_route(b)
-        loss, info = JR.route_loss(m(b), b, pos_weight)
+        loss, info = LJR.route_loss(m(b), b, pos_weight)
         nv = max(float(b["valid"].sum()), 1.0)
         for k in ("road", "lane"):
             win[f"lab_{k}"].append(info[f"n_{k}"] / nv)
