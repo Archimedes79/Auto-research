@@ -51,4 +51,4 @@ powershell -File reports/build/reports/print_weekly.ps1 -Html <html> -Pdf <pdf>
 powershell -File reports/build/decks/build_research_workflow_pptx.ps1
 ```
 The html is an intermediate file: print the PDF, then do not keep the html next to it.
-Rules: English; architecture drawing + numbers table + result images per experiment; one fresh numbers reviewer before a report is final; state the setting and the noise band.
+Rules: English; every report holds the architecture drawing of the current system (`training/architecture.svg` or a cut of it; the owner, 2026-11-25: "always add an architecture drawing into the reports"); architecture drawing + numbers table + result images per experiment; one fresh numbers reviewer before a report is final; state the setting and the noise band.
