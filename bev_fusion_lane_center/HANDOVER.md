@@ -2,7 +2,7 @@
 
 New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `DESIGN.md`, `experiment_execution/DECISIONS.md` (one neutral table; wording rule: English, answers paraphrased, no person named, "the owner").
 
-**State 2026-11-25 02:20: the computer is ON and finishes D145 / D148:** the BEV run t25.R_s0 trains until about 04:00; then the report chat's report (`results/E2E_Report_2026-11-25/`, by 06:30), then the lead shuts the computer down (about 06:30 - 07:00). No mail; no push without a word of the owner (D149: `origin/main` = 6674f0a9, no tags; later commits are local). D146 (three-layer clean-up) NOT started: its plan (`experiment_execution/plans/`) needs 2 - 2.5 days, D147 is open.
+**State 2026-11-25 05:00: D145 / D148 are done; the lead shut the computer down (about 05:05) after the final check.** All runs finished (last: t25.R_s0.eval, 03:45); report with 7 figures: `results/E2E_Report_2026-11-25/E2E_Bericht_2026-11-25.html` (sent in chat; sources committed 26930f49; its gate run: 43 PASS, 1 FAIL "grid metric reproduces stored numbers" only because the GPU was hidden after 03:00; `run_all_tests.sh` not run). No mail; no push without a word of the owner (D149: `origin/main` = 6674f0a9, no tags; the commits after it are local). Root `CLAUDE.md` holds an older uncommitted edit that is not the lead's. D146 (three-layer clean-up) NOT started: its plan (`experiment_execution/plans/`) needs 2 - 2.5 days, D147 is open.
 
 **CHAMPION (D120, unchanged):** token recipe: E373 head (none weight 0.25, E375 decode: link 0.3 / 0.2, node p_none < 0.6) + stage 2 = head and B''s node head trained together (S4); weights `runs/e372_s4_s0 / s1`; VAL D115 live topo F1 0.6682 / 0.6813, junction F1 0.2538 / 0.2481; 16.2 - 16.4 ms, 2.323 M parameters; code in `winner/` (BEV winner: `../bev_fusion/winner/t21_ctl`). No TEST.
 
@@ -12,7 +12,7 @@ New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `DESIGN.
 - E393 (pyramid trained by the token loss): n and e E2E-HOLDS (no gain), p INCONCLUSIVE (p_s1 VOID after a CUDA resume): the frozen pyramid stays.
 - E394: step 0 only; the label-free gate closed by hand; the retrained arms (v2) not started.
 - Skipped by rule: E391b.read_s0 / s1, E395 step 3; held E317 - E319. E392 r2 (11-23): quality holds, cost bar missed, not adopted.
-- BEV t25 (BEV chat): A2 and A1 FAIL against ctl (CUT, velocity guard), memory A2 - A1 TIE (+0.031); R running.
+- BEV t25 (BEV chat, `../bev_fusion/records/d145_account_2026-11-25.md`): A1 and A2 FAIL against ctl and are CUT (velocity guards), R NOT PASS (static velocity error +0.019 m/s over its limit, detection unchanged), memory A2 - A1 TIE (+0.031); one seed, short trainings. Deviations: A1 training ended 1 min after 17:30; R's evaluation started 03:32 (lead's reading: it belongs to the arm started before 03:00).
 
 **Earlier closed:** E375 ADOPT-DECODE; S2 / S2b / S3 TIE; E376 NO; E377 TARGETING-ONLY; E378 NO; E379 NO / MISS; E381 TIE; E383 MISS; E384 CUT; E388 NO; E389 TIE / E389b; E390 SOUND (v7). Reports: `results/E2E_Report_2026-11-23/` (sent by mail and chat), the new one as above.
 
