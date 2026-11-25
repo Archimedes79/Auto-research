@@ -13,6 +13,7 @@ Full description with a minimal example: README.md. The procedure and the qualit
 import argparse, base64, glob, io, json, os, re, shutil, subprocess, sys, tempfile, zipfile
 
 PENDING = "PENDING"
+PLACEHOLDER_SVG = "PENDING: architecture drawing"                       # the text of the scaffold's placeholder drawing (`new`); `drawings` does not count it
 NUM = re.compile(r"(?<![\w.])-?\d+\.\d+(?![\w.])")
 CHAPTERS = [  # id, title, part file, prompt written into the scaffold (what the chapter must contain)
     ("intro", "1. Introduction: purpose and status", "01_intro.md",
@@ -200,6 +201,17 @@ def render_md(md, text, folder, out_dir, st, demote=1):
     return html.replace(PENDING, '<span class="pend">PENDING</span>')
 
 
+def drawings(folder, spec):
+    """the architecture drawings of a report: the `svg` parts of its sections (path relative to parts/) that exist, are not empty and are not the scaffold's placeholder.
+    Every report holds at least one (the owner, 2026-11-25: "always add an architecture drawing into the reports"); `build --strict` refuses without it"""
+    out = []
+    for s in spec.get("sections", []):
+        svg = read_part(folder, s["svg"]) if s.get("svg") else ""
+        if svg.strip() and PLACEHOLDER_SVG not in svg:
+            out.append(s["svg"])
+    return out
+
+
 def build(folder, out=None, strict=False):
     from markdown_it import MarkdownIt
     spec = load_spec(folder)
@@ -260,7 +272,10 @@ def build(folder, out=None, strict=False):
         print("  value not resolved (file or key missing):", n)
     for n in sorted(set(unknown_all)):
         print("  placeholder without a value:", n)
-    if strict and (n_pend or missing or unknown_all):
+    drawn = drawings(folder, spec)
+    if not drawn:
+        print("  no architecture drawing: give a section an `svg` part (a file in parts/, the path relative to parts/) that shows the current system, not the scaffold's placeholder")
+    if strict and (n_pend or missing or unknown_all or not drawn):
         sys.exit(1)
     return out
 
@@ -370,7 +385,7 @@ def new(folder, title):
             open(path, "w", encoding="utf-8").write("# %s\n\n%s\n" % (t, prompt))
     svg = os.path.join(folder, "parts", "02_system.svg")
     if not os.path.exists(svg):
-        open(svg, "w", encoding="utf-8").write('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 60"><text x="10" y="35" font-size="14">PENDING: architecture drawing</text></svg>\n')
+        open(svg, "w", encoding="utf-8").write('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 60"><text x="10" y="35" font-size="14">%s</text></svg>\n' % PLACEHOLDER_SVG)
     print("scaffold in", folder, "- edit report.json (abstract, teaser, values, sources, utilities, pack) and the parts, then: build, check, pack")
 
 
@@ -416,6 +431,25 @@ def selftest():
             raise AssertionError("strict build must fail with PENDING marks")
         except SystemExit:
             pass
+        assert drawings(rep, spec) == [], "the scaffold's placeholder svg is no drawing"
+        open(os.path.join(rep, "parts", "02_system.svg"), "w").write('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>\n')
+        assert drawings(rep, spec) == ["02_system.svg"], "a real svg part is the drawing"
+        flat = dict(spec, sections=[s for s in spec["sections"] if not s.get("svg")])
+        assert drawings(rep, flat) == [], "a report without an svg part has no drawing"
+        # the strict gate itself: a clean report (no PENDING, all values) fails without a drawing and passes with one
+        clean = os.path.join(d, "clean")
+        os.makedirs(os.path.join(clean, "parts"))
+        sec = {"id": "system", "title": "2. The system", "part": "02_system.md"}            # no `svg` part: nothing else is PENDING, so only the gate can refuse
+        json.dump({"title": "Clean", "sections": [sec]}, open(os.path.join(clean, "report.json"), "w"))
+        open(os.path.join(clean, "parts", "02_system.md"), "w").write("The chain.\n")
+        try:
+            build(clean, strict=True)
+            raise AssertionError("strict build must fail without a drawing")
+        except SystemExit:
+            pass
+        json.dump({"title": "Clean", "sections": [dict(sec, svg="02_system.svg")]}, open(os.path.join(clean, "report.json"), "w"))
+        open(os.path.join(clean, "parts", "02_system.svg"), "w").write('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>\n')
+        build(clean, strict=True)
         print("selftest OK")
     finally:
         shutil.rmtree(d, ignore_errors=True)

@@ -37,6 +37,7 @@ The goal: **an engineer who does not know the system understands what it is for,
 - No number from memory; no rounding that changes a verdict; no "about" where the source has a value.
 - Never mix validation and test numbers in one comparison; no test number without the owner's recorded permission; anything fitted or chosen on the evaluation set is labelled in-sample.
 - Timing numbers carry their protocol (device, load, batch, frames); numbers of different protocols are never subtracted or turned into percentages.
+- Every report holds an architecture drawing of the current system (the owner, 2026-11-25), as an `svg` part of a section; `build --strict` refuses a report without one. When the system changed, redraw it before the report.
 - Rule-based or hand-tuned parts of a system are named as such in the architecture chapter.
 - Videos are not embedded: they live in `media/` and in the zip, with a still image in the text.
 - Keep the file small: images are recompressed; respect the package limit.

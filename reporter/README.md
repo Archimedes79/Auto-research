@@ -31,7 +31,7 @@ python reporter.py check my_report                        # every decimal number
 python reporter.py pack  my_report                        # -> package.zip: report.html, media/, README.txt, code/, utilities/ ; refuses over the limit
 python reporter.py selftest                               # builds, checks and packs a throw-away example
 ```
-`--strict` on `build` / `check` exits 1 when a PENDING mark or an unfound number is left: the last gate before sending.
+`--strict` on `build` / `check` exits 1 when a PENDING mark or an unfound number is left: the last gate before sending. `build --strict` also exits 1 when the report has no architecture drawing: every report holds one (the owner, 2026-11-25), i.e. at least one section has an `svg` part (a file in `parts/`; the `svg` path is relative to `parts/`) that exists and is not the scaffold's placeholder; a teaser svg or an svg linked as a markdown image does not count. For the lane project copy `bev_fusion_lane_center/training/architecture.svg` or a cut of it into `parts/`.
 
 ## Minimal example
 `my_report/report.json` (paths relative to the report folder):
