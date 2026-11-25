@@ -1,7 +1,7 @@
 {"schema": 2,
  "overlays": [
   {},
-  {"autoresearch/tools/gitfast.py": {"blob": "2bde41d892525713942f4306fda77b37050731d9", "file": "code/2bde41d89252_gitfast.py"}}
+  {"autoresearch/tools/gitfast.py": {"blob": "2bde41d892525713942f4306fda77b37050731d9"}}
  ],
  "runs": {
   "E394.gdesign_s0": {"base": "a1095b74b18d43f7ed49cfae5214e4d2a1c6834e", "how": "snapshot parent", "overlay": 0, "snapshot": "e11899b262a9d38e0e1a130bbaf8405d927e04e3", "unresolved": ["experiments/E394_sd-map-error-models-and-trust/scripts/e394/e394_design.py"]},
