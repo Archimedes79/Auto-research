@@ -138,7 +138,7 @@
     {
       "what": "clones of the foundation code and the GaussianCaR weights",
       "where": "~/work/CRN, ~/work/gaussiancar, ~/work/bevfusion, ~/work/gaussiancar_ckpt",
-      "recipe": "tools/env/setup/foundation_code.md (remotes and commits; the source of the weights is still to be recorded)"
+      "recipe": "tools/env/setup/foundation_code.md (remotes and commits; source, size and sha256 of the GaussianCaR weights)"
     }
   ],
   "artifacts": [
@@ -363,7 +363,7 @@
       "needs": [
         "internet"
       ],
-      "note": "remotes and commits are recorded; the weights are not scripted: record their source (D11 follow-up)"
+      "note": "remotes and commits are recorded, and the source of the GaussianCaR weights with size and sha256; the download is not scripted and needs the owner's word"
     },
     {
       "id": "stored_run_outputs",
