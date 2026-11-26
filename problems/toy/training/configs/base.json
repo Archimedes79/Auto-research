@@ -1,0 +1,22 @@
+{
+ "_about": "the base recipe of the toy; variants are values (--set), not files",
+ "name": "toy_base",
+ "steps": 400,
+ "lr": 0.003,
+ "warmup": 20,
+ "accum": 1,
+ "batch_size": 16,
+ "width": 8,
+ "pos_weight": 1.0,
+ "seed": 0,
+ "ema": 0.98,
+ "log_every": 20,
+ "eval_every": 200,
+ "save_every": 100,
+ "keep": 1,
+ "device": "cpu",
+ "threads": 2,
+ "data_root": "",
+ "gt_supersample": 4,
+ "compare_to": ""
+}

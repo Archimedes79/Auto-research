@@ -14,6 +14,8 @@ One lead agent plans a round and writes the experiment cards. Experiment agents 
 | [`bev_fusion_lane_center/`](bev_fusion_lane_center/README.md) | problem 1: a lane-centre-line graph from camera + radar, attached to an SD map; the system of record is the token champion (`training/architecture.svg`) |
 | [`bev_fusion/`](bev_fusion/README.md) | problem 2: a camera + radar BEV perception system on nuScenes: the five-layer framework and the full network (camera + radar + temporal fusion + motion block) on the current GT version; training, evaluation, experiments, literature |
 | [`data/NuScenes/`](data/NuScenes/README.md) | the nuScenes dataset family: description, manifest, download / check / link tools and the map of where raw data, caches and checkpoints live (the data itself is not in the repository) |
+| [`problems/`](problems/README.md) | being built (restructure plan [`autoresearch/INTEGRATION_2026-11-26.md`](autoresearch/INTEGRATION_2026-11-26.md)): one folder per problem, code and text only; holds the reference problem `toy/` today, the two problems above move in later |
+| [`champions/`](champions/README.md) | being built: the facts (weights' hashes, numbers, per-scene counts, timing, drawing) of each problem's best network and its comparison networks; no code |
 | [`reporter/`](reporter/README.md) | the report builder: a folder of markdown parts and result files becomes one html report with its numbers filled from the result files and checked (`reporter.py build / check / pack`) |
 
 Not in git: the rest of `data/` (generated data), `temp/` (scratch), `wsl/` (disk image).

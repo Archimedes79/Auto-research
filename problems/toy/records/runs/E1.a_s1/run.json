@@ -1,0 +1,87 @@
+{
+ "id": "E1.a_s1",
+ "hypothesis": "does a wider network segment the disc better (width=12)",
+ "prediction": "+0.020 iou over arm c",
+ "rule": "[{\"metric\": \"iou\", \"min_effect\": 0.01}, {\"metric\": \"recall\", \"max_loss\": 0.02}]",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/run_arm.sh temp/compose/E1_a_s1.json",
+ "argv": [
+  "bash",
+  "tools/run_arm.sh",
+  "temp/compose/E1_a_s1.json"
+ ],
+ "cwd": "/mnt/c/Auto-research/autoresearch/examples/toy",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 883,
+ "created": "2026-11-26T22:17:47",
+ "status": "ok",
+ "after": "E1.c_s1",
+ "timeout_min": 0,
+ "card_id": "E1",
+ "card_sha": "9d0e1a7c76e95f1c",
+ "card_arms": {
+  "c": {
+   "order": {
+    "": [
+     "name:E1_c_s0",
+     "name:E1_c_s1"
+    ]
+   },
+   "seeds": [
+    0,
+    1
+   ],
+   "run_ids": [
+    "E1.c_s0",
+    "E1.c_s1"
+   ]
+  },
+  "a": {
+   "order": {
+    "": [
+     "name:E1_a_s0",
+     "name:E1_a_s1"
+    ]
+   },
+   "seeds": [
+    0,
+    1
+   ],
+   "run_ids": [
+    "E1.a_s0",
+    "E1.a_s1"
+   ]
+  }
+ },
+ "code_hash_first": "815e3143afb3",
+ "started": "2026-11-26T22:18:06",
+ "code_hash": "815e3143afb3",
+ "commit": "4d5d59d5a2",
+ "tag": "toy/E1.a_s1",
+ "git_note": "",
+ "pid": 1293,
+ "pgid": 1293,
+ "pid_start": 29092,
+ "exit": 0,
+ "duration_s": 11,
+ "attempts": 1,
+ "ended": "2026-11-26T22:18:18",
+ "last_lines": [
+  "=== attempt 2026-11-26T22:18:06: bash tools/run_arm.sh temp/compose/E1_a_s1.json",
+  "E1_a_s1: iou 0.8628 on 160 val frames; against E1_c_s1: +0.3280 [+0.3100, +0.3489]",
+  "step 300: total 0.0377 lr 4.96e-04 grad 0.02",
+  "step 320: total 0.0335 lr 3.27e-04 grad 0.05",
+  "step 340: total 0.0443 lr 1.90e-04 grad 0.09",
+  "step 360: total 0.0374 lr 8.83e-05 grad 0.05",
+  "step 380: total 0.0396 lr 2.55e-05 grad 0.08",
+  "step 400: total 0.0315 lr 3.05e-06 grad 0.03",
+  "step 400: val total 0.0373",
+  "trained E1_a_s1: 400 steps, 1537 parameters",
+  "E1_a_s1 exit 0 22:18:17"
+ ]
+}

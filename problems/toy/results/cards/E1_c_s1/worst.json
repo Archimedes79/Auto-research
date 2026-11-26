@@ -1,0 +1,20 @@
+{
+ "frames": [
+  {
+   "frame": "val_036/001",
+   "iou": 0.20408163265306123
+  },
+  {
+   "frame": "val_034/000",
+   "iou": 0.21311475409836064
+  },
+  {
+   "frame": "val_007/000",
+   "iou": 0.21621621621621623
+  }
+ ],
+ "pictures": [
+  "runs/E1_c_s1/eval/suite/qualitative/frames/val_000_000_overview.png",
+  "runs/E1_c_s1/eval/suite/qualitative/frames/val_036_001_overview.png"
+ ]
+}

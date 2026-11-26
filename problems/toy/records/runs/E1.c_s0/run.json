@@ -1,0 +1,87 @@
+{
+ "id": "E1.c_s0",
+ "hypothesis": "does a wider network segment the disc better (width=4)",
+ "prediction": "+0.020 iou over arm c",
+ "rule": "[{\"metric\": \"iou\", \"min_effect\": 0.01}, {\"metric\": \"recall\", \"max_loss\": 0.02}]",
+ "split": "train",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/run_arm.sh temp/compose/E1_c_s0.json",
+ "argv": [
+  "bash",
+  "tools/run_arm.sh",
+  "temp/compose/E1_c_s0.json"
+ ],
+ "cwd": "/mnt/c/Auto-research/autoresearch/examples/toy",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 517,
+ "created": "2026-11-26T22:17:31",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E1",
+ "card_sha": "9d0e1a7c76e95f1c",
+ "card_arms": {
+  "c": {
+   "order": {
+    "": [
+     "name:E1_c_s0",
+     "name:E1_c_s1"
+    ]
+   },
+   "seeds": [
+    0,
+    1
+   ],
+   "run_ids": [
+    "E1.c_s0",
+    "E1.c_s1"
+   ]
+  },
+  "a": {
+   "order": {
+    "": [
+     "name:E1_a_s0",
+     "name:E1_a_s1"
+    ]
+   },
+   "seeds": [
+    0,
+    1
+   ],
+   "run_ids": [
+    "E1.a_s0",
+    "E1.a_s1"
+   ]
+  }
+ },
+ "code_hash_first": "815e3143afb3",
+ "started": "2026-11-26T22:17:35",
+ "code_hash": "815e3143afb3",
+ "commit": "1ae81e113d",
+ "tag": "toy/E1.c_s0",
+ "git_note": "",
+ "pid": 624,
+ "pgid": 624,
+ "pid_start": 25997,
+ "exit": 0,
+ "duration_s": 11,
+ "attempts": 1,
+ "ended": "2026-11-26T22:17:46",
+ "last_lines": [
+  "=== attempt 2026-11-26T22:17:35: bash tools/run_arm.sh temp/compose/E1_c_s0.json",
+  "E1_c_s0: iou 0.0045 on 160 val frames",
+  "step 300: total 0.0996 lr 4.96e-04 grad 0.04",
+  "step 320: total 0.1065 lr 3.27e-04 grad 0.04",
+  "step 340: total 0.0905 lr 1.90e-04 grad 0.04",
+  "step 360: total 0.1022 lr 8.83e-05 grad 0.04",
+  "step 380: total 0.1113 lr 2.55e-05 grad 0.05",
+  "step 400: total 0.1078 lr 3.05e-06 grad 0.04",
+  "step 400: val total 0.1208",
+  "trained E1_c_s0: 400 steps, 225 parameters",
+  "E1_c_s0 exit 0 22:17:45"
+ ]
+}

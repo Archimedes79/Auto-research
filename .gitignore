@@ -25,6 +25,10 @@
 # the report tool (reporter/: report builder, plots, winner export); the winner folders are in each project (<project>/winner/: small source snapshots of winning systems, no weights; D139 / D140)
 !/reporter/
 
+# the problems (code and text) and the facts of their best networks (restructure plan, autoresearch/INTEGRATION_2026-11-26.md); data and runs stay outside
+!/problems/
+!/champions/
+
 # problem: lane-centre-line graph + SD map (tag prefix lcr)
 !/bev_fusion_lane_center/
 /bev_fusion_lane_center/*

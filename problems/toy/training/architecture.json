@@ -1,0 +1,32 @@
+{
+ "title": "Toy: a disc in noise, from the raw shards to the metric card",
+ "subtitle": "the reference problem of the research system; every report of it shows this drawing",
+ "root": "..",
+ "nodes": [
+  {"id": "raw", "label": "raw shards\n+ manifest", "kind": "input", "col": 0, "row": 0, "code": ["data/make_data.py::make"]},
+  {"id": "truth", "label": "truth store\n(signature)", "kind": "fixed", "col": 1, "row": 0, "code": ["gt/raster.py::rasterise", "gt/generate.py::generate"]},
+  {"id": "reader", "label": "shard reader", "kind": "fixed", "col": 2, "row": 0, "code": ["net/prep/shards.py::load_split"]},
+  {"id": "net", "label": "DiscNet\nthree convolutions", "kind": "learned", "col": 3, "row": 0, "code": ["net/model/net.py::DiscNet"]},
+  {"id": "threshold", "label": "logit above 0\nis the disc", "kind": "rule", "col": 4, "row": 0, "code": ["evaluation/adapter.py::ToySubject.predict"],
+   "why": "a pixel decision that makes the delivered mask", "replace_with": "nothing: the mask is the output"},
+  {"id": "run", "label": "Runner:\nstored predictions", "kind": "fixed", "col": 5, "row": 0, "code": ["runner/runner.py::Runner"]},
+  {"id": "score", "label": "metric, pictures,\ncard, timing", "kind": "fixed", "col": 6, "row": 0, "code": ["evaluation/adapter.py::card", "evaluation/score.py::main"]},
+  {"id": "card", "label": "metric card", "kind": "output", "col": 7, "row": 0},
+  {"id": "train", "label": "trainer on\ntrainkit", "kind": "fixed", "col": 2, "row": 1, "code": ["training/train.py::train"]},
+  {"id": "loss", "label": "pixel loss", "kind": "fixed", "col": 3, "row": 1, "code": ["net/loss/loss.py::DiscLoss"]}
+ ],
+ "edges": [
+  {"from": "raw", "to": "truth", "label": "annotation"},
+  {"from": "truth", "to": "reader"},
+  {"from": "reader", "to": "net", "label": "pictures"},
+  {"from": "net", "to": "threshold", "label": "logits"},
+  {"from": "threshold", "to": "run", "label": "mask"},
+  {"from": "run", "to": "score"},
+  {"from": "score", "to": "card"},
+  {"from": "reader", "to": "train"},
+  {"from": "train", "to": "loss"},
+  {"from": "loss", "to": "net", "label": "gradient", "dashed": true}
+ ],
+ "main_path": {"from": ["raw"], "to": ["card"]},
+ "covers": [{"dir": "data"}, {"dir": "gt"}, {"dir": "net"}, {"dir": "training"}, {"dir": "runner"}, {"dir": "evaluation"}]
+}

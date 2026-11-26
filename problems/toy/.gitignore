@@ -1,0 +1,13 @@
+# derived data and run state of the toy problem; the text records (records/, results/, experiments/) are in git
+/runs/
+/data/store/
+/temp/
+reports/*/*.html
+records/runs/*/heartbeat
+records/runs/*/done
+records/runs/*/*.log
+records/runs/.gpu_slots/
+__pycache__/
+*.lock
+# the drawing is text made by tools/archdraw.py from the spec next to it (the repository ignores *.svg in general)
+!training/architecture.svg

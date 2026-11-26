@@ -1,0 +1,41 @@
+{
+ "id": "E1",
+ "cannot_tell": [],
+ "provenance_waived": [],
+ "verdict": "KEEP",
+ "metric": "iou",
+ "variant": "a",
+ "control": "c",
+ "effect": 0.59371,
+ "diffs": [
+  0.85942,
+  0.32801
+ ],
+ "pairing": "seed",
+ "subset_effects": null,
+ "effect_note": "",
+ "interval": [
+  0.30998,
+  0.86708
+ ],
+ "why": "headline iou a-c +0.5937 beyond the band 0.01, interval [+0.310, +0.867], 2 paired seed(s); every clause holds",
+ "prediction": "prediction +0.020, measured +0.5937 (error +0.5737)",
+ "clauses": [
+  {
+   "text": "iou a-c +0.5937 (want >= +0.010, band 0.01)",
+   "ok": true,
+   "flags": []
+  },
+  {
+   "text": "recall a-c +0.6496 (want >= -0.020)",
+   "ok": true,
+   "flags": []
+  }
+ ],
+ "date": "2026-11-26 22:18",
+ "rule_sha": "9d0e1a7c76e95f1c",
+ "registered": true,
+ "registered_runs": "4 of 4",
+ "by_hand": "",
+ "previous": []
+}

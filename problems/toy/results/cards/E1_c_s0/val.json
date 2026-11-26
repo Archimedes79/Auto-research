@@ -1,0 +1,51 @@
+{
+ "schema": 1,
+ "name": "E1_c_s0",
+ "split": "val",
+ "frames": 160,
+ "seed": 0,
+ "metrics": {
+  "iou": 0.004484304932735426,
+  "precision": 1.0,
+  "recall": 0.004484304932735426,
+  "f1": 0.008928571428571428
+ },
+ "better": {
+  "iou": "higher",
+  "precision": "higher",
+  "recall": "higher",
+  "f1": "higher"
+ },
+ "commit": "1ae81e113d",
+ "date": "2026-11-26 22:17",
+ "info": {
+  "eval_id": "E1_c_s0@ebb92cec7566c",
+  "results": "E1_c_s0@r842a281be3c2",
+  "n_scenes": 40,
+  "gt": "f0fb52a05df5",
+  "width": 4,
+  "checkpoint": "ckpt_00000400.pt"
+ },
+ "provenance": {
+  "schema": 1,
+  "gt": {
+   "version": "f0fb52a05df5",
+   "signature": "f0fb52a05df5"
+  },
+  "data": {
+   "manifest_hash": "2fc6bb6e4354",
+   "frame_hash": "966aa9d2f977",
+   "split": "val",
+   "n": 160
+  },
+  "evaluator": {
+   "code_hash": "9382bfde9b54",
+   "commit": "1ae81e113d",
+   "dirty": []
+  },
+  "subject": {
+   "run": "E1_c_s0",
+   "checkpoint_hash": "5473eb778484"
+  }
+ }
+}
