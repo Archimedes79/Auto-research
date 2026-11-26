@@ -7,6 +7,7 @@ Exit 0 when every number agrees (bit for bit at tolerance 0), 1 otherwise; print
 from __future__ import annotations
 
 import json
+import math
 import os
 import shutil
 import sys
@@ -23,14 +24,19 @@ def main(problem: str, rid: str, tolerance: float = 0.0) -> int:
         from Evaluation import Evaluation
         p = read_json(os.path.join(os.getcwd(), "problem.json"))
         ev = Evaluation(project=os.getcwd())
-        done = ev.run(run_dir(problem, rid), rec["split"], metrics=tuple(rec["evaluation"]["metrics"]), device=p["evaluate"].get("device", "cuda"),
+        done = ev.run(run_dir(problem, rid), rec["evaluation"].get("frames", rec["split"]), metrics=tuple(rec["evaluation"]["metrics"]), device=p["evaluate"].get("device", "cuda"),
                       workers=0, progress=0)
         now = ev.show_numbers(done["id"])["numbers"]
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     then = rec["numbers"]
-    diff = {k: (then.get(k), now.get(k)) for k in sorted(set(then) | set(now))
-            if k not in then or k not in now or abs(float(then[k]) - float(now[k])) > tolerance}
+    def differs(a, b):
+        a, b = float(a), float(b)
+        if math.isnan(a) or math.isnan(b):
+            return not (math.isnan(a) and math.isnan(b))           # an undefined number agrees only with an undefined one
+        return abs(a - b) > tolerance
+
+    diff = {k: (then.get(k), now.get(k)) for k in sorted(set(then) | set(now)) if k not in then or k not in now or differs(then[k], now[k])}
     print(json.dumps({"run": rid, "agree": not diff, "differ": diff, "tolerance": tolerance}, indent=1, default=str))
     return 0 if not diff else 1
 

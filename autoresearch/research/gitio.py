@@ -130,24 +130,3 @@ def unpack(root: str, commit: str, dest: str, paths: Sequence[str]) -> None:
             tar.extractall(dest, filter="data")
         except TypeError:                                    # python before 3.12 has no filter; the members were checked above
             tar.extractall(dest)
-
-
-def changed_files(root: str, a: str, b: str, paths: Sequence[str]) -> List[str]:
-    out = git(root, "diff", "--name-only", a, b, "--", *paths)
-    return [x for x in out.splitlines() if x]
-
-
-def diff(root: str, a: str, b: str, paths: Sequence[str]) -> bytes:
-    r = subprocess.run(["git", "-C", root, "diff", "--binary", a, b, "--", *paths], capture_output=True)
-    if r.returncode != 0:
-        raise ResearchError(f"git diff: {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
-    return r.stdout
-
-
-def apply(root: str, patch: bytes, check_only: bool = False) -> None:
-    """apply a patch to the working tree (three-way where the base is known); a conflict is an error and leaves the tree as it was"""
-    if not patch.strip():
-        return
-    git(root, "apply", "--3way", "--check", data=patch)
-    if not check_only:
-        git(root, "apply", "--3way", data=patch)

@@ -27,11 +27,12 @@ def main(problem: str, rid: str, test: bool = False) -> int:
         split = p["holdout"][0]
     else:
         split = spec.split_of(card, p)
+    frames = split if test else spec.frames_of(card, p)
     from Evaluation import Evaluation
     ev = Evaluation(project=project)
     e = p["evaluate"]
     t0 = time.time()
-    done = ev.run(out, split, metrics=tuple(e["metrics"]), device=e.get("device", "cuda"), workers=0, progress=0)
+    done = ev.run(out, frames, metrics=tuple(e["metrics"]), device=e.get("device", "cuda"), workers=0, progress=0)
     nums = ev.show_numbers(done["id"])
     per_scene = ev.split_numbers(done["id"], "scene")
     score = p["score"]["metric"]
@@ -44,7 +45,7 @@ def main(problem: str, rid: str, test: bool = False) -> int:
         "score": {"metric": score, "value": nums["numbers"][score], "better": p["score"]["better"]},
         "numbers": nums["numbers"], "better": nums["better"],
         "per_scene": {sc: row.get(score) for sc, row in sorted(per_scene.items())} if isinstance(per_scene, dict) else {},
-        "evaluation": {"id": done["id"], "results": done.get("results"), "metrics": list(e["metrics"]), "gt": info.get("gt"),
+        "evaluation": {"id": done["id"], "results": done.get("results"), "frames": frames, "metrics": list(e["metrics"]), "gt": info.get("gt"),
                        "evaluator": info.get("evaluator"), "warnings": nums.get("warnings", []) + done.get("warnings", [])},
         "identity": {"commit": os.environ.get("RESEARCH_COMMIT", ""), **ident},
         "cost": ev.get_cost(done["id"]).get("predict"), "seconds": round(time.time() - t0, 1), "date": time.strftime("%Y-%m-%d %H:%M:%S"),

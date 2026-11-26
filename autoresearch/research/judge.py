@@ -1,8 +1,10 @@
 """The verdict of an experiment, by the rule its snapshot holds.
 
-For every arm other than the control: every run finished and evaluated? (else INCOMPLETE, nothing written) -> the control valid? (its score
-reaches the floor of problem.json for every seed, and its seeds lie no further apart than the card's max_seed_spread; else INVALID) -> the
-paired scene bootstrap of the pooled seeds (research/compute.py, in the snapshot with the problem's interpreter) -> the standard rule:
+For every arm other than the control: every run finished and evaluated? (else INCOMPLETE, nothing written; a run a kill rule stopped makes its
+arm CUT, the control INVALID) -> the control valid? (its score reaches the floor of problem.json for every seed, and its seeds lie no further
+apart than the card's max_seed_spread; else INVALID) -> scored alike? (split, frames, ground truth, evaluator and metrics the same in both
+arms; else INVALID) -> the paired scene bootstrap of the pooled seeds (research/compute.py, in the snapshot with the problem's interpreter)
+-> the standard rule (a KEEP whose seeds disagree in sign is INCONCLUSIVE):
 
     gain = variant - control in the direction of the score (positive = better); e = the card's min_effect (default: the problem's band)
     TIE           |gain| < e: inside the band, whatever the interval  (also a KEEP whose guard broke: the gain and the guard are in the reason)
@@ -36,20 +38,42 @@ def _arm_runs(problem: str, card: Dict[str, Any], arm: str) -> Dict[str, str]:
     return {str(s): f"{exp}.{name}_s{s}" for s in card["seeds"]}
 
 
-def _results(problem: str, runs: Dict[str, str]) -> Tuple[Dict[str, Dict[str, Any]], List[str]]:
-    got, missing = {}, []
+def _results(problem: str, runs: Dict[str, str]) -> Tuple[Dict[str, Dict[str, Any]], List[str], List[str]]:
+    """(seed -> the finished run's result, runs that are not finished, runs a kill rule stopped)"""
+    got, missing, killed = {}, [], []
     for seed, rid in runs.items():
         try:
             run = read_json(os.path.join(record_dir(problem, rid), "run.json"))
-            res = read_json(os.path.join(record_dir(problem, rid), "result.json"))
         except (OSError, ValueError, ResearchError):
-            missing.append(f"{rid} (no result)")
+            missing.append(f"{rid} (not started)")
             continue
-        if run.get("status") != "ok":
-            missing.append(f"{rid} ({run.get('status')})")
+        if run.get("status") == "killed":
+            why = next((s.get("why", "") for s in run.get("steps", {}).values() if s.get("status") == "killed"), "")
+            killed.append(f"{rid} ({why})")
+            continue
+        try:
+            res = read_json(os.path.join(record_dir(problem, rid), "result.json"))
+        except (OSError, ValueError):
+            res = None
+        if run.get("status") != "ok" or res is None:
+            missing.append(f"{rid} ({run.get('status')}{', no result' if res is None else ''})")
             continue
         got[seed] = {"run": rid, "result": res, "commit": run.get("commit", "")}
-    return got, missing
+    return got, missing, killed
+
+
+COMPARABLE = (("split", lambda r: r["split"]), ("frames", lambda r: r["frames"]), ("ground truth", lambda r: r["evaluation"].get("gt")),
+              ("evaluator", lambda r: r["evaluation"].get("evaluator")), ("metrics", lambda r: r["evaluation"].get("metrics")))
+
+
+def incomparable(runs: List[Dict[str, Any]]) -> List[str]:
+    """what differs between the results of the runs of one comparison (they must be scored on the same frames, ground truth and evaluator)"""
+    out = []
+    for name, get in COMPARABLE:
+        vals = {json.dumps(get(r["result"]), sort_keys=True, default=str) for r in runs}
+        if len(vals) > 1:
+            out.append(f"{name} differs: {sorted(vals)[:3]}")
+    return out
 
 
 def standard(gain: float, lo: float, hi: float, e: float) -> Tuple[str, str]:
@@ -82,30 +106,32 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
     if not commit:
         raise ResearchError(f"{exp_id} has no snapshot {tag}: it was never started")
     p = load_problem(problem, at=commit)
-    card = load_card(problem, exp_id, at=commit)
-    if load_card(problem, exp_id) != card:
-        raise ResearchError(f"the card of {exp_id} changed since its snapshot {tag}: the verdict follows the snapshot, so the records must too")
+    frozen, now = load_card(problem, exp_id, at=commit), load_card(problem, exp_id)
+    if not spec.same_rule(frozen, now):
+        raise ResearchError(f"the card of {exp_id} changed since its snapshot {tag}: the verdict follows the snapshot, so the records must too (only seeds may be added)")
+    card = dict(frozen, seeds=now["seeds"])
     score, better = p["score"]["metric"], p["score"]["better"]
     if card.get("kind") == "measure":
         return measure(problem, card, p, tag, commit)
     sign = 1.0 if better == "higher" else -1.0
     e = spec.min_effect(card, p)
     control = card["control"]
-    c_runs, c_missing = _results(problem, _arm_runs(problem, card, control))
+    c_runs, c_missing, c_killed = _results(problem, _arm_runs(problem, card, control))
     out: Dict[str, Any] = {"experiment": exp_id, "problem": problem, "tag": tag, "snapshot": commit, "control": control, "score": score, "better": better,
-                           "min_effect": e, "rule": card.get("rule", {}), "arms": {}, "by": "research judge", "date": time.strftime("%Y-%m-%d %H:%M")}
+                           "min_effect": e, "rule": card.get("rule", {}), "seeds": card["seeds"], "arms": {}, "by": "research judge",
+                           "date": time.strftime("%Y-%m-%d %H:%M")}
     incomplete = list(c_missing)
     arms = [a for a in card["arms"] if a != control]
-    v_runs = {}
+    v_runs, v_killed = {}, {}
     for a in arms:
-        v_runs[a], miss = _results(problem, _arm_runs(problem, card, a))
+        v_runs[a], miss, v_killed[a] = _results(problem, _arm_runs(problem, card, a))
         incomplete += miss
     if incomplete:
         return {**out, "verdict": "INCOMPLETE", "missing": incomplete}
     # the control
     floor = p.get("control_floor", {}).get(score)
     c_scores = {s: r["result"]["score"]["value"] for s, r in c_runs.items()}
-    problems = []
+    problems = [f"a kill rule stopped the control: {', '.join(c_killed)}"] if c_killed else []
     if floor is not None:
         bad = {s: v for s, v in c_scores.items() if sign * (v - floor) < 0}
         if bad:
@@ -121,6 +147,13 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
         if problems:
             out["arms"][a] = {"verdict": "INVALID", "reason": "; ".join(problems)}
             continue
+        if v_killed[a]:
+            out["arms"][a] = {"verdict": "CUT", "reason": f"a kill rule of the card stopped the arm: {', '.join(v_killed[a])}"}
+            continue
+        differs = incomparable([c_runs[s] for s in seeds] + [v_runs[a][s] for s in seeds])
+        if differs:
+            out["arms"][a] = {"verdict": "INVALID", "reason": "the arms are not scored alike: " + "; ".join(differs)}
+            continue
         q = {"score": score, "guards": [g["metric"] for g in guards], "boot": card.get("rule", {}).get("boot", boot),
              "control": {s: c_runs[s]["result"]["evaluation"]["id"] for s in seeds}, "variant": {s: v_runs[a][s]["result"]["evaluation"]["id"] for s in seeds}}
         num = _compute(problem, code, p, q)
@@ -128,6 +161,9 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
         gain = sign * pooled["diff"]
         lo, hi = (pooled["lo"], pooled["hi"]) if sign > 0 else (-pooled["hi"], -pooled["lo"])
         verdict, reason = standard(gain, lo, hi, e)
+        per_seed = {s: sign * v["diff"] for s, v in num["seeds"].items()}
+        if verdict == "KEEP" and any(g <= 0 for g in per_seed.values()):
+            verdict, reason = "INCONCLUSIVE", f"{reason}, but the seeds disagree (gain per seed {per_seed}): add a seed"
         broken = []
         for g in guards:
             gv = num["guards"][g["metric"]]
@@ -168,7 +204,8 @@ def measure(problem: str, card: Dict[str, Any], p: Dict[str, Any], tag: str, com
                            "arms": {}, "by": "research judge", "date": time.strftime("%Y-%m-%d %H:%M")}
     missing: List[str] = []
     for a in card["arms"]:
-        got, miss = _results(problem, _arm_runs(problem, card, a))
+        got, miss, killed = _results(problem, _arm_runs(problem, card, a))
+        miss += killed
         missing += miss
         out["arms"][a] = {"verdict": "MEASURED", "seeds": {s: {"run": r["run"], "numbers": r["result"]["numbers"], "frames": r["result"]["frames"],
                                                                "cost": r["result"].get("cost")} for s, r in got.items()}}

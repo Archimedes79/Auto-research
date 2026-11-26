@@ -116,12 +116,29 @@ def check(problem: str, exp_id: str) -> Dict[str, Any]:
     commit = gitio.tag_commit(repo(), tag)
     if commit:
         try:
-            frozen = load_card(problem, exp_id, at=commit)
-            if frozen != card:
-                errors.append(f"the card changed since its snapshot {tag}: the rule is what the tag holds; a changed experiment is a new experiment")
+            if not spec.same_rule(load_card(problem, exp_id, at=commit), card):
+                errors.append(f"the card changed since its snapshot {tag}: the rule is what the tag holds (only seeds may be added); a changed experiment is a new experiment")
         except ResearchError as e:
             errors.append(f"the snapshot {tag}: {e}")
+    else:
+        dirty = uncommitted_code(problem)
+        if dirty:
+            errors.append("the code is not committed (a run executes a commit, and an experiment's code is committed default-off before its start): "
+                          + ", ".join(dirty[:8]) + (f" and {len(dirty) - 8} more" if len(dirty) > 8 else ""))
     return {"errors": errors, "runs": [r for r, _, _ in runs_of(card)] if not errors else [], "tag": tag, "snapshot": commit[:12]}
+
+
+def code_paths(problem: str) -> List[str]:
+    """what a run imports: the core and the data-set services, and the problem's folder without its records"""
+    root = repo()
+    pdir = rel(problem_dir(problem))
+    return [x for x in SNAPSHOT_PATHS if os.path.isdir(os.path.join(root, x))] + [pdir, f":(exclude){pdir}/experiments", f":(exclude){pdir}/ledger.csv"]
+
+
+def uncommitted_code(problem: str) -> List[str]:
+    """files of the code that differ from HEAD or are new (ignored files aside): another chat's half-done edit never becomes a run's code"""
+    out = gitio.git(repo(), "status", "--porcelain", "--untracked-files=all", "--", *code_paths(problem))
+    return [ln[3:] for ln in out.splitlines() if ln.strip()]
 
 
 # ------------------------------------------------------------------------------------------------ start
@@ -130,15 +147,15 @@ def start(problem: str, exp_id: str, arms: Optional[Sequence[str]] = None, seeds
     if c["errors"]:
         raise ResearchError("refused:\n  " + "\n  ".join(c["errors"]))
     root = repo()
-    p = load_problem(problem)
     card = load_card(problem, exp_id)
     todo = runs_of(card, arms, seeds)
     commit = gitio.tag_commit(root, c["tag"])
-    if not commit:
-        paths = [x for x in SNAPSHOT_PATHS if os.path.isdir(os.path.join(root, x))] + [rel(problem_dir(problem))]
-        commit = gitio.snapshot(root, paths, f"{exp_id} ({problem}): {card['title']}\n\nsnapshot of research start; the runs execute this commit", c["tag"])
+    if not commit:                                               # HEAD (the code is committed: check) plus the experiment's own folder
+        commit = gitio.snapshot(root, [rel(experiment_dir(problem, exp_id))],
+                                f"{exp_id} ({problem}): {card['title']}\n\nsnapshot of research start; the runs execute this commit", c["tag"])
     p = load_problem(problem, at=commit)                         # from here on everything is read from the snapshot
-    card = load_card(problem, exp_id, at=commit)
+    seeds_now = card["seeds"]
+    card = dict(load_card(problem, exp_id, at=commit), seeds=seeds_now)      # the rule of the snapshot; only added seeds come from the working card
     cfg = base_config(problem, p, at=commit)
     started, skipped = [], []
     for rid, arm, seed in todo:
@@ -182,6 +199,3 @@ def test(problem: str, rid: str, spawn: bool = True) -> Dict[str, Any]:
         spawn_worker(problem, rid, ["--test"])
     return {"run": rid, "started": spawn}
 
-
-def runs_root_of(problem: str) -> str:
-    return runs_root(problem)

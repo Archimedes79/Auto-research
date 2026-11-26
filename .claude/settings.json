@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "wsl.exe --cd \"$CLAUDE_PROJECT_DIR\" python3 autoresearch/tools/guard_hook.py || true",
+            "command": "wsl.exe --cd \"$CLAUDE_PROJECT_DIR\" python3 autoresearch/research/hook.py",
             "timeout": 20
           }
         ]

@@ -139,7 +139,7 @@ class Worker:
         if step["run"] == "evaluate":
             return [py, "-m", "research.evaluate", self.problem, self.rid] + (["--test"] if self.test else [])
         names = {"python": py, "config": cfg_path, "run_dir": self.out, "data": self.m["data"], "runs": runs_root(self.problem),
-                 "seed": str(self.run["seed"])}
+                 "seed": str(self.run["seed"]), "split": self.split}
         try:
             return [w.format(**names) for w in step["run"]]
         except (KeyError, IndexError, ValueError) as e:
@@ -148,7 +148,7 @@ class Worker:
     def env(self, code: str) -> Dict[str, str]:
         e = dict(os.environ)
         e.update(RESEARCH_REPO=repo(), RESEARCH_PROBLEM=self.problem, RESEARCH_RUN=self.rid, RESEARCH_RUN_DIR=self.out, RESEARCH_RECORD=self.rec,
-                 RESEARCH_DATA=self.m["data"], RESEARCH_RUNS=runs_root(self.problem), RESEARCH_COMMIT=self.run["commit"], RESEARCH_CODE=code,
+                 RESEARCH_DATA=self.m["data"], RESEARCH_RUNS=runs_root(self.problem), RESEARCH_COMMIT=self.run["commit"], RESEARCH_CODE=code, RESEARCH_SPLIT=self.split,
                  PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", self.problem), os.path.join(code, "autoresearch"), code]),
                  PYTHONUNBUFFERED="1")
         if self.test:
@@ -215,7 +215,10 @@ class Worker:
             try:
                 return self._main()
             except Exception as e:                                # noqa: BLE001 - a worker always leaves a record
-                self.save(status="failed", error=f"{type(e).__name__}: {e}"[:500], ended=time.strftime("%Y-%m-%d %H:%M:%S"))
+                if self.test:                                      # a TEST evaluation never changes the run's own record
+                    print(f"TEST evaluation of {self.rid} failed: {type(e).__name__}: {e}", flush=True)
+                else:
+                    self.save(status="failed", error=f"{type(e).__name__}: {e}"[:500], ended=time.strftime("%Y-%m-%d %H:%M:%S"))
                 raise
 
     def _main(self) -> int:
@@ -227,14 +230,16 @@ class Worker:
         p = read_json(os.path.join(code, "problems", self.problem, "problem.json"))
         card = spec.parse_card(open(os.path.join(self.rec, "..", "..", "experiment.md"), encoding="utf-8").read())
         frozen = spec.parse_card(gitio.show(repo(), self.run["commit"], os.path.relpath(os.path.join(self.rec, "..", "..", "experiment.md"), repo()).replace(os.sep, "/")))
-        if card != frozen:
+        if not spec.same_rule(frozen, card):
             raise ResearchError("the card in the working tree is not the card of the snapshot: the run follows the snapshot, and so must the records")
+        self.split = p["holdout"][0] if self.test else spec.split_of(frozen, p)
         cfg = expand(read_json(os.path.join(self.rec, "config.json")), self.problem)
         cfg_path = os.path.join(self.out, "config.json")
         write_json(cfg_path, cfg)
-        self.save(status="running", host=socket.gethostname(), started=self.run.get("started") or time.strftime("%Y-%m-%d %H:%M:%S"))
-        steps = ["evaluate"] if self.test else list(self.run["steps"])
-        why = self.wait_needs(cfg, card["arms"][self.run["arm"]].get("needs", {}))
+        if not self.test:
+            self.save(status="running", host=socket.gethostname(), started=self.run.get("started") or time.strftime("%Y-%m-%d %H:%M:%S"))
+        steps = list(p.get("test_steps", ["evaluate"])) if self.test else list(self.run["steps"])
+        why = "" if self.test else self.wait_needs(cfg, frozen["arms"][self.run["arm"]].get("needs", {}))
         if why:
             self.save(status="failed", error=why, ended=time.strftime("%Y-%m-%d %H:%M:%S"))
             return 1
@@ -243,7 +248,7 @@ class Worker:
                 continue
             step = p["steps"][name]
             cmd = self.command(step, code, cfg_path, p)
-            kill = Kill(card.get("kill", []), os.path.join(self.out, "log.jsonl")) if step["run"] != "evaluate" else None
+            kill = Kill(frozen.get("kill", []), os.path.join(self.out, "log.jsonl")) if step["run"] != "evaluate" and not self.test else None
             if not self.test:
                 self.run["steps"][name] = {"status": "running", "since": time.strftime("%Y-%m-%d %H:%M:%S")}
                 self.save()
@@ -253,13 +258,17 @@ class Worker:
             else:
                 res = self.execute(name, cmd, code, kill)
             if self.test:
-                return 0 if res["status"] == "ok" else 1
+                if res["status"] != "ok":
+                    print(f"TEST step {name} of {self.rid}: {res}", flush=True)
+                    return 1
+                continue
             self.run["steps"][name] = res
             if res["status"] != "ok":
                 self.save(status=res["status"], ended=time.strftime("%Y-%m-%d %H:%M:%S"))
                 return 1 if res["status"] in ("failed", "killed") else EXIT_STOPPED
             self.save()
-        self.save(status="ok", ended=time.strftime("%Y-%m-%d %H:%M:%S"))
+        if not self.test:
+            self.save(status="ok", ended=time.strftime("%Y-%m-%d %H:%M:%S"))
         return 0
 
 

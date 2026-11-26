@@ -63,6 +63,17 @@ def stop(problem: str, target: str) -> List[str]:
     return done
 
 
+STALE_S = 600                                                  # a heartbeat older than this: the worker is gone
+
+
+def heartbeat_age(problem: str, rid: str) -> float:
+    try:
+        with open(os.path.join(run_dir(problem, rid), "heartbeat"), encoding="utf-8") as f:
+            return time.time() - float(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return float("inf")
+
+
 def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     """start the worker again for stopped runs (and failed ones with --failed); finished steps are skipped, a training resumes from its checkpoint"""
     if gates.hold_refusal(problem):
@@ -71,7 +82,8 @@ def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     for rid in _runs(problem, target):
         path = os.path.join(record_dir(problem, rid), "run.json")
         run = read_json(path)
-        if run.get("status") in ("stopped", "queued") or (failed and run.get("status") == "failed"):
+        orphan = run.get("status") == "running" and heartbeat_age(problem, rid) > STALE_S       # its worker died (a reboot, a killed WSL)
+        if run.get("status") in ("stopped", "queued") or orphan or (failed and run.get("status") == "failed"):
             run.update(status="queued", resumed=time.strftime("%Y-%m-%d %H:%M:%S"))      # not a final state any more: the worker takes it from here
             write_json(path, run)
             launch.spawn_worker(problem, rid)
@@ -113,7 +125,7 @@ def build() -> argparse.ArgumentParser:
     s.add_argument("--no-commit", action="store_true"), s.add_argument("--boot", type=int, default=2000)
     s = sub.add_parser("adopt", help="a KEEP arm becomes the champion (the owner's decision)")
     s.add_argument("problem"), s.add_argument("experiment"), s.add_argument("arm"), s.add_argument("--decision", required=True)
-    s.add_argument("--by-hand", default=""), s.add_argument("--tolerance", type=float, default=0.0), s.add_argument("--no-commit", action="store_true")
+    s.add_argument("--by-hand", default=""), s.add_argument("--tolerance", type=float, default=None, help="default: problem.json evaluate.anchor_tolerance"), s.add_argument("--no-commit", action="store_true")
     s = sub.add_parser("register", help="a measured network as champion or comparison network (the owner's decision)")
     s.add_argument("problem"), s.add_argument("experiment"), s.add_argument("arm"), s.add_argument("--decision", required=True)
     s.add_argument("--role", choices=("champion", "comparison"), required=True), s.add_argument("--no-commit", action="store_true")
@@ -121,6 +133,12 @@ def build() -> argparse.ArgumentParser:
     s.add_argument("problem"), s.add_argument("run")
     s = sub.add_parser("report", help="build a report again from the records and the stored predictions (into the run root)")
     s.add_argument("problem"), s.add_argument("folder"), s.add_argument("--strict", action="store_true")
+    s = sub.add_parser("anchor", help="evaluate a finished run again with the working tree's code: do its numbers still come out?")
+    s.add_argument("problem"), s.add_argument("run"), s.add_argument("--tolerance", type=float, default=None)
+    s = sub.add_parser("compare", help="two finished runs side by side (a diagnostic, never a verdict)")
+    s.add_argument("problem"), s.add_argument("control"), s.add_argument("variant"), s.add_argument("--boot", type=int, default=2000)
+    s = sub.add_parser("clean", help="list the run folders nothing needs any more; --delete under a decided decision")
+    s.add_argument("problem"), s.add_argument("--delete", action="store_true"), s.add_argument("--decision", default="")
     s = sub.add_parser("index", help="write ledger.csv from the records")
     s.add_argument("problem"), s.add_argument("--check", action="store_true", help="exit 1 when ledger.csv is not what the records give")
     s = sub.add_parser("hold", help="no start or resume of a problem until released")
@@ -170,6 +188,16 @@ def run(a: argparse.Namespace) -> Any:
     if v == "report":
         from research import report
         return report.build(a.problem, a.folder, a.strict)
+    if v in ("anchor", "compare", "clean"):
+        from research import upkeep
+        if v == "anchor":
+            res = upkeep.anchor(a.problem, a.run, a.tolerance)
+            if not res["agree"]:
+                raise ResearchError("the numbers do not come out:\n" + json.dumps(res["differ"], indent=1, default=str))
+            return res
+        if v == "compare":
+            return upkeep.compare(a.problem, a.control, a.variant, a.boot)
+        return upkeep.clean(a.problem, a.delete, a.decision)
     if v == "commit":
         from research import gitio
         trailer = "\n\nCo-Authored-By: " + os.environ["RESEARCH_COAUTHOR"] if os.environ.get("RESEARCH_COAUTHOR") else ""

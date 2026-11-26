@@ -16,12 +16,15 @@ PROBLEM_KEYS = {
     "name": (str, True), "tag_prefix": (str, True), "python": (str, True), "config": (str, True),
     "steps": (dict, True), "default_steps": (list, True), "score": (dict, True), "evaluate": (dict, True),
     "guards": (list, False), "control_floor": (dict, False), "holdout": (list, False), "protected": (list, False),
-    "data": (str, False), "first_experiment": (int, False), "note": (str, False),
+    "data": (str, False), "first_experiment": (int, False), "test_steps": (list, False), "note": (str, False),
 }
+# test_steps: the steps a TEST evaluation of a finished run runs (default ["evaluate"]; a problem that predicts in a step of its own names it too)
 CONFIG_KEYS = ("name", "seed", "out_root")                 # every base config has them: the run's name, its seed and where it writes
 STEP_KEYS = {"run": ((list, str), True), "gpus": (int, False), "note": (str, False)}
 SCORE_KEYS = {"metric": (str, True), "better": (str, True), "band": ((int, float), True)}
-EVALUATE_KEYS = {"split": (str, True), "metrics": (list, False), "device": (str, False)}
+EVALUATE_KEYS = {"split": (str, True), "metrics": (list, True), "device": (str, False), "frames": (str, False), "anchor_tolerance": ((int, float), False)}
+# frames: which frames of the split are scored (an Evaluation frame spec such as "spread:1000:val"; default: the whole split);
+# anchor_tolerance: how far an evaluation repeated with the same weights may differ (0 = bit for bit; a GPU that is not deterministic needs more)
 GUARD_KEYS = {"metric": (str, True), "better": (str, False), "min": ((int, float), False), "max": ((int, float), False),
               "max_drop": ((int, float), False)}
 
@@ -113,9 +116,8 @@ def card_errors(card: Dict[str, Any], problem: Dict[str, Any], base_config: Opti
             if set(arm) - {"from", "note"}:
                 errs.append(f"card arms.{name}: an arm with 'from' reuses stored runs and sets nothing")
         if base_config is not None:
-            for key in arm.get("set", {}):
-                if key not in base_config:
-                    errs.append(f"card arms.{name}.set: {key!r} is not a setting of the base config (a new option goes into the base config, default off)")
+            for key in unknown_settings(arm.get("set", {}), base_config):
+                errs.append(f"card arms.{name}.set: {key!r} is not a setting of the base config (a new option goes into the base config, default off)")
             for key in arm.get("needs", {}):
                 if key not in base_config:
                     errs.append(f"card arms.{name}.needs: {key!r} is not a setting of the base config")
@@ -159,16 +161,46 @@ def split_of(card: Dict[str, Any], problem: Dict[str, Any]) -> str:
     return card.get("split") or problem["evaluate"]["split"]
 
 
+def frames_of(card: Dict[str, Any], problem: Dict[str, Any]) -> str:
+    """the frames an evaluation scores: the problem's frame spec, or the whole split a card names"""
+    return card["split"] if card.get("split") else problem["evaluate"].get("frames") or problem["evaluate"]["split"]
+
+
 def min_effect(card: Dict[str, Any], problem: Dict[str, Any]) -> float:
     return float(card.get("rule", {}).get("min_effect", problem["score"]["band"]))
+
+
+def unknown_settings(settings: Dict[str, Any], base: Dict[str, Any], prefix: str = "") -> List[str]:
+    """the settings (nested: 'model.width') that the base config does not have"""
+    out = []
+    for k, v in settings.items():
+        if k not in base:
+            out.append(prefix + k)
+        elif isinstance(v, dict) and isinstance(base[k], dict):
+            out += unknown_settings(v, base[k], f"{prefix}{k}.")
+    return out
+
+
+def merged(base: Dict[str, Any], settings: Dict[str, Any]) -> Dict[str, Any]:
+    """the base config with the settings put in; a nested setting changes only its own keys"""
+    out = dict(base)
+    for k, v in settings.items():
+        out[k] = merged(base[k], v) if isinstance(v, dict) and isinstance(base.get(k), dict) else v
+    return out
+
+
+def same_rule(frozen: Dict[str, Any], current: Dict[str, Any]) -> bool:
+    """does the card in the working tree say what the frozen card says? Only more seeds may be added (an INCONCLUSIVE verdict asks for one)"""
+    strip = lambda c: {k: v for k, v in c.items() if k != "seeds"}      # noqa: E731
+    return strip(frozen) == strip(current) and set(frozen.get("seeds", [])) <= set(current.get("seeds", [])) and \
+        list(current.get("seeds", []))[:len(frozen.get("seeds", []))] == list(frozen.get("seeds", []))
 
 
 def compose(base: Dict[str, Any], card: Dict[str, Any], arm: str, seed: int, rid: str) -> Dict[str, Any]:
     """the config of one run: the base config, the arm's settings, the seed and the run's place ({runs}: the machine's run root of the problem).
     `needs` become the folder of the named run of the same seed"""
     a = card["arms"][arm]
-    cfg = dict(base)
-    cfg.update(a.get("set", {}))
+    cfg = merged(base, a.get("set", {}))
     for key, ref in a.get("needs", {}).items():
         exp, other = FROM.match(ref).groups()
         cfg[key] = f"{{runs}}/{exp}.{other}_s{seed}"

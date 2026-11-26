@@ -16,6 +16,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 GATE_NAMES = {"problem.json", "TEST_LOG.md", "settings.json", "settings.local.json", "hook.py", "gates.py"}
 TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
+MCP_WRITERS = ("write_file", "edit_block", "move_file", "write_pdf")             # file tools of MCP servers (mcp__<server>__<tool>)
+PATH_KEYS = ("file_path", "notebook_path", "path", "source", "destination", "outputPath")
+
+
+def targets(event: dict) -> list:
+    """the paths an edit event would write"""
+    tool, inp = event.get("tool_name", ""), event.get("tool_input") or {}
+    if tool in TOOLS:
+        return [inp.get(TOOLS[tool], "")] if inp.get(TOOLS[tool]) else []
+    if tool.startswith("mcp__") and tool.rsplit("__", 1)[-1] in MCP_WRITERS:
+        return [inp[k] for k in PATH_KEYS if isinstance(inp.get(k), str) and inp[k]]
+    return []
 
 
 def to_local(path: str) -> str:
@@ -42,18 +54,16 @@ def checkout_of(path: str) -> str:
 
 def verdict(event: dict) -> str:
     """'' = allow, else the reason of the refusal"""
-    key = TOOLS.get(event.get("tool_name", ""))
-    raw = (event.get("tool_input") or {}).get(key or "", "") if key else ""
-    if not raw:
-        return ""
-    path = to_local(raw)
-    if not os.path.isabs(path):
-        path = os.path.join(event.get("cwd") or os.getcwd(), path)
-    root = checkout_of(path)
-    if not root:
-        return ""
     from research import gates
-    return gates.protected_refusal(os.path.relpath(os.path.abspath(path), root), root)
+    for raw in targets(event):
+        path = to_local(raw)
+        if not os.path.isabs(path):
+            path = os.path.join(event.get("cwd") or os.getcwd(), path)
+        root = checkout_of(path)
+        reason = gates.protected_refusal(os.path.relpath(os.path.abspath(path), root), root) if root else ""
+        if reason:
+            return reason
+    return ""
 
 
 def main() -> int:
@@ -62,9 +72,8 @@ def main() -> int:
         event = json.load(sys.stdin)
         reason = verdict(event)
     except Exception as e:                                             # noqa: BLE001 - the hook must answer
-        key = TOOLS.get(event.get("tool_name", "")) if isinstance(event, dict) else None
-        name = os.path.basename(str(((event.get("tool_input") or {}) if isinstance(event, dict) else {}).get(key or "", "")).replace("\\", "/"))
-        reason = f"the gate hook failed ({type(e).__name__}: {e}); edits of the gate files are refused until it works" if name in GATE_NAMES else ""
+        names = {os.path.basename(str(p).replace("\\", "/")) for p in (targets(event) if isinstance(event, dict) else [])}
+        reason = f"the gate hook failed ({type(e).__name__}: {e}); edits of the gate files are refused until it works" if names & GATE_NAMES else ""
     if reason:
         print(reason, file=sys.stderr)
         return 2

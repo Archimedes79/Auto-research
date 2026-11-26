@@ -84,6 +84,13 @@ def parts(tmp: str) -> None:
     assert "not named" in gates.test_refusal("x", "E1.b_s0", root)
     assert gates.is_protected("problems/x/problem.json", root) and gates.is_protected("problems/x/evaluation/adapter.py", root)
     assert gates.is_protected("champions/x/E1.a/network.json", root) and not gates.is_protected("problems/x/net/model/net.py", root)
+    # a card may only gain seeds after its start; nested settings merge key by key; results scored differently are not comparable
+    assert spec.same_rule(card, dict(card, seeds=[0, 1, 2])) and not spec.same_rule(card, dict(card, seeds=[1, 0])) and not spec.same_rule(card, dict(card, prediction=0.1))
+    assert spec.merged({"m": {"a": 1, "b": 2}, "c": 3}, {"m": {"b": 5}}) == {"m": {"a": 1, "b": 5}, "c": 3}
+    assert spec.unknown_settings({"m": {"x": 1}}, {"m": {"a": 1}}) == ["m.x"]
+    r = {"split": "val", "frames": 160, "evaluation": {"gt": "g1", "evaluator": "e1", "metrics": ["seg"]}}
+    assert judge.incomparable([{"result": r}, {"result": r}]) == []
+    assert any("ground truth" in x for x in judge.incomparable([{"result": r}, {"result": dict(r, evaluation=dict(r["evaluation"], gt="g2"))}]))
     say("parts: schemas and typos, compose, run ids, the standard rule, kill rules, decisions, the TEST log, protected paths")
 
 
@@ -159,6 +166,12 @@ def chain(tmp: str) -> None:
             "rule": {"boot": 300}, "kill": [{"metric": "total", "after_step": 10, "above": 100.0}]}
     write_card(root, e1, card)
     assert json.loads(research(["check", "toy", "E1"], env).stdout)["errors"] == []
+    net_py = os.path.join(root, "problems", "toy", "net", "model", "net.py")
+    keep = open(net_py, encoding="utf-8").read()
+    open(net_py, "a", encoding="utf-8").write("# a half-done edit of another chat\n")
+    assert any("not committed" in e for e in json.loads(research(["check", "toy", "E1"], env).stdout)["errors"])
+    assert "not committed" in research(["start", "toy", "E1"], env, ok=(1,)).stderr
+    open(net_py, "w", encoding="utf-8").write(keep)
     started = json.loads(research(["start", "toy", "E1"], env).stdout)
     assert sorted(started["started"]) == ["E1.a_s0", "E1.a_s1", "E1.c_s0", "E1.c_s1"] and started["tag"] == "toy/E1", started
     snap = subprocess.run(["git", "rev-parse", "toy/E1^{commit}"], cwd=root, capture_output=True, text=True).stdout.strip()
@@ -242,6 +255,8 @@ def chain(tmp: str) -> None:
     assert r.returncode == 2 and "protected" in r.stderr, (r.returncode, r.stderr)
     ok = dict(ev, tool_input={"file_path": os.path.join(root, "problems", "toy", "net", "model", "net.py")})
     assert subprocess.run([sys.executable, hook], input=json.dumps(ok), capture_output=True, text=True, env=env).returncode == 0
+    mcp = {"tool_name": "mcp__files__write_file", "tool_input": {"path": os.path.join(root, "problems", "toy", "TEST_LOG.md")}, "cwd": root}
+    assert subprocess.run([sys.executable, hook], input=json.dumps(mcp), capture_output=True, text=True, env=env).returncode == 2, "an MCP file tool is guarded too"
     research(["grant", "problems/toy/problem.json", "--decision", "D1", "--hours", "1", "--note", "selftest"], env)
     assert subprocess.run([sys.executable, hook], input=json.dumps(ev), capture_output=True, text=True, env=env).returncode == 0
     assert "not a decided" in research(["grant", "problems/toy/TEST_LOG.md", "--decision", "D9", "--note", "x"], env, ok=(1,)).stderr
