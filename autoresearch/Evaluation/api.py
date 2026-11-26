@@ -44,6 +44,7 @@ import sys
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from . import defaults
 from .contracts import FrameRef, Source
 from .suite import EvalSuite
 from .results import Locked, ResultSet, digest, write_atomic, writer_lock
@@ -158,12 +159,12 @@ def load_adapter(spec: Any, project: Optional[str]):
             mod = importlib.import_module(spec)
         except ImportError as e:
             raise EvaluationError(f"adapter {spec!r} cannot be imported: {e}") from None
-    missing = [f for f in ADAPTER_FUNCTIONS if not hasattr(mod, f)]
+    missing = [f for f in defaults.REQUIRED if not hasattr(mod, f)]
     if missing:
         raise EvaluationError(f"the adapter lacks {', '.join(missing)}")
     if hasattr(mod, "free_source") != hasattr(mod, "free_subject"):
         raise EvaluationError("the adapter defines only one of free_source / free_subject: they go together (a Source without ground truth and the Subject that fits it)")
-    return mod
+    return mod if isinstance(mod, defaults.Adapter) else defaults.Adapter(mod, project)      # name, out, network, ... where the adapter has none
 
 
 def load_runner(project: Optional[str], adapter: Any):
@@ -176,8 +177,8 @@ def load_runner(project: Optional[str], adapter: Any):
     except (OSError, ValueError, AttributeError):
         spec = None
     if not spec:
-        raise EvaluationError(f'the project names no runner: write "runner": "module:Class" in {root}/evaluation/evaluation.json (the Evaluation always includes the project\'s Runner class), '
-                              "or inject one: Evaluation(runner=...)")
+        from .netrunner import Runner                          # the default Runner: networks are run folders with checkpoints
+        return Runner(root, adapter)
     module, sep, cls = str(spec).partition(":")
     if not sep or not module or not cls:
         raise EvaluationError(f'"runner" in {root}/evaluation/evaluation.json is "module:Class", got {spec!r}')
@@ -237,6 +238,9 @@ class Helpers:
     def _source(self, net: str, of: str, workers: int, control: str, labelled: bool) -> Source:
         """the Source of a set: with its ground truth (the adapter's source) for the Evaluation, without (free_source, else source) for the Runner. A set the project does not define is
         refused before anything is opened, and whatever the adapter raises (SystemExit included) is an EvaluationError"""
+        held = defaults.holdout_sets(getattr(self.ad, "project", ""))
+        if (of in held or of.split(".")[-1] in held) and not defaults.holdout_open():
+            raise EvaluationError(f"set {of!r} is a holdout split of this problem: it opens only in a run of `research test` (a row of the TEST log under a decided decision)")
         known = self.ad.sets()
         if of not in known:
             raise EvaluationError(f"set {of!r}: not one of {sorted(known)}" + (" (the TEST split is not offered)" if "test" in of else ""))
@@ -257,6 +261,14 @@ class Evaluation(Helpers):
         self.runner = runner
         self._tasks: Dict[Tuple[str, Tuple[str, ...]], Any] = {}
 
+    def _metric_names(self, metrics: Optional[Sequence[str]]) -> Tuple[str, ...]:
+        """the metrics asked for; none named = the adapter's METRICS"""
+        if metrics is None:
+            if not getattr(self.ad, "METRICS", None):
+                raise EvaluationError("name the metrics (the adapter defines no METRICS, the list used when none are named)")
+            return names(self.ad.METRICS)
+        return names(metrics)
+
     # ---------------------------------------------------------------------------------------- what exists, and the dry run
     def list_sets(self) -> Dict[str, Any]:
         """the sets of scenes the project defines: name -> number of scenes (`val` and `train` are the network's own lists: no number)"""
@@ -276,10 +288,10 @@ class Evaluation(Helpers):
                 rows.append({"id": f"{name}@{d}", "kind": "evaluation", "frames": ev["n_frames"], "set": ev["frames"], "gt": ev["gt"], "metrics": ev["metrics"]})
         return rows
 
-    def check(self, network: str, frames: str = "val", metrics: Sequence[str] = ("maps", "boxes"), taps: Sequence[str] = (), workers: int = 0, control: str = "") -> Dict[str, Any]:
+    def check(self, network: str, frames: str = "val", metrics: Optional[Sequence[str]] = None, taps: Sequence[str] = (), workers: int = 0, control: str = "") -> Dict[str, Any]:
         """the dry run: what `run` would do with these frames (the Runner's plan) and what is wrong with the ground truth and the metrics (`ok`, `problems`). No frame runs; the data
         and the checkpoint are opened (a BEV network is built on the CPU)"""
-        metrics = names(metrics)
+        metrics = self._metric_names(metrics)
         res = dict(self.runner.plan(network, str(frames), names(taps), workers, control))
         problems: List[str] = res["problems"]
         if "results" not in res:                                              # the Runner could not even plan: its problems are the answer
@@ -311,15 +323,15 @@ class Evaluation(Helpers):
         return res
 
     # ---------------------------------------------------------------------------------------- scoring (the network is run by the Runner)
-    def score(self, results: str, frames: str = "val", gt_key: Optional[str] = None, metrics: Sequence[str] = ("maps", "boxes"), workers: int = 0, progress: int = 50) -> Dict[str, Any]:
+    def score(self, results: str, frames: str = "val", gt_key: Optional[str] = None, metrics: Optional[Sequence[str]] = None, workers: int = 0, progress: int = 50) -> Dict[str, Any]:
         """score stored predictions (an id `<network>@r<hash>`) on the frames against the ground truth; the network is not run; frames that were not predicted are an error"""
-        return self._score_stored(results, Frames.parse(frames), gt_key, names(metrics), workers, progress, 0.0, 0, True)
+        return self._score_stored(results, Frames.parse(frames), gt_key, self._metric_names(metrics), workers, progress, 0.0, 0, True)
 
-    def run(self, network: str, frames: str = "val", gt_key: Optional[str] = None, metrics: Sequence[str] = ("maps", "boxes"), taps: Sequence[str] = (), device: str = "cuda",
+    def run(self, network: str, frames: str = "val", gt_key: Optional[str] = None, metrics: Optional[Sequence[str]] = None, taps: Sequence[str] = (), device: str = "cuda",
             workers: int = 2, control: str = "", progress: int = 50) -> Dict[str, Any]:
         """predict (what is not stored yet, through the Runner), then score against the ground truth; gt_key = the GT version the numbers must be on (refused when the data has another);
         metrics = what the project offers (BEV: maps, boxes, curves, fusion, velocity). -> a dict: the id, what was done, the warnings"""
-        net, fr, metrics = self.resolve(network), Frames.parse(frames), names(metrics)
+        net, fr, metrics = self.resolve(network), Frames.parse(frames), self._metric_names(metrics)
         self._task(net, metrics)                                          # a typo in the metrics fails here, not after the network ran
         pinfo = self.runner.predict(net, str(fr), names(taps), device, workers, control, progress)       # the network runs and is released; the labelled data is opened after it
         try:

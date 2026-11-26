@@ -1,10 +1,12 @@
-"""Training of the toy network on the project-independent engine trainkit (autoresearch/trainkit/README.md).
+"""Training of the toy network on the problem-independent engine trainkit (autoresearch/trainkit/README.md).
 
-    bash tools/py.sh training/train.py <config.json>            train; the same command again resumes from the newest checkpoint
-    bash tools/py.sh training/train.py --check <config.json>    the static check: every key known, the values sane (the data are the 'prepare' item's job)
+    python training/train.py <config.json>             train into <out_root>/<name>; the same command again resumes from the newest checkpoint
+    python training/train.py --check <config.json>     the static check: every key known, the values sane
+
+In a run of the research system the worker composes the config (the base config, the arm's settings, the seed, the run's folders) and starts
+this script from the run's snapshot.
 """
 import argparse
-import json
 import os
 import sys
 from dataclasses import dataclass
@@ -39,11 +41,10 @@ class TrainConfig(Config):
     keep: int = 1
     device: str = "cpu"
     threads: int = 2                 # CPU threads: small, so a toy run does not disturb other work
-    data_root: str = ""              # "" = data/store of the problem (or TOY_DATA)
+    data_root: str = ""              # the toy's data folder (in a run: <data root of the machine>/toy)
     gt_supersample: int = 4
-    compare_to: str = ""             # run folder name of the control this run's card is compared with (evaluation/score.py)
 
-    RESUME_FREE = Config.RESUME_FREE + ("threads", "data_root", "compare_to")
+    RESUME_FREE = Config.RESUME_FREE + ("threads", "data_root")
 
 
 def check(cfg):
@@ -51,6 +52,8 @@ def check(cfg):
     bad = [f"{k} must be at least 1" for k in ("steps", "batch_size", "width", "accum", "threads", "gt_supersample") if getattr(cfg, k) < 1]
     if cfg.device != "cpu":
         bad.append("the toy runs on the CPU (device cpu)")
+    if not cfg.data_root or "{" in cfg.data_root:
+        bad.append(f"data_root {cfg.data_root!r}: an absolute folder (the worker fills in the machine's data root)")
     return bad
 
 
@@ -77,10 +80,8 @@ def train(cfg):
             return {"total": float(loss(logits, y_val)), "iou": float((pred & truth).sum()) / max(1.0, float((pred | truth).sum()))}
 
     out_dir = prepare_run_dir(cfg)
-    with open(os.path.join(out_dir, "gt.json"), "w", encoding="utf-8") as f:
-        json.dump({"signature": sig, "version": sig}, f)            # what Training shows as the truth a run trained on
     fit(cfg, model, loss, loader, step_fn, out_dir, cfg.device, evaluate=evaluate)
-    print(f"trained {cfg.name}: {cfg.steps} steps, {sum(p.numel() for p in model.parameters())} parameters", flush=True)
+    print(f"trained {cfg.name}: {cfg.steps} steps, {sum(p.numel() for p in model.parameters())} parameters, ground truth {sig}", flush=True)
 
 
 def main(argv=None):

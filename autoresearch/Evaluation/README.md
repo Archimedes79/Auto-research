@@ -28,14 +28,12 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
 ```
 A caller (a person, a script, the command line) talks to the Evaluation only. The Runner is the layer below: the only class that runs a network (D72: it reads no ground truth and computes no loss) and stores what
 it predicts. There is one Runner and the Evaluation always includes it: the class a project names in `<project>/evaluation/evaluation.json` as `"runner": "module:Class"` (module relative to the
-project root, like the adapter; built with `(project, adapter)`; BEV: `runner.runner:Runner`, whose command line is `python -m runner` from `bev_fusion/`, for frames without labels). Evaluation has no
-Runner of its own and never imports a project's by name; a project that names none is an error, and `Evaluation(runner=...)` injects any object with `predict`, `plan`, `list_results`, `tap`, `time`,
-`probe`. The toy selftest of this interface (`AR_PROJECT=../bev_fusion python -m Evaluation.selftest_api`) therefore runs the Evaluation together with the BEV Runner on a toy adapter.
+project root, like the adapter; built with `(project, adapter)`). A project that names none gets the default Runner (`netrunner.py`: networks are run folders with checkpoints), and `Evaluation(runner=...)` injects any object with `predict`, `plan`, `list_results`, `tap`, `time`, `probe`. An adapter defines only `sets`, `source`, `subject` and `task` (and `METRICS`, the metric names used when none are named); names, folders, checkpoints and identities have defaults (`defaults.py`), and a problem's holdout splits (problem.json) open only in a run of `research test`.
 
 Data flow of one `Evaluation.run`: frames (a text) -> the Runner runs the scenes up to their last kept frame, whole and warm, stores the kept frames as a ResultSet (the temporary data: only what the
 network predicted) and releases the network -> the Evaluation opens the labelled data, scores the frames against the ground truth (`reference`, no inputs) into a RunStore (the counts) ->
 `show_numbers` / `compare` / `find_worst` read the counts. The ResultSet is only needed to score again (another ground truth, metric or subset) and to draw; it is derived data (deletable through
-`autoresearch/tools/package.py`, D40). A wrong `gt_key` or an unreadable ground truth shows only after the network ran: the predictions are kept, and the message names them (`score` them again).
+D154: deleted only after the catalog lists it). A wrong `gt_key` or an unreadable ground truth shows only after the network ran: the predictions are kept, and the message names them (`score` them again).
 A network with a memory always runs warm (D70): whole scenes in time order from the network's own start; the frames you ask for decide which results are kept and scored.
 
 ## Class interface
@@ -86,7 +84,7 @@ Every Evaluation method is a command (`python -m Evaluation <method>` or `Evalua
 | the network | `time NETWORK`, `Evaluation.probe NETWORK` (the Runner's, passed through) |
 | every command | `--json` (nothing else on stdout), `--project`, `--adapter`; exit 0 ok, 1 `check` found problems, 2 any error (`EVALUATION_TRACEBACK=1` shows the traceback) |
 
-`run` here is not `autoresearch/tools/run.py`: it books no ledger row and takes no GPU slot; a number that feeds a verdict is launched with `run.py ... -- python -m Evaluation run ...`.
+`run` here is not `research start`: it writes no record and takes no GPU slot; a number that feeds a verdict comes from the evaluation step of a run (`research/evaluate.py`).
 
 ## Underneath: the engine `EvalSuite`
 The Evaluation counts and draws with this engine and builds its workbench (`EvalSuite`: a Source, a Subject or none, a Task, with `.quant` and `.qual`) for each call; a person does not construct one. `EvalSuite`

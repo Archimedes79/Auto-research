@@ -1,0 +1,182 @@
+{
+ "_about": "the raw data of the toy problem, named by hashes (dataset/make_data.py makes the shards from this recipe)",
+ "recipe": {
+  "dataset": "toy-disc",
+  "seed": 7,
+  "size": 32,
+  "frames_per_scene": 4,
+  "noise": 0.7,
+  "splits": {
+   "train": {
+    "shards": 16,
+    "scenes": 10
+   },
+   "val": {
+    "shards": 4,
+    "scenes": 10
+   }
+  }
+ },
+ "shards": [
+  {
+   "name": "train_000",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "1d7ef1402e795e4ff6fd59ec2e0e6cedb93ab13a2ffa2a416cf1a34affa5dc43"
+  },
+  {
+   "name": "train_001",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "f4422733a6ec480f8c98c5d6227f92113f9251984b93905f6f348b58c4d1da00"
+  },
+  {
+   "name": "train_002",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "9b7fc7fa9d0764a0edbaf0e785c4bda9ea628a8fdd12fb60c3b58a35bf476bd9"
+  },
+  {
+   "name": "train_003",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "dc01f2e4fbbcc2c9608a97d001ef6692ac0040ff3587f80fbd3a06b7fbf4c394"
+  },
+  {
+   "name": "train_004",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "ceccf301254b51a5044d40aff2b96781a463e6bf9c13c119c17667f46984fe1c"
+  },
+  {
+   "name": "train_005",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "a8be261cc4e58f53e541fa2715f0e8547aceadd2730f6255fff53e9ad117a46f"
+  },
+  {
+   "name": "train_006",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "5963b4e3b329badff6c8e8ae0519ab35df260653137d83d8882f922fd9312469"
+  },
+  {
+   "name": "train_007",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "58cf94a11e5a398f603bf7c1e7aba53bdf3f3f921ee5aa05cd6e19f84ef0c511"
+  },
+  {
+   "name": "train_008",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "9576752ade2ad48f26ecb2157d0c882f6eb375cb7565d0de8980b315277fd071"
+  },
+  {
+   "name": "train_009",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "ff28c2c0dae325eef8fab4fcac1adb96ec585b3d3837ac3f9190949c0f158d86"
+  },
+  {
+   "name": "train_010",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "3ff6178594dcfe003cb655ca2e8fde5b6c7affd2f54b217ef73739aebe9767be"
+  },
+  {
+   "name": "train_011",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "57d9b7143d65f76a943b6f37eed618083bd9547c52c51234afaae5241cd9f14e"
+  },
+  {
+   "name": "train_012",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "d66ddfb02a62cefee80f8bc21354528aa36baa5fb05aaa884627cc1c52dfce30"
+  },
+  {
+   "name": "train_013",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "517f7fd9d014b6d09019fdac16f10238b2a102238e9cf364bab7bb27c8535910"
+  },
+  {
+   "name": "train_014",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "f79b6d7f7a965c1d84d7422e97a2397aa8ed770b94d18ef66e0607c5519a5e10"
+  },
+  {
+   "name": "train_015",
+   "split": "train",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "47380e82fb2b25ce870f26ddf46d8ebdd5349bf026cbfb114a5700154595c367"
+  },
+  {
+   "name": "val_000",
+   "split": "val",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "8e3d882a0b240999814ca543a8134d125e32b6475dc4f1caa567578d9fe448d7"
+  },
+  {
+   "name": "val_001",
+   "split": "val",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "34b95fd437930c501786121a918726108b2a3dde83fb13682089e3ff694ed53c"
+  },
+  {
+   "name": "val_002",
+   "split": "val",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "1f8e2045bd26c5c0a725de05f11e62bf868e8d8a23ef6de90f7ad64c0f3d7cd5"
+  },
+  {
+   "name": "val_003",
+   "split": "val",
+   "scenes": 10,
+   "frames": 40,
+   "bytes": 166592,
+   "sha256": "c0641db552662c5c0743c17157af16cbc1eb70222f9d267c7004c92a941c228d"
+  }
+ ]
+}

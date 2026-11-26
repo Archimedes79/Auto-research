@@ -1,0 +1,20 @@
+{
+ "name": "toy",
+ "tag_prefix": "toy",
+ "python": "gcar",
+ "config": "training/configs/base.json",
+ "steps": {
+  "prepare": {"run": ["{python}", "gt/generate.py", "make", "--config", "{config}"], "note": "the raw shards and the ground truth: written once, checked against the manifest"},
+  "train": {"run": ["{python}", "training/train.py", "{config}"]},
+  "evaluate": {"run": "evaluate"}
+ },
+ "default_steps": ["prepare", "train", "evaluate"],
+ "score": {"metric": "seg.iou", "better": "higher", "band": 0.01},
+ "guards": [{"metric": "seg.precision", "min": 0.5}],
+ "control_floor": {"seg.iou": 0.3},
+ "evaluate": {"split": "val", "metrics": ["seg"], "device": "cpu"},
+ "holdout": ["test"],
+ "protected": ["problem.json", "TEST_LOG.md", "dataset/manifest.json", "evaluation/"],
+ "data": "dataset/manifest.json",
+ "note": "the reference problem: a disc in noise, small enough for the CPU; the chain test of the research system"
+}

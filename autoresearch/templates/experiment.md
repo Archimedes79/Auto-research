@@ -1,56 +1,36 @@
-# E<id> <short title>
+# E000 <title>
 
-One file per experiment, in the experiment folder; it grows from card (P2) to detail plan (P3 start, block experiments only) to summary (P3 end). The machine-readable card is the block in section 0 of this file (validated against `autoresearch/schemas/experiment.schema.json` by `experiment.py check`, read by `decide.py`); there is no separate `experiment.json`.
-
-## 0. The card (what the tools run)
-Fields: id / card / title; kind (variant = configuration only, block = new code); deterministic (true when the arms share one checkpoint: no training seed, the paired scene-bootstrap interval decides); metric, direction, band (required; 0.010 unless the project measured another seed spread, then cite it); prediction {value, vs: arm letter}; arms {letter: recipe or command, base, set, seeds, run_ids, cards or names}; control; rule (clauses: metric, vs, min_effect or max_loss, band, subsets, at_least, note); budget_gpu_h, kill; evaluate {split, subset, compare}; sources (optional: `["<topic slug>/<note id>"]`, the research notes it tests; `decide.py --write` fills their result line). The rule is fixed before the run: `run.py` stores its hash in the run record and `decide.py` refuses a rule edited after the launch (`--by-hand "reason"` labels a verdict that goes around it).
+The card is the json block below: `research check <problem> E000` checks it, `research start` freezes it in the snapshot. What the runs do,
+how the verdict is made and what counts is the card as the snapshot holds it; a changed experiment is a new experiment.
 
 ```json card
 {
- "id": "E<id>",
- "card": "H<..>",
- "title": "...",
- "kind": "variant",
- "metric": "Q",
- "direction": "higher",
- "band": 0.010,
- "prediction": {"value": 0.0, "vs": "c"},
- "arms": {"a": {"recipe": "...", "run_ids": ["E<id>.a_s0", "E<id>.a_s1"]}, "c": {"recipe": "...", "run_ids": ["E<id>.c_s0", "E<id>.c_s1"]}},
+ "id": "E000",
+ "title": "<title>",
+ "question": "the one question this experiment answers",
+ "hypothesis": "what you expect and why (the mechanism)",
+ "prediction": 0.0,
  "control": "c",
- "rule": [{"metric": "Q", "min_effect": 0.01}],
- "budget_gpu_h": 0.0,
- "kill": "loss@500 > 2.0",
- "evaluate": {"split": "val"}
+ "arms": {
+  "c": {"set": {}, "note": "the control: today's champion settings"},
+  "a": {"set": {}, "note": "the change, as settings of the base config (a new option enters the code default-off first)"}
+ },
+ "seeds": [0, 1],
+ "rule": {},
+ "kill": []
 }
 ```
+Keys: `prediction` = the expected gain of the score over the control; `rule` may set `min_effect` (default: the problem's band),
+`max_seed_spread` (the control's seeds further apart make the verdict INVALID), `boot` (bootstrap draws) or `script` (a rule script
+in this folder, judge.py, when the standard rule cannot say it); `kill` = `[{"metric": "total", "after_step": 400, "above": 0.7}]`
+on the training's log.jsonl; an arm can reuse stored runs (`"from": "E12.a"`) or name the run it builds on (`"needs": {"<setting>": "E12.a"}`);
+`"kind": "measure"` measures arms without a control and without a verdict; `steps` and `split` override the problem's defaults.
 
-`run_ids` (the planned ledger ids of the arm, list them BEFORE the first launch) is what registers the rule: `run.py` finds the card through it and stores the hash of the rule block in the run record; `decide.py` then checks that every listed run finished (ledger status ok, not repeating, started with a card), refuses a rule edited after the launch (the arms' lists are locked too, `card_arms`: later edits may only append, a seed at the end), and writes its token on the ledger rows of the variant arm. A card without `run_ids` still decides, but is labelled `rule not registered at launch`. `cards` or `names` (the metric cards of the arm, added after the evaluation) are what `decide.py` reads; an arm without them is not decided. `kill` is a Training rule `key@step > value`.
+## Design delta
+The rules of DESIGN.md this experiment attacks or changes, with the changed text (the coder gets DESIGN.md plus this).
 
-## 1. Card text (written in P2, checked by ar-critic, mode cards; one page)
-The prediction, the decision rule, the arms and controls, the budget and the kill criterion are the block above: write each once, there, and do not copy them into prose (a rule written twice drifts). Evidence and results belong in section 3.
+## Plan
+What the coder changes (files, switches, tests), what is checked before the start, the budget.
 
-- **Statement** (falsifiable, one sentence):
-- **Mechanism** (why it should work):
-- **Inputs** (ready / to build: data, code blocks, tests):
-- **Starts from** (the version or run it changes):
-- **Design delta** (the rows of the problem's `DESIGN.md` this card attacks or changes: row ids and, for a change, the new text; a card that attacks a rule names the new mechanism or the cheaper test; the coder is given `DESIGN.md` plus this delta):
-- **Lens / group / sources / status** (one line: lens, problem group, note and K ids; status proposed / accepted / scheduled / confirmed / refuted / closed):
-- **Referee** (one line: the critic's verdict and a link to its report):
-
-## 2. Detail plan (block experiments only; written by ar-planner when the loop reaches the card)
-What would make it fail, in our own words: ...
-
-| step | what exactly | where (file / function) | done when | budget |
-|---|---|---|---|---|
-| code | | | spec test passes; gradient reaches the new parameters | |
-| train | arms, seeds, configs | launcher command | done flag | |
-| evaluate | registry names, split, comparison | evaluation entry point | metric card | |
-| decide | the rule above | decision tool | verdict in the ledger | |
-
-## 3. Summary (written after the decision; one line is enough for a variant)
-- **Runs** (ledger ids, code tags) and **decision** (KEEP / CUT / TIE / INCONCLUSIVE, by the rule as written):
-- **Setup** (architecture drawing, the one change, controls):
-- **Numbers** (from metric cards; split and frames named; with controls; ms per frame):
-- **Images**:
-- **What it says** (about the hypothesis, why; negatives stay):
-- **Weaknesses of this experiment** / **open points and next steps**:
+## Conclusion
+After `research judge`: the verdict, the numbers with split and denominator, what was learned, what follows.

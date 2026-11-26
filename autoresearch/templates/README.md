@@ -1,12 +1,10 @@
 # templates
 
-What agents copy when they start a file of a problem. The tools read the problem's copies, so the markers and headers of a template are a contract.
+What an agent copies when it starts a file of a problem.
 
-| file | for | its copy is read by |
+| file | for | read by |
 |---|---|---|
-| `problem.md` | `PROBLEM.md` of a new problem (goal, chain, metrics, current best, gaps) | the person, the planner |
-| `experiment.md` | one experiment: the `json card` block (section 0), the detail plan, the summary | `tools/experiment.py`, `decide.py` (schema `../schemas/experiment.schema.json`) |
-| `results.md` | the page of a decided experiment | `tools/result.py` writes between its markers |
-| `plan.md` | an optional plan file of a loop (`PLAN.md` or `plan/plan.md` in the problem) | `tools/plan.py status` |
-| `paper_note.md` | one research note; its eight header lines become the topic table | `tools/topic_table.py` |
-| `group_summary.md` | the summary of a problem group, with its digest | the planner |
+| `experiment.md` | one experiment: the `json card` block, the Design delta, the plan, the conclusion | `research` (`spec.py` checks the card) |
+| `problem.md` | `PROBLEM.md` of a new problem (goal, chain, metrics, current best, gaps) | the owner, the planner |
+| `paper_note.md` | one research note; its header lines make the table of a topic | the researcher (mode summary) |
+| `group_summary.md` | the summary of a problem group | the planner |

@@ -112,6 +112,9 @@ def free_subject(net, src, device):                                             
     return subject(net, src, device)
 
 
+METRICS = ("maps", "boxes")                     # what an evaluation uses when it names none
+
+
 def task(net, metrics):
     if set(metrics) - {"maps", "boxes"}:
         raise ValueError(f"unknown metrics {sorted(set(metrics) - {'maps', 'boxes'})}")
@@ -389,7 +392,8 @@ def check_run():
     assert type(Evaluation(project=proj).runner) is cls and type(Evaluation(project=proj, adapter=ME).runner) is cls, "the project's Runner, whichever way the adapter comes"
     assert type(Evaluation(project=proj, runner=cls(None, ME)).runner) is cls and type(toy_eval().runner) is cls, "an injected Runner is used"
     config(None)
-    _raises(EvaluationError, "names no runner", Evaluation, proj)                       # no fallback: Evaluation has no Runner of its own
+    from Evaluation.netrunner import Runner as DefaultRunner
+    assert type(Evaluation(project=proj).runner) is DefaultRunner, "a project that names no Runner gets the default one"
     for bad, text in (("nonsense", "module:Class"), (f"{__name__}:Nothing", "cannot be built"), ("no_such_module_here:Runner", "cannot be built")):
         config(bad)
         _raises(EvaluationError, text, Evaluation, proj)
@@ -440,11 +444,11 @@ def check_run():
             _raises(EvaluationError, "being written by pid", ev.score, allr["results"], "val", None, ("maps",))
         assert ev.score(allr["results"], "val", None, ("maps",))["id"].endswith(eid)
     # an adapter without the label-free pair: the Runner reads the labelled source and subject (more data than it needs, the same numbers)
-    plain_ad = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, reference=reference, card=card)
+    plain_ad = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, METRICS=ME.METRICS, reference=reference, card=card)
     fb = toy_eval(plain_ad).run("runs/thr0.45", "val", progress=0)
     _same(toy_eval(plain_ad).show_numbers(fb["id"])["numbers"], _engine("runs/thr0.45", Frames.parse("val")), "the fallback path")
     # the adapter: free_source and free_subject go together
-    half = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, free_source=free_source)
+    half = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, METRICS=ME.METRICS, free_source=free_source)
     _raises(EvaluationError, "go together", load_adapter, half, None)
     _raises(EvaluationError, "go together", Evaluation, None, half)
     # the identity of the network changes while it is loaded (a training wrote a checkpoint): nothing is stored, the message says why

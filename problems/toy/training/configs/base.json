@@ -1,6 +1,8 @@
 {
- "_about": "the base recipe of the toy; variants are values (--set), not files",
- "name": "toy_base",
+ "_about": "the base config of the toy; an experiment's arms change values of it",
+ "name": "toy",
+ "out_root": "{runs}",
+ "data_root": "{data}/toy",
  "steps": 400,
  "lr": 0.003,
  "warmup": 20,
@@ -16,7 +18,5 @@
  "keep": 1,
  "device": "cpu",
  "threads": 2,
- "data_root": "",
- "gt_supersample": 4,
- "compare_to": ""
+ "gt_supersample": 4
 }
