@@ -1,0 +1,102 @@
+{
+ "id": "E319.m_s1",
+ "hypothesis": "The junction maps head has an isotropic context; a forward / backward exchange along the lane heading (ahead / behind at 2, 4, 8 m, two rounds, differentiable) gives the ends the evidence of the continuing lane: Mirko's hypothesis that the right shape needs a forward-backward information exchange.",
+ "prediction": "maps keypoint F1 +0.008 over E307 of the same seed (below the +0.01 of attention in E286 j2), entry recall beyond 35 m +0.03: stage 2 runs on a seed only if keypoint F1 or far entry recall gains at least +0.01 over E307; topo F1 +0.005 over E312 of the same seed on the snapped read-out at p >= 0.1 (a TIE is the expected outcome)",
+ "rule": "E319 card section 0: by hand (jmaps_eval.py score for the maps stage; jends_eval.py score --snap --thr 0.1 for the read-out); gate of stage 2: keypoint F1 or far entry recall at least +0.01 over E307 of the seed, else the pair stage is not run; KEEP when topo F1 over E312 rises by more than 0.01 on both seeds with the guards held; TIE kept (the head without the block is cheaper); CUT below -0.01 or the kill (stage 1 keypoint F1 below E307 by 0.03); VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jmaps_train.py --name e319_m_s1 --seed 1 --ctx dil --sigma 1.0 --steps 3000 --workers 4 --dirx",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jmaps_train.py",
+  "--name",
+  "e319_m_s1",
+  "--seed",
+  "1",
+  "--ctx",
+  "dil",
+  "--sigma",
+  "1.0",
+  "--steps",
+  "3000",
+  "--workers",
+  "4",
+  "--dirx"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 433182,
+ "created": "2026-11-15T01:12:15",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E319",
+ "card_sha": "3089d23d153ef6b5",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "d": {
+   "order": {},
+   "run_ids": [
+    "E319.m_s0",
+    "E319.m_s1",
+    "E319.p_s0",
+    "E319.p_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "7516cbf3529e",
+ "started": "2026-11-15T01:28:04",
+ "code_hash": "7516cbf3529e",
+ "commit": "43d9ce3dba",
+ "tag": "lcr/E319.m_s1",
+ "git_note": "",
+ "pid": 435763,
+ "pgid": 435763,
+ "pid_start": 10467205,
+ "code_drift": {
+  "n": 16,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/tests/test_jtest_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e334_preview.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit3.py",
+   "bev_fusion_lane_center/temp/day25/day25.sh",
+   "bev_fusion_lane_center/temp/e334/manual_boots.sh",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_0/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_436884/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_436887/jtest_eval.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3391,
+ "attempts": 1,
+ "ended": "2026-11-15T02:25:13",
+ "last_lines": [
+  "02:09:14 step 2100/3000 loss 1.3043 lr 2.42e-04 1.145 s/step j_zone 0.166 j_heat 0.628 j_dir 0.022 j_paint 0.346",
+  "02:11:12 step 2200/3000 loss 1.2227 lr 1.99e-04 1.147 s/step j_zone 0.197 j_heat 0.723 j_dir 0.098 j_paint 0.355",
+  "02:13:01 step 2300/3000 loss 1.2080 lr 1.59e-04 1.144 s/step j_zone 0.228 j_heat 0.679 j_dir 0.051 j_paint 0.334",
+  "02:14:41 step 2400/3000 loss 1.2040 lr 1.24e-04 1.139 s/step j_zone 0.133 j_heat 0.646 j_dir 0.025 j_paint 0.357",
+  "02:16:30 step 2500/3000 loss 1.1719 lr 9.28e-05 1.136 s/step j_zone 0.232 j_heat 0.773 j_dir 0.090 j_paint 0.410",
+  "02:18:10 step 2600/3000 loss 1.2167 lr 6.71e-05 1.131 s/step j_zone 0.174 j_heat 0.610 j_dir 0.029 j_paint 0.374",
+  "02:19:39 step 2700/3000 loss 1.1846 lr 4.67e-05 1.122 s/step j_zone 0.314 j_heat 0.823 j_dir 0.097 j_paint 0.433",
+  "02:21:11 step 2800/3000 loss 1.1362 lr 3.20e-05 1.115 s/step j_zone 0.135 j_heat 0.648 j_dir 0.032 j_paint 0.356",
+  "02:22:40 step 2900/3000 loss 1.1601 lr 2.30e-05 1.107 s/step j_zone 0.195 j_heat 0.656 j_dir 0.036 j_paint 0.341",
+  "02:24:23 step 3000/3000 loss 1.1878 lr 2.00e-05 1.105 s/step j_zone 0.176 j_heat 0.653 j_dir 0.046 j_paint 0.190",
+  "02:24:23 done 3000",
+  "02:24:23 done e319_m_s1"
+ ]
+}

@@ -1,0 +1,114 @@
+{
+ "id": "E292.a_s0",
+ "hypothesis": "E292: the one-pass Matrix-NMS layer after the node head, trained end to end in the fine-tune, delivers a graph that read out WITHOUT the hard close-node step and wired with E312's connectors scores within the band of the same fine-tune without the layer",
+ "prediction": "a - c: snapped topo F1 -0.003, lanes found -0.009, junction F1 +0.005, F1@1.0 -0.003, vertices -0.7 per 100 m, dup_frac -0.003 (card section 1)",
+ "rule": "E292 card section 0: by hand (replay of the stored cards: jends_eval.py score --snap --thr 0.1 --full --base --spec --tag); a seed PASSES when topo F1 of a >= c2 - 0.01 and >= c - 0.01 with the guards held; PRECONDITION c2 passes against c; KEEP / TIE (kept and refined, D87) / CUT only by the kill (card section 0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh qgraph_train.py --name e292_a_s0 --seed 0 --workers 3 --phases 3 4 5 6 9 --steps 3000 2500 1000 750 1000 --resume-from /mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s0/model.pt --gate-phases 3 --gate-node-prec 0.75 --gate-node-rec 0.5 --soft-nms-mnms 1.75 0.1",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "qgraph_train.py",
+  "--name",
+  "e292_a_s0",
+  "--seed",
+  "0",
+  "--workers",
+  "3",
+  "--phases",
+  "3",
+  "4",
+  "5",
+  "6",
+  "9",
+  "--steps",
+  "3000",
+  "2500",
+  "1000",
+  "750",
+  "1000",
+  "--resume-from",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s0/model.pt",
+  "--gate-phases",
+  "3",
+  "--gate-node-prec",
+  "0.75",
+  "--gate-node-rec",
+  "0.5",
+  "--soft-nms-mnms",
+  "1.75",
+  "0.1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 27576,
+ "created": "2026-11-14T02:04:39",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E292",
+ "card_sha": "4e0d7cecfc8dab9b",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "c2": {
+   "order": {},
+   "run_ids": [
+    "E292.c2_s0",
+    "E292.c2_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E292.a_s0",
+    "E292.a_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "69e1ab867eb2",
+ "started": "2026-11-14T02:21:33",
+ "code_hash": "69e1ab867eb2",
+ "commit": "1fc3d2ef98",
+ "tag": "lcr/E292.a_s0",
+ "git_note": "",
+ "pid": 28827,
+ "pgid": 28827,
+ "pid_start": 2148101,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e331_maps.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e331_table.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/handover_e331.py",
+   "bev_fusion_lane_center/temp/e292/verdict_e292.py",
+   "bev_fusion_lane_center/temp/e331/ledger_notes.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2954,
+ "attempts": 1,
+ "ended": "2026-11-14T03:11:03",
+ "last_lines": [
+  "n_dir 0.022 n_s 0.148 n_u 0.202 l_link 0.194 l_long 0.082 l_deg 1.360 l_scale 0.125 l_pos 1775.000 l_pairs 45255.000 l_miss 0.000 s_ce 0.585 s_pair 0.214 a_asg 0.089 a_fp 0.853 a_road 0.519 a_struct 0.303 a_acc 0.981",
+  "03:06:52 step 700/1000 loss 4.1927 lr 4.87e-05 0.338 s/step n_e 0.171 n_flags 1.003 n_off 0.567 n_dir 0.064 n_s 0.357 n_u 0.420 l_link 0.310 l_long 0.099 l_deg 1.598 l_scale 0.198 l_pos 1637.000 l_pairs 49674.000 l_miss 0.000 s_ce 2.252 s_pair 0.516 a_asg 0.170 a_fp 1.116 a_road 0.132 a_struct 0.282 a_acc 0.938",
+  "03:07:24 step 800/1000 loss 4.1633 lr 2.49e-05 0.336 s/step n_e 0.106 n_flags 0.523 n_off 0.503 n_dir 0.039 n_s 0.132 n_u 0.196 l_link 0.274 l_long 0.110 l_deg 1.432 l_scale 0.154 l_pos 1919.000 l_pairs 47044.000 l_miss 0.000 s_ce 1.157 s_pair 0.303 a_asg 0.239 a_fp 0.951 a_road 0.135 a_struct 0.436 a_acc 0.894",
+  "03:07:54 step 900/1000 loss 4.2333 lr 9.42e-06 0.333 s/step n_e 0.152 n_flags 0.433 n_off 0.436 n_dir 0.013 n_s 0.110 n_u 0.166 l_link 0.146 l_long 0.103 l_deg 1.350 l_scale 0.131 l_pos 1696.000 l_pairs 33093.000 l_miss 0.000 s_ce 0.576 s_pair 0.250 a_asg 0.093 a_fp 0.963 a_road 0.086 a_struct 0.347 a_acc 0.973",
+  "03:08:22 step 1000/1000 loss 4.3627 lr 4.00e-06 0.327 s/step n_e 0.145 n_flags 0.505 n_off 0.461 n_dir 0.018 n_s 0.125 n_u 0.377 l_link 0.206 l_long 0.130 l_deg 1.195 l_scale 0.150 l_pos 1445.000 l_pairs 35906.000 l_miss 0.000 s_ce 0.726 s_pair 0.260 a_asg 0.055 a_fp 0.977 a_road 0.430 a_struct 0.303 a_acc 0.995",
+  "03:08:22 done 1000",
+  "03:10:39 GATE {\"p3\": {\"node_f1\": 0.782992284424096, \"node_prec\": 0.9125730876649117, \"node_rec\": 0.6856354832525752, \"node_prec_2m\": 0.9238165691134619, \"node_rec_2m\": 0.9061523628073157, \"e271_f1\": 0.6129707968622224, \"pos_err_med\": 0.2762165069580078, \"flag_recall\": {\"stop\": 0.49206349206349204, \"exit\": 0.41938674579624136, \"split\": 0.39331619537275064, \"merge\": 0.3648351648351648, \"start\": 0.20224719101123595, \"end\": 0.1724137931034483, \"win_in\": 0.6756410256410257, \"win_out\": 0.702513966480447}}, \"p4\": {\"link_prec\": 0.25829213208814017, \"link_rec\": 0.7925531914893617, \"link_f1\": 0.3896106287576765, \"junction_F1\": 0.20115163147792706, \"F1_1\": 0.8367477150971355, \"topo_F1\": 0.6182669111046265, \"lanes_found\": 0.6690401594987183, \"Q\": 0.647407411255257, \"pieces_per_gt_piece\": 1.4370468029004615, \"id_switches\": 0.9458555944720813, \"vert100_dp\": 23.12132176658276, \"node_f1_scorer\": 0.8587492564235412}, \"p5\": {\"section_start_acc\": 0.47723502304147464, \"junction_F1\": 0.212972744559476, \"F1_1\": 0.8368100734818912, \"topo_F1\": 0.6279711075218236, \"lanes_found\": 0.6690401594987183, \"Q\": 0.6485215157756697, \"pieces_per_gt_piece\": 1.5965721819380356, \"id_switches\": 1.360510835628454, \"vert100_dp\": 23.384995064982224, \"node_f1_scorer\": 0.8587492564235412}, \"p6\": {\"lane_acc_error\": 0.9032042198079042, \"geo_acc_error\": 0.8715556605259014, \"lane_acc_exact\": 0.935852534562212, \"geo_acc_exact\": 0.9466175115207374}, \"pass\": true, \"why\": \"phase 9: numbers only\"}",
+  "03:10:39 all phases done [3, 4, 5, 6, 9]"
+ ]
+}

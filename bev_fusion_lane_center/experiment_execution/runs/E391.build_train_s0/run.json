@@ -1,0 +1,60 @@
+{
+ "id": "E391.build_train_s0",
+ "hypothesis": "E391 step 2 data: the association labels of the cached B' tokens to the E390 road-graph nodes, the node-level route role, the delivered mask",
+ "prediction": "none (data)",
+ "rule": "data preparation, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_mapassoc_data.py build --split train --seed 0 && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_mapassoc_data.py stats --split train --seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_mapassoc_data.py build --split train --seed 0 && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_mapassoc_data.py stats --split train --seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 2658,
+ "created": "2026-11-21T18:13:22",
+ "status": "failed",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "e9cad069399d",
+ "started": "2026-11-21T18:14:18",
+ "code_hash": "e9cad069399d",
+ "commit": "9350ab0d61",
+ "tag": "lcr/E391.build_train_s0",
+ "git_note": "1436 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 3418,
+ "pgid": 3418,
+ "pid_start": 41090,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/mapassoc_probe.py",
+   "bev_fusion_lane_center/training/data/lane_mapassoc_data.py",
+   "bev_fusion_lane_center/training/grid/jmapassoc.py"
+  ]
+ },
+ "exit": 1,
+ "duration_s": 215,
+ "attempts": 1,
+ "ended": "2026-11-21T18:18:47",
+ "last_lines": [
+  "  p_none 400/868",
+  "  p_none 800/868",
+  "Traceback (most recent call last):",
+  "  File \"/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_mapassoc_data.py\", line 220, in <module>",
+  "    main()",
+  "  File \"/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_mapassoc_data.py\", line 215, in main",
+  "    return build(a.split, a.seed)",
+  "           ^^^^^^^^^^^^^^^^^^^^^^",
+  "  File \"/mnt/c/Auto-research/bev_fusion_lane_center/training/data/lane_mapassoc_data.py\", line 152, in build",
+  "    on_road, on_lane, _ = rc.token_labels(i, gt_id)",
+  "                          ^^^^^^^^^^^^^^^",
+  "AttributeError: 'TokenRoute' object has no attribute 'token_labels'"
+ ]
+}

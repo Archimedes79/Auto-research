@@ -1,0 +1,61 @@
+{
+ "id": "E390.nulls4b",
+ "hypothesis": "E390 step 1 v4 data and nulls: the SD road graphs (divider lanes fixed, proxies for P6) and the nulls measured before any encoder is trained",
+ "prediction": "none (measurement)",
+ "rule": "measurement for the bars, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py nulls",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py nulls"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 46641,
+ "created": "2026-11-21T01:36:42",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "code_hash_first": "850ebf1d7112",
+ "started": "2026-11-21T01:37:58",
+ "code_hash": "850ebf1d7112",
+ "commit": "89fcf83835",
+ "tag": "lcr/E390.nulls4b",
+ "git_note": "1347 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 47181,
+ "pgid": 47181,
+ "pid_start": 665142,
+ "code_drift": {
+  "n": 60,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_lead/e2e_verdicts.py",
+   "bev_fusion_lane_center/temp/_session_scratch_lead/e357_peek.py",
+   "bev_fusion_lane_center/temp/_session_scratch_lead/mk_clean_tags.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_lead/note_e354.sh",
+   "bev_fusion_lane_center/temp/cleanup/audit.py",
+   "bev_fusion_lane_center/temp/cleanup/both.py",
+   "bev_fusion_lane_center/temp/cleanup/clean_head.sh",
+   "bev_fusion_lane_center/temp/cleanup/drop_e390.py",
+   "bev_fusion_lane_center/temp/cleanup/edit1.py",
+   "bev_fusion_lane_center/temp/cleanup/edit10.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 899,
+ "attempts": 1,
+ "ended": "2026-11-21T01:54:21",
+ "last_lines": [
+  "[0.5884, 0.7278], p2_lr 0.8588 [0.8341, 0.8856], p2ap_lr 0.1971 [0.1558, 0.2436], p2all_lr 0.8592 [0.8355, 0.8854], p6_rule 0.6074 [0.5406, 0.6802], p6_seg_rule 0.6074 [0.5406, 0.6802], p6_none_rule nan [nan, nan], p6_false_none_rule 0.0039 [0.0003, 0.0095]; {'p6_proxies': 106352, 'p6_unassigned': 0, 'p1_nodes': 6228, 'p2_pos_dec': 918, 'p2_neg_dec': 50098, 'p3_pos': 426, 'p3_neg': 6181} (62 s)",
+  "pose1: p1_copy 0.6922 [0.6805, 0.7032], p1_vote 0.6946 [0.6834, 0.7049], p1_bayes 0.7577 [0.6970, 0.8136], p2_rule 0.6695 [0.6434, 0.6931], p2ap_rule 0.0722 [0.0621, 0.0887], p2all_rule 0.6693 [0.6441, 0.6930], p3_rule 0.6442 [0.5825, 0.7044], p2_lr 0.8416 [0.8231, 0.8609], p2ap_lr 0.2692 [0.2137, 0.3305], p2all_lr 0.8417 [0.8234, 0.8600], p6_rule 0.5684 [0.5080, 0.6326], p6_seg_rule 0.5684 [0.5080, 0.6326], p6_none_rule nan [nan, nan], p6_false_none_rule 0.0160 [0.0074, 0.0275]; {'p6_proxies': 106352, 'p6_unassigned': 0, 'p1_nodes': 6228, 'p2_pos_dec': 2834, 'p2_neg_dec': 50098, 'p3_pos': 426, 'p3_neg': 6181} (63 s)",
+  "pose2: p1_copy 0.6922 [0.6805, 0.7032], p1_vote 0.6946 [0.6834, 0.7049], p1_bayes 0.7577 [0.6970, 0.8136], p2_rule 0.6692 [0.6430, 0.6933], p2ap_rule 0.0721 [0.0620, 0.0887], p2all_rule 0.6690 [0.6437, 0.6928], p3_rule 0.6439 [0.5815, 0.7042], p2_lr 0.8412 [0.8228, 0.8606], p2ap_lr 0.2711 [0.2144, 0.3345], p2all_lr 0.8413 [0.8230, 0.8596], p6_rule 0.5337 [0.4816, 0.5867], p6_seg_rule 0.5337 [0.4816, 0.5867], p6_none_rule nan [nan, nan], p6_false_none_rule 0.0257 [0.0143, 0.0391]; {'p6_proxies': 106352, 'p6_unassigned': 0, 'p1_nodes': 6228, 'p2_pos_dec': 2834, 'p2_neg_dec': 50098, 'p3_pos': 426, 'p3_neg': 6181} (63 s)",
+  "pose5: p1_copy 0.6922 [0.6805, 0.7032], p1_vote 0.6946 [0.6834, 0.7049], p1_bayes 0.7577 [0.6970, 0.8136], p2_rule 0.6689 [0.6433, 0.6926], p2ap_rule 0.0721 [0.0621, 0.0883], p2all_rule 0.6686 [0.6435, 0.6919], p3_rule 0.6453 [0.5829, 0.7063], p2_lr 0.8414 [0.8230, 0.8608], p2ap_lr 0.2699 [0.2136, 0.3315], p2all_lr 0.8415 [0.8233, 0.8597], p6_rule 0.4571 [0.4145, 0.4979], p6_seg_rule 0.4571 [0.4145, 0.4979], p6_none_rule nan [nan, nan], p6_false_none_rule 0.0848 [0.0682, 0.1028]; {'p6_proxies': 106352, 'p6_unassigned': 0, 'p1_nodes': 6228, 'p2_pos_dec': 2834, 'p2_neg_dec': 50098, 'p3_pos': 426, 'p3_neg': 6181} (63 s)",
+  "nd: p1_copy 0.6925 [0.6801, 0.7053], p1_vote 0.6937 [0.6816, 0.7057], p1_bayes 0.7313 [0.6608, 0.7994], p2_rule 0.6677 [0.6403, 0.6932], p2ap_rule 0.0731 [0.0627, 0.0899], p2all_rule 0.6670 [0.6407, 0.6921], p3_rule 0.6215 [0.5537, 0.6818], p2_lr 0.8226 [0.8041, 0.8395], p2ap_lr 0.2163 [0.1709, 0.2723], p2all_lr 0.8227 [0.8048, 0.8395], p6_rule 0.5767 [0.5118, 0.6435], p6_seg_rule 0.6414 [0.5784, 0.7065], p6_none_rule 0.3044 [0.2195, 0.3932], p6_false_none_rule 0.0070 [0.0027, 0.0131]; {'p6_proxies': 106352, 'p6_unassigned': 20432, 'p1_nodes': 5054, 'p2_pos_dec': 1897, 'p2_neg_dec': 32901, 'p3_pos': 312, 'p3_neg': 4465} (56 s)",
+  "written runs/e390_sdgraph/nulls_val.json (bootstrap resamples left out as undefined: 10000)"
+ ]
+}

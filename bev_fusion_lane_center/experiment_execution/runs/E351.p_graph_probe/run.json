@@ -1,0 +1,60 @@
+{
+ "id": "E351.p_graph_probe",
+ "hypothesis": "E351 throw-away probe: a CUDA graph of pyramid + maps head (+ node head) with the pair head eager: bit identity on 24 frames, ms of the front and of the whole forward, GPU busy time (the critic of the E351 card asked for it before any build)",
+ "prediction": "front falls from about 8 ms (E312) / 12 ms (E324 s) to about 3 - 4 ms, whole forward -4 .. -6 ms; outputs bit identical",
+ "rule": "by hand: measured, a probe; no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh graph_probe.py",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "graph_probe.py"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 488381,
+ "created": "2026-11-15T09:17:40",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "code_hash_first": "9ff3e9ae185b",
+ "started": "2026-11-15T09:18:20",
+ "code_hash": "9ff3e9ae185b",
+ "commit": "0d9c2f2020",
+ "tag": "lcr/E351.p_graph_probe",
+ "git_note": "",
+ "pid": 488777,
+ "pgid": 488777,
+ "pid_start": 13288805,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/qual_report_1115/pass1_q1115.py",
+   "bev_fusion_lane_center/temp/qual_report_1115/q1_q1115.py",
+   "bev_fusion_lane_center/temp/qual_report_1115/table_q1115.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 122,
+ "attempts": 1,
+ "ended": "2026-11-15T09:20:49",
+ "last_lines": [
+  "  e312_p_s0: whole forward eager 19.09, g1 15.09; front (pyramid + maps (+ node head)) eager 7.94, graph replay 5.00",
+  "      paired whole forward g1 - eager -4.47 [-6.49, -2.54] = -23.4 %",
+  "      paired front only   g1 - eager -3.40 [-4.09, -2.85]",
+  "  e324_s_s0: whole forward eager 32.80, g1 20.92; front (pyramid + maps (+ node head)) eager 13.64, graph replay 7.09",
+  "      paired whole forward g1 - eager -10.92 [-14.52, -7.60] = -33.3 %",
+  "      paired front only   g1 - eager -6.48 [-7.55, -5.48]",
+  "",
+  "GPU busy time (sum of kernel durations of one forward, profiler) and the wall time of that forward:",
+  "  e312_p_s0 eager : kernel busy  83.83 ms, wall  95.92 ms (the profiler adds overhead to the wall time)",
+  "  e312_p_s0 g1    : kernel busy  82.57 ms, wall  93.19 ms (the profiler adds overhead to the wall time)",
+  "  e324_s_s0 eager : kernel busy   8.03 ms, wall  32.57 ms (the profiler adds overhead to the wall time)",
+  "  e324_s_s0 g1    : kernel busy   7.96 ms, wall  23.21 ms (the profiler adds overhead to the wall time)"
+ ]
+}

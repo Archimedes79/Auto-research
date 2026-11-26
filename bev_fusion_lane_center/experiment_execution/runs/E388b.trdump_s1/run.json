@@ -1,0 +1,52 @@
+{
+ "id": "E388b.trdump_s1",
+ "hypothesis": "E388b diagnostic (D126 item 2, no verdict): does the E388 learned cell lose on TRAIN too (surrogate wrong) or only on VAL (TRAIN-to-VAL shift)",
+ "prediction": "none (diagnostic)",
+ "rule": "diagnostic, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --live --run e372_s4_s1 --seed 1 --split train --every 3",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --live --run e372_s4_s1 --seed 1 --split train --every 3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 2217,
+ "created": "2026-11-19T01:52:35",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "code_hash_first": "0fb61aaa8776",
+ "started": "2026-11-19T01:53:35",
+ "code_hash": "0fb61aaa8776",
+ "commit": "7888d0f1e2",
+ "tag": "lcr/E388b.trdump_s1",
+ "git_note": "1095 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 3070,
+ "pgid": 3070,
+ "pid_start": 63100,
+ "code_drift": {
+  "n": 4,
+  "paths": [
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r3d.py",
+   "bev_fusion_lane_center/temp/e389/probe_gt.py",
+   "bev_fusion_lane_center/training/grid/test_jtoken.py",
+   "bev_fusion_lane_center/training/train/jtoken_train.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 94,
+ "attempts": 1,
+ "ended": "2026-11-19T01:56:09",
+ "last_lines": [
+  "=== attempt 2026-11-19T01:53:35: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --live --run e372_s4_s1 --seed 1 --split train --every 3",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e372_s4_s1/token_train_every3_live.pkl: 291 frames, kept nodes per frame 203.3, links per frame rec 189.4 argmax 183.9, device cuda"
+ ]
+}

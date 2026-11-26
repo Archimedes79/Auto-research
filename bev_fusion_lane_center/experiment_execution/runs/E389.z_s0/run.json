@@ -1,0 +1,121 @@
+{
+ "id": "E389.z_s0",
+ "hypothesis": "E389 A6: a route-association head on the cached B' tokens of the champion (cross-attention of the tokens to the SD route tokens with the protocol's map errors, metre-scale registration features; per token: on the route's carriageway / on the ego lane), against the same head without the map",
+ "prediction": "0.15 vs z",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"route_F1_road\",\"vs\":\"z\",\"min_effect\":0.1}] | kill: a loss is not finite; or no learning in an arm (z, z2, m, m2: the logged `total` of step 3000 (mean of steps 2901 - 3000) is not below 0.8 x the logged `total` of step 100 (mean of steps 1 - 100); the 100-step means are what `trainer.fit` logs); or the head ignores the map: the absolute F1_road of m at the mode wrong is within 0.01 of its F1_road at the mode error (the two score cards' `by_delivered.kept.numbers.route_F1_road`: arithmetic on the cards, no extra score run) on BOTH seeds AND m - z < 0.01 at the mode error (the verdict is then TIE (NO GAIN) with the status 'the head did not learn to read the map'); or the labels are wrong (the data fixture fails, section 1); or the learnability sanity step fails (section 2: the 300-step run of m, read at the mode exact, must reach F1_road >= straight prior + 0.03 = 0.757 on VAL covered nodes (the straight prior 0.7272 / 0.7286, section 3)); `--timeout` is set from the launch gate; two slots at most",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jroute_train.py --name e389_z_s0 --seed 0 --arm z --inputs full --ident e292_a --steps 3000 --bs 8 --lr 1e-3 --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jroute_train.py",
+  "--name",
+  "e389_z_s0",
+  "--seed",
+  "0",
+  "--arm",
+  "z",
+  "--inputs",
+  "full",
+  "--ident",
+  "e292_a",
+  "--steps",
+  "3000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 4054,
+ "created": "2026-11-20T00:32:58",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 25.0,
+ "card_id": "E389",
+ "card_sha": "220d5e9265692ae0",
+ "card_arms": {
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E389.z_s0",
+    "E389.z_s1",
+    "E389.read_z_s0",
+    "E389.read_z_s1"
+   ]
+  },
+  "z2": {
+   "order": {},
+   "run_ids": [
+    "E389.z2_s0",
+    "E389.read_z2_s0"
+   ]
+  },
+  "m": {
+   "order": {},
+   "run_ids": [
+    "E389.m_s0",
+    "E389.m_s1",
+    "E389.read_m_s0",
+    "E389.read_m_s1"
+   ]
+  },
+  "m2": {
+   "order": {},
+   "run_ids": [
+    "E389.m2_s0",
+    "E389.read_m2_s0"
+   ]
+  },
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E389.zg_s0",
+    "E389.mg_s0",
+    "E389.read_zg_s0",
+    "E389.read_mg_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "5686508278b2",
+ "started": "2026-11-20T00:34:43",
+ "code_hash": "5686508278b2",
+ "commit": "925ded0757",
+ "tag": "lcr/E389.z_s0",
+ "git_note": "1191 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 4614,
+ "pgid": 4614,
+ "pid_start": 328993,
+ "exit": 0,
+ "duration_s": 251,
+ "attempts": 1,
+ "ended": "2026-11-20T00:39:09",
+ "last_lines": [
+  "00:38:00 step 2100/3000 loss 0.7479 lr 2.27e-04 0.055 s/step bce_road 0.173 bce_lane 0.312 acc_lane 0.863 acc_road 0.904 lab_lane 0.393 lab_road 0.393 pos_lane 0.241 pos_road 0.364",
+  "00:38:06 step 2200/3000 loss 0.7336 lr 1.83e-04 0.055 s/step bce_road 0.198 bce_lane 0.366 acc_lane 0.864 acc_road 0.910 lab_lane 0.401 lab_road 0.401 pos_lane 0.238 pos_road 0.351",
+  "00:38:12 step 2300/3000 loss 0.7156 lr 1.42e-04 0.055 s/step bce_road 0.210 bce_lane 0.383 acc_lane 0.869 acc_road 0.908 lab_lane 0.396 lab_road 0.396 pos_lane 0.235 pos_road 0.351",
+  "00:38:17 step 2400/3000 loss 0.7208 lr 1.06e-04 0.055 s/step bce_road 0.466 bce_lane 0.611 acc_lane 0.866 acc_road 0.913 lab_lane 0.410 lab_road 0.410 pos_lane 0.249 pos_road 0.371",
+  "00:38:23 step 2500/3000 loss 0.7435 lr 7.43e-05 0.055 s/step bce_road 0.411 bce_lane 0.612 acc_lane 0.863 acc_road 0.904 lab_lane 0.395 lab_road 0.395 pos_lane 0.246 pos_road 0.363",
+  "00:38:28 step 2600/3000 loss 0.7272 lr 4.81e-05 0.055 s/step bce_road 0.220 bce_lane 0.349 acc_lane 0.860 acc_road 0.910 lab_lane 0.400 lab_road 0.400 pos_lane 0.244 pos_road 0.365",
+  "00:38:34 step 2700/3000 loss 0.7377 lr 2.73e-05 0.055 s/step bce_road 0.250 bce_lane 0.414 acc_lane 0.864 acc_road 0.907 lab_lane 0.395 lab_road 0.395 pos_lane 0.247 pos_road 0.368",
+  "00:38:40 step 2800/3000 loss 0.7373 lr 1.22e-05 0.055 s/step bce_road 0.309 bce_lane 0.474 acc_lane 0.860 acc_road 0.906 lab_lane 0.401 lab_road 0.401 pos_lane 0.248 pos_road 0.370",
+  "00:38:45 step 2900/3000 loss 0.7235 lr 3.10e-06 0.055 s/step bce_road 0.296 bce_lane 0.433 acc_lane 0.869 acc_road 0.911 lab_lane 0.391 lab_road 0.391 pos_lane 0.248 pos_road 0.365",
+  "00:38:51 step 3000/3000 loss 0.7153 lr 3.04e-10 0.055 s/step bce_road 0.204 bce_lane 0.375 acc_lane 0.865 acc_road 0.907 lab_lane 0.402 lab_road 0.402 pos_lane 0.240 pos_road 0.359",
+  "00:38:51 done 3000",
+  "00:38:51 done e389_z_s0"
+ ]
+}

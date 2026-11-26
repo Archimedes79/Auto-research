@@ -1,0 +1,55 @@
+{
+ "id": "E377.dump_n_s0",
+ "hypothesis": "E377 (card v2.1): the none weight 0.73 on the none tokens within 2 m / cos 0.5 of an assigned token (0.25 elsewhere; mean over the TRAIN none tokens 0.5 = the scalar of E367 b5) keeps >= 0.010 more lanes found than the scalar recipe at an equal junction F1 and raises the champion's junction F1 by >= 0.03 within its guards.",
+ "prediction": "n - ref junction F1 +0.035 at (b) (window +0.020 to +0.050), lanes found n - ref -0.030, n - m lanes found +0.020, junction n - m about 0; ADOPT-LOSS about 10 %, TARGETING-ONLY about 30 %, SCALAR-SUFFICES about 5 %, NO about 50 %, INCONCLUSIVE about 5 %",
+ "rule": "E377 card v2.1 section 0 (by hand, written before any run): (i) on both seeds at the pinned (b) cells vs the champion: junction F1 >= +0.03 with the paired interval above 0, topo F1 / F1@1.0 not lower by > 0.005, lanes found not lower by > 0.010, dup_frac not above by > 0.010, D113 floors, E373 tie conditions, kill not fired; (ii) vs the scalar recipe m (E367 b5) lanes found >= +0.010 at junction F1 not lower by > 0.010; ADOPT-LOSS = (i) and ((ii) or m fails (i)); TARGETING-ONLY / SCALAR-SUFFICES / NO / INCONCLUSIVE as written; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e377_n_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e377_n_s0 --seed 0 --split train --every 3",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e377_n_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e377_n_s0 --seed 0 --split train --every 3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 198745,
+ "created": "2026-11-17T16:07:22",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "394727f5e622",
+ "started": "2026-11-17T16:09:28",
+ "code_hash": "394727f5e622",
+ "commit": "76bca492aa",
+ "tag": "lcr/E377.dump_n_s0",
+ "git_note": "486 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 199653,
+ "pgid": 199653,
+ "pid_start": 6150818,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_s4/probe14.py",
+   "bev_fusion_lane_center/temp/e377/e377a_session_scratch_/e377a_runtests.py",
+   "bev_fusion_lane_center/temp/e377/e377a_session_scratch_/test_jtoken_eval.py",
+   "bev_fusion_lane_center/temp/gt2/patch_e2e.py",
+   "bev_fusion_lane_center/temp/gt2/patch_tests.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 129,
+ "attempts": 1,
+ "ended": "2026-11-17T16:12:12",
+ "last_lines": [
+  "=== attempt 2026-11-17T16:09:28: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e377_n_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e377_n_s0 --seed 0 --split train --every 3",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e377_n_s0/token_val.pkl: 873 frames, kept nodes per frame 183.1, links per frame rec 164.0 argmax 160.7, device cuda",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e377_n_s0/token_train_every3.pkl: 291 frames, kept nodes per frame 186.6, links per frame rec 169.8 argmax 165.9, device cuda"
+ ]
+}

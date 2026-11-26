@@ -1,0 +1,118 @@
+{
+ "id": "E391.P_s1",
+ "hypothesis": "E391 step 2 (card v2, D130 / D135 / D136): a fusion head associates the champion's delivered tokens to the segments of the frozen E390 road-graph encoding (with 'unassigned' for false tokens) better than the zero-shot E390 head, and the map read through it improves lanes per direction and the route role over perception alone; perception untouched (token inputs detached)",
+ "prediction": "(card v2.1 section 5.1 item 6, before any fusion run) assoc_acc F1 about 0.83, P about 0.81; lanes F2 / F3 about 0.92; route F2 / F3 about 0.85; PASS 15 %, PARTLY 25 %, INCONCLUSIVE 25 %, NO FUSION 35 %",
+ "rule": "E391 card v2.1 section 5.1 (bars from the nulls measured before any fusion training, verdict by hand): clause A per chosen arm and seed at dec on VAL: assoc_acc >= 0.8427 / 0.8397 with the paired interval vs p6gate (zero-shot E390 head + no-map false-token gate) above 0 and false_unassigned <= 0.05; L lanes_acc >= 0.9182 / 0.9044; R route_f1 >= 0.8771 / 0.8750; arms chosen on the TRAIN holdout first (temp/e391/choose391.py); order NO FUSION > INCONCLUSIVE > PARTLY > PASS; VAL, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py train --arm P --seed 1",
+ "argv": [
+  "bash",
+  "-c",
+  "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py train --arm P --seed 1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 2644,
+ "created": "2026-11-21T22:20:46",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E391",
+ "card_sha": "baa6a977a2ed4bc7",
+ "card_arms": {
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "P": {
+   "order": {},
+   "run_ids": [
+    "E391.P_s0",
+    "E391.P_s1",
+    "E391.hold_P_s0",
+    "E391.hold_P_s1",
+    "E391.read_P_s0",
+    "E391.read_P_s1"
+   ]
+  },
+  "F1": {
+   "order": {},
+   "run_ids": [
+    "E391.F1_s0",
+    "E391.F1_s1",
+    "E391.hold_F1_s0",
+    "E391.hold_F1_s1",
+    "E391.read_F1_s0",
+    "E391.read_F1_s1"
+   ]
+  },
+  "F2": {
+   "order": {},
+   "run_ids": [
+    "E391.F2_s0",
+    "E391.F2_s1",
+    "E391.hold_F2_s0",
+    "E391.hold_F2_s1",
+    "E391.read_F2_s0",
+    "E391.read_F2_s1"
+   ]
+  },
+  "F3": {
+   "order": {},
+   "run_ids": [
+    "E391.F3_s0",
+    "E391.F3_s1",
+    "E391.hold_F3_s0",
+    "E391.hold_F3_s1",
+    "E391.read_F3_s0",
+    "E391.read_F3_s1"
+   ]
+  },
+  "t": {
+   "order": {},
+   "run_ids": []
+  },
+  "Fx": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "8fd86b5e1dd2",
+ "started": "2026-11-21T22:21:37",
+ "code_hash": "8fd86b5e1dd2",
+ "commit": "de577aaeda",
+ "tag": "lcr/E391.P_s1",
+ "git_note": "1451 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 3088,
+ "pgid": 3088,
+ "pid_start": 1093612,
+ "exit": 0,
+ "duration_s": 549,
+ "attempts": 1,
+ "ended": "2026-11-21T22:30:58",
+ "last_lines": [
+  "{\"step\": 1900, \"loss\": 1.08449, \"lanes\": 0.13099, \"route\": 0.42989, \"assoc\": 0.52361, \"s\": 287.6}",
+  "{\"step\": 2000, \"loss\": 1.27794, \"lanes\": 0.16243, \"route\": 0.37254, \"assoc\": 0.74297, \"s\": 303.8}",
+  "{\"step\": 2100, \"loss\": 1.05386, \"lanes\": 0.10617, \"route\": 0.38371, \"assoc\": 0.56398, \"s\": 320.1}",
+  "{\"step\": 2200, \"loss\": 1.02842, \"lanes\": 0.25366, \"route\": 0.26398, \"assoc\": 0.51078, \"s\": 334.8}",
+  "{\"step\": 2300, \"loss\": 1.08593, \"lanes\": 0.08809, \"route\": 0.32632, \"assoc\": 0.67152, \"s\": 349.5}",
+  "{\"step\": 2400, \"loss\": 0.76955, \"lanes\": 0.03842, \"route\": 0.33168, \"assoc\": 0.39945, \"s\": 364.6}",
+  "{\"step\": 2500, \"loss\": 0.95966, \"lanes\": 0.13947, \"route\": 0.29964, \"assoc\": 0.52056, \"s\": 381.0}",
+  "{\"step\": 2600, \"loss\": 0.86275, \"lanes\": 0.14703, \"route\": 0.2783, \"assoc\": 0.43742, \"s\": 395.4}",
+  "{\"step\": 2700, \"loss\": 1.03323, \"lanes\": 0.1408, \"route\": 0.31325, \"assoc\": 0.57917, \"s\": 409.8}",
+  "{\"step\": 2800, \"loss\": 0.95914, \"lanes\": 0.11829, \"route\": 0.31081, \"assoc\": 0.53004, \"s\": 424.6}",
+  "{\"step\": 2900, \"loss\": 1.11358, \"lanes\": 0.22007, \"route\": 0.31862, \"assoc\": 0.57489, \"s\": 439.9}",
+  "{\"step\": 3000, \"loss\": 0.95925, \"lanes\": 0.08751, \"route\": 0.33743, \"assoc\": 0.53431, \"s\": 453.2}"
+ ]
+}

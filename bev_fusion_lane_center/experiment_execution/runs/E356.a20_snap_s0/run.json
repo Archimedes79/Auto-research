@@ -1,0 +1,120 @@
+{
+ "id": "E356.a20_snap_s0",
+ "hypothesis": "E356 (card experiments/E356_node-spacing, section 0): E356.a20_snap_s0",
+ "prediction": "E356 card section 1 (prediction with hit windows): radius 2.0: E324 s snapped topo F1 -0.002 (window -0.006 .. +0.002), vert100_dp -0.3 (window -1.0 .. 0.0); radius 2.5: -0.010 (window -0.025 .. -0.002), vert100_dp -1.5 (window -3.0 .. -0.5); l25 topo F1 -0.030 against g1 (window -0.045 .. -0.020), l31 -0.045 (window -0.065 .. -0.030)",
+ "rule": "E356 card section 0 (by hand: replay of the cards, temp/e356/e356_table.py): a radius is taken when topo F1 loses at most 0.01 on both seeds and all four numbers sets with the guards held AND vert100_dp of E324 s snapped falls by at least 0.5 (mean of the seeds); part B: the E346 rule (loss against g1 at most 0.03 on topo F1, lanes found, F1@1.0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "nice -n 19 bash tools/env/_py14.sh jends_eval.py score --run e324_s_s0 --seed 0 --spec close:2.0@0.5 --tag c20 --snap --thr 0.1",
+ "argv": [
+  "nice",
+  "-n",
+  "19",
+  "bash",
+  "tools/env/_py14.sh",
+  "jends_eval.py",
+  "score",
+  "--run",
+  "e324_s_s0",
+  "--seed",
+  "0",
+  "--spec",
+  "close:2.0@0.5",
+  "--tag",
+  "c20",
+  "--snap",
+  "--thr",
+  "0.1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 620396,
+ "created": "2026-11-15T20:42:48",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E356",
+ "card_sha": "8cf4c1fd1f259a29",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "a20": {
+   "order": {},
+   "run_ids": [
+    "E356.a20_snap_s0",
+    "E356.a20_snap_s1"
+   ]
+  },
+  "a25": {
+   "order": {},
+   "run_ids": [
+    "E356.a25_snap_s0",
+    "E356.a25_snap_s1",
+    "E356.a15chk_snap_s0"
+   ]
+  },
+  "sp": {
+   "order": {},
+   "run_ids": [
+    "E356.nn_spacing"
+   ]
+  },
+  "l25": {
+   "order": {},
+   "run_ids": [
+    "E356.l25"
+   ]
+  },
+  "l31": {
+   "order": {},
+   "run_ids": [
+    "E356.l31"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "2e99d7d73728",
+ "started": "2026-11-15T20:43:55",
+ "code_hash": "2e99d7d73728",
+ "commit": "4a34061507",
+ "tag": "lcr/E356.a20_snap_s0",
+ "git_note": "",
+ "pid": 620835,
+ "pgid": 620835,
+ "pid_start": 17402374,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py",
+   "bev_fusion_lane_center/temp/e356/e356_table.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 353,
+ "attempts": 1,
+ "ended": "2026-11-15T20:50:41",
+ "last_lines": [
+  "=== attempt 2026-11-15T20:43:55: nice -n 19 bash tools/env/_py14.sh jends_eval.py score --run e324_s_s0 --seed 0 --spec close:2.0@0.5 --tag c20 --snap --thr 0.1",
+  "_py14.sh: evaluation/jends_eval.py",
+  "pyramid of the maps run == the base run's: True (False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')",
+  "  scored 200/873  64 s",
+  "  scored 400/873  128 s",
+  "  scored 600/873  187 s",
+  "  scored 800/873  249 s",
+  "                           Q      F1@1.0 lanes_found     topo_F1      topo_P      topo_R junction_F1  junction_P  junction_R    dup_frac  vert100_dp",
+  "base                  0.5420      0.6010      0.2182      0.2377      0.6794      0.1440      0.2352      0.3007      0.1931      0.1928     28.6678",
+  "head                  0.6798      0.7421      0.4471      0.4041      0.6913      0.2855      0.3869      0.3510      0.4309      0.1678     23.7102",
+  "difference           +0.1378     +0.1411     +0.2289     +0.1664     +0.0119     +0.1414     +0.1517     +0.0503     +0.2378     -0.0250     -4.9576",
+  "curves 11729 (wired at both ends 3525); the rule of D79 holds for this seed: True {'topo_F1': True, 'F1_1': True, 'dup_frac': True, 'vert100_dp': True, 'junction_F1': True}"
+ ]
+}

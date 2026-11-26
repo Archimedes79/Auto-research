@@ -1,0 +1,124 @@
+{
+ "id": "E379.d_s1",
+ "hypothesis": "E379: the champion recipe (E365 head, none weight 0.25, 12000 steps) trained with a KL term on the successor distributions to the mean of two frozen champion-recipe heads (e373_cb_s<S>, e367_b25_s<S>) on the same tokens, head seeds 2 / 3 as E373, recovers part of the +0.0065 .. +0.0115 topo F1 that averaging the two heads gives at inference, with one head at inference",
+ "prediction": "topo F1 d - ref at the pinned cell about +0.005 (window -0.002 to +0.010), junction F1 +0.005, dup_frac -0.005; ADOPT 25 / TIE 65 / NO 10 percent; the KD value over steps 11901 - 12000 in 0.005 - 0.10",
+ "rule": "E379 card v2 section 0 (by hand, written before any run): ADOPT-DISTILL = on both seeds at the pinned (b) cell d - ref topo F1 >= +0.005 with the paired 95 percent interval above 0, junction F1 not lower by more than 0.010, F1@1.0 -0.005, lanes found -0.010, dup_frac +0.010, the D113 floors, the kill not fired, and (seed 0, if l is run) l - ref >= +0.005 makes it a TIE unless d - l >= +0.003; NO = d - ref <= -0.005 on both seeds or a guard broken on both; TIE otherwise (default: the champion head, no teacher); INCONCLUSIVE when the seeds disagree in sign",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jtoken_train.py --name e379_d_s1 --seed 1 --head-seed 3 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 --none-weight 0.25 --distill-from runs/e373_cb_s1,runs/e367_b25_s1 --distill-weight 1.0",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jtoken_train.py",
+  "--name",
+  "e379_d_s1",
+  "--seed",
+  "1",
+  "--head-seed",
+  "3",
+  "--ident",
+  "e292_a",
+  "--steps",
+  "12000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4",
+  "--none-weight",
+  "0.25",
+  "--distill-from",
+  "runs/e373_cb_s1,runs/e367_b25_s1",
+  "--distill-weight",
+  "1.0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 379132,
+ "created": "2026-11-18T01:16:07",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 130.0,
+ "card_id": "E379",
+ "card_sha": "4ec25d849067aaed",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "e2": {
+   "order": {},
+   "run_ids": [
+    "E379.ens_s0",
+    "E379.ens_s1",
+    "E379.time_e2"
+   ]
+  },
+  "d": {
+   "order": {},
+   "run_ids": [
+    "E379.d_s0",
+    "E379.d_s1"
+   ]
+  },
+  "l": {
+   "order": {},
+   "run_ids": [
+    "E379.l_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "46075da57e2e",
+ "started": "2026-11-18T01:17:36",
+ "code_hash": "46075da57e2e",
+ "commit": "1a4ab93137",
+ "tag": "lcr/E379.d_s1",
+ "git_note": "651 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 382549,
+ "pgid": 382549,
+ "pid_start": 9439548,
+ "code_drift": {
+  "n": 1833,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_champion/equiv_more.py",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/fuzzstat.py",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/gpu.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/params_fp16.py",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/probe1.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/probe2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/run.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/runm.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/runp.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_champion/zipit.py"
+  ],
+  "n_other": 3
+ },
+ "exit": 0,
+ "duration_s": 5096,
+ "attempts": 1,
+ "ended": "2026-11-18T02:43:53",
+ "last_lines": [
+  "_l1 0.074",
+  "02:39:17 step 11600/12000 loss 0.4005 lr 3.05e-06 0.119 s/step nll_s 0.130 nll_l 0.019 ce1 0.245 ce3 0.204 gt_links 2680.000 pos_pairs 2648.000 gt_outside 32.000 gt_class 0.000 scale_l1 0.074 kd 0.026 kd_s 0.020 kd_l 0.006 ent_s 0.292 ent_l 0.065 gt 0.410 gt_mean 0.378 kd_mean 0.023 gpu_gb 2.930 gpu_res_gb 3.135",
+  "02:40:05 clock: 0.474 s/step over the last 100 steps of this process; over all 3700 steps so far: peak GPU allocated 2.93 GB, reserved 3.14 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 24 of 2777, ylong against the token chord class 0; loss parts nll_s 0.100 nll_l 0.015 ce1 0.182 ce3 0.152 scale_l1 0.106",
+  "02:40:05 step 11700/12000 loss 0.4076 lr 1.72e-06 0.122 s/step nll_s 0.100 nll_l 0.015 ce1 0.182 ce3 0.152 gt_links 2777.000 pos_pairs 2753.000 gt_outside 24.000 gt_class 0.000 scale_l1 0.106 kd 0.019 kd_s 0.014 kd_l 0.005 ent_s 0.222 ent_l 0.048 gt 0.335 gt_mean 0.385 kd_mean 0.022 gpu_gb 2.930 gpu_res_gb 3.135",
+  "02:40:52 clock: 0.474 s/step over the last 100 steps of this process; over all 3800 steps so far: peak GPU allocated 2.93 GB, reserved 3.14 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 25 of 2639, ylong against the token chord class 0; loss parts nll_s 0.134 nll_l 0.031 ce1 0.245 ce3 0.220 scale_l1 0.059",
+  "02:40:52 step 11800/12000 loss 0.4191 lr 7.67e-07 0.125 s/step nll_s 0.134 nll_l 0.031 ce1 0.245 ce3 0.220 gt_links 2639.000 pos_pairs 2614.000 gt_outside 25.000 gt_class 0.000 scale_l1 0.059 kd 0.026 kd_s 0.018 kd_l 0.008 ent_s 0.320 ent_l 0.079 gt 0.426 gt_mean 0.396 kd_mean 0.023 gpu_gb 2.930 gpu_res_gb 3.135",
+  "02:41:39 clock: 0.473 s/step over the last 100 steps of this process; over all 3900 steps so far: peak GPU allocated 2.93 GB, reserved 3.14 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 21 of 2517, ylong against the token chord class 0; loss parts nll_s 0.074 nll_l 0.022 ce1 0.205 ce3 0.164 scale_l1 0.058",
+  "02:41:40 step 11900/12000 loss 0.4098 lr 1.94e-07 0.128 s/step nll_s 0.074 nll_l 0.022 ce1 0.205 ce3 0.164 gt_links 2517.000 pos_pairs 2496.000 gt_outside 21.000 gt_class 0.000 scale_l1 0.058 kd 0.022 kd_s 0.015 kd_l 0.008 ent_s 0.203 ent_l 0.060 gt 0.309 gt_mean 0.387 kd_mean 0.023 gpu_gb 2.930 gpu_res_gb 3.135",
+  "02:42:21 clock: 0.419 s/step over the last 100 steps of this process; over all 4000 steps so far: peak GPU allocated 2.93 GB, reserved 3.14 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 13 of 2169, ylong against the token chord class 0; loss parts nll_s 0.083 nll_l 0.026 ce1 0.231 ce3 0.206 scale_l1 0.077",
+  "02:42:21 step 12000/12000 loss 0.4099 lr 1.90e-11 0.131 s/step nll_s 0.083 nll_l 0.026 ce1 0.231 ce3 0.206 gt_links 2169.000 pos_pairs 2156.000 gt_outside 13.000 gt_class 0.000 scale_l1 0.077 kd 0.023 kd_s 0.016 kd_l 0.007 ent_s 0.203 ent_l 0.066 gt 0.367 gt_mean 0.388 kd_mean 0.022 gpu_gb 2.930 gpu_res_gb 3.135",
+  "02:42:22 done 12000",
+  "02:42:22 done e379_d_s1"
+ ]
+}

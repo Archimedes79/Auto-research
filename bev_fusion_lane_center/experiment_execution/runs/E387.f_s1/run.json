@@ -1,0 +1,116 @@
+{
+ "id": "E387.f_s1",
+ "hypothesis": "E387 S2b: the E365 token head with a gated MLP fusion of the cross-attention output (FusedPastBlock after layer 1, state = the head's own token states of the previous keyframe, K = 3 training sequences, stream read-out), against the same head trained on the same sequences without the block (E368's z) and against E368's residual block (r)",
+ "prediction": "0.004 vs z",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"topo_F1\",\"vs\":\"z\",\"min_effect\":0.005}] | kill: a loss is not finite; or no learning (the mean loss over steps 1801 - 2000 is not below 0.8 x the mean over steps 101 - 200); or the head ignores the past: u = RMS(block(x, past) - block(x, the past of ANOTHER SAMPLE of the batch)) / RMS(x) on the frames that have a past, averaged over the last 500 steps, is below 0.01 on BOTH seeds of arm f (the verdict is then TIE with the status 'the fusion did not learn to read the past'); or a 20-step smoke run above 11 GB; `--timeout` is set BEFORE the start as steps x the gate's pessimistic step speed x 1.3; two slots at most",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jpast_train.py --name e387_f_s1 --seed 1 --ident e292_a --steps 8000 --bs 4 --seq 3 --lr 1e-3 --workers 4 --block fused",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jpast_train.py",
+  "--name",
+  "e387_f_s1",
+  "--seed",
+  "1",
+  "--ident",
+  "e292_a",
+  "--steps",
+  "8000",
+  "--bs",
+  "4",
+  "--seq",
+  "3",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4",
+  "--block",
+  "fused"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 651077,
+ "created": "2026-11-18T10:54:57",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 75.0,
+ "card_id": "E387",
+ "card_sha": "4c979a5cfe91114b",
+ "card_arms": {
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E368.z_s0",
+    "E368.z_s1"
+   ]
+  },
+  "r": {
+   "order": {},
+   "run_ids": [
+    "E368.r_s0",
+    "E368.r_s1"
+   ]
+  },
+  "f": {
+   "order": {},
+   "run_ids": [
+    "E387.f_s0",
+    "E387.f_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "12aec90e67db",
+ "started": "2026-11-18T10:56:32",
+ "code_hash": "12aec90e67db",
+ "commit": "6fb809b0a1",
+ "tag": "lcr/E387.f_s1",
+ "git_note": "1656 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 651720,
+ "pgid": 651720,
+ "pid_start": 12913187,
+ "code_drift": {
+  "n": 34,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e291/apply_hunks.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/chain3.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/final_chain2.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_mut4.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_mut5.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_plan.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_sc.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_sh.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_test8.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_test9.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3840,
+ "attempts": 1,
+ "ended": "2026-11-18T12:01:26",
+ "last_lines": [
+  "11:57:30 clock: 0.433 s/step over the last 100 steps of this process; over all 7600 steps so far: peak GPU allocated 3.38 GB, reserved 3.49 GB, valid tokens in the largest frame 512; loss parts nll_s 0.101 nll_l 0.028 ce1 0.144 ce3 0.127 scale_l1 0.069 u 0.2255 u_none 0.1731",
+  "11:57:30 step 7600/8000 loss 0.4549 lr 6.85e-06 0.470 s/step ce1 0.144 ce3 0.127 gt_class 0.000 gt_links 1253.000 gt_outside 10.000 nll_l 0.028 nll_s 0.101 pos_pairs 1243.000 scale_l1 0.069 u 0.226 u_none 0.173 gpu_gb 3.384 gpu_res_gb 3.494",
+  "11:58:13 clock: 0.431 s/step over the last 100 steps of this process; over all 7700 steps so far: peak GPU allocated 3.38 GB, reserved 3.49 GB, valid tokens in the largest frame 512; loss parts nll_s 0.163 nll_l 0.031 ce1 0.211 ce3 0.187 scale_l1 0.112 u 0.2254 u_none 0.1738",
+  "11:58:13 step 7700/8000 loss 0.4429 lr 3.87e-06 0.469 s/step ce1 0.211 ce3 0.187 gt_class 0.000 gt_links 755.667 gt_outside 12.000 nll_l 0.031 nll_s 0.163 pos_pairs 743.667 scale_l1 0.112 u 0.225 u_none 0.174 gpu_gb 3.384 gpu_res_gb 3.494",
+  "11:58:58 clock: 0.456 s/step over the last 100 steps of this process; over all 7800 steps so far: peak GPU allocated 3.38 GB, reserved 3.49 GB, valid tokens in the largest frame 512; loss parts nll_s 0.133 nll_l 0.034 ce1 0.214 ce3 0.184 scale_l1 0.073 u 0.2237 u_none 0.1742",
+  "11:58:59 step 7800/8000 loss 0.4648 lr 1.72e-06 0.469 s/step ce1 0.214 ce3 0.184 gt_class 0.000 gt_links 938.000 gt_outside 6.000 nll_l 0.034 nll_s 0.133 pos_pairs 932.000 scale_l1 0.073 u 0.224 u_none 0.174 gpu_gb 3.384 gpu_res_gb 3.494",
+  "11:59:43 clock: 0.450 s/step over the last 100 steps of this process; over all 7900 steps so far: peak GPU allocated 3.38 GB, reserved 3.49 GB, valid tokens in the largest frame 512; loss parts nll_s 0.218 nll_l 0.035 ce1 0.252 ce3 0.240 scale_l1 0.087 u 0.2233 u_none 0.1725",
+  "11:59:44 step 7900/8000 loss 0.4544 lr 4.36e-07 0.469 s/step ce1 0.252 ce3 0.240 gt_class 0.000 gt_links 1251.667 gt_outside 10.000 nll_l 0.035 nll_s 0.218 pos_pairs 1241.667 scale_l1 0.087 u 0.223 u_none 0.172 gpu_gb 3.384 gpu_res_gb 3.494",
+  "12:00:28 clock: 0.450 s/step over the last 100 steps of this process; over all 8000 steps so far: peak GPU allocated 3.38 GB, reserved 3.49 GB, valid tokens in the largest frame 512; loss parts nll_s 0.152 nll_l 0.057 ce1 0.206 ce3 0.184 scale_l1 0.111 u 0.2239 u_none 0.1733",
+  "12:00:29 step 8000/8000 loss 0.4554 lr 4.27e-11 0.469 s/step ce1 0.206 ce3 0.184 gt_class 0.000 gt_links 971.667 gt_outside 7.333 nll_l 0.057 nll_s 0.152 pos_pairs 964.333 scale_l1 0.111 u 0.224 u_none 0.173 gpu_gb 3.384 gpu_res_gb 3.494",
+  "12:00:29 done 8000",
+  "12:00:29 done e387_f_s1"
+ ]
+}

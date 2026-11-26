@@ -1,0 +1,63 @@
+{
+ "id": "E357.read_s1",
+ "hypothesis": "Given the ground-truth nodes of the 2.5 m lattice and no types, ONE pair head recovers at least half of the gap between the best link rule and the GT links on topo F1 and joins the junction links with an F1 of at least 0.75 (stage T0 of the token design E355).",
+ "prediction": "best rule topo F1 0.82 (seen on 31 frames before the run: 0.69), hi 0.955, p 0.92 (gap share about 0.75); junction-link F1 of p 0.80; the degraded read-out loses about 0.25 topo F1",
+ "rule": "E357 card section 0 (by hand: oracle-node replay), section-free read-out, p >= 0.5: FAIL first (both seeds gap share on topo F1 < 0.5, or junction-link F1 < 0.50), then PASS (both seeds gap share >= 0.5 AND junction-link F1 >= 0.75), else INCONCLUSIVE; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_py14.sh jtok_eval.py dump --run e357_p_s1 --seed 1 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.5 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.3 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.7 && bash tools/env/_py14.sh jtok_eval.py dump --run e357_p_s1 --seed 1 --drop 0.17 --drop-seed 0 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.5 --drop 0.17 --drop-seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_py14.sh jtok_eval.py dump --run e357_p_s1 --seed 1 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.5 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.3 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.7 && bash tools/env/_py14.sh jtok_eval.py dump --run e357_p_s1 --seed 1 --drop 0.17 --drop-seed 0 && bash tools/env/_py14.sh jtok_eval.py score --run e357_p_s1 --seed 1 --thr 0.5 --drop 0.17 --drop-seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 708859,
+ "created": "2026-11-16T03:05:52",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 240.0,
+ "code_hash_first": "b9436f9bc1b7",
+ "started": "2026-11-16T03:06:29",
+ "code_hash": "b9436f9bc1b7",
+ "commit": "f3784a8338",
+ "tag": "lcr/E357.read_s1",
+ "git_note": "",
+ "pid": 709213,
+ "pgid": 709213,
+ "pid_start": 19697774,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_lead/e357_peek.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e352_section3.py",
+   "bev_fusion_lane_center/temp/e357/decode_diag.py",
+   "bev_fusion_lane_center/temp/e357/decode_topo.py",
+   "bev_fusion_lane_center/temp/e357/rank_diag.py",
+   "bev_fusion_lane_center/temp/e357/read_cards.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3699,
+ "attempts": 1,
+ "ended": "2026-11-16T04:08:41",
+ "last_lines": [
+  "_py14.sh: evaluation/jtok_eval.py",
+  "   100/873 frames, 49 s",
+  "   200/873 frames, 174 s",
+  "   300/873 frames, 269 s",
+  "   400/873 frames, 353 s",
+  "   500/873 frames, 383 s",
+  "   600/873 frames, 492 s",
+  "   700/873 frames, 538 s",
+  "   800/873 frames, 601 s",
+  "e357_p_s1 thr 0.5 sec0      topo_F1 0.4182  junction_F1 0.1579  lanes_found 0.8334  F1@1.0 0.9035  dup_frac 0.5882  vert100 3.4656  link_junction_P 0.0633  link_junction_R 0.8235  link_junction_F1 0.1176  link_lane_long_F1 0.0003  link_short_F1 0.8559",
+  "e357_p_s1 thr 0.5 gtsec     topo_F1 0.4406  junction_F1 0.1646  lanes_found 0.8334  F1@1.0 0.9035  dup_frac 0.5940  vert100 3.4656  link_junction_P 0.0633  link_junction_R 0.8235  link_junction_F1 0.1176  link_lane_long_F1 0.0003  link_short_F1 0.8559",
+  "WARNING: 361 GT long LANE links (lane_long_gt in the cards): the junction-link precision also counts false long links that belong to them"
+ ]
+}

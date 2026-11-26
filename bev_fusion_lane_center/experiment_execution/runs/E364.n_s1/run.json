@@ -1,0 +1,90 @@
+{
+ "id": "E364.n_s1",
+ "hypothesis": "E364: what the long-link cover drop (R4) and the pair mask (R6) carry on the end-to-end read-out of E324 s (measurement, CPU): job E364.n_s1",
+ "prediction": "R4: topo F1 -0.003 without the cover drop (card guess); R6: 0.995 of the true connectors admitted (card guess)",
+ "rule": "E364 card section 0 (reading rules FREE / CARRIES / HARMS / MIXED for R4, FREE / COSTS for R6; by hand: D87 replay)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh score_nocover.py --run e324_s_s1 --seed 1",
+ "argv": [
+  "env",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "nice",
+  "-n",
+  "10",
+  "bash",
+  "tools/env/_py14.sh",
+  "score_nocover.py",
+  "--run",
+  "e324_s_s1",
+  "--seed",
+  "1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 811252,
+ "created": "2026-11-16T14:57:13",
+ "status": "ok",
+ "after": "E364.n_s0",
+ "timeout_min": 0,
+ "card_id": "E364",
+ "card_sha": "9a936bb3a4be5883",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E364.n_s0",
+    "E364.n_s1",
+    "E364.fx_s0",
+    "E364.fx_s1"
+   ]
+  },
+  "m": {
+   "order": {},
+   "run_ids": [
+    "E364.m"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "7b1d22097ecb",
+ "started": "2026-11-16T15:11:23",
+ "code_hash": "7b1d22097ecb",
+ "commit": "9bb9213959",
+ "tag": "lcr/E364.n_s1",
+ "git_note": "42 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 813806,
+ "pgid": 813806,
+ "pid_start": 24047104,
+ "exit": 0,
+ "duration_s": 230,
+ "attempts": 1,
+ "ended": "2026-11-16T15:15:19",
+ "last_lines": [
+  "_py14.sh: temp/e364/score_nocover.py",
+  "score e324_s_s1 seed 1: COVER_POS = -1.0, tag e364n",
+  "pyramid of the maps run == the base run's: True (False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')",
+  "  scored 200/873  45 s",
+  "  scored 400/873  88 s",
+  "  scored 600/873  125 s",
+  "  scored 800/873  169 s",
+  "                           Q      F1@1.0 lanes_found     topo_F1      topo_P      topo_R junction_F1  junction_P  junction_R    dup_frac  vert100_dp",
+  "base                  0.6560      0.8159      0.6137      0.6249      0.6928      0.5691      0.2493      0.1660      0.5005      0.2012     20.0803",
+  "head                  0.6999      0.8792      0.7785      0.6682      0.6381      0.7014      0.2788      0.1705      0.7648      0.2281     19.4265",
+  "difference           +0.0440     +0.0633     +0.1649     +0.0434     -0.0547     +0.1323     +0.0295     +0.0045     +0.2643     +0.0268     -0.6538",
+  "curves 11880 (wired at both ends 6463); the rule of D79 holds for this seed: False {'topo_F1': True, 'F1_1': True, 'dup_frac': False, 'vert100_dp': True, 'junction_F1': True}"
+ ]
+}

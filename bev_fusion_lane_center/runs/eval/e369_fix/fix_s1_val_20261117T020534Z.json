@@ -1,0 +1,87 @@
+{
+ "mode": "e369",
+ "ok": true,
+ "rule": {
+  "present": 0.999,
+  "extra": 0.001,
+  "kept_diff": 0,
+  "topo_val": 0.001
+ },
+ "numbers": {
+  "present": 0.9996678233951276,
+  "extra": 0.0,
+  "kept_diff": 0,
+  "topo_diff": -6.534229474464137e-05
+ },
+ "counts": {
+  "rule": 141491,
+  "rule_short": 135311,
+  "rule_long": 6180,
+  "rule_in_short": 135264,
+  "rule_in_long": 6180,
+  "out_gate": 47,
+  "head": 141444,
+  "present": 141444,
+  "present_in_short": 135264,
+  "present_in_long": 6180,
+  "extra": 0,
+  "kept_diff": 0,
+  "valid": 380188
+ },
+ "topo_F1": {
+  "head": 0.6280436351692051,
+  "rule": 0.6281089774639498,
+  "rule_in": 0.6280436351692051
+ },
+ "graph": {
+  "head": {
+   "topo_F1": 0.6280436351692051,
+   "topo_P": 0.7425230962503806,
+   "topo_R": 0.5441487899618562,
+   "F1@1.0": 0.7729238635333855,
+   "lanes_found": 0.5861428711032932,
+   "Q": 0.6096549293554244,
+   "junction_F1": 0.15912979711561964,
+   "dup_frac": 0.003665399829572285,
+   "vert100_dp": 16.97880947252412
+  },
+  "rule": {
+   "topo_F1": 0.6281089774639498,
+   "topo_P": 0.7420787554279143,
+   "topo_R": 0.5444858674340785,
+   "F1@1.0": 0.7728876956074223,
+   "lanes_found": 0.5863871787354636,
+   "Q": 0.6095892662698216,
+   "junction_F1": 0.15944498539435248,
+   "dup_frac": 0.0034743991989765292,
+   "vert100_dp": 17.00516823562747
+  },
+  "rule_in": {
+   "topo_F1": 0.6280436351692051,
+   "topo_P": 0.7425230962503806,
+   "topo_R": 0.5441487899618562,
+   "F1@1.0": 0.7729238635333855,
+   "lanes_found": 0.5861428711032932,
+   "Q": 0.6096549293554244,
+   "junction_F1": 0.15912979711561964,
+   "dup_frac": 0.003665399829572285,
+   "vert100_dp": 16.978809483978385
+  }
+ },
+ "gt_loss": 3.0887396879076,
+ "split": "val",
+ "every": 1,
+ "max": 0,
+ "frames": 873,
+ "K": 512,
+ "ident": "e292_a",
+ "seed": 1,
+ "cache": "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e365_cache/be292_a_1_K512_9ad1d4ce30_v1/val",
+ "run": null,
+ "steps": 0,
+ "lam": 12.0,
+ "mu": 10.399999618530273,
+ "rule_card_topo_F1": 0.6281089774639498,
+ "rule_vs_card": 0.0,
+ "note": "links of the decode of record against c-rule (`rule_frame`) per frame; gt_loss = jtoken_loss with the GT targets of the cache on these frames, eval mode, the mean over frames of the batch means"
+}

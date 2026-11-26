@@ -1,0 +1,61 @@
+{
+ "id": "E363.dump_a_s1",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jends_eval.py dump --run e363_a_s1",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jends_eval.py",
+  "dump",
+  "--run",
+  "e363_a_s1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 791039,
+ "created": "2026-11-16T13:41:42",
+ "status": "ok",
+ "after": "E363.dump_a_s0",
+ "timeout_min": 1800.0,
+ "code_hash_first": "e7820fa577ae",
+ "started": "2026-11-16T13:47:14",
+ "code_hash": "e7820fa577ae",
+ "commit": "7140c19d4f",
+ "tag": "lcr/E363.dump_a_s1",
+ "git_note": "17 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 793796,
+ "pgid": 793796,
+ "pid_start": 23542263,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e358/stage/jwire_head.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 140,
+ "attempts": 1,
+ "ended": "2026-11-16T13:49:58",
+ "last_lines": [
+  " \"ent_recall\": 0.7355284743379423,",
+  " \"ent_precision\": 0.7080654258319233,",
+  " \"ext_recall\": 0.7577961296684333,",
+  " \"ext_precision\": 0.686084142394822,",
+  " \"pair_recall\": 0.43773687060097455,",
+  " \"pair_precision\": 0.6760975609756098,",
+  " \"thr\": 0.5,",
+  " \"frames\": 873,",
+  " \"order\": true,",
+  " \"evidence\": true,",
+  " \"maps\": \"/mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s1/model.pt\"",
+  "}"
+ ]
+}

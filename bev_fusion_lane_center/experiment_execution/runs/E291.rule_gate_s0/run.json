@@ -1,0 +1,52 @@
+{
+ "id": "E291.rule_gate_s0",
+ "hypothesis": "E291 rule evaluation (card section 0): E291.rule_gate_s0",
+ "prediction": "G / R / C / kill (5) as the card's three-valued rule; likely INCONCLUSIVE (underpowered)",
+ "rule": "E291 card section 0 (by hand: replay, decide.py is not used): pooled paired scene bootstrap of the mean over seeds of the snapped topo F1 difference against the recipe twin; the clean row is an upper bound",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh analysis.py gate e291_b_s0_noise30 e291_b_s0_clean",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "analysis.py",
+  "gate",
+  "e291_b_s0_noise30",
+  "e291_b_s0_clean"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 579933,
+ "created": "2026-11-15T16:43:38",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "e5659019697c",
+ "started": "2026-11-15T16:44:22",
+ "code_hash": "e5659019697c",
+ "commit": "dae6a2401a",
+ "tag": "lcr/E291.rule_gate_s0",
+ "git_note": "",
+ "pid": 580413,
+ "pgid": 580413,
+ "pid_start": 15965058,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/training/train/jnarrow_train.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 22,
+ "attempts": 1,
+ "ended": "2026-11-15T16:45:18",
+ "last_lines": [
+  "=== attempt 2026-11-15T16:44:22: bash tools/env/_py14.sh analysis.py gate e291_b_s0_noise30 e291_b_s0_clean",
+  "_py14.sh: temp/e291/analysis.py",
+  "e291_b_s0_noise30 against e291_b_s0_clean: 15517 keypoints with a count in both, 10743 right, 4774 wrong; term / token: right 0.0767, wrong 0.0903; correlation with `right`: -0.139"
+ ]
+}

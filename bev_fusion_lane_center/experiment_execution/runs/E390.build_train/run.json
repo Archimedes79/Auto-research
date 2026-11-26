@@ -1,0 +1,98 @@
+{
+ "id": "E390.build_train",
+ "hypothesis": "E390 step 1 data: the exact SD road graphs (lane_sdgraph_data v2) of the VAL / TRAIN frames",
+ "prediction": "none (data)",
+ "rule": "data preparation, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py build --split train && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py stats --split train",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py build --split train && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py stats --split train"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 18291,
+ "created": "2026-11-21T00:32:39",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E390",
+ "card_sha": "3456e18eb19ddf18",
+ "card_arms": {
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E390.g_s0",
+    "E390.g_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E390.n_s0",
+    "E390.n_s1"
+   ]
+  },
+  "rules": {
+   "order": {},
+   "run_ids": [
+    "E390.build_val",
+    "E390.build_train"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "f34708de76ff",
+ "started": "2026-11-21T00:33:53",
+ "code_hash": "f34708de76ff",
+ "commit": "cc8dd47e4d",
+ "tag": "lcr/E390.build_train",
+ "git_note": "1298 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 18711,
+ "pgid": 18711,
+ "pid_start": 280682,
+ "code_drift": {
+  "n": 87,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/drivers/e2e_gradient_report.py",
+   "bev_fusion_lane_center/evaluation/drivers/p16_pipeline_eval.py",
+   "bev_fusion_lane_center/evaluation/gpu_gate.py",
+   "bev_fusion_lane_center/evaluation/jdup.py",
+   "bev_fusion_lane_center/evaluation/jmaps_eval.py",
+   "bev_fusion_lane_center/evaluation/jsplits.py",
+   "bev_fusion_lane_center/evaluation/loops/loop12/p12_calib.py",
+   "bev_fusion_lane_center/evaluation/loops/loop17/p17_consumer.py",
+   "bev_fusion_lane_center/evaluation/qgraph_run_eval.py",
+   "bev_fusion_lane_center/evaluation/qgraph_timing.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 579,
+ "attempts": 1,
+ "ended": "2026-11-21T00:44:35",
+ "last_lines": [
+  "  4000/8414",
+  "  4500/8414",
+  "  5000/8414",
+  "  5500/8414",
+  "  6000/8414",
+  "  6500/8414",
+  "  7000/8414",
+  "  7500/8414",
+  "  8000/8414",
+  "written runs/e390_sdgraph/train.pkl: 8414 frames, 212 scenes",
+  "_py14.sh: training/data/lane_sdgraph_data.py",
+  "{\"frames\": 8414, \"scenes\": 212, \"nodes_mean\": 13.04, \"nodes_max\": 32, \"at_cap\": 0, \"links\": 121359, \"links_inside_gap\": 0.9423, \"route_nodes\": 22288, \"lane_classes\": [54238, 22700, 3642, 3]}"
+ ]
+}

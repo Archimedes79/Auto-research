@@ -1,0 +1,86 @@
+{
+ "id": "E390.g_s1",
+ "hypothesis": "E390 step 1 (card v5, D130 / D135): a relation-biased graph encoding of the SD road graph (logical lanes per direction, links, junctions, route; node geometry cut at node boundaries) recovers lanes per direction, dropped links, hidden route flags and the association of perception proxies to their segment (with unassigned) above the measured nulls, invariant under rigid motion, with graceful decay",
+ "prediction": "P1 base about 0.74 (copy 0.696), P2 about 0.94 (logistic 0.917), P3 about 0.80 (rule 0.618), P6 about 0.95 at base (nearest 0.923), 0.88 at pose2, none recall at nd about 0.5 (nearest 0.19); SOUND 30 %, PARTLY 50 %",
+ "rule": "E390 card v5 section 0 (by hand, bars from the v6 nulls measured before training): SOUND = on both seeds P1 >= 0.7335 (base) and >= 0.99 (ce0), P2 >= 0.9380 / 0.9354 (base / s2), P3 >= 0.7138, P6 >= 0.9420 (base), >= 0.8747 (pose2), nd accuracy >= 0.8444 and none recall >= 0.3918, false-unassigned <= 0.05, each with the paired interval vs its null above 0; graph clause g - n on P3 >= +0.05; P4 <= 1e-4; P5 graceful; order NOT SOUND > INCONCLUSIVE > PARTLY > SOUND; VAL 873, CPU, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py train --arm g --seed 1",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py train --arm g --seed 1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 74025,
+ "created": "2026-11-21T04:23:40",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 180.0,
+ "card_id": "E390",
+ "card_sha": "4570222d4c48f924",
+ "card_arms": {
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E390.g_s0",
+    "E390.g_s1",
+    "E390.read_g_s0",
+    "E390.read_g_s1",
+    "E390.clause_s0",
+    "E390.clause_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E390.n_s0",
+    "E390.n_s1",
+    "E390.read_n_s0",
+    "E390.read_n_s1"
+   ]
+  },
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "ef0acf865995",
+ "started": "2026-11-21T04:24:35",
+ "code_hash": "ef0acf865995",
+ "commit": "421b626045",
+ "tag": "lcr/E390.g_s1",
+ "git_note": "1403 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 74468,
+ "pgid": 74468,
+ "pid_start": 1664849,
+ "exit": 0,
+ "duration_s": 2698,
+ "attempts": 1,
+ "ended": "2026-11-21T05:09:41",
+ "last_lines": [
+  "{\"epoch\": 0, \"loss\": 1.98723, \"p1\": 0.32984, \"p2\": 0.52723, \"p3\": 0.15445, \"p6\": 0.9757, \"s\": 221.5}",
+  "{\"epoch\": 1, \"loss\": 1.17999, \"p1\": 0.20228, \"p2\": 0.31115, \"p3\": 0.13214, \"p6\": 0.53442, \"s\": 444.6}",
+  "{\"epoch\": 2, \"loss\": 0.9315, \"p1\": 0.17584, \"p2\": 0.24053, \"p3\": 0.12921, \"p6\": 0.38592, \"s\": 669.0}",
+  "{\"epoch\": 3, \"loss\": 0.77562, \"p1\": 0.15307, \"p2\": 0.20096, \"p3\": 0.12273, \"p6\": 0.29886, \"s\": 889.9}",
+  "{\"epoch\": 4, \"loss\": 0.68984, \"p1\": 0.13682, \"p2\": 0.18237, \"p3\": 0.11628, \"p6\": 0.25438, \"s\": 1110.4}",
+  "{\"epoch\": 5, \"loss\": 0.62348, \"p1\": 0.1211, \"p2\": 0.16624, \"p3\": 0.11091, \"p6\": 0.22523, \"s\": 1329.3}",
+  "{\"epoch\": 6, \"loss\": 0.58046, \"p1\": 0.10434, \"p2\": 0.15749, \"p3\": 0.10985, \"p6\": 0.20878, \"s\": 1547.7}",
+  "{\"epoch\": 7, \"loss\": 0.54495, \"p1\": 0.09845, \"p2\": 0.14468, \"p3\": 0.10408, \"p6\": 0.19774, \"s\": 1766.1}",
+  "{\"epoch\": 8, \"loss\": 0.50725, \"p1\": 0.08837, \"p2\": 0.13114, \"p3\": 0.10039, \"p6\": 0.18734, \"s\": 1983.0}",
+  "{\"epoch\": 9, \"loss\": 0.49164, \"p1\": 0.08546, \"p2\": 0.12332, \"p3\": 0.10024, \"p6\": 0.18263, \"s\": 2199.2}",
+  "{\"epoch\": 10, \"loss\": 0.46889, \"p1\": 0.07619, \"p2\": 0.12094, \"p3\": 0.09551, \"p6\": 0.17626, \"s\": 2415.1}",
+  "{\"epoch\": 11, \"loss\": 0.45703, \"p1\": 0.07445, \"p2\": 0.11433, \"p3\": 0.09625, \"p6\": 0.172, \"s\": 2620.3}"
+ ]
+}

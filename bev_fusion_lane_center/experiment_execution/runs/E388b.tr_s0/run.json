@@ -1,0 +1,57 @@
+{
+ "id": "E388b.tr_s0",
+ "hypothesis": "E388b diagnostic (D126 item 2, no verdict): does the E388 learned cell lose on TRAIN too (surrogate wrong) or only on VAL (TRAIN-to-VAL shift)",
+ "prediction": "none (diagnostic)",
+ "rule": "diagnostic, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e372_s4_s0 --seed 0 --split train --every 3 --link-thr 0.05 --link-thr-long 0.19 --keep-thr 0.388 --no-none-gate --ref-cell 0.3,0.2,0.6,off",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e372_s4_s0 --seed 0 --split train --every 3 --link-thr 0.05 --link-thr-long 0.19 --keep-thr 0.388 --no-none-gate --ref-cell 0.3,0.2,0.6,off"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1877,
+ "created": "2026-11-19T01:52:13",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "ac2a6279b7c9",
+ "started": "2026-11-19T01:53:16",
+ "code_hash": "ac2a6279b7c9",
+ "commit": "4c43cd5c26",
+ "tag": "lcr/E388b.tr_s0",
+ "git_note": "1095 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 2718,
+ "pgid": 2718,
+ "pid_start": 61206,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_critic_e389/stats1.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/fixt.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r3d.py",
+   "bev_fusion_lane_center/temp/e389/probe_gt.py",
+   "bev_fusion_lane_center/training/grid/test_jtoken.py",
+   "bev_fusion_lane_center/training/train/jtoken_train.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 171,
+ "attempts": 1,
+ "ended": "2026-11-19T01:57:09",
+ "last_lines": [
+  "=== attempt 2026-11-19T01:53:16: bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e372_s4_s0 --seed 0 --split train --every 3 --link-thr 0.05 --link-thr-long 0.19 --keep-thr 0.388 --no-none-gate --ref-cell 0.3,0.2,0.6,off",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "   100/291 frames, 15 s",
+  "   200/291 frames, 29 s",
+  "   291/291 frames, 42 s",
+  "e372_s4_s0 rec_lt0.05_ltl0.19_kt0.388_nng_train_every3_livetopo_F1 0.6937  topo_P 0.6595  topo_R 0.7316  F1@1.0 0.8974  lanes_found 0.7976  Q 0.6910  junction_F1 0.1867  dup_frac 0.0410  vert100_dp 36.0571"
+ ]
+}

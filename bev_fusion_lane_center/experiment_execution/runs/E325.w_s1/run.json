@@ -1,0 +1,101 @@
+{
+ "id": "E325.w_s1",
+ "hypothesis": "A small softmax head over the delivered piece PLACES in reach (15 features, 545 parameters), trained on TRAIN frames with the oracle label (the rule applied at the matched GT end) and a heavy-tailed keypoint jitter, replaces the nearest-piece rule at the read-out of E312 at equal topology: the one rule step of the delivered graph that had no differentiable replacement",
+ "prediction": "w - c = 0.000 topo F1 (an imitation of a label that ties the rule); place-level agreement with the oracle label on the real choices: rule 0.750 / 0.745, head 0.790 / 0.785 (the VAL cross-validation diagnostic gave 0.772 / 0.775, distance-only 0.758 / 0.755); lanes found, F1@1.0, dup_frac, junction F1 within 0.003 of c",
+ "rule": "E325 card section 0 (by hand: replay; KEEP when snapped topo F1 of w >= c - 0.005 on both seeds with the guards held, TIE kept and refined (D87) otherwise, CUT only by the kill: the head does not learn)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jwire_train.py run --seed 1 --name e325_w_s1 --heads 3 --epochs 60 --workers 3",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jwire_train.py",
+  "run",
+  "--seed",
+  "1",
+  "--name",
+  "e325_w_s1",
+  "--heads",
+  "3",
+  "--epochs",
+  "60",
+  "--workers",
+  "3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 402037,
+ "created": "2026-11-14T22:00:27",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E325",
+ "card_sha": "42e4a8d0f4f80584",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "t": {
+   "order": {}
+  },
+  "w": {
+   "order": {},
+   "run_ids": [
+    "E325.w_s0",
+    "E325.w_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "55384f224947",
+ "started": "2026-11-14T22:45:22",
+ "code_hash": "55384f224947",
+ "commit": "45913fe7dd",
+ "tag": "lcr/E325.w_s1",
+ "git_note": "",
+ "pid": 407175,
+ "pgid": 407175,
+ "pid_start": 9491042,
+ "code_drift": {
+  "n": 20,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jtest_eval.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jtest_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e317_preview.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/driver.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_0/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_1/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_x/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mutate.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r2b.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r2c.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2084,
+ "attempts": 1,
+ "ended": "2026-11-14T23:20:34",
+ "last_lines": [
+  "  6800/8414  541 s",
+  "  7200/8414  581 s",
+  "  7600/8414  620 s",
+  "  8000/8414  658 s",
+  "  8400/8414  696 s",
+  "23:01:17 pilot TRAIN {\"matched_ends\": 229361, \"err_mean\": 1.1552200180899304, \"err_median\": 1.0151879665850392, \"err_p90\": 2.1204377358605186, \"overall\": 0.8586389212811485, \"multi\": 0.7329312114989733, \"kp_p_mean\": 0.9371201873872411, \"kp_p_p10\": 0.8622765839099884, \"node_e_mean\": 0.6481829285621643, \"link_p_mean\": 0.7830225825309753, \"multi_share\": 0.5293058747608319} VAL {\"matched_ends\": 17368, \"err_mean\": 1.326055647933299, \"err_median\": 1.132757983980576, \"err_p90\": 2.532187513687738, \"overall\": 0.8540443191605982, \"multi\": 0.7505019408379066, \"kp_p_mean\": 0.8993946999488767, \"kp_p_p10\": 0.5746651649475097, \"node_e_mean\": 0.6471735239028931, \"link_p_mean\": 0.7829793095588684, \"multi_share\": 0.5849972594158641} -> jitter scale 0.273 m (median error 1.133 m, VAL 1.133 m); the keypoint probabilities are blind columns of the head (jwire_head.BLIND)",
+  "23:07:29 training ends 589468 (584006 labelled), VAL ends 17263 (12771 with an oracle label)",
+  "23:10:54 head 0: VAL overall 0.875 (rule 0.854) real choices 0.786 (rule 0.751); TRAIN+jitter real choices 0.795 (rule 0.721)",
+  "23:14:02 head 1: VAL overall 0.875 (rule 0.854) real choices 0.786 (rule 0.751); TRAIN+jitter real choices 0.796 (rule 0.721)",
+  "23:17:07 head 2: VAL overall 0.874 (rule 0.854) real choices 0.784 (rule 0.751); TRAIN+jitter real choices 0.795 (rule 0.721)",
+  "23:19:56 head 3 (distance-only): VAL overall 0.861 (rule 0.854) real choices 0.762 (rule 0.751); TRAIN+jitter real choices 0.737 (rule 0.721)",
+  "23:19:56 KILL (agreement below the rule's by more than 0.02 on the VAL real choices or on the TRAIN ends): False (VAL False, TRAIN False); parameters 545"
+ ]
+}

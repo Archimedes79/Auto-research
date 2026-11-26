@@ -1,0 +1,111 @@
+{
+ "id": "E292.c2_s0",
+ "hypothesis": "E292 matched reference: B's final checkpoint fine-tuned with the schedule of the card (phases 3 4 5 6 9, pyramid frozen) WITHOUT the layer, read out with the hard close-node step, costs less than the band against E312 (precondition of the comparison)",
+ "prediction": "c2 topo F1 within -0.01 of c (E312 snapped 0.6825 / 0.6864) on both seeds with the guards held; not predicted more exactly (that is what c2 measures)",
+ "rule": "E292 card section 0: by hand (replay of the stored cards: jends_eval.py score --snap --thr 0.1 --full --base --spec --tag); a seed PASSES when topo F1 of a >= c2 - 0.01 and >= c - 0.01 with the guards held; PRECONDITION c2 passes against c; KEEP / TIE (kept and refined, D87) / CUT only by the kill (card section 0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh qgraph_train.py --name e292_c2_s0 --seed 0 --workers 3 --phases 3 4 5 6 9 --steps 3000 2500 1000 750 1000 --resume-from /mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s0/model.pt --gate-phases 3 --gate-node-prec 0.75 --gate-node-rec 0.5",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "qgraph_train.py",
+  "--name",
+  "e292_c2_s0",
+  "--seed",
+  "0",
+  "--workers",
+  "3",
+  "--phases",
+  "3",
+  "4",
+  "5",
+  "6",
+  "9",
+  "--steps",
+  "3000",
+  "2500",
+  "1000",
+  "750",
+  "1000",
+  "--resume-from",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s0/model.pt",
+  "--gate-phases",
+  "3",
+  "--gate-node-prec",
+  "0.75",
+  "--gate-node-rec",
+  "0.5"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 20617,
+ "created": "2026-11-14T00:32:14",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E292",
+ "card_sha": "4e0d7cecfc8dab9b",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "c2": {
+   "order": {},
+   "run_ids": [
+    "E292.c2_s0",
+    "E292.c2_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E292.a_s0",
+    "E292.a_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "e3aa51b23003",
+ "started": "2026-11-14T00:32:38",
+ "code_hash": "e3aa51b23003",
+ "commit": "6fcfa79855",
+ "tag": "lcr/E292.c2_s0",
+ "git_note": "",
+ "pid": 20880,
+ "pgid": 20880,
+ "pid_start": 1494665,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e324_table.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/maps_cmp.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/watch_logs.sh",
+   "bev_fusion_lane_center/temp/e324/boots_result.sh",
+   "bev_fusion_lane_center/temp/e324/verdict_e324.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3401,
+ "attempts": 1,
+ "ended": "2026-11-14T01:29:48",
+ "last_lines": [
+  "dir 0.022 n_s 0.154 n_u 0.207 l_link 0.163 l_long 0.097 l_deg 1.629 l_scale 0.128 l_pos 2296.000 l_pairs 46140.000 l_miss 0.000 s_ce 0.597 s_pair 0.210 a_asg 0.154 a_fp 0.999 a_road 0.552 a_struct 0.346 a_acc 0.977",
+  "01:23:54 step 700/1000 loss 4.1317 lr 4.87e-05 0.402 s/step n_e 0.127 n_flags 0.995 n_off 0.512 n_dir 0.063 n_s 0.358 n_u 0.417 l_link 0.282 l_long 0.099 l_deg 1.739 l_scale 0.213 l_pos 2002.000 l_pairs 50118.000 l_miss 0.000 s_ce 2.384 s_pair 0.472 a_asg 0.223 a_fp 1.178 a_road 0.203 a_struct 0.325 a_acc 0.924",
+  "01:24:35 step 800/1000 loss 4.0844 lr 2.49e-05 0.403 s/step n_e 0.086 n_flags 0.527 n_off 0.460 n_dir 0.035 n_s 0.133 n_u 0.200 l_link 0.231 l_long 0.105 l_deg 1.712 l_scale 0.149 l_pos 2351.000 l_pairs 46762.000 l_miss 0.000 s_ce 1.204 s_pair 0.314 a_asg 0.139 a_fp 1.106 a_road 0.116 a_struct 0.340 a_acc 0.963",
+  "01:25:15 step 900/1000 loss 4.1773 lr 9.42e-06 0.402 s/step n_e 0.087 n_flags 0.424 n_off 0.331 n_dir 0.012 n_s 0.107 n_u 0.170 l_link 0.136 l_long 0.101 l_deg 1.553 l_scale 0.128 l_pos 2019.000 l_pairs 33784.000 l_miss 0.000 s_ce 0.604 s_pair 0.241 a_asg 0.079 a_fp 1.033 a_road 0.072 a_struct 0.343 a_acc 0.974",
+  "01:25:55 step 1000/1000 loss 4.2872 lr 4.00e-06 0.402 s/step n_e 0.086 n_flags 0.526 n_off 0.374 n_dir 0.017 n_s 0.129 n_u 0.392 l_link 0.182 l_long 0.134 l_deg 1.521 l_scale 0.153 l_pos 1783.000 l_pairs 36835.000 l_miss 0.000 s_ce 0.766 s_pair 0.285 a_asg 0.150 a_fp 1.055 a_road 0.272 a_struct 0.360 a_acc 0.990",
+  "01:25:56 done 1000",
+  "01:29:10 GATE {\"p3\": {\"node_f1\": 0.7738553183541153, \"node_prec\": 0.9144646496172432, \"node_rec\": 0.670723897449021, \"node_prec_2m\": 0.932528676579169, \"node_rec_2m\": 0.8934343098657318, \"e271_f1\": 0.6129707968622224, \"pos_err_med\": 0.25192126631736755, \"flag_recall\": {\"stop\": 0.49404761904761907, \"exit\": 0.4124629080118694, \"split\": 0.3856041131105398, \"merge\": 0.3824175824175824, \"start\": 0.23595505617977527, \"end\": 0.1839080459770115, \"win_in\": 0.6987179487179487, \"win_out\": 0.7108938547486033}}, \"p4\": {\"link_prec\": 0.22005027652086476, \"link_rec\": 0.8197482768954151, \"link_f1\": 0.3469630428233951, \"junction_F1\": 0.12362423568649249, \"F1_1\": 0.8331810657537582, \"topo_F1\": 0.5949383917964378, \"lanes_found\": 0.6516661919681003, \"Q\": 0.634948052160862, \"pieces_per_gt_piece\": 1.2938420348058903, \"id_switches\": 0.6268900243517945, \"vert100_dp\": 29.830527601535344, \"node_f1_scorer\": 0.8533458823529411}, \"p5\": {\"section_start_acc\": 0.4662857142857143, \"junction_F1\": 0.12698786665096004, \"F1_1\": 0.8331857489394596, \"topo_F1\": 0.6031538358668034, \"lanes_found\": 0.6516661919681003, \"Q\": 0.6349234090734734, \"pieces_per_gt_piece\": 1.6218206157965194, \"id_switches\": 1.4476129720843787, \"vert100_dp\": 29.832177706859856, \"node_f1_scorer\": 0.8533458823529411}, \"p6\": {\"lane_acc_error\": 0.8998189261533617, \"geo_acc_error\": 0.8708471106912298, \"lane_acc_exact\": 0.9324608294930875, \"geo_acc_exact\": 0.9422304147465438}, \"pass\": true, \"why\": \"phase 9: numbers only\"}",
+  "01:29:10 all phases done [3, 4, 5, 6, 9]"
+ ]
+}

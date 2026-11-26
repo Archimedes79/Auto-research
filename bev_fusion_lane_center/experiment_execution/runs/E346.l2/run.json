@@ -1,0 +1,95 @@
+{
+ "id": "E346.l2",
+ "hypothesis": "E346 B's node + link code on the 2 m grid: oracle_prediction(frame.lane()) -> readout -> graph_metrics",
+ "prediction": "loses 0.017 topo F1 against g1 (31-frame hand check) and passes",
+ "rule": "passes when the loss against g1 is at most 0.03 on topo_F1, lanes_found and F1@1.0, all three (E346 card section 0)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh e346_arm.py l2",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "e346_arm.py",
+  "l2"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 476992,
+ "created": "2026-11-15T08:29:06",
+ "status": "ok",
+ "after": "E346.g1",
+ "timeout_min": 90.0,
+ "card_id": "E346",
+ "card_sha": "f132625527163c2e",
+ "card_arms": {
+  "g0": {
+   "order": {},
+   "run_ids": [
+    "E346.g0"
+   ]
+  },
+  "g1": {
+   "order": {},
+   "run_ids": [
+    "E346.g1"
+   ]
+  },
+  "l2": {
+   "order": {},
+   "run_ids": [
+    "E346.l2"
+   ]
+  },
+  "l1": {
+   "order": {},
+   "run_ids": [
+    "E346.l1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0
+   ]
+  }
+ },
+ "code_hash_first": "90fee98eaa46",
+ "started": "2026-11-15T08:36:53",
+ "code_hash": "90fee98eaa46",
+ "commit": "851eb7be20",
+ "tag": "lcr/E346.l2",
+ "git_note": "",
+ "pid": 481196,
+ "pgid": 481196,
+ "pid_start": 13040150,
+ "code_drift": {
+  "n": 4,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e347/control/run_each.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/control/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/stage/training/grid/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/e347/run_staged.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 268,
+ "attempts": 1,
+ "ended": "2026-11-15T08:41:51",
+ "last_lines": [
+  "e346 self-test ok (29 s): cell-size harness (mutations caught), g0 = 1.000, planted degradations fall, parts by kind, l2 = qgraph_eval.score_frames, collision and link toys",
+  "arm l2: 873 of 873 VAL frames (every 1th, k 0 .. 872)",
+  "   l2: 100/873 frames, 18 s",
+  "   l2: 200/873 frames, 51 s",
+  "   l2: 300/873 frames, 78 s",
+  "   l2: 400/873 frames, 102 s",
+  "   l2: 500/873 frames, 113 s",
+  "   l2: 600/873 frames, 140 s",
+  "   l2: 700/873 frames, 164 s",
+  "   l2: 800/873 frames, 192 s",
+  "card /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e346_l2/val.json",
+  "   topo_F1 0.9669  F1@1.0 0.9957  lanes_found 0.9853  junction_F1 0.9535  vert100 33.0697  vert100_dp 11.4489   (0.234 s per frame)"
+ ]
+}

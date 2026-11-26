@@ -1,0 +1,102 @@
+{
+ "id": "E366.val_s0",
+ "hypothesis": "E366: the two trained heads of E365 S1 with a decode selected on the TRAIN sample (every third of the 873 evenly spaced TRAIN frames: 291 frames; link threshold x keep threshold x none gate, 24 cells) and applied once to VAL lift the delivered graph; the miss of S1 is largely the conservative decode.",
+ "prediction": "the chosen cell looser than the record (T <= 0.2) 85 %; VAL topo F1 +0.03 over the record (0 to +0.08), about 0.58 / 0.60; PASS-DECODE about 5 %, MISS-DECODE about 85 %",
+ "rule": "E366 card section 0 (by hand): the cell with the highest mean TRAIN-sample topo F1 over both seeds among the cells with mean TRAIN dup_frac <= 0.05, ties to the record; applied once to VAL; PASS-DECODE = G-topo (>= 0.6359 / 0.6349) and G-found (F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937) on both seeds; MISS-DECODE = G-topo or G-found fails on both seeds; else INCONCLUSIVE; decide.py not used",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e365_s1_s0 --seed 0 --link-thr 0.1 --keep-thr 0.6 --no-none-gate",
+ "argv": [
+  "env",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "nice",
+  "-n",
+  "10",
+  "bash",
+  "tools/env/_py14.sh",
+  "jtoken_eval.py",
+  "score",
+  "--run",
+  "e365_s1_s0",
+  "--seed",
+  "0",
+  "--link-thr",
+  "0.1",
+  "--keep-thr",
+  "0.6",
+  "--no-none-gate"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 48387,
+ "created": "2026-11-17T02:45:43",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E366",
+ "card_sha": "e1a9c4b50ccb0bc6",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "dec": {
+   "order": {},
+   "run_ids": [
+    "E366.dump_s0",
+    "E366.dump_s1",
+    "E366.sweep_s0",
+    "E366.sweep_s1",
+    "E366.val_s0",
+    "E366.val_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "50ef55902e14",
+ "started": "2026-11-17T02:46:29",
+ "code_hash": "50ef55902e14",
+ "commit": "308fbb7f80",
+ "tag": "lcr/E366.val_s0",
+ "git_note": "192 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 49161,
+ "pgid": 49161,
+ "pid_start": 1332927,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_t4.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_t5.sh",
+   "bev_fusion_lane_center/temp/e274/show_gate.sh",
+   "bev_fusion_lane_center/temp/e274/show_gate2.sh",
+   "bev_fusion_lane_center/training/grid/test_jpast_train.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 459,
+ "attempts": 1,
+ "ended": "2026-11-17T02:54:56",
+ "last_lines": [
+  "=== attempt 2026-11-17T02:46:29: env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e365_s1_s0 --seed 0 --link-thr 0.1 --keep-thr 0.6 --no-none-gate",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "   100/873 frames, 18 s",
+  "   200/873 frames, 41 s",
+  "   300/873 frames, 64 s",
+  "   400/873 frames, 86 s",
+  "   500/873 frames, 98 s",
+  "   600/873 frames, 123 s",
+  "   700/873 frames, 141 s",
+  "   800/873 frames, 161 s",
+  "   873/873 frames, 176 s",
+  "e365_s1_s0 rec_lt0.1_kt0.6_nng    topo_F1 0.6617  topo_P 0.6937  topo_R 0.6326  F1@1.0 0.8359  lanes_found 0.6747  Q 0.6597  junction_F1 0.2089  dup_frac 0.0548  vert100_dp 25.2082"
+ ]
+}

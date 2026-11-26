@@ -1,0 +1,234 @@
+{
+ "id": "E395.dump_val_p0nt_s0",
+ "hypothesis": "E395 (D142): Catmull-Rom curves through the nodes. Step 1 (no training, CPU, through run.py): the delivered links of the stage-1 controls c and r2 (and of the S4 champion) drawn as straight chords, uniform or centripetal Catmull-Rom curves through the delivered nodes (ghost nodes from the delivered neighbours, reflection at the ends), or Catmull-Rom for the short links and the Hermite connector for the long ones, against the Hermite connectors of the record; plus ORACLE node positions (every delivered token with a GT node moved onto that GT node's line, and onto the node) as the measured headroom for matched nodes. Step 2 (stage 1 on the cached K 512 tokens, the E373 recipe): a position head on the token head (a normal offset per node, zero start) trained with a loss on the Catmull-Rom curve through the GT-matched nodes (p0), with a node-level loss (p0n, the control of the curve loss), with the E392 message rounds (p2); step 3 (gated, section 1.5): soft neighbours for the ghost nodes of the curve loss (p2s). Read with the standard scorer at the D115 cell, VAL 873: the SAME dump with the nodes unmoved and moved (the primary contrast), Hermite connectors",
+ "prediction": "0.03 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"F1@0.5\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"min_effect\":0.0},{\"metric\":\"topo_F1\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: VERDICT BY HAND per section 1.3 (`jcr_eval.py verdict`); the JSON rule above is only what the tools register. CUT kills (verdict CUT, on any seed): the offsets saturate (more than half of the valid tokens at the 3 m cap in the step-2000 row: the trainer's log field `dpos_cap` > 0.5); the refined nodes are WORSE than the unmoved tokens on VAL (the mean absolute lateral error of the delivered matched tokens after the head above the one before it by more than 0.01 m, `jcr_eval.py nodeerr`; the mean and not the rms, because the loss is a smooth L1 and the rms follows outliers). INCONCLUSIVE kills (a diagnosis, no verdict; the names for `--flags`: nonfinite, no_learning, notparity, notfinished, tests): a loss is not finite (nonfinite); no learning (no_learning: the position loss of the arm, `curve` or `node` of the log rows, the mean of the rows at steps 1900 and 2000 not below 0.95 x the mean of the rows at steps 100 and 200; the trainer logs a row every 100 steps and the card names the columns `curve` / `node`: a weak clause, the head sees only cached features and part of the 0.48 m error is shared and not learnable from them; ADDENDUM A1, section 1.6: for the arms p0nt / p0ntb the clause reads the rows' `pos_mean`, the mean of the trained position loss over the 100 calls before the row (`pos_n` = 100), instead of the single batch, and the verdict reads it itself, `--kills window`); the `jarm --curve` fingerprint stops the arm (notparity); a started run does not finish (notfinished); the unit tests of section 2 fail (tests). The CUT kill 'saturate' is also a flag name. STOP (nothing is read): step 1 does not reproduce the record (mode H of the real run must equal the stored D115 card of the run within 1e-4 in topo F1, F1@0.5, F1@1.0, lanes found and junction F1; `jcr_eval.py` asserts it; the selftest asserts the `curves` path with the Hermite curves given explicitly on a toy frame)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e395_p0nt_s0 --seed 0 --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e395_p0nt_s0 --seed 0 --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 81705,
+ "created": "2026-11-24T09:57:03",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E395",
+ "card_sha": "187ac5ce32040feb",
+ "card_arms": {
+  "step1": {
+   "order": {},
+   "run_ids": [
+    "E395.step1_c_s0",
+    "E395.step1_c_s1",
+    "E395.step1_r2_s0",
+    "E395.step1_r2_s1",
+    "E395.step1_s4_s0",
+    "E395.step1_s4_s1",
+    "E395.verdict_step1_c",
+    "E395.verdict_step1_r2",
+    "E395.verdict_step1_s4"
+   ]
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E395.score_c_s0",
+    "E395.score_c_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E395.score_r2_s0",
+    "E395.score_r2_s1"
+   ]
+  },
+  "p0": {
+   "order": {},
+   "run_ids": [
+    "E395.p0_s0",
+    "E395.dump_val_p0_s0",
+    "E395.dump_train_p0_s0",
+    "E395.sweep_p0_s0",
+    "E395.choose_p0_s0",
+    "E395.cell_vs_p0_s0",
+    "E395.d115_vs_p0_s0",
+    "E395.score_p0_s0",
+    "E395.nodeerr_p0_s0",
+    "E395.p0_s1",
+    "E395.dump_val_p0_s1",
+    "E395.dump_train_p0_s1",
+    "E395.sweep_p0_s1",
+    "E395.choose_p0_s1",
+    "E395.cell_vs_p0_s1",
+    "E395.d115_vs_p0_s1",
+    "E395.score_p0_s1",
+    "E395.nodeerr_p0_s1",
+    "E395.verdict_p0"
+   ]
+  },
+  "p0n": {
+   "order": {},
+   "run_ids": [
+    "E395.p0n_s0",
+    "E395.dump_val_p0n_s0",
+    "E395.dump_train_p0n_s0",
+    "E395.sweep_p0n_s0",
+    "E395.choose_p0n_s0",
+    "E395.cell_vs_p0n_s0",
+    "E395.d115_vs_p0n_s0",
+    "E395.score_p0n_s0",
+    "E395.nodeerr_p0n_s0",
+    "E395.p0n_s1",
+    "E395.dump_val_p0n_s1",
+    "E395.dump_train_p0n_s1",
+    "E395.sweep_p0n_s1",
+    "E395.choose_p0n_s1",
+    "E395.cell_vs_p0n_s1",
+    "E395.d115_vs_p0n_s1",
+    "E395.score_p0n_s1",
+    "E395.nodeerr_p0n_s1",
+    "E395.verdict_p0n",
+    "E395.verdict_diag"
+   ]
+  },
+  "p0nt": {
+   "order": {},
+   "run_ids": [
+    "E395.p0nt_s0",
+    "E395.dump_val_p0nt_s0",
+    "E395.dump_train_p0nt_s0",
+    "E395.sweep_p0nt_s0",
+    "E395.choose_p0nt_s0",
+    "E395.cell_vs_p0nt_s0",
+    "E395.d115_vs_p0nt_s0",
+    "E395.score_p0nt_s0",
+    "E395.nodeerr_p0nt_s0",
+    "E395.p0nt_s1",
+    "E395.dump_val_p0nt_s1",
+    "E395.dump_train_p0nt_s1",
+    "E395.sweep_p0nt_s1",
+    "E395.choose_p0nt_s1",
+    "E395.cell_vs_p0nt_s1",
+    "E395.d115_vs_p0nt_s1",
+    "E395.score_p0nt_s1",
+    "E395.nodeerr_p0nt_s1",
+    "E395.verdict_p0nt"
+   ]
+  },
+  "p0ntb": {
+   "order": {},
+   "run_ids": [
+    "E395.p0ntb_s0",
+    "E395.dump_val_p0ntb_s0",
+    "E395.dump_train_p0ntb_s0",
+    "E395.sweep_p0ntb_s0",
+    "E395.choose_p0ntb_s0",
+    "E395.cell_vs_p0ntb_s0",
+    "E395.d115_vs_p0ntb_s0",
+    "E395.score_p0ntb_s0",
+    "E395.nodeerr_p0ntb_s0",
+    "E395.p0ntb_s1",
+    "E395.dump_val_p0ntb_s1",
+    "E395.dump_train_p0ntb_s1",
+    "E395.sweep_p0ntb_s1",
+    "E395.choose_p0ntb_s1",
+    "E395.cell_vs_p0ntb_s1",
+    "E395.d115_vs_p0ntb_s1",
+    "E395.score_p0ntb_s1",
+    "E395.nodeerr_p0ntb_s1",
+    "E395.verdict_p0ntb",
+    "E395.verdict_spread"
+   ]
+  },
+  "p2": {
+   "order": {},
+   "run_ids": [
+    "E395.p2_s0",
+    "E395.dump_val_p2_s0",
+    "E395.dump_train_p2_s0",
+    "E395.sweep_p2_s0",
+    "E395.choose_p2_s0",
+    "E395.cell_vs_p2_s0",
+    "E395.d115_vs_p2_s0",
+    "E395.score_p2_s0",
+    "E395.nodeerr_p2_s0",
+    "E395.p2_s1",
+    "E395.dump_val_p2_s1",
+    "E395.dump_train_p2_s1",
+    "E395.sweep_p2_s1",
+    "E395.choose_p2_s1",
+    "E395.cell_vs_p2_s1",
+    "E395.d115_vs_p2_s1",
+    "E395.score_p2_s1",
+    "E395.nodeerr_p2_s1",
+    "E395.verdict_p2"
+   ]
+  },
+  "p2s": {
+   "order": {},
+   "run_ids": [
+    "E395.p2s_s0",
+    "E395.dump_val_p2s_s0",
+    "E395.dump_train_p2s_s0",
+    "E395.sweep_p2s_s0",
+    "E395.choose_p2s_s0",
+    "E395.cell_vs_p2s_s0",
+    "E395.d115_vs_p2s_s0",
+    "E395.score_p2s_s0",
+    "E395.nodeerr_p2s_s0",
+    "E395.p2s_s1",
+    "E395.dump_val_p2s_s1",
+    "E395.dump_train_p2s_s1",
+    "E395.sweep_p2s_s1",
+    "E395.choose_p2s_s1",
+    "E395.cell_vs_p2s_s1",
+    "E395.d115_vs_p2s_s1",
+    "E395.score_p2s_s1",
+    "E395.nodeerr_p2s_s1",
+    "E395.verdict_p2s"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "41c6763753c0",
+ "started": "2026-11-24T09:57:46",
+ "code_hash": "41c6763753c0",
+ "commit": "ef99cd6f40",
+ "tag": "lcr/E395.dump_val_p0nt_s0",
+ "git_note": "",
+ "pid": 82465,
+ "pgid": 82465,
+ "pid_start": 510539,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/mapassoc_exist.py",
+   "bev_fusion_lane_center/evaluation/maptrust_gate.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 37,
+ "attempts": 1,
+ "ended": "2026-11-24T09:58:33",
+ "last_lines": [
+  "=== attempt 2026-11-24T09:57:46: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e395_p0nt_s0 --seed 0 --split val",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e395_p0nt_s0/token_val.pkl: 873 frames, kept nodes per frame 200.6, links per frame rec 183.0 argmax 178.2, device cuda"
+ ]
+}

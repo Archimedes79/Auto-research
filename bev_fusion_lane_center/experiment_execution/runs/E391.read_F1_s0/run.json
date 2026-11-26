@@ -1,0 +1,123 @@
+{
+ "id": "E391.read_F1_s0",
+ "hypothesis": "E391 step 2 (card v2, D130 / D135 / D136): a fusion head associates the champion's delivered tokens to the segments of the frozen E390 road-graph encoding (with 'unassigned' for false tokens) better than the zero-shot E390 head, and the map read through it improves lanes per direction and the route role over perception alone; perception untouched (token inputs detached)",
+ "prediction": "(card v2.1 section 5.1 item 6, before any fusion run) assoc_acc F1 about 0.83, P about 0.81; lanes F2 / F3 about 0.92; route F2 / F3 about 0.85; PASS 15 %, PARTLY 25 %, INCONCLUSIVE 25 %, NO FUSION 35 %",
+ "rule": "E391 card v2.1 section 5.1 (bars from the nulls measured before any fusion training, verdict by hand): clause A per chosen arm and seed at dec on VAL: assoc_acc >= 0.8427 / 0.8397 with the paired interval vs p6gate (zero-shot E390 head + no-map false-token gate) above 0 and false_unassigned <= 0.05; L lanes_acc >= 0.9182 / 0.9044; R route_f1 >= 0.8771 / 0.8750; arms chosen on the TRAIN holdout first (temp/e391/choose391.py); order NO FUSION > INCONCLUSIVE > PARTLY > PASS; VAL, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py read --arm F1 --seed 0 --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py read --arm F1 --seed 0 --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 10661,
+ "created": "2026-11-21T23:37:03",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E391",
+ "card_sha": "baa6a977a2ed4bc7",
+ "card_arms": {
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "P": {
+   "order": {},
+   "run_ids": [
+    "E391.P_s0",
+    "E391.P_s1",
+    "E391.hold_P_s0",
+    "E391.hold_P_s1",
+    "E391.read_P_s0",
+    "E391.read_P_s1"
+   ]
+  },
+  "F1": {
+   "order": {},
+   "run_ids": [
+    "E391.F1_s0",
+    "E391.F1_s1",
+    "E391.hold_F1_s0",
+    "E391.hold_F1_s1",
+    "E391.read_F1_s0",
+    "E391.read_F1_s1"
+   ]
+  },
+  "F2": {
+   "order": {},
+   "run_ids": [
+    "E391.F2_s0",
+    "E391.F2_s1",
+    "E391.hold_F2_s0",
+    "E391.hold_F2_s1",
+    "E391.read_F2_s0",
+    "E391.read_F2_s1"
+   ]
+  },
+  "F3": {
+   "order": {},
+   "run_ids": [
+    "E391.F3_s0",
+    "E391.F3_s1",
+    "E391.hold_F3_s0",
+    "E391.hold_F3_s1",
+    "E391.read_F3_s0",
+    "E391.read_F3_s1"
+   ]
+  },
+  "t": {
+   "order": {},
+   "run_ids": []
+  },
+  "Fx": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "d0bc1a4a72ea",
+ "started": "2026-11-21T23:37:53",
+ "code_hash": "d0bc1a4a72ea",
+ "commit": "cf9df006c4",
+ "tag": "lcr/E391.read_F1_s0",
+ "git_note": "1455 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 11129,
+ "pgid": 11129,
+ "pid_start": 1551220,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/e363/start_chain.sh",
+   "bev_fusion_lane_center/temp/e363/verdict_e363.py",
+   "bev_fusion_lane_center/temp/e392_ref/e392_jlive_mutants.py",
+   "bev_fusion_lane_center/training/grid/test_jlive_train.py",
+   "bev_fusion_lane_center/training/grid/test_jtoken.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 709,
+ "attempts": 1,
+ "ended": "2026-11-21T23:50:53",
+ "last_lines": [
+  "=== attempt 2026-11-21T23:37:53: bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py read --arm F1 --seed 0 --split val",
+  "_py14.sh: evaluation/mapassoc_probe.py",
+  "F1_s0 val dec: assoc_acc 0.8223, nonfalse_acc 0.8575, seg_acc 0.8525, none_recall 0.9006, false_assign 0.2478, false_unassigned 0.1282, lanes_acc 0.9483, route_f1 0.5452 (154 s)",
+  "F1_s0 val exact: assoc_acc 0.8170, nonfalse_acc 0.8694, seg_acc 0.8696, none_recall 0.1765, false_assign 0.2875, false_unassigned 0.1091, lanes_acc 0.9840, route_f1 0.6815 (160 s)",
+  "F1_s0 val pose2: assoc_acc 0.8207, nonfalse_acc 0.8507, seg_acc 0.8447, none_recall 0.9025, false_assign 0.2391, false_unassigned 0.1354, lanes_acc 0.9485, route_f1 0.5443 (163 s)",
+  "F1_s0 val nd2: assoc_acc 0.8331, nonfalse_acc 0.8604, seg_acc 0.8477, none_recall 0.9101, false_assign 0.2213, false_unassigned 0.1347, lanes_acc 0.9288, route_f1 0.4982 (164 s)",
+  "written runs/e391_F1_s0/card_val.json"
+ ]
+}

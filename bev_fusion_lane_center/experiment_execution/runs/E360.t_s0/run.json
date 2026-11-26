@@ -1,0 +1,135 @@
+{
+ "id": "E360.t_s0",
+ "hypothesis": "E360: the Matrix-NMS layer (E292 a) read out at the end-to-end read-out with the pair run of E324 s, no hard step, is better than the graph without layer and without step (E292 c2 plain): scoring job E360.t_s0",
+ "prediction": "a - c topo F1 +0.011 seed 0 / +0.019 seed 1 (hit +-0.010); expected token TIE",
+ "rule": "E360 card section 0 (by hand: D87 replay by temp/e360/verdict_e360.py; KEEP = candidate only, nothing adopted)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jends_eval.py score --run e324_s_s0 --seed 0 --thr 0.1 --attach --snap --snap-nogeom --full /mnt/c/Auto-research/bev_fusion_lane_center/temp/e292/predfull_e292_c2_s0.pkl --base /mnt/c/Auto-research/bev_fusion_lane_center/runs/e292_c2_s0/model.pt --spec close:1.5@0.5 --tag e360t",
+ "argv": [
+  "env",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "nice",
+  "-n",
+  "10",
+  "bash",
+  "tools/env/_py14.sh",
+  "jends_eval.py",
+  "score",
+  "--run",
+  "e324_s_s0",
+  "--seed",
+  "0",
+  "--thr",
+  "0.1",
+  "--attach",
+  "--snap",
+  "--snap-nogeom",
+  "--full",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/temp/e292/predfull_e292_c2_s0.pkl",
+  "--base",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e292_c2_s0/model.pt",
+  "--spec",
+  "close:1.5@0.5",
+  "--tag",
+  "e360t"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 746810,
+ "created": "2026-11-16T09:19:58",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E360",
+ "card_sha": "e7c77b664b986f4f",
+ "card_arms": {
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E360.c_s0",
+    "E360.c_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E360.a_s0",
+    "E360.a_s1"
+   ]
+  },
+  "ck": {
+   "order": {},
+   "run_ids": [
+    "E360.ck_s0",
+    "E360.ck_s1"
+   ]
+  },
+  "ak": {
+   "order": {},
+   "run_ids": [
+    "E360.ak_s0",
+    "E360.ak_s1"
+   ]
+  },
+  "t": {
+   "order": {},
+   "run_ids": [
+    "E360.t_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "e809af4279c1",
+ "started": "2026-11-16T09:20:31",
+ "code_hash": "e809af4279c1",
+ "commit": "7f52012d78",
+ "tag": "lcr/E360.t_s0",
+ "git_note": "",
+ "pid": 747255,
+ "pgid": 747255,
+ "pid_start": 21941953,
+ "code_drift": {
+  "n": 17,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jwire_check.py",
+   "bev_fusion_lane_center/evaluation/jwire_verdict.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_card360.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_gap6.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_verdict.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_verdict2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_verdict3.py",
+   "bev_fusion_lane_center/temp/e358/fix10.py",
+   "bev_fusion_lane_center/temp/e358/fix11.py",
+   "bev_fusion_lane_center/temp/e358/fix12.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 243,
+ "attempts": 1,
+ "ended": "2026-11-16T09:24:58",
+ "last_lines": [
+  "=== attempt 2026-11-16T09:20:31: env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jends_eval.py score --run e324_s_s0 --seed 0 --thr 0.1 --attach --snap --snap-nogeom --full /mnt/c/Auto-research/bev_fusion_lane_center/temp/e292/predfull_e292_c2_s0.pkl --base /mnt/c/Auto-research/bev_fusion_lane_center/runs/e292_c2_s0/model.pt --spec close:1.5@0.5 --tag e360t",
+  "_py14.sh: evaluation/jends_eval.py",
+  "pyramid of the maps run == the base run's: True (False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')",
+  "  scored 200/873  46 s",
+  "  scored 400/873  91 s",
+  "  scored 600/873  129 s",
+  "  scored 800/873  174 s",
+  "                           Q      F1@1.0 lanes_found     topo_F1      topo_P      topo_R junction_F1  junction_P  junction_R    dup_frac  vert100_dp",
+  "base                  0.6666      0.8270      0.6305      0.6346      0.6880      0.5889      0.2840      0.1916      0.5490      0.2267     18.9847",
+  "head                  0.7096      0.8759      0.7674      0.6989      0.7052      0.6928      0.3174      0.2029      0.7291      0.1777     19.1315",
+  "difference           +0.0430     +0.0489     +0.1369     +0.0643     +0.0172     +0.1039     +0.0334     +0.0113     +0.1801     -0.0490     +0.1468",
+  "curves 11729 (wired at both ends 6158); the rule of D79 holds for this seed: True {'topo_F1': True, 'F1_1': True, 'dup_frac': True, 'vert100_dp': True, 'junction_F1': True}"
+ ]
+}

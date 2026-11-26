@@ -1,0 +1,56 @@
+{
+ "id": "E354.post_s0",
+ "hypothesis": "E354: the read-outs of the recursive feature state (stream, off, shuffle, trunc), the control arm and the layer-1 control of the new stream-order driver on E341, scored unsnapped and snapped at p >= 0.1, with the flip rates at matched delivery.",
+ "prediction": "the driver reproduces the stored E341 cards within 0.0005; r minus z +0.004 unsnapped topo F1; flip rate -3 points at matched delivery",
+ "rule": "E354 card section 0 (by hand: replay); the layer-1 control must hold before any arm is read; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/e354/post_seed.sh 0",
+ "argv": [
+  "bash",
+  "temp/e354/post_seed.sh",
+  "0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 608201,
+ "created": "2026-11-15T18:55:46",
+ "status": "failed",
+ "after": "E354.r_s0,E354.z_s0",
+ "timeout_min": 300.0,
+ "code_hash_first": "9ec9d51098d7",
+ "started": "2026-11-15T21:29:02",
+ "code_hash": "9ec9d51098d7",
+ "commit": "8b97cf80a8",
+ "tag": "lcr/E354.post_s0",
+ "git_note": "",
+ "pid": 628582,
+ "pgid": 628582,
+ "pid_start": 17673061,
+ "code_drift": {
+  "n": 30,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jflip.py",
+   "bev_fusion_lane_center/evaluation/jrecur_time.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/e346_arm.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/e346_lib.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/e355_lib.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/patch_wl.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/probe1.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/probe2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/syntax.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e351_quiet_watch4.sh"
+  ]
+ },
+ "exit": 1,
+ "duration_s": 8558,
+ "attempts": 1,
+ "ended": "2026-11-15T23:52:52",
+ "last_lines": [
+  "=== attempt 2026-11-15T21:29:02: bash temp/e354/post_seed.sh 0"
+ ]
+}

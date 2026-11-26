@@ -1,0 +1,106 @@
+{
+ "id": "E373.cb_s1",
+ "hypothesis": "E373: the b_bal25 recipe (the E365 head with none weight 0.25) frozen passes the okayish gate again with two fresh head seeds (2 on cache 0, 3 on cache 1), at the record decode or at the recipe cell 0.2 / 0.6 / gate off.",
+ "prediction": "at D-rec topo F1 about 0.650, the gate holds on both heads about 45 %; at D-cell topo F1 about 0.670, the gate holds about 85 %; CONFIRMED about 85 %; replacement of the S1 champion about 35 %",
+ "rule": "E373 card section 0 (by hand): the decode = D-rec if the okayish gate of E365 holds on both fresh heads at D-rec, else D-cell (0.2 / 0.6 / off) if it holds there, else NOT CONFIRMED; replacement of the S1 champion needs CONFIRMED and per cache topo F1 >= 0.6518 / 0.6650, F1@1.0 >= 0.8281 / 0.8310, lanes found >= 0.6698 / 0.6776 at the chosen decode; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jtoken_train.py --name e373_cb_s1 --seed 1 --head-seed 3 --ident e292_a --none-weight 0.25 --steps 12000 --bs 8 --lr 1e-3 --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jtoken_train.py",
+  "--name",
+  "e373_cb_s1",
+  "--seed",
+  "1",
+  "--head-seed",
+  "3",
+  "--ident",
+  "e292_a",
+  "--none-weight",
+  "0.25",
+  "--steps",
+  "12000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 81276,
+ "created": "2026-11-17T04:52:32",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 130.0,
+ "card_id": "E373",
+ "card_sha": "fd9b02ea6ae28415",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "cb": {
+   "order": {},
+   "run_ids": [
+    "E373.cb_s0",
+    "E373.cb_s1",
+    "E373.read_s0",
+    "E373.read_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "301f1e6cb110",
+ "started": "2026-11-17T04:54:45",
+ "code_hash": "301f1e6cb110",
+ "commit": "396a08fa31",
+ "tag": "lcr/E373.cb_s1",
+ "git_note": "253 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 83261,
+ "pgid": 83261,
+ "pid_start": 2102479,
+ "code_drift": {
+  "n": 9,
+  "paths": [
+   "bev_fusion_lane_center/temp/e276/exp_oracle_links.py",
+   "bev_fusion_lane_center/temp/e276/patch_oracle.py",
+   "bev_fusion_lane_center/temp/e276/peek_succ.py",
+   "bev_fusion_lane_center/temp/e276/run_p5b.sh",
+   "bev_fusion_lane_center/temp/e370/put_fix.py",
+   "bev_fusion_lane_center/temp/e370/read_a.sh",
+   "bev_fusion_lane_center/temp/e370/read_fix.py",
+   "bev_fusion_lane_center/temp/jr/qual_champion.sh",
+   "bev_fusion_lane_center/temp/jr/set_teaser.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2606,
+ "attempts": 1,
+ "ended": "2026-11-17T05:38:45",
+ "last_lines": [
+  "05:37:16 clock: 0.203 s/step over the last 100 steps of this process; over all 11600 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 19 of 2143, ylong against the token chord class 0; loss parts nll_s 0.092 nll_l 0.022 ce1 0.253 ce3 0.219 scale_l1 0.079",
+  "05:37:17 step 11600/12000 loss 0.3796 lr 3.05e-06 0.210 s/step nll_s 0.092 nll_l 0.022 ce1 0.253 ce3 0.219 gt_links 2143.000 pos_pairs 2124.000 gt_outside 19.000 gt_class 0.000 scale_l1 0.079 gpu_gb 2.116 gpu_res_gb 2.284",
+  "05:37:36 clock: 0.193 s/step over the last 100 steps of this process; over all 11700 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 20 of 2525, ylong against the token chord class 0; loss parts nll_s 0.118 nll_l 0.021 ce1 0.219 ce3 0.184 scale_l1 0.044",
+  "05:37:36 step 11700/12000 loss 0.3727 lr 1.72e-06 0.210 s/step nll_s 0.118 nll_l 0.021 ce1 0.219 ce3 0.184 gt_links 2525.000 pos_pairs 2505.000 gt_outside 20.000 gt_class 0.000 scale_l1 0.044 gpu_gb 2.116 gpu_res_gb 2.284",
+  "05:37:46 clock: 0.106 s/step over the last 100 steps of this process; over all 11800 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 23 of 2547, ylong against the token chord class 0; loss parts nll_s 0.126 nll_l 0.029 ce1 0.281 ce3 0.250 scale_l1 0.068",
+  "05:37:46 step 11800/12000 loss 0.3799 lr 7.67e-07 0.209 s/step nll_s 0.126 nll_l 0.029 ce1 0.281 ce3 0.250 gt_links 2547.000 pos_pairs 2524.000 gt_outside 23.000 gt_class 0.000 scale_l1 0.068 gpu_gb 2.116 gpu_res_gb 2.284",
+  "05:37:57 clock: 0.106 s/step over the last 100 steps of this process; over all 11900 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 26 of 2445, ylong against the token chord class 0; loss parts nll_s 0.061 nll_l 0.012 ce1 0.176 ce3 0.138 scale_l1 0.033",
+  "05:37:57 step 11900/12000 loss 0.3884 lr 1.94e-07 0.209 s/step nll_s 0.061 nll_l 0.012 ce1 0.176 ce3 0.138 gt_links 2445.000 pos_pairs 2419.000 gt_outside 26.000 gt_class 0.000 scale_l1 0.033 gpu_gb 2.116 gpu_res_gb 2.284",
+  "05:38:08 clock: 0.106 s/step over the last 100 steps of this process; over all 12000 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 19 of 2198, ylong against the token chord class 0; loss parts nll_s 0.088 nll_l 0.020 ce1 0.202 ce3 0.170 scale_l1 0.059",
+  "05:38:08 step 12000/12000 loss 0.3755 lr 1.90e-11 0.208 s/step nll_s 0.088 nll_l 0.020 ce1 0.202 ce3 0.170 gt_links 2198.000 pos_pairs 2179.000 gt_outside 19.000 gt_class 0.000 scale_l1 0.059 gpu_gb 2.116 gpu_res_gb 2.284",
+  "05:38:08 done 12000",
+  "05:38:08 done e373_cb_s1"
+ ]
+}

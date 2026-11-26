@@ -1,0 +1,108 @@
+{
+ "id": "E318.u_s0",
+ "hypothesis": "A learned position scale per keypoint (Laplace NLL on the end position instead of the Huber end term, detached feature of the pair logit) lets the head declare an end uncertain; the scale is informative about the true end error and marks the unsure pairs.",
+ "prediction": "snapped p >= 0.1 topo F1 +0.005 over the control E317.g (a TIE); Spearman(sigma, end error) >= 0.3 and precision of the delivered pairs +0.03 between the confident and the unsure fifth AND more than the same split by range, as defined by temp/e318/sigma_check.py (nulls on E312 seeds 0 / 1: Spearman of range +0.12 / +0.10, fifths of range +0.17 / +0.13)",
+ "rule": "E318 card section 0: by hand (jends_eval.py score --snap --thr 0.1 and score --thr 0.1, then temp/e318/sigma_check.py on the dump: Spearman and fifths as defined in the card, the fifths clause also needs the sigma split to exceed the range split of the seed); KEEP when snapped topo F1 over the control E317.g rises by more than 0.01 on both seeds with the guards held; TIE kept when the uncertainty is informative (Spearman >= 0.3 and fifths >= 0.03 on both seeds), else CUT; the kill is a non-finite loss or log sigma at the clamp for more than 90 % of the keypoints on the VAL dump; the arm is Huber -> Laplace NLL + two pair inputs + the scale, not a single factor; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jends_train.py --name e318_u_s0 --seed 0 --maps /mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s0/model.pt --e2e --scales --maps-w 1.0 --steps 3000 --geom-w 0.5 --unc --workers 3",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jends_train.py",
+  "--name",
+  "e318_u_s0",
+  "--seed",
+  "0",
+  "--maps",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s0/model.pt",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--steps",
+  "3000",
+  "--geom-w",
+  "0.5",
+  "--unc",
+  "--workers",
+  "3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 406043,
+ "created": "2026-11-14T22:36:11",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E318",
+ "card_sha": "eef6bbbf170c6f38",
+ "card_arms": {
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E317.g_s0",
+    "E317.g_s1"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": [
+    "E318.u_s0",
+    "E318.u_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "33aab07dd4b0",
+ "started": "2026-11-15T00:59:59",
+ "code_hash": "33aab07dd4b0",
+ "commit": "34f4697137",
+ "tag": "lcr/E318.u_s0",
+ "git_note": "",
+ "pid": 431014,
+ "pgid": 431014,
+ "pid_start": 10298769,
+ "code_drift": {
+  "n": 60,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jrule_removal.py",
+   "bev_fusion_lane_center/evaluation/jtest_eval.py",
+   "bev_fusion_lane_center/evaluation/jwire_check.py",
+   "bev_fusion_lane_center/evaluation/jwire_data.py",
+   "bev_fusion_lane_center/evaluation/jwire_verdict.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jtest_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e350/fix_verdict.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e350/legacy_caches.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e350/mutate_pair_run.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e350/mutate_tools.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 6932,
+ "attempts": 1,
+ "ended": "2026-11-15T02:56:09",
+ "last_lines": [
+  "ss 0.000 geom_shape 0.198 geom_n 124.000 geom_d_curve 0.312 geom_d_gt 0.328 geom_sig 0.886 geom_end 0.642 geom_end_d 0.824 j_zone 0.217 j_heat 0.716 j_dir 0.061 j_paint 0.296",
+  "02:25:41 step 2200/3000 loss 2.1096 lr 1.99e-04 2.308 s/step bce 0.116 pos_pairs 67.000 allowed 861.000 dual 0.317 scale_l1 0.221 cross 0.001 geom_shape 0.085 geom_n 67.000 geom_d_curve 0.215 geom_d_gt 0.222 geom_sig 0.766 geom_end 0.566 geom_end_d 0.764 j_zone 0.222 j_heat 0.589 j_dir 0.021 j_paint 0.320",
+  "02:29:49 step 2300/3000 loss 2.0794 lr 1.59e-04 2.316 s/step bce 0.127 pos_pairs 87.000 allowed 1513.000 dual 0.376 scale_l1 0.197 cross 0.000 geom_shape 0.122 geom_n 87.000 geom_d_curve 0.258 geom_d_gt 0.263 geom_sig 1.024 geom_end 0.759 geom_end_d 0.969 j_zone 0.256 j_heat 0.799 j_dir 0.043 j_paint 0.266",
+  "02:34:01 step 2400/3000 loss 2.0712 lr 1.24e-04 2.324 s/step bce 0.126 pos_pairs 126.000 allowed 1536.000 dual 0.372 scale_l1 0.223 cross 0.000 geom_shape 0.116 geom_n 126.000 geom_d_curve 0.251 geom_d_gt 0.251 geom_sig 0.770 geom_end 0.489 geom_end_d 0.734 j_zone 0.177 j_heat 0.705 j_dir 0.061 j_paint 0.278",
+  "02:38:05 step 2500/3000 loss 2.0373 lr 9.28e-05 2.329 s/step bce 0.147 pos_pairs 106.000 allowed 1488.000 dual 0.378 scale_l1 0.205 cross 0.000 geom_shape 0.118 geom_n 106.000 geom_d_curve 0.253 geom_d_gt 0.258 geom_sig 0.878 geom_end 0.563 geom_end_d 0.773 j_zone 0.208 j_heat 0.763 j_dir 0.031 j_paint 0.204",
+  "02:41:33 step 2600/3000 loss 1.9922 lr 6.71e-05 2.319 s/step bce 0.095 pos_pairs 125.000 allowed 1796.000 dual 0.250 scale_l1 0.186 cross 0.000 geom_shape 0.106 geom_n 125.000 geom_d_curve 0.242 geom_d_gt 0.238 geom_sig 0.790 geom_end 0.487 geom_end_d 0.736 j_zone 0.185 j_heat 0.730 j_dir 0.014 j_paint 0.168",
+  "02:44:55 step 2700/3000 loss 2.0132 lr 4.67e-05 2.308 s/step bce 0.190 pos_pairs 70.000 allowed 742.000 dual 0.389 scale_l1 0.205 cross 0.000 geom_shape 0.110 geom_n 70.000 geom_d_curve 0.232 geom_d_gt 0.234 geom_sig 0.959 geom_end 0.630 geom_end_d 0.867 j_zone 0.166 j_heat 0.700 j_dir 0.018 j_paint 0.220",
+  "02:48:21 step 2800/3000 loss 2.0009 lr 3.20e-05 2.299 s/step bce 0.138 pos_pairs 107.000 allowed 1728.000 dual 0.328 scale_l1 0.174 cross 0.000 geom_shape 0.123 geom_n 107.000 geom_d_curve 0.244 geom_d_gt 0.251 geom_sig 0.765 geom_end 0.523 geom_end_d 0.766 j_zone 0.162 j_heat 0.727 j_dir 0.032 j_paint 0.191",
+  "02:51:52 step 2900/3000 loss 1.9762 lr 2.30e-05 2.293 s/step bce 0.118 pos_pairs 106.000 allowed 1443.000 dual 0.313 scale_l1 0.189 cross 0.000 geom_shape 0.147 geom_n 106.000 geom_d_curve 0.274 geom_d_gt 0.270 geom_sig 0.900 geom_end 0.629 geom_end_d 0.876 j_zone 0.275 j_heat 0.775 j_dir 0.033 j_paint 0.285",
+  "02:55:07 step 3000/3000 loss 1.9989 lr 2.00e-05 2.281 s/step bce 0.134 pos_pairs 115.000 allowed 1782.000 dual 0.382 scale_l1 0.206 cross 0.000 geom_shape 0.221 geom_n 115.000 geom_d_curve 0.332 geom_d_gt 0.334 geom_sig 0.910 geom_end 0.718 geom_end_d 0.913 j_zone 0.216 j_heat 0.803 j_dir 0.054 j_paint 0.284",
+  "02:55:08 done 3000",
+  "02:55:08 done e318_u_s0"
+ ]
+}

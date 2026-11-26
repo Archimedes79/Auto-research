@@ -1,0 +1,106 @@
+{
+ "id": "E366.sweep_s0",
+ "hypothesis": "E366: the two trained heads of E365 S1 with a decode selected on the TRAIN sample (every third of the 873 evenly spaced TRAIN frames: 291 frames; link threshold x keep threshold x none gate, 24 cells) and applied once to VAL lift the delivered graph; the miss of S1 is largely the conservative decode.",
+ "prediction": "the chosen cell looser than the record (T <= 0.2) 85 %; VAL topo F1 +0.03 over the record (0 to +0.08), about 0.58 / 0.60; PASS-DECODE about 5 %, MISS-DECODE about 85 %",
+ "rule": "E366 card section 0 (by hand): the cell with the highest mean TRAIN-sample topo F1 over both seeds among the cells with mean TRAIN dup_frac <= 0.05, ties to the record; applied once to VAL; PASS-DECODE = G-topo (>= 0.6359 / 0.6349) and G-found (F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937) on both seeds; MISS-DECODE = G-topo or G-found fails on both seeds; else INCONCLUSIVE; decide.py not used",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e365_s1_s0 --seed 0 --split train --every 3",
+ "argv": [
+  "env",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "nice",
+  "-n",
+  "10",
+  "bash",
+  "tools/env/_py14.sh",
+  "jtoken_eval.py",
+  "sweep",
+  "--run",
+  "e365_s1_s0",
+  "--seed",
+  "0",
+  "--split",
+  "train",
+  "--every",
+  "3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 42942,
+ "created": "2026-11-17T02:20:36",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E366",
+ "card_sha": "e1a9c4b50ccb0bc6",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "dec": {
+   "order": {},
+   "run_ids": [
+    "E366.dump_s0",
+    "E366.dump_s1",
+    "E366.sweep_s0",
+    "E366.sweep_s1",
+    "E366.val_s0",
+    "E366.val_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a412f04f6ace",
+ "started": "2026-11-17T02:21:18",
+ "code_hash": "a412f04f6ace",
+ "commit": "29eae3bc31",
+ "tag": "lcr/E366.sweep_s0",
+ "git_note": "173 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 44208,
+ "pgid": 44208,
+ "pid_start": 1181785,
+ "code_drift": {
+  "n": 27,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jtoken_eval.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jtoken_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_edit1.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_edit2.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_edit3.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_imp.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_run1.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/coder_t1.sh",
+   "bev_fusion_lane_center/temp/e273/report_part2.py",
+   "bev_fusion_lane_center/temp/e273/strip_text.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1096,
+ "attempts": 1,
+ "ended": "2026-11-17T02:40:18",
+ "last_lines": [
+  "link 0.1   keep 0.5  gate off  topo_F1 0.7169  topo_P 0.7537  topo_R 0.6834  F1@1.0 0.8943  lanes_found 0.7556  dup_frac 0.0392  links/frame 183.6",
+  "link 0.1   keep 0.6  gate on   topo_F1 0.6673  topo_P 0.8059  topo_R 0.5694  F1@1.0 0.8565  lanes_found 0.6706  dup_frac 0.0144  links/frame 175.5",
+  "link 0.1   keep 0.6  gate off  topo_F1 0.7200  topo_P 0.7357  topo_R 0.7049  F1@1.0 0.9001  lanes_found 0.7795  dup_frac 0.0438  links/frame 193.9",
+  "link 0.1   keep 0.7  gate on   topo_F1 0.6669  topo_P 0.7986  topo_R 0.5725  F1@1.0 0.8598  lanes_found 0.6785  dup_frac 0.0160  links/frame 179.4",
+  "link 0.1   keep 0.7  gate off  topo_F1 0.7190  topo_P 0.7157  topo_R 0.7224  F1@1.0 0.9043  lanes_found 0.7984  dup_frac 0.0507  links/frame 204.9",
+  "link 0.05  keep 0.5  gate on   topo_F1 0.6719  topo_P 0.7833  topo_R 0.5882  F1@1.0 0.8559  lanes_found 0.6651  dup_frac 0.0185  links/frame 176.7",
+  "link 0.05  keep 0.5  gate off  topo_F1 0.7074  topo_P 0.6747  topo_R 0.7436  F1@1.0 0.9059  lanes_found 0.8020  dup_frac 0.0789  links/frame 199.5",
+  "link 0.05  keep 0.6  gate on   topo_F1 0.6731  topo_P 0.7744  topo_R 0.5952  F1@1.0 0.8604  lanes_found 0.6785  dup_frac 0.0194  links/frame 182.0",
+  "link 0.05  keep 0.6  gate off  topo_F1 0.6994  topo_P 0.6476  topo_R 0.7602  F1@1.0 0.9090  lanes_found 0.8243  dup_frac 0.0902  links/frame 212.9",
+  "link 0.05  keep 0.7  gate on   topo_F1 0.6717  topo_P 0.7665  topo_R 0.5977  F1@1.0 0.8634  lanes_found 0.6862  dup_frac 0.0210  links/frame 186.3",
+  "link 0.05  keep 0.7  gate off  topo_F1 0.6891  topo_P 0.6203  topo_R 0.7749  F1@1.0 0.9113  lanes_found 0.8450  dup_frac 0.1066  links/frame 227.9",
+  "written runs/e365_s1_s0/token_sweep_train_every3.json"
+ ]
+}

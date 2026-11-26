@@ -1,0 +1,114 @@
+{
+ "id": "E374.z2_s0",
+ "hypothesis": "E374 S3: the E365 token head with ONE cross-attention block after self-attention layer 2 to road-level SD-map tokens (sd_lib carriageway centre lines, lane count, the junction connector ranges cut; trained on corrupted maps incl. absent, count-unknown and gross frames) decides weak tokens better than the same head trained by the same trainer without the block",
+ "prediction": "topo F1 of m minus z about +0.006 (hit window 0.000 to +0.012); parameters +20.3 k, +57 percent per training step (launch gate 0.155 against 0.099 s/step); odds KEEP 25, TIE 60, CUT 15 percent",
+ "rule": "E374 card section 0 (by hand: written before the runs): KEEP = m - z >= +0.010 topo F1 on BOTH seeds at the primary read-out (each arm at its own TRAIN-selected decode, VAL error map) with the paired bootstrap interval above 0, AP not below, guards held, the noise band z2 below 0.010 and the map of ANOTHER scene (S) at least 0.005 below the record map; CUT = m - z <= -0.010 on both seeds or a guard broken on both; TIE otherwise (default z, the cheaper)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jmap_train.py --name e374_z2_s0 --seed 0 --init-seed 1 --no-map --steps 12000 --bs 8 --lr 1e-3 --ident e292_a --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jmap_train.py",
+  "--name",
+  "e374_z2_s0",
+  "--seed",
+  "0",
+  "--init-seed",
+  "1",
+  "--no-map",
+  "--steps",
+  "12000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--ident",
+  "e292_a",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 209448,
+ "created": "2026-11-17T16:55:29",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E374",
+ "card_sha": "cd26fb3001b58ee2",
+ "card_arms": {
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E374.z_s0",
+    "E374.z_s1"
+   ]
+  },
+  "z2": {
+   "order": {},
+   "run_ids": [
+    "E374.z2_s0"
+   ]
+  },
+  "m": {
+   "order": {},
+   "run_ids": [
+    "E374.m_s0",
+    "E374.m_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "551df2fb699f",
+ "started": "2026-11-17T16:56:44",
+ "code_hash": "551df2fb699f",
+ "commit": "081c6b13ff",
+ "tag": "lcr/E374.z2_s0",
+ "git_note": "493 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 210222,
+ "pgid": 210222,
+ "pid_start": 6434372,
+ "code_drift": {
+  "n": 10,
+  "paths": [
+   "bev_fusion_lane_center/temp/day2/day2.sh",
+   "bev_fusion_lane_center/temp/e374/modes.py",
+   "bev_fusion_lane_center/temp/e378/choose378.py",
+   "bev_fusion_lane_center/temp/e378/noise.sh",
+   "bev_fusion_lane_center/temp/e378/read378.sh",
+   "bev_fusion_lane_center/temp/e378/start_after_n.sh",
+   "bev_fusion_lane_center/temp/e378/sup378.sh",
+   "bev_fusion_lane_center/temp/e378/texts378.sh",
+   "bev_fusion_lane_center/temp/gt2/cpu_round.sh",
+   "bev_fusion_lane_center/temp/gt2/patch_cap.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2022,
+ "attempts": 1,
+ "ended": "2026-11-17T17:31:03",
+ "last_lines": [
+  "17:29:00 clock: 0.204 s/step over the last 100 steps of this process; over all 11600 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 24 of 2988, ylong against the token chord class 0; loss parts nll_s 0.144 nll_l 0.023 ce1 0.178 ce3 0.145 scale_l1 0.059",
+  "17:29:01 step 11600/12000 loss 0.4141 lr 3.05e-06 0.160 s/step nll_s 0.144 nll_l 0.023 ce1 0.178 ce3 0.145 gt_links 2988.000 pos_pairs 2964.000 gt_outside 24.000 gt_class 0.000 scale_l1 0.059 gpu_gb 2.116 gpu_res_gb 2.284",
+  "17:29:21 clock: 0.201 s/step over the last 100 steps of this process; over all 11700 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 16 of 2963, ylong against the token chord class 0; loss parts nll_s 0.103 nll_l 0.026 ce1 0.161 ce3 0.117 scale_l1 0.047",
+  "17:29:21 step 11700/12000 loss 0.4082 lr 1.72e-06 0.160 s/step nll_s 0.103 nll_l 0.026 ce1 0.161 ce3 0.117 gt_links 2963.000 pos_pairs 2947.000 gt_outside 16.000 gt_class 0.000 scale_l1 0.047 gpu_gb 2.116 gpu_res_gb 2.284",
+  "17:29:41 clock: 0.204 s/step over the last 100 steps of this process; over all 11800 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 12 of 2667, ylong against the token chord class 0; loss parts nll_s 0.114 nll_l 0.033 ce1 0.165 ce3 0.141 scale_l1 0.043",
+  "17:29:41 step 11800/12000 loss 0.4152 lr 7.67e-07 0.161 s/step nll_s 0.114 nll_l 0.033 ce1 0.165 ce3 0.141 gt_links 2667.000 pos_pairs 2655.000 gt_outside 12.000 gt_class 0.000 scale_l1 0.043 gpu_gb 2.116 gpu_res_gb 2.284",
+  "17:30:02 clock: 0.208 s/step over the last 100 steps of this process; over all 11900 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 17 of 2593, ylong against the token chord class 0; loss parts nll_s 0.119 nll_l 0.027 ce1 0.175 ce3 0.133 scale_l1 0.069",
+  "17:30:02 step 11900/12000 loss 0.4124 lr 1.94e-07 0.161 s/step nll_s 0.119 nll_l 0.027 ce1 0.175 ce3 0.133 gt_links 2593.000 pos_pairs 2576.000 gt_outside 17.000 gt_class 0.000 scale_l1 0.069 gpu_gb 2.116 gpu_res_gb 2.284",
+  "17:30:23 clock: 0.207 s/step over the last 100 steps of this process; over all 12000 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 12 of 2305, ylong against the token chord class 0; loss parts nll_s 0.143 nll_l 0.033 ce1 0.190 ce3 0.156 scale_l1 0.053",
+  "17:30:23 step 12000/12000 loss 0.4203 lr 1.90e-11 0.161 s/step nll_s 0.143 nll_l 0.033 ce1 0.190 ce3 0.156 gt_links 2305.000 pos_pairs 2293.000 gt_outside 12.000 gt_class 0.000 scale_l1 0.053 gpu_gb 2.116 gpu_res_gb 2.284",
+  "17:30:23 done 12000",
+  "17:30:23 done e374_z2_s0"
+ ]
+}

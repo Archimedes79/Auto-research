@@ -1,0 +1,121 @@
+{
+ "id": "E379.ens_s0",
+ "hypothesis": "E379: the champion recipe (E365 head, none weight 0.25, 12000 steps) trained with a KL term on the successor distributions to the mean of two frozen champion-recipe heads (e373_cb_s<S>, e367_b25_s<S>) on the same tokens, head seeds 2 / 3 as E373, recovers part of the +0.0065 .. +0.0115 topo F1 that averaging the two heads gives at inference, with one head at inference",
+ "prediction": "topo F1 d - ref at the pinned cell about +0.005 (window -0.002 to +0.010), junction F1 +0.005, dup_frac -0.005; ADOPT 25 / TIE 65 / NO 10 percent; the KD value over steps 11901 - 12000 in 0.005 - 0.10",
+ "rule": "E379 card v2 section 0 (by hand, written before any run): ADOPT-DISTILL = on both seeds at the pinned (b) cell d - ref topo F1 >= +0.005 with the paired 95 percent interval above 0, junction F1 not lower by more than 0.010, F1@1.0 -0.005, lanes found -0.010, dup_frac +0.010, the D113 floors, the kill not fired, and (seed 0, if l is run) l - ref >= +0.005 makes it a TIE unless d - l >= +0.003; NO = d - ref <= -0.005 on both seeds or a guard broken on both; TIE otherwise (default: the champion head, no teacher); INCONCLUSIVE when the seeds disagree in sign",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py ensemble --runs e373_cb_s0,e367_b25_s0 --seed 0 --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.6 --no-none-gate --out-dir temp/e379/ens_cards",
+ "argv": [
+  "env",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "nice",
+  "-n",
+  "10",
+  "bash",
+  "tools/env/_py14.sh",
+  "jtoken_eval.py",
+  "ensemble",
+  "--runs",
+  "e373_cb_s0,e367_b25_s0",
+  "--seed",
+  "0",
+  "--link-thr",
+  "0.3",
+  "--link-thr-long",
+  "0.2",
+  "--keep-thr",
+  "0.6",
+  "--no-none-gate",
+  "--out-dir",
+  "temp/e379/ens_cards"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 486871,
+ "created": "2026-11-18T02:46:18",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "card_id": "E379",
+ "card_sha": "4ec25d849067aaed",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "e2": {
+   "order": {},
+   "run_ids": [
+    "E379.ens_s0",
+    "E379.ens_s1",
+    "E379.time_e2"
+   ]
+  },
+  "d": {
+   "order": {},
+   "run_ids": [
+    "E379.d_s0",
+    "E379.d_s1"
+   ]
+  },
+  "l": {
+   "order": {},
+   "run_ids": [
+    "E379.l_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "6527535cb548",
+ "started": "2026-11-18T02:47:46",
+ "code_hash": "6527535cb548",
+ "commit": "e0aab3c7cd",
+ "tag": "lcr/E379.ens_s0",
+ "git_note": "1575 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 496992,
+ "pgid": 496992,
+ "pid_start": 9980568,
+ "code_drift": {
+  "n": 12,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e291/cmp_dump.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_test4.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/mut/s08_dump_overwrites/training/data/lane_gt_data.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/chain7.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/control/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/e347/stage_launch.py",
+   "bev_fusion_lane_center/temp/e379/reread_d_s1.sh",
+   "bev_fusion_lane_center/temp/simplify/u5c_after.sh",
+   "bev_fusion_lane_center/temp/tmp8atbqy4o/m28.py",
+   "bev_fusion_lane_center/temp/tmp8atbqy4o/m29.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 197,
+ "attempts": 1,
+ "ended": "2026-11-18T02:52:09",
+ "last_lines": [
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "   100/873 frames, 10 s",
+  "   200/873 frames, 21 s",
+  "   300/873 frames, 33 s",
+  "   400/873 frames, 44 s",
+  "   500/873 frames, 50 s",
+  "   600/873 frames, 62 s",
+  "   700/873 frames, 72 s",
+  "   800/873 frames, 83 s",
+  "   873/873 frames, 92 s",
+  "ens e373_cb_s0+e367_b25_s0        topo_F1 0.6792  topo_P 0.7141  topo_R 0.6475  F1@1.0 0.8504  lanes_found 0.7282  Q 0.6841  junction_F1 0.2588  dup_frac 0.0503  vert100_dp 23.7800",
+  "  delivered links per frame 202.33, of which the floor may hide at most 0.377 more (links are a subset of the full-probability ensemble's at this cell)"
+ ]
+}

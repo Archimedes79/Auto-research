@@ -1,0 +1,236 @@
+{
+ "id": "E395.sweep_p0ntb_s1",
+ "hypothesis": "E395 (D142): Catmull-Rom curves through the nodes. Step 1 (no training, CPU, through run.py): the delivered links of the stage-1 controls c and r2 (and of the S4 champion) drawn as straight chords, uniform or centripetal Catmull-Rom curves through the delivered nodes (ghost nodes from the delivered neighbours, reflection at the ends), or Catmull-Rom for the short links and the Hermite connector for the long ones, against the Hermite connectors of the record; plus ORACLE node positions (every delivered token with a GT node moved onto that GT node's line, and onto the node) as the measured headroom for matched nodes. Step 2 (stage 1 on the cached K 512 tokens, the E373 recipe): a position head on the token head (a normal offset per node, zero start) trained with a loss on the Catmull-Rom curve through the GT-matched nodes (p0), with a node-level loss (p0n, the control of the curve loss), with the E392 message rounds (p2); step 3 (gated, section 1.5): soft neighbours for the ghost nodes of the curve loss (p2s). Read with the standard scorer at the D115 cell, VAL 873: the SAME dump with the nodes unmoved and moved (the primary contrast), Hermite connectors",
+ "prediction": "0.03 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"F1@0.5\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"min_effect\":0.0},{\"metric\":\"topo_F1\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: VERDICT BY HAND per section 1.3 (`jcr_eval.py verdict`); the JSON rule above is only what the tools register. CUT kills (verdict CUT, on any seed): the offsets saturate (more than half of the valid tokens at the 3 m cap in the step-2000 row: the trainer's log field `dpos_cap` > 0.5); the refined nodes are WORSE than the unmoved tokens on VAL (the mean absolute lateral error of the delivered matched tokens after the head above the one before it by more than 0.01 m, `jcr_eval.py nodeerr`; the mean and not the rms, because the loss is a smooth L1 and the rms follows outliers). INCONCLUSIVE kills (a diagnosis, no verdict; the names for `--flags`: nonfinite, no_learning, notparity, notfinished, tests): a loss is not finite (nonfinite); no learning (no_learning: the position loss of the arm, `curve` or `node` of the log rows, the mean of the rows at steps 1900 and 2000 not below 0.95 x the mean of the rows at steps 100 and 200; the trainer logs a row every 100 steps and the card names the columns `curve` / `node`: a weak clause, the head sees only cached features and part of the 0.48 m error is shared and not learnable from them; ADDENDUM A1, section 1.6: for the arms p0nt / p0ntb the clause reads the rows' `pos_mean`, the mean of the trained position loss over the 100 calls before the row (`pos_n` = 100), instead of the single batch, and the verdict reads it itself, `--kills window`); the `jarm --curve` fingerprint stops the arm (notparity); a started run does not finish (notfinished); the unit tests of section 2 fail (tests). The CUT kill 'saturate' is also a flag name. STOP (nothing is read): step 1 does not reproduce the record (mode H of the real run must equal the stored D115 card of the run within 1e-4 in topo F1, F1@0.5, F1@1.0, lanes found and junction F1; `jcr_eval.py` asserts it; the selftest asserts the `curves` path with the Hermite curves given explicitly on a toy frame)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e395_p0ntb_s1 --seed 1 --split train --every 3 --grid perclass",
+ "argv": [
+  "bash",
+  "-c",
+  "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e395_p0ntb_s1 --seed 1 --split train --every 3 --grid perclass"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 237124,
+ "created": "2026-11-24T22:50:43",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E395",
+ "card_sha": "187ac5ce32040feb",
+ "card_arms": {
+  "step1": {
+   "order": {},
+   "run_ids": [
+    "E395.step1_c_s0",
+    "E395.step1_c_s1",
+    "E395.step1_r2_s0",
+    "E395.step1_r2_s1",
+    "E395.step1_s4_s0",
+    "E395.step1_s4_s1",
+    "E395.verdict_step1_c",
+    "E395.verdict_step1_r2",
+    "E395.verdict_step1_s4"
+   ]
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E395.score_c_s0",
+    "E395.score_c_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E395.score_r2_s0",
+    "E395.score_r2_s1"
+   ]
+  },
+  "p0": {
+   "order": {},
+   "run_ids": [
+    "E395.p0_s0",
+    "E395.dump_val_p0_s0",
+    "E395.dump_train_p0_s0",
+    "E395.sweep_p0_s0",
+    "E395.choose_p0_s0",
+    "E395.cell_vs_p0_s0",
+    "E395.d115_vs_p0_s0",
+    "E395.score_p0_s0",
+    "E395.nodeerr_p0_s0",
+    "E395.p0_s1",
+    "E395.dump_val_p0_s1",
+    "E395.dump_train_p0_s1",
+    "E395.sweep_p0_s1",
+    "E395.choose_p0_s1",
+    "E395.cell_vs_p0_s1",
+    "E395.d115_vs_p0_s1",
+    "E395.score_p0_s1",
+    "E395.nodeerr_p0_s1",
+    "E395.verdict_p0"
+   ]
+  },
+  "p0n": {
+   "order": {},
+   "run_ids": [
+    "E395.p0n_s0",
+    "E395.dump_val_p0n_s0",
+    "E395.dump_train_p0n_s0",
+    "E395.sweep_p0n_s0",
+    "E395.choose_p0n_s0",
+    "E395.cell_vs_p0n_s0",
+    "E395.d115_vs_p0n_s0",
+    "E395.score_p0n_s0",
+    "E395.nodeerr_p0n_s0",
+    "E395.p0n_s1",
+    "E395.dump_val_p0n_s1",
+    "E395.dump_train_p0n_s1",
+    "E395.sweep_p0n_s1",
+    "E395.choose_p0n_s1",
+    "E395.cell_vs_p0n_s1",
+    "E395.d115_vs_p0n_s1",
+    "E395.score_p0n_s1",
+    "E395.nodeerr_p0n_s1",
+    "E395.verdict_p0n",
+    "E395.verdict_diag"
+   ]
+  },
+  "p0nt": {
+   "order": {},
+   "run_ids": [
+    "E395.p0nt_s0",
+    "E395.dump_val_p0nt_s0",
+    "E395.dump_train_p0nt_s0",
+    "E395.sweep_p0nt_s0",
+    "E395.choose_p0nt_s0",
+    "E395.cell_vs_p0nt_s0",
+    "E395.d115_vs_p0nt_s0",
+    "E395.score_p0nt_s0",
+    "E395.nodeerr_p0nt_s0",
+    "E395.p0nt_s1",
+    "E395.dump_val_p0nt_s1",
+    "E395.dump_train_p0nt_s1",
+    "E395.sweep_p0nt_s1",
+    "E395.choose_p0nt_s1",
+    "E395.cell_vs_p0nt_s1",
+    "E395.d115_vs_p0nt_s1",
+    "E395.score_p0nt_s1",
+    "E395.nodeerr_p0nt_s1",
+    "E395.verdict_p0nt"
+   ]
+  },
+  "p0ntb": {
+   "order": {},
+   "run_ids": [
+    "E395.p0ntb_s0",
+    "E395.dump_val_p0ntb_s0",
+    "E395.dump_train_p0ntb_s0",
+    "E395.sweep_p0ntb_s0",
+    "E395.choose_p0ntb_s0",
+    "E395.cell_vs_p0ntb_s0",
+    "E395.d115_vs_p0ntb_s0",
+    "E395.score_p0ntb_s0",
+    "E395.nodeerr_p0ntb_s0",
+    "E395.p0ntb_s1",
+    "E395.dump_val_p0ntb_s1",
+    "E395.dump_train_p0ntb_s1",
+    "E395.sweep_p0ntb_s1",
+    "E395.choose_p0ntb_s1",
+    "E395.cell_vs_p0ntb_s1",
+    "E395.d115_vs_p0ntb_s1",
+    "E395.score_p0ntb_s1",
+    "E395.nodeerr_p0ntb_s1",
+    "E395.verdict_p0ntb",
+    "E395.verdict_spread"
+   ]
+  },
+  "p2": {
+   "order": {},
+   "run_ids": [
+    "E395.p2_s0",
+    "E395.dump_val_p2_s0",
+    "E395.dump_train_p2_s0",
+    "E395.sweep_p2_s0",
+    "E395.choose_p2_s0",
+    "E395.cell_vs_p2_s0",
+    "E395.d115_vs_p2_s0",
+    "E395.score_p2_s0",
+    "E395.nodeerr_p2_s0",
+    "E395.p2_s1",
+    "E395.dump_val_p2_s1",
+    "E395.dump_train_p2_s1",
+    "E395.sweep_p2_s1",
+    "E395.choose_p2_s1",
+    "E395.cell_vs_p2_s1",
+    "E395.d115_vs_p2_s1",
+    "E395.score_p2_s1",
+    "E395.nodeerr_p2_s1",
+    "E395.verdict_p2"
+   ]
+  },
+  "p2s": {
+   "order": {},
+   "run_ids": [
+    "E395.p2s_s0",
+    "E395.dump_val_p2s_s0",
+    "E395.dump_train_p2s_s0",
+    "E395.sweep_p2s_s0",
+    "E395.choose_p2s_s0",
+    "E395.cell_vs_p2s_s0",
+    "E395.d115_vs_p2s_s0",
+    "E395.score_p2s_s0",
+    "E395.nodeerr_p2s_s0",
+    "E395.p2s_s1",
+    "E395.dump_val_p2s_s1",
+    "E395.dump_train_p2s_s1",
+    "E395.sweep_p2s_s1",
+    "E395.choose_p2s_s1",
+    "E395.cell_vs_p2s_s1",
+    "E395.d115_vs_p2s_s1",
+    "E395.score_p2s_s1",
+    "E395.nodeerr_p2s_s1",
+    "E395.verdict_p2s"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "abada2be11fe",
+ "started": "2026-11-24T22:50:57",
+ "code_hash": "abada2be11fe",
+ "commit": "ba415cf55f",
+ "tag": "lcr/E395.sweep_p0ntb_s1",
+ "git_note": "",
+ "pid": 237253,
+ "pgid": 237253,
+ "pid_start": 5149639,
+ "exit": 0,
+ "duration_s": 1477,
+ "attempts": 1,
+ "ended": "2026-11-24T23:15:35",
+ "last_lines": [
+  "link 0.1   long 0.3   keep 0.6  gate off  topo_F1 0.6930  topo_P 0.6980  topo_R 0.6881  F1@1.0 0.8826  lanes_found 0.7752  dup_frac 0.0160  junction_F1 0.1853  junction_P 0.1067  junction_R 0.7046  links/frame 238.1",
+  "link 0.1   long 0.3   keep 0.7  gate off  topo_F1 0.6898  topo_P 0.6859  topo_R 0.6937  F1@1.0 0.8829  lanes_found 0.7830  dup_frac 0.0164  junction_F1 0.1766  junction_P 0.1003  junction_R 0.7358  links/frame 250.7",
+  "link 0.1   long 0.2   keep 0.5  gate off  topo_F1 0.6994  topo_P 0.6770  topo_R 0.7235  F1@1.0 0.8981  lanes_found 0.8031  dup_frac 0.0441  junction_F1 0.2074  junction_P 0.1203  junction_R 0.7529  links/frame 229.9",
+  "link 0.1   long 0.2   keep 0.6  gate off  topo_F1 0.6966  topo_P 0.6628  topo_R 0.7341  F1@1.0 0.8987  lanes_found 0.8150  dup_frac 0.0465  junction_F1 0.1944  junction_P 0.1111  junction_R 0.7796  links/frame 243.2",
+  "link 0.1   long 0.2   keep 0.7  gate off  topo_F1 0.6922  topo_P 0.6510  topo_R 0.7391  F1@1.0 0.8986  lanes_found 0.8233  dup_frac 0.0457  junction_F1 0.1842  junction_P 0.1040  junction_R 0.8049  links/frame 255.9",
+  "link 0.1   long 0.1   keep 0.5  gate off  topo_F1 0.6841  topo_P 0.6145  topo_R 0.7715  F1@1.0 0.9090  lanes_found 0.8561  dup_frac 0.1196  junction_F1 0.2152  junction_P 0.1232  junction_R 0.8518  links/frame 239.6",
+  "link 0.1   long 0.1   keep 0.6  gate off  topo_F1 0.6773  topo_P 0.5981  topo_R 0.7807  F1@1.0 0.9090  lanes_found 0.8683  dup_frac 0.1289  junction_F1 0.1989  junction_P 0.1124  junction_R 0.8656  links/frame 253.8",
+  "link 0.1   long 0.1   keep 0.7  gate off  topo_F1 0.6712  topo_P 0.5863  topo_R 0.7849  F1@1.0 0.9088  lanes_found 0.8758  dup_frac 0.1299  junction_F1 0.1863  junction_P 0.1042  junction_R 0.8767  links/frame 267.1",
+  "link 0.1   long 0.05  keep 0.5  gate off  topo_F1 0.6470  topo_P 0.5432  topo_R 0.7999  F1@1.0 0.9096  lanes_found 0.8936  dup_frac 0.2073  junction_F1 0.2120  junction_P 0.1201  junction_R 0.9024  links/frame 252.6",
+  "link 0.1   long 0.05  keep 0.6  gate off  topo_F1 0.6375  topo_P 0.5260  topo_R 0.8090  F1@1.0 0.9093  lanes_found 0.9066  dup_frac 0.2200  junction_F1 0.1962  junction_P 0.1099  junction_R 0.9130  links/frame 268.4",
+  "link 0.1   long 0.05  keep 0.7  gate off  topo_F1 0.6288  topo_P 0.5126  topo_R 0.8130  F1@1.0 0.9088  lanes_found 0.9144  dup_frac 0.2239  junction_F1 0.1837  junction_P 0.1020  junction_R 0.9213  links/frame 282.8",
+  "written runs/e395_p0ntb_s1/token_sweep_perclass_train_every3.json"
+ ]
+}

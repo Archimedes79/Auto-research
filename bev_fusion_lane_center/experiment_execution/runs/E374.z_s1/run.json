@@ -1,0 +1,114 @@
+{
+ "id": "E374.z_s1",
+ "hypothesis": "E374 S3: the E365 token head with ONE cross-attention block after self-attention layer 2 to road-level SD-map tokens (sd_lib carriageway centre lines, lane count, the junction connector ranges cut; trained on corrupted maps incl. absent, count-unknown and gross frames) decides weak tokens better than the same head trained by the same trainer without the block",
+ "prediction": "topo F1 of m minus z about +0.006 (hit window 0.000 to +0.012); parameters +20.3 k, +57 percent per training step (launch gate 0.155 against 0.099 s/step); odds KEEP 25, TIE 60, CUT 15 percent",
+ "rule": "E374 card section 0 (by hand: written before the runs): KEEP = m - z >= +0.010 topo F1 on BOTH seeds at the primary read-out (each arm at its own TRAIN-selected decode, VAL error map) with the paired bootstrap interval above 0, AP not below, guards held, the noise band z2 below 0.010 and the map of ANOTHER scene (S) at least 0.005 below the record map; CUT = m - z <= -0.010 on both seeds or a guard broken on both; TIE otherwise (default z, the cheaper)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jmap_train.py --name e374_z_s1 --seed 1 --init-seed 1 --no-map --steps 12000 --bs 8 --lr 1e-3 --ident e292_a --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jmap_train.py",
+  "--name",
+  "e374_z_s1",
+  "--seed",
+  "1",
+  "--init-seed",
+  "1",
+  "--no-map",
+  "--steps",
+  "12000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--ident",
+  "e292_a",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 192556,
+ "created": "2026-11-17T15:25:29",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E374",
+ "card_sha": "cd26fb3001b58ee2",
+ "card_arms": {
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E374.z_s0",
+    "E374.z_s1"
+   ]
+  },
+  "z2": {
+   "order": {},
+   "run_ids": [
+    "E374.z2_s0"
+   ]
+  },
+  "m": {
+   "order": {},
+   "run_ids": [
+    "E374.m_s0",
+    "E374.m_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a82cc3cc5c39",
+ "started": "2026-11-17T15:27:16",
+ "code_hash": "a82cc3cc5c39",
+ "commit": "18b1b0d9af",
+ "tag": "lcr/E374.z_s1",
+ "git_note": "480 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 193177,
+ "pgid": 193177,
+ "pid_start": 5897609,
+ "code_drift": {
+  "n": 14,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e372critic/probe_fd.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e372critic/probe_live.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e372critic/probe_prec.py",
+   "bev_fusion_lane_center/temp/day1/day.sh",
+   "bev_fusion_lane_center/temp/e304/start_far.sh",
+   "bev_fusion_lane_center/temp/e377/e377a_session_scratch_/e377a_probe2.py",
+   "bev_fusion_lane_center/temp/e377/e377a_session_scratch_/jtoken_eval.py",
+   "bev_fusion_lane_center/temp/e377/e377a_session_scratch_/test_jtoken_eval.py",
+   "bev_fusion_lane_center/temp/e377/e377li_run.py",
+   "bev_fusion_lane_center/temp/gt2/patch_crit1.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2472,
+ "attempts": 1,
+ "ended": "2026-11-17T16:09:04",
+ "last_lines": [
+  "16:07:40 clock: 0.106 s/step over the last 100 steps of this process; over all 11600 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 20 of 2868, ylong against the token chord class 0; loss parts nll_s 0.146 nll_l 0.027 ce1 0.181 ce3 0.144 scale_l1 0.059",
+  "16:07:41 step 11600/12000 loss 0.4232 lr 3.05e-06 0.201 s/step nll_s 0.146 nll_l 0.027 ce1 0.181 ce3 0.144 gt_links 2868.000 pos_pairs 2848.000 gt_outside 20.000 gt_class 0.000 scale_l1 0.059 gpu_gb 2.116 gpu_res_gb 2.284",
+  "16:07:51 clock: 0.106 s/step over the last 100 steps of this process; over all 11700 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 20 of 2736, ylong against the token chord class 0; loss parts nll_s 0.104 nll_l 0.024 ce1 0.159 ce3 0.117 scale_l1 0.050",
+  "16:07:51 step 11700/12000 loss 0.4181 lr 1.72e-06 0.200 s/step nll_s 0.104 nll_l 0.024 ce1 0.159 ce3 0.117 gt_links 2736.000 pos_pairs 2716.000 gt_outside 20.000 gt_class 0.000 scale_l1 0.050 gpu_gb 2.116 gpu_res_gb 2.284",
+  "16:08:01 clock: 0.103 s/step over the last 100 steps of this process; over all 11800 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 14 of 2514, ylong against the token chord class 0; loss parts nll_s 0.102 nll_l 0.031 ce1 0.166 ce3 0.129 scale_l1 0.048",
+  "16:08:01 step 11800/12000 loss 0.4216 lr 7.67e-07 0.199 s/step nll_s 0.102 nll_l 0.031 ce1 0.166 ce3 0.129 gt_links 2514.000 pos_pairs 2500.000 gt_outside 14.000 gt_class 0.000 scale_l1 0.048 gpu_gb 2.116 gpu_res_gb 2.284",
+  "16:08:12 clock: 0.103 s/step over the last 100 steps of this process; over all 11900 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 22 of 2447, ylong against the token chord class 0; loss parts nll_s 0.116 nll_l 0.034 ce1 0.186 ce3 0.137 scale_l1 0.064",
+  "16:08:12 step 11900/12000 loss 0.4246 lr 1.94e-07 0.198 s/step nll_s 0.116 nll_l 0.034 ce1 0.186 ce3 0.137 gt_links 2447.000 pos_pairs 2425.000 gt_outside 22.000 gt_class 0.000 scale_l1 0.064 gpu_gb 2.116 gpu_res_gb 2.284",
+  "16:08:24 clock: 0.123 s/step over the last 100 steps of this process; over all 12000 steps so far: peak GPU allocated 2.12 GB, reserved 2.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 24 of 2266, ylong against the token chord class 0; loss parts nll_s 0.141 nll_l 0.037 ce1 0.201 ce3 0.173 scale_l1 0.052",
+  "16:08:24 step 12000/12000 loss 0.4332 lr 1.90e-11 0.198 s/step nll_s 0.141 nll_l 0.037 ce1 0.201 ce3 0.173 gt_links 2266.000 pos_pairs 2242.000 gt_outside 24.000 gt_class 0.000 scale_l1 0.052 gpu_gb 2.116 gpu_res_gb 2.284",
+  "16:08:24 done 12000",
+  "16:08:24 done e374_z_s1"
+ ]
+}

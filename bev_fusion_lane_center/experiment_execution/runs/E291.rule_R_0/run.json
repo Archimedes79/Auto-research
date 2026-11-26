@@ -1,0 +1,58 @@
+{
+ "id": "E291.rule_R_0",
+ "hypothesis": "E291 rule evaluation (card section 0): E291.rule_R_0",
+ "prediction": "G / R / C / kill (5) as the card's three-valued rule; likely INCONCLUSIVE (underpowered)",
+ "rule": "E291 card section 0 (by hand: replay, decide.py is not used): pooled paired scene bootstrap of the mean over seeds of the snapped topo F1 difference against the recipe twin; the clean row is an upper bound",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh jdiag.py boot_pooled e291_b_s0_noise30 ends_card_noise30_snap_thr0.1 e291_c_s0 ends_card_snap_thr0.1",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "jdiag.py",
+  "boot_pooled",
+  "e291_b_s0_noise30",
+  "ends_card_noise30_snap_thr0.1",
+  "e291_c_s0",
+  "ends_card_snap_thr0.1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 569967,
+ "created": "2026-11-15T16:29:26",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "3db361b1c897",
+ "started": "2026-11-15T16:30:16",
+ "code_hash": "3db361b1c897",
+ "commit": "59ba784357",
+ "tag": "lcr/E291.rule_R_0",
+ "git_note": "",
+ "pid": 570919,
+ "pgid": 570919,
+ "pid_start": 15880493,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/training/grid/jnarrow.py",
+   "bev_fusion_lane_center/training/grid/test_jrecur.py",
+   "bev_fusion_lane_center/training/train/jnarrow_eval.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 55,
+ "attempts": 1,
+ "ended": "2026-11-15T16:31:52",
+ "last_lines": [
+  "=== attempt 2026-11-15T16:30:16: bash tools/env/_py14.sh jdiag.py boot_pooled e291_b_s0_noise30 ends_card_noise30_snap_thr0.1 e291_c_s0 ends_card_snap_thr0.1",
+  "_py14.sh: evaluation/jdiag.py",
+  "pooled over 1 seeds, 22 scenes, 1000 resamples, one scene draw per resample for every seed: topo_F1",
+  "  A = e291_b_s0_noise30 ends_card_noise30_snap_thr0.1   B = e291_c_s0 ends_card_snap_thr0.1   A - B: point +0.0047, 95 % [+0.0035, +0.0059]",
+  "  pooled mean over seeds: point +0.0047, bootstrap mean +0.0047, 95 % [+0.0035, +0.0059]"
+ ]
+}

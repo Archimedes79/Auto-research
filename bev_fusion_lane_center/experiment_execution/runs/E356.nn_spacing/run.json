@@ -1,0 +1,107 @@
+{
+ "id": "E356.nn_spacing",
+ "hypothesis": "E356 (card experiments/E356_node-spacing, section 0): E356.nn_spacing",
+ "prediction": "E356 card section 1 (prediction with hit windows): radius 2.0: E324 s snapped topo F1 -0.002 (window -0.006 .. +0.002), vert100_dp -0.3 (window -1.0 .. 0.0); radius 2.5: -0.010 (window -0.025 .. -0.002), vert100_dp -1.5 (window -3.0 .. -0.5); l25 topo F1 -0.030 against g1 (window -0.045 .. -0.020), l31 -0.045 (window -0.065 .. -0.030)",
+ "rule": "E356 card section 0 (by hand: replay of the cards, temp/e356/e356_table.py): a radius is taken when topo F1 loses at most 0.01 on both seeds and all four numbers sets with the guards held AND vert100_dp of E324 s snapped falls by at least 0.5 (mean of the seeds); part B: the E346 rule (loss against g1 at most 0.03 on topo F1, lanes found, F1@1.0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "nice -n 19 bash tools/env/_py14.sh nn_spacing.py",
+ "argv": [
+  "nice",
+  "-n",
+  "19",
+  "bash",
+  "tools/env/_py14.sh",
+  "nn_spacing.py"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 616791,
+ "created": "2026-11-15T20:20:44",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E356",
+ "card_sha": "8cf4c1fd1f259a29",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "a20": {
+   "order": {},
+   "run_ids": [
+    "E356.a20_snap_s0",
+    "E356.a20_snap_s1"
+   ]
+  },
+  "a25": {
+   "order": {},
+   "run_ids": [
+    "E356.a25_snap_s0",
+    "E356.a25_snap_s1",
+    "E356.a15chk_snap_s0"
+   ]
+  },
+  "sp": {
+   "order": {},
+   "run_ids": [
+    "E356.nn_spacing"
+   ]
+  },
+  "l25": {
+   "order": {},
+   "run_ids": [
+    "E356.l25"
+   ]
+  },
+  "l31": {
+   "order": {},
+   "run_ids": [
+    "E356.l31"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "36ac82c62bfc",
+ "started": "2026-11-15T20:22:13",
+ "code_hash": "36ac82c62bfc",
+ "commit": "c6798c380c",
+ "tag": "lcr/E356.nn_spacing",
+ "git_note": "",
+ "pid": 617273,
+ "pgid": 617273,
+ "pid_start": 17272108,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 81,
+ "attempts": 1,
+ "ended": "2026-11-15T20:24:28",
+ "last_lines": [
+  "=== attempt 2026-11-15T20:22:13: nice -n 19 bash tools/env/_py14.sh nn_spacing.py",
+  "_py14.sh: temp/e356/nn_spacing.py",
+  "| seed | read-out | nodes per frame (mean / p95 / max) | share with a neighbour < 2.0 m | share with a neighbour < 2.5 m | NN distance 5 % / 25 % / 50 % / 75 % (m) |",
+  "|---|---|---|---|---|---|",
+  "| 0 | e >= thr (no step) | 172.2 / 298 / 344 | 0.772 | 0.961 | 0.52 / 1.80 / 1.97 / 2.00 |",
+  "| 0 | close:1.5 | 156.5 / 277 / 300 | 0.698 | 0.926 | 1.73 / 1.94 / 1.99 / 2.00 |",
+  "| 0 | close:2.0 | 105.6 / 183 / 205 | 0.000 | 0.576 | 2.00 / 2.01 / 2.09 / 3.23 |",
+  "| 0 | close:2.5 | 81.8 / 141 / 159 | 0.000 | 0.000 | 2.68 / 3.13 / 3.68 / 3.97 |",
+  "| 1 | e >= thr (no step) | 173.3 / 309 / 343 | 0.767 | 0.959 | 0.49 / 1.79 / 1.97 / 2.00 |",
+  "| 1 | close:1.5 | 157.3 / 282 / 297 | 0.690 | 0.924 | 1.74 / 1.93 / 1.99 / 2.00 |",
+  "| 1 | close:2.0 | 106.6 / 189 / 219 | 0.000 | 0.581 | 2.00 / 2.01 / 2.08 / 3.13 |",
+  "| 1 | close:2.5 | 82.4 / 144 / 163 | 0.000 | 0.000 | 2.68 / 3.05 / 3.67 / 3.97 |"
+ ]
+}

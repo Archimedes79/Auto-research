@@ -1,0 +1,112 @@
+{
+ "id": "E291.c_s1",
+ "hypothesis": "The recipe TWIN of E312 (same staged code, environment and data order, prior flag off) reproduces E312 within the noise of the recipe: it is the control of E291 and measures the reproduction noise that no earlier run measured.",
+ "prediction": "snapped topo F1 within 0.005 of the stored E312 of the same seed (0.6825 / 0.6864), unsnapped within 0.005 (0.6438 / 0.6481)",
+ "rule": "E291 card section 0 (by hand: replay, decide.py is not used): the twin is the control of G, R and the shuffled-table kill; if |twin - stored E312| exceeds 0.005 snapped topo F1 on either seed the card says so and decides against the twin; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash temp/e291/run_staged_gpu.sh jends_train.py --name e291_c_s1 --seed 1 --maps /mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s1/model.pt --e2e --scales --maps-w 1.0 --steps 3000 --workers 4",
+ "argv": [
+  "bash",
+  "temp/e291/run_staged_gpu.sh",
+  "jends_train.py",
+  "--name",
+  "e291_c_s1",
+  "--seed",
+  "1",
+  "--maps",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s1/model.pt",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--steps",
+  "3000",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 538682,
+ "created": "2026-11-15T13:37:17",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E291",
+ "card_sha": "9f4d4fa3164b2256",
+ "card_arms": {
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E291.c_s0",
+    "E291.c_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E291.a_s0",
+    "E291.a_s1"
+   ]
+  },
+  "b": {
+   "order": {},
+   "run_ids": [
+    "E291.b_s0",
+    "E291.b_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "08b068e3644f",
+ "started": "2026-11-15T14:36:12",
+ "code_hash": "08b068e3644f",
+ "commit": "b3c98e6539",
+ "tag": "lcr/E291.c_s1",
+ "git_note": "",
+ "pid": 545831,
+ "pgid": 545831,
+ "pid_start": 15196016,
+ "code_drift": {
+  "n": 20,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jprune_b.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e291_rule.sh",
+   "bev_fusion_lane_center/temp/day29/day29.sh",
+   "bev_fusion_lane_center/temp/e353/e352_probe3.py",
+   "bev_fusion_lane_center/temp/e353/e352_readme_edit.py",
+   "bev_fusion_lane_center/temp/e353/e352_time1.py",
+   "bev_fusion_lane_center/temp/e353/e352_time2.py",
+   "bev_fusion_lane_center/temp/e353/e352_time3.py",
+   "bev_fusion_lane_center/temp/e353/e353_eq24.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 4307,
+ "attempts": 1,
+ "ended": "2026-11-15T15:48:39",
+ "last_lines": [
+  "15:28:19 step 2200/3000 loss 1.6631 lr 1.99e-04 1.392 s/step bce 0.131 pos_pairs 149.000 allowed 2191.000 dual 0.408 scale_l1 0.161 cross 0.000 j_zone 0.224 j_heat 0.790 j_dir 0.101 j_paint 0.268",
+  "15:30:48 step 2300/3000 loss 1.6511 lr 1.59e-04 1.397 s/step bce 0.090 pos_pairs 147.000 allowed 2291.000 dual 0.259 scale_l1 0.204 cross 0.000 j_zone 0.252 j_heat 0.730 j_dir 0.052 j_paint 0.311",
+  "15:33:15 step 2400/3000 loss 1.6293 lr 1.24e-04 1.399 s/step bce 0.130 pos_pairs 106.000 allowed 1132.000 dual 0.296 scale_l1 0.163 cross 0.000 j_zone 0.150 j_heat 0.698 j_dir 0.023 j_paint 0.320",
+  "15:35:36 step 2500/3000 loss 1.6183 lr 9.28e-05 1.400 s/step bce 0.109 pos_pairs 142.000 allowed 2198.000 dual 0.304 scale_l1 0.191 cross 0.000 j_zone 0.243 j_heat 0.817 j_dir 0.102 j_paint 0.358",
+  "15:37:56 step 2600/3000 loss 1.6339 lr 6.71e-05 1.400 s/step bce 0.159 pos_pairs 85.000 allowed 1358.000 dual 0.525 scale_l1 0.166 cross 0.000 j_zone 0.182 j_heat 0.647 j_dir 0.030 j_paint 0.287",
+  "15:40:07 step 2700/3000 loss 1.6164 lr 4.67e-05 1.397 s/step bce 0.105 pos_pairs 107.000 allowed 2083.000 dual 0.340 scale_l1 0.181 cross 0.000 j_zone 0.319 j_heat 0.829 j_dir 0.101 j_paint 0.380",
+  "15:42:25 step 2800/3000 loss 1.5642 lr 3.20e-05 1.396 s/step bce 0.210 pos_pairs 132.000 allowed 1529.000 dual 0.469 scale_l1 0.185 cross 0.000 j_zone 0.159 j_heat 0.684 j_dir 0.042 j_paint 0.341",
+  "15:44:50 step 2900/3000 loss 1.5852 lr 2.30e-05 1.398 s/step bce 0.138 pos_pairs 123.000 allowed 1376.000 dual 0.343 scale_l1 0.200 cross 0.000 j_zone 0.221 j_heat 0.715 j_dir 0.041 j_paint 0.327",
+  "15:47:37 step 3000/3000 loss 1.6175 lr 2.00e-05 1.407 s/step bce 0.095 pos_pairs 104.000 allowed 1568.000 dual 0.281 scale_l1 0.164 cross 0.000 j_zone 0.196 j_heat 0.708 j_dir 0.044 j_paint 0.175",
+  "15:47:43 done 3000",
+  "15:47:44 done e291_c_s1",
+  "run_staged: stage = temp/_session_scratch_e291/stage | staged modules loaded: lane_gt_data -> temp/_session_scratch_e291/stage/training/data/lane_gt_data.py, jends -> temp/_session_scratch_e291/stage/training/grid/jends.py"
+ ]
+}

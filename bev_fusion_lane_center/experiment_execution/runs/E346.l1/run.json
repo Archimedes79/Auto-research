@@ -1,0 +1,94 @@
+{
+ "id": "E346.l1",
+ "hypothesis": "E346 the same code on a 1 m grid (qtargets N, RES set at runtime, SHORT 8 m, fit grid unchanged)",
+ "prediction": "loses 0.012 topo F1 against g1 (a guess); the chain code is rejected on both grids",
+ "rule": "replaces l2 only when l2 fails and l1 passes the same rule; its gain over l2 is reported either way (below 0.01 topo F1: the 1 m grid buys nothing)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh e346_arm.py l1",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "e346_arm.py",
+  "l1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 477003,
+ "created": "2026-11-15T08:29:09",
+ "status": "ok",
+ "after": "E346.l2",
+ "timeout_min": 90.0,
+ "card_id": "E346",
+ "card_sha": "f132625527163c2e",
+ "card_arms": {
+  "g0": {
+   "order": {},
+   "run_ids": [
+    "E346.g0"
+   ]
+  },
+  "g1": {
+   "order": {},
+   "run_ids": [
+    "E346.g1"
+   ]
+  },
+  "l2": {
+   "order": {},
+   "run_ids": [
+    "E346.l2"
+   ]
+  },
+  "l1": {
+   "order": {},
+   "run_ids": [
+    "E346.l1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0
+   ]
+  }
+ },
+ "code_hash_first": "5f50ee71b7da",
+ "started": "2026-11-15T08:42:33",
+ "code_hash": "5f50ee71b7da",
+ "commit": "65b85fa764",
+ "tag": "lcr/E346.l1",
+ "git_note": "",
+ "pid": 482055,
+ "pgid": 482055,
+ "pid_start": 13074181,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e347/stage/evaluation/jend_grid_stats.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/stage/training/grid/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/stage/training/grid/test_jmaps_simplify.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 285,
+ "attempts": 1,
+ "ended": "2026-11-15T08:47:43",
+ "last_lines": [
+  "e346 self-test ok (28 s): cell-size harness (mutations caught), g0 = 1.000, planted degradations fall, parts by kind, l2 = qgraph_eval.score_frames, collision and link toys",
+  "arm l1: 873 of 873 VAL frames (every 1th, k 0 .. 872)",
+  "   l1: 100/873 frames, 18 s",
+  "   l1: 200/873 frames, 53 s",
+  "   l1: 300/873 frames, 80 s",
+  "   l1: 400/873 frames, 103 s",
+  "   l1: 500/873 frames, 115 s",
+  "   l1: 600/873 frames, 147 s",
+  "   l1: 700/873 frames, 173 s",
+  "   l1: 800/873 frames, 203 s",
+  "card /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e346_l1/val.json",
+  "   topo_F1 0.9693  F1@1.0 0.9969  lanes_found 0.9899  junction_F1 0.9670  vert100 62.4309  vert100_dp 11.3520   (0.247 s per frame)"
+ ]
+}

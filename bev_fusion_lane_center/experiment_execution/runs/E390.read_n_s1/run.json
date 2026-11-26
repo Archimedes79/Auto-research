@@ -1,0 +1,80 @@
+{
+ "id": "E390.read_n_s1",
+ "hypothesis": "E390 step 1 (card v5, D130 / D135): a relation-biased graph encoding of the SD road graph (logical lanes per direction, links, junctions, route; node geometry cut at node boundaries) recovers lanes per direction, dropped links, hidden route flags and the association of perception proxies to their segment (with unassigned) above the measured nulls, invariant under rigid motion, with graceful decay",
+ "prediction": "P1 base about 0.74 (copy 0.696), P2 about 0.94 (logistic 0.917), P3 about 0.80 (rule 0.618), P6 about 0.95 at base (nearest 0.923), 0.88 at pose2, none recall at nd about 0.5 (nearest 0.19); SOUND 30 %, PARTLY 50 %",
+ "rule": "E390 card v5 section 0 (by hand, bars from the v6 nulls measured before training): SOUND = on both seeds P1 >= 0.7335 (base) and >= 0.99 (ce0), P2 >= 0.9380 / 0.9354 (base / s2), P3 >= 0.7138, P6 >= 0.9420 (base), >= 0.8747 (pose2), nd accuracy >= 0.8444 and none recall >= 0.3918, false-unassigned <= 0.05, each with the paired interval vs its null above 0; graph clause g - n on P3 >= +0.05; P4 <= 1e-4; P5 graceful; order NOT SOUND > INCONCLUSIVE > PARTLY > SOUND; VAL 873, CPU, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py read --arm n --seed 1",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py read --arm n --seed 1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 86041,
+ "created": "2026-11-21T05:33:47",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E390",
+ "card_sha": "4570222d4c48f924",
+ "card_arms": {
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E390.g_s0",
+    "E390.g_s1",
+    "E390.read_g_s0",
+    "E390.read_g_s1",
+    "E390.clause_s0",
+    "E390.clause_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E390.n_s0",
+    "E390.n_s1",
+    "E390.read_n_s0",
+    "E390.read_n_s1"
+   ]
+  },
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "ef0acf865995",
+ "started": "2026-11-21T05:34:33",
+ "code_hash": "ef0acf865995",
+ "commit": "a043daf2f0",
+ "tag": "lcr/E390.read_n_s1",
+ "git_note": "1403 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 86717,
+ "pgid": 86717,
+ "pid_start": 2084628,
+ "exit": 0,
+ "duration_s": 1190,
+ "attempts": 1,
+ "ended": "2026-11-21T05:54:30",
+ "last_lines": [
+  "0.8246], p2all +0.9726 [+0.9654, +0.9794], p3 +0.7579 [+0.7129, +0.7951], p6 +0.9394 [+0.9149, +0.9600], p6_seg +0.9394 [+0.9149, +0.9600], p6_none +nan [+nan, +nan], p6_false_none +0.0047 [+0.0010, +0.0103], p6_road +0.9330 [+0.9044, +0.9559], p6_inter +0.9472 [+0.9193, +0.9674], p1_minus_copy +0.0953 [+0.0617, +0.1276], p1_minus_vote +0.0925 [+0.0597, +0.1243], p1_minus_bayes +0.0201 [-0.0281, +0.0750], p2_minus_rule +0.1681 [+0.1378, +0.1967], p2_minus_lr +0.0546 [+0.0431, +0.0675], p3_minus_rule +0.1403 [+0.0466, +0.2284], p6_minus_rule +0.0769 [+0.0604, +0.0960], p6_minus_lr +0.0833 [+0.0657, +0.1033] (81 s)",
+  "n_s1 pose2: p1 +0.7912 [+0.7632, +0.8168], p2 +0.9721 [+0.9649, +0.9791], p2ap +0.7571 [+0.6921, +0.8248], p2all +0.9726 [+0.9654, +0.9794], p3 +0.7579 [+0.7129, +0.7951], p6 +0.9168 [+0.8906, +0.9386], p6_seg +0.9168 [+0.8906, +0.9386], p6_none +nan [+nan, +nan], p6_false_none +0.0058 [+0.0020, +0.0115], p6_road +0.9204 [+0.8905, +0.9451], p6_inter +0.9124 [+0.8803, +0.9372], p1_minus_copy +0.0953 [+0.0617, +0.1276], p1_minus_vote +0.0925 [+0.0597, +0.1243], p1_minus_bayes +0.0201 [-0.0281, +0.0750], p2_minus_rule +0.1684 [+0.1379, +0.1971], p2_minus_lr +0.0547 [+0.0433, +0.0677], p3_minus_rule +0.1410 [+0.0481, +0.2286], p6_minus_rule +0.0987 [+0.0788, +0.1189], p6_minus_lr +0.0839 [+0.0654, +0.1034] (82 s)",
+  "n_s1 pose5: p1 +0.7912 [+0.7632, +0.8168], p2 +0.9720 [+0.9649, +0.9791], p2ap +0.7571 [+0.6927, +0.8243], p2all +0.9725 [+0.9654, +0.9794], p3 +0.7579 [+0.7129, +0.7951], p6 +0.8193 [+0.7883, +0.8495], p6_seg +0.8193 [+0.7883, +0.8495], p6_none +nan [+nan, +nan], p6_false_none +0.0473 [+0.0390, +0.0567], p6_road +0.8487 [+0.8097, +0.8849], p6_inter +0.7835 [+0.7440, +0.8133], p1_minus_copy +0.0953 [+0.0617, +0.1276], p1_minus_vote +0.0925 [+0.0597, +0.1243], p1_minus_bayes +0.0201 [-0.0281, +0.0750], p2_minus_rule +0.1683 [+0.1379, +0.1970], p2_minus_lr +0.0545 [+0.0431, +0.0675], p3_minus_rule +0.1397 [+0.0454, +0.2282], p6_minus_rule +0.0954 [+0.0644, +0.1211], p6_minus_lr +0.0500 [+0.0347, +0.0645] (82 s)",
+  "n_s1 nd: p1 +0.7716 [+0.7487, +0.7935], p2 +0.9617 [+0.9530, +0.9707], p2ap +0.6849 [+0.6126, +0.7688], p2all +0.9624 [+0.9539, +0.9713], p3 +0.7430 [+0.6743, +0.7955], p6 +0.9184 [+0.8964, +0.9383], p6_seg +0.9578 [+0.9390, +0.9738], p6_none +0.7501 [+0.7027, +0.7970], p6_false_none +0.0061 [+0.0019, +0.0120], p6_road +0.9142 [+0.8846, +0.9409], p6_inter +0.9234 [+0.8962, +0.9404], p1_minus_copy +0.0768 [+0.0473, +0.1053], p1_minus_vote +0.0755 [+0.0464, +0.1031], p1_minus_bayes +0.0263 [-0.0306, +0.0903], p2_minus_rule +0.1605 [+0.1307, +0.1888], p2_minus_lr +0.0539 [+0.0429, +0.0660], p3_minus_rule +0.1504 [+0.0509, +0.2389], p6_minus_rule +0.1258 [+0.1084, +0.1410], p6_minus_lr +0.1915 [+0.1749, +0.2085], p6_none_minus_rule +0.5611 [+0.4720, +0.6299], p6_none_minus_lr +0.7097 [+0.6524, +0.7544] (75 s)",
+  "P4: {'max_rel_change': 1.5749561786651611, 'flips': 247, 'frames': 873, 'draws': 10}",
+  "written runs/e390_n_s1/probe_card.json"
+ ]
+}

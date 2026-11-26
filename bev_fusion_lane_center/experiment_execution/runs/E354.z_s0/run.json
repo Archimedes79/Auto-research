@@ -1,0 +1,114 @@
+{
+ "id": "E354.z_s0",
+ "hypothesis": "A learned ego-warped feature state of the previous keyframe (one gated convolution in the 2 m trunk of the junction maps head, gradient through the state, D103) costs no accuracy against the same training with the state empty and lowers the pair flip rate between keyframes.",
+ "prediction": "unsnapped topo F1 of r minus z +0.004 on both seeds (a TIE), snapped +0.003; pair flip rate at matched delivery -3 points (from 35.2 / 33.2 % on E341); +74.4 k parameters, +0.186 GMACs",
+ "rule": "E354 card section 0 (by hand: replay): KEEP = r at least 0.01 above z on both seeds unsnapped, snapped not below z by more than 0.005, guards held, not below E341 by more than 0.01; TIE = not KEEP and not below z by more than 0.01 on both seeds and both read-outs (status 'offered as the D103 solution' only with the matched-delivery flip-rate clause and the nulls on r's own checkpoint); CUT = below z by more than 0.01 on both seeds, a guard broken on both, or the kill; else INCONCLUSIVE; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jrecur_train.py --name e354_z_s0 --seed 0 --maps /mnt/c/Auto-research/bev_fusion_lane_center/runs/e332_ma_s0/model.pt --e2e --scales --maps-w 1.0 --steps 3000 --seq 3 --bs 4 --state off --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jrecur_train.py",
+  "--name",
+  "e354_z_s0",
+  "--seed",
+  "0",
+  "--maps",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e332_ma_s0/model.pt",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--steps",
+  "3000",
+  "--seq",
+  "3",
+  "--bs",
+  "4",
+  "--state",
+  "off",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 608157,
+ "created": "2026-11-15T18:55:32",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E354",
+ "card_sha": "77c0fa5ce2dcfd88",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E354.z_s0",
+    "E354.z_s1"
+   ]
+  },
+  "r": {
+   "order": {},
+   "run_ids": [
+    "E354.r_s0",
+    "E354.r_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a2b257282454",
+ "started": "2026-11-15T18:57:12",
+ "code_hash": "a2b257282454",
+ "commit": "5c9ba4e720",
+ "tag": "lcr/E354.z_s0",
+ "git_note": "",
+ "pid": 609008,
+ "pgid": 609008,
+ "pid_start": 16762096,
+ "code_drift": {
+  "n": 40,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py",
+   "bev_fusion_lane_center/evaluation/jtok_eval.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jprune_b.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e353/pbcopy/jprune_b.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/digest_check.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/e346_arm.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/e346_lib.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e355/e355_lib.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e352_blobs.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e356_ledger.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 9022,
+ "attempts": 1,
+ "ended": "2026-11-15T21:27:59",
+ "last_lines": [
+  "21:09:54 clock: 3.025 s/step over the last 100 steps of this process, peak GPU 0.62 GB, gate mean |g| 0.0030 max 0.0273, state_contrib 0.0000",
+  "21:09:54 step 2600/3000 loss 1.2966 lr 6.71e-05 3.031 s/step bce 0.150 pos_pairs 210.000 allowed 2375.000 dual 0.289 scale_l1 0.220 cross 0.000 j_zone 0.187 j_heat 0.740 j_dir 0.071 j_paint 0.000 gate 0.003 state_contrib 0.000 gpu_gb 0.623",
+  "21:14:20 clock: 2.658 s/step over the last 100 steps of this process, peak GPU 0.62 GB, gate mean |g| 0.0030 max 0.0278, state_contrib 0.0000",
+  "21:14:20 step 2700/3000 loss 1.3030 lr 4.67e-05 3.017 s/step bce 0.169 pos_pairs 111.000 allowed 902.000 dual 0.322 scale_l1 0.218 cross 0.000 j_zone 0.098 j_heat 0.644 j_dir 0.034 j_paint 0.000 gate 0.003 state_contrib 0.000 gpu_gb 0.623",
+  "21:17:55 clock: 2.149 s/step over the last 100 steps of this process, peak GPU 0.62 GB, gate mean |g| 0.0031 max 0.0277, state_contrib 0.0000",
+  "21:17:55 step 2800/3000 loss 1.2973 lr 3.20e-05 2.986 s/step bce 0.118 pos_pairs 160.000 allowed 1830.000 dual 0.212 scale_l1 0.192 cross 0.000 j_zone 0.133 j_heat 0.543 j_dir 0.014 j_paint 0.000 gate 0.003 state_contrib 0.000 gpu_gb 0.623",
+  "21:22:43 clock: 2.884 s/step over the last 100 steps of this process, peak GPU 0.62 GB, gate mean |g| 0.0031 max 0.0280, state_contrib 0.0000",
+  "21:22:43 step 2900/3000 loss 1.3511 lr 2.30e-05 2.983 s/step bce 0.133 pos_pairs 207.000 allowed 3483.000 dual 0.449 scale_l1 0.218 cross 0.000 j_zone 0.218 j_heat 0.816 j_dir 0.042 j_paint 0.000 gate 0.003 state_contrib 0.000 gpu_gb 0.623",
+  "21:27:16 clock: 2.730 s/step over the last 100 steps of this process, peak GPU 0.62 GB, gate mean |g| 0.0031 max 0.0281, state_contrib 0.0000",
+  "21:27:16 step 3000/3000 loss 1.2987 lr 2.00e-05 2.974 s/step bce 0.164 pos_pairs 176.000 allowed 2240.000 dual 0.321 scale_l1 0.239 cross 0.000 j_zone 0.212 j_heat 0.761 j_dir 0.043 j_paint 0.000 gate 0.003 state_contrib 0.000 gpu_gb 0.623",
+  "21:27:17 done 3000",
+  "21:27:17 done e354_z_s0: gate mean |g| 0.0031"
+ ]
+}

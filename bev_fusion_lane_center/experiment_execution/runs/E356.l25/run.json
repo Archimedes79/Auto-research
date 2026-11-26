@@ -1,0 +1,117 @@
+{
+ "id": "E356.l25",
+ "hypothesis": "E356 (card experiments/E356_node-spacing, section 0): E356.l25",
+ "prediction": "E356 card section 1 (prediction with hit windows): radius 2.0: E324 s snapped topo F1 -0.002 (window -0.006 .. +0.002), vert100_dp -0.3 (window -1.0 .. 0.0); radius 2.5: -0.010 (window -0.025 .. -0.002), vert100_dp -1.5 (window -3.0 .. -0.5); l25 topo F1 -0.030 against g1 (window -0.045 .. -0.020), l31 -0.045 (window -0.065 .. -0.030)",
+ "rule": "E356 card section 0 (by hand: replay of the cards, temp/e356/e356_table.py): a radius is taken when topo F1 loses at most 0.01 on both seeds and all four numbers sets with the guards held AND vert100_dp of E324 s snapped falls by at least 0.5 (mean of the seeds); part B: the E346 rule (loss against g1 at most 0.03 on topo F1, lanes found, F1@1.0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "nice -n 19 env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 bash tools/env/_py14.sh e346_arm.py l25",
+ "argv": [
+  "nice",
+  "-n",
+  "19",
+  "env",
+  "CUDA_VISIBLE_DEVICES=",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "bash",
+  "tools/env/_py14.sh",
+  "e346_arm.py",
+  "l25"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 623095,
+ "created": "2026-11-15T20:58:59",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E356",
+ "card_sha": "8cf4c1fd1f259a29",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "a20": {
+   "order": {},
+   "run_ids": [
+    "E356.a20_snap_s0",
+    "E356.a20_snap_s1"
+   ]
+  },
+  "a25": {
+   "order": {},
+   "run_ids": [
+    "E356.a25_snap_s0",
+    "E356.a25_snap_s1",
+    "E356.a15chk_snap_s0"
+   ]
+  },
+  "sp": {
+   "order": {},
+   "run_ids": [
+    "E356.nn_spacing"
+   ]
+  },
+  "l25": {
+   "order": {},
+   "run_ids": [
+    "E356.l25"
+   ]
+  },
+  "l31": {
+   "order": {},
+   "run_ids": [
+    "E356.l31"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a191de578a2c",
+ "started": "2026-11-15T20:59:59",
+ "code_hash": "a191de578a2c",
+ "commit": "8823c22ceb",
+ "tag": "lcr/E356.l25",
+ "git_note": "",
+ "pid": 623477,
+ "pgid": 623477,
+ "pid_start": 17498790,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e353/pbcopy/jprune_b.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e352_blobs.py",
+   "bev_fusion_lane_center/temp/e353/e352_edit31.py",
+   "bev_fusion_lane_center/temp/e353/gate_block.py",
+   "bev_fusion_lane_center/temp/e353/pbcopy/jprune_b.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 416,
+ "attempts": 1,
+ "ended": "2026-11-15T21:07:52",
+ "last_lines": [
+  "e346 self-test ok (47 s, grids 2.5 m): cell-size harness (mutations caught, 3.0 m refused), g0 = 1.000, planted degradations fall, parts by kind, l2 = qgraph_eval.score_frames, collision and link toys",
+  "arm l25: 873 of 873 VAL frames (every 1th, k 0 .. 872)",
+  "   l25: 100/873 frames, 21 s",
+  "   l25: 200/873 frames, 64 s",
+  "   l25: 300/873 frames, 99 s",
+  "   l25: 400/873 frames, 131 s",
+  "   l25: 500/873 frames, 150 s",
+  "   l25: 600/873 frames, 194 s",
+  "   l25: 700/873 frames, 236 s",
+  "   l25: 800/873 frames, 281 s",
+  "card /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e346_l25/val.json",
+  "   topo_F1 0.9656  F1@1.0 0.9953  lanes_found 0.9836  junction_F1 0.9467  vert100 27.0009  vert100_dp 11.4147   (0.345 s per frame)"
+ ]
+}

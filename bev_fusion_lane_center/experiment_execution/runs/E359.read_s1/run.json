@@ -1,0 +1,58 @@
+{
+ "id": "E359.read_s1",
+ "hypothesis": "With a node-type head (long_out, long_in, short_out) and a per-source softmax with a none option, one head on the oracle nodes of the 2.5 m lattice delivers the graph at least half way from the best link rule to the GT links on topo F1 (>= 0.834) and joins the junction links with an F1 of at least 0.75 (the question left open by E357).",
+ "prediction": "topo F1 0.80 (window 0.72 - 0.88), G2 link-level junction F1 0.54 (0.35 - 0.72), type head long_out F1 0.80, oracle-source top-1 0.75; FAIL likeliest (about 55 %), INCONCLUSIVE 35 %, PASS 10 %",
+ "rule": "E359 card section 0 (by hand: oracle-node replay), section-free read-out, decode of record = argmax per source kept at type probability >= 0.5: FAIL first (both seeds g1 < 0.5, or both seeds G2 < 0.50), then PASS (both seeds g1 >= 0.5 AND G2 >= 0.75), else INCONCLUSIVE; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_py14.sh jtok2_eval.py dump --run e359_p2_s1 --seed 1 && bash tools/env/_py14.sh jtok2_eval.py score --run e359_p2_s1 --seed 1 && bash tools/env/_py14.sh jtok2_eval.py diag --run e359_p2_s1 --seed 1 && bash tools/env/_py14.sh jtok2_eval.py dump --run e359_p2_s1 --seed 1 --drop 0.17 --drop-seed 0 && bash tools/env/_py14.sh jtok2_eval.py score --run e359_p2_s1 --seed 1 --drop 0.17 --drop-seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_py14.sh jtok2_eval.py dump --run e359_p2_s1 --seed 1 && bash tools/env/_py14.sh jtok2_eval.py score --run e359_p2_s1 --seed 1 && bash tools/env/_py14.sh jtok2_eval.py diag --run e359_p2_s1 --seed 1 && bash tools/env/_py14.sh jtok2_eval.py dump --run e359_p2_s1 --seed 1 --drop 0.17 --drop-seed 0 && bash tools/env/_py14.sh jtok2_eval.py score --run e359_p2_s1 --seed 1 --drop 0.17 --drop-seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 754441,
+ "created": "2026-11-16T09:56:45",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "code_hash_first": "9d33730f22ae",
+ "started": "2026-11-16T09:57:26",
+ "code_hash": "9d33730f22ae",
+ "commit": "f930e1979c",
+ "tag": "lcr/E359.read_s1",
+ "git_note": "",
+ "pid": 755432,
+ "pgid": 755432,
+ "pid_start": 22163488,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/temp/e358/unused.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 773,
+ "attempts": 1,
+ "ended": "2026-11-16T10:10:43",
+ "last_lines": [
+  "   100/873 frames, 23 s",
+  "   200/873 frames, 60 s",
+  "   300/873 frames, 86 s",
+  "   400/873 frames, 114 s",
+  "   500/873 frames, 132 s",
+  "   600/873 frames, 171 s",
+  "   700/873 frames, 200 s",
+  "   800/873 frames, 231 s",
+  "e359_p2_s1 rec sec0         topo_F1 0.7160  junction_F1 0.2488  lanes_found 0.7084  F1@1.0 0.8734  dup_frac 0.0050  vert100 28.6643  link_junction_P 0.6458  link_junction_R 0.3503  link_junction_F1 0.4542  link_lane_long_F1 0.0022  link_short_F1 0.9832",
+  "e359_p2_s1 rec gtsec        topo_F1 0.7191  junction_F1 0.2739  lanes_found 0.7084  F1@1.0 0.8735  dup_frac 0.0150  vert100 28.6643  link_junction_P 0.6458  link_junction_R 0.3503  link_junction_F1 0.4542  link_lane_long_F1 0.0022  link_short_F1 0.9832",
+  "e359_p2_s1 cond03 sec0      topo_F1 0.7192  junction_F1 0.2761  lanes_found 0.7167  F1@1.0 0.8760  dup_frac 0.0105  vert100 27.6461  link_junction_P 0.6176  link_junction_R 0.3697  link_junction_F1 0.4625  link_lane_long_F1 0.0019  link_short_F1 0.9821",
+  "e359_p2_s1 cond03 gtsec     topo_F1 0.7230  junction_F1 0.3152  lanes_found 0.7167  F1@1.0 0.8761  dup_frac 0.0228  vert100 27.6461  link_junction_P 0.6176  link_junction_R 0.3697  link_junction_F1 0.4625  link_lane_long_F1 0.0019  link_short_F1 0.9821"
+ ]
+}

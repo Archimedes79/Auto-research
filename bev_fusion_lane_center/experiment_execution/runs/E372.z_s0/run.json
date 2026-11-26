@@ -1,0 +1,119 @@
+{
+ "id": "E372.z_s0",
+ "hypothesis": "E372 (card v3.2): one joint fine-tune of the champion head with B''s node head trainable (s4: the head's loss + B''s own node loss, live tokens and labels) keeps the delivered graph's topo F1 and junction F1 within 0.01 of the same live fine-tune with B' frozen (z) and within the E373 guards of the champion read live (ref), on both seeds; b (B on its own loss only) separates 'B trains more' from 'the head's gradient reaches B'.",
+ "prediction": "s4 - z topo F1 -0.003 (window -0.02 to +0.01), junction F1 -0.005; s4 - b about 0; s4 - ref topo F1 -0.005; the update share 0.2 - 0.4; S4-HOLDS about 55 % (S4-GAINS about 10 % inside it), S4-LOSES about 35 %, voided / killed about 10 %",
+ "rule": "E372 card v3.2 section 0 (by hand, written before any run): S4-HOLDS = on both seeds at D115: s4 - z topo F1 and junction F1 not lower by > 0.01; s4 - ref (the champion read live) topo F1 / junction F1 / F1@1.0 >= -0.01, lanes found >= -0.01; the D113 floors; the parity rule passed; B''s node head proven s4's own; the kill did not fire; labels 'in structure only' / 'with moving labels'; S4-GAINS inside it with the credit through b; S4-LOSES otherwise; z and b never adopted; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jlive_train.py --name e372_z_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 0 --steps 3000 --bs 8 --lr 1e-4 --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jlive_train.py",
+  "--name",
+  "e372_z_s0",
+  "--seed",
+  "0",
+  "--head-run",
+  "e373_cb_s0",
+  "--train-nodes",
+  "0",
+  "--steps",
+  "3000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-4",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 288983,
+ "created": "2026-11-18T00:09:30",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E372",
+ "card_sha": "1e495dd078e95dca",
+ "card_arms": {
+  "ref": {
+   "order": {},
+   "run_ids": [
+    "E372.parity_s0",
+    "E372.parity_s1"
+   ]
+  },
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E372.z_s0",
+    "E372.z_s1"
+   ]
+  },
+  "b": {
+   "order": {},
+   "run_ids": [
+    "E372.b_s0",
+    "E372.b_s1"
+   ]
+  },
+  "s4": {
+   "order": {},
+   "run_ids": [
+    "E372.s4_s0",
+    "E372.s4_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "3cf4e75de200",
+ "started": "2026-11-18T00:11:37",
+ "code_hash": "3cf4e75de200",
+ "commit": "482b9d0e8c",
+ "tag": "lcr/E372.z_s0",
+ "git_note": "637 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 290366,
+ "pgid": 290366,
+ "pid_start": 9043716,
+ "code_drift": {
+  "n": 36,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/pmap.py",
+   "bev_fusion_lane_center/temp/_session_scratch_critic_u1/critic_u1_check.py",
+   "bev_fusion_lane_center/temp/_session_scratch_critic_u1/critic_u1_parse.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/patch_qt.py",
+   "bev_fusion_lane_center/temp/_session_scratch_speed/par_cells.py",
+   "bev_fusion_lane_center/temp/e298/start_driven.sh",
+   "bev_fusion_lane_center/temp/e302/start_cap.sh",
+   "bev_fusion_lane_center/temp/e306/start_exact.sh",
+   "bev_fusion_lane_center/temp/e312/start_maps.sh",
+   "bev_fusion_lane_center/temp/e383/read383.sh"
+  ],
+  "n_other": 18
+ },
+ "exit": 0,
+ "duration_s": 1658,
+ "attempts": 1,
+ "ended": "2026-11-18T00:40:53",
+ "last_lines": [
+  "000 gt_class 0.000 scale_l1 0.075 gpu_gb 2.112 gpu_res_gb 2.584 nn_min 0.850 pos_grad_max nan head 0.402 b_loss 1.316 b_e 0.129 b_flags 0.448 b_off 0.466 b_dir 0.017 b_s 0.158 b_u 0.205 b_start 1.495 b_mean 1.509 h_start 0.380 overflow 0.000 pair_cov 0.991 gt_cov 0.980 n_valid 446.049 label_s 0.114 clip_head 1.000 clip_nodes 1.000 upd_head 0.000",
+  "00:37:08 clock: 0.478 s/step over the last 100 steps of this process; over all 2800 steps so far: peak GPU allocated 2.11 GB, reserved 2.58 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 29 of 2527, ylong against the token chord class 0; loss parts nll_s 0.101 nll_l 0.026 ce1 0.233 ce3 0.196 scale_l1 0.090",
+  "00:37:08 step 2800/3000 loss 0.3683 lr 1.22e-06 0.492 s/step nll_s 0.101 nll_l 0.026 ce1 0.233 ce3 0.196 gt_links 2527.000 pos_pairs 2498.000 gt_outside 29.000 gt_class 0.000 scale_l1 0.090 gpu_gb 2.112 gpu_res_gb 2.584 nn_min 0.758 pos_grad_max nan head 0.386 b_loss 1.375 b_e 0.120 b_flags 0.515 b_off 0.442 b_dir 0.065 b_s 0.156 b_u 0.222 b_start 1.495 b_mean 1.508 h_start 0.380 overflow 0.000 pair_cov 0.992 gt_cov 0.981 n_valid 434.439 label_s 0.120 clip_head 1.000 clip_nodes 1.000 upd_head 0.000",
+  "00:37:55 clock: 0.474 s/step over the last 100 steps of this process; over all 2900 steps so far: peak GPU allocated 2.11 GB, reserved 2.58 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 30 of 2671, ylong against the token chord class 0; loss parts nll_s 0.125 nll_l 0.022 ce1 0.249 ce3 0.219 scale_l1 0.078",
+  "00:37:55 step 2900/3000 loss 0.3723 lr 3.10e-07 0.491 s/step nll_s 0.125 nll_l 0.022 ce1 0.249 ce3 0.219 gt_links 2671.000 pos_pairs 2641.000 gt_outside 30.000 gt_class 0.000 scale_l1 0.078 gpu_gb 2.112 gpu_res_gb 2.584 nn_min 0.775 pos_grad_max nan head 0.420 b_loss 1.513 b_e 0.123 b_flags 0.585 b_off 0.471 b_dir 0.045 b_s 0.209 b_u 0.250 b_start 1.495 b_mean 1.480 h_start 0.380 overflow 0.000 pair_cov 0.991 gt_cov 0.981 n_valid 446.974 label_s 0.116 clip_head 1.000 clip_nodes 1.000 upd_head 0.000",
+  "00:38:45 clock: 0.495 s/step over the last 100 steps of this process; over all 3000 steps so far: peak GPU allocated 2.11 GB, reserved 2.58 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 25 of 2686, ylong against the token chord class 0; loss parts nll_s 0.080 nll_l 0.026 ce1 0.198 ce3 0.160 scale_l1 0.057",
+  "00:38:45 step 3000/3000 loss 0.3735 lr 3.04e-11 0.491 s/step nll_s 0.080 nll_l 0.026 ce1 0.198 ce3 0.160 gt_links 2686.000 pos_pairs 2661.000 gt_outside 25.000 gt_class 0.000 scale_l1 0.057 gpu_gb 2.112 gpu_res_gb 2.584 nn_min 0.803 pos_grad_max nan head 0.314 b_loss 1.239 b_e 0.120 b_flags 0.450 b_off 0.432 b_dir 0.018 b_s 0.142 b_u 0.191 b_start 1.495 b_mean 1.474 h_start 0.380 overflow 0.000 pair_cov 0.991 gt_cov 0.981 n_valid 446.961 label_s 0.128 clip_head 1.000 clip_nodes 1.000 upd_head 0.000",
+  "00:38:46 done 3000",
+  "00:38:48 done e372_z_s0: model.pt holds the head and B' (b_state), read back and checked"
+ ]
+}

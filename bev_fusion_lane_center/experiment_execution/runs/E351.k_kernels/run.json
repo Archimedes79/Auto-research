@@ -1,0 +1,61 @@
+{
+ "id": "E351.k_kernels",
+ "hypothesis": "E351 step 1: how many CUDA launches, memcopies and syncs each stage and each section of the pair head of one forward costs (E312, E341, E324 s, E348)",
+ "prediction": "the pair head and the attachment hold about 40 % of the ~600 / 860 launches; the sync count is concentrated in the rank matrix",
+ "rule": "by hand: measured, a count",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh jtiming.py kernels --tag e351_kernels_20261115",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "jtiming.py",
+  "kernels",
+  "--tag",
+  "e351_kernels_20261115"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 485710,
+ "created": "2026-11-15T09:02:17",
+ "status": "failed",
+ "after": "",
+ "timeout_min": 20.0,
+ "code_hash_first": "b7d56d162f90",
+ "started": "2026-11-15T09:02:47",
+ "code_hash": "b7d56d162f90",
+ "commit": "870b95eb7d",
+ "tag": "lcr/E351.k_kernels",
+ "git_note": "",
+ "pid": 485996,
+ "pgid": 485996,
+ "pid_start": 13195592,
+ "code_drift": {
+  "n": 25,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e347/chain3.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/evaluation/jend_grid_stats.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/evaluation/jmaps_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/evaluation/jmodel_cost.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/training/data/lane_gt_data.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/training/grid/jends.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/training/grid/jgt.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/training/grid/jmaps.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/training/grid/qjunction.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/mut/m10_focal_norm/training/grid/test_jmaps_r2.py"
+  ]
+ },
+ "exit": 1,
+ "duration_s": 51,
+ "attempts": 1,
+ "ended": "2026-11-15T09:04:04",
+ "last_lines": [
+  "=== attempt 2026-11-15T09:02:47: bash tools/env/_py14.sh jtiming.py kernels --tag e351_kernels_20261115",
+  "_py14.sh: evaluation/jtiming.py",
+  "STOP: the GPU is not idle ({'util_max': 6.0, 'mem_mib': 805.0, 'temp_c': 50.2, 'sm_clock_mhz': 231.0})"
+ ]
+}

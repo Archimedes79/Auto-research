@@ -1,0 +1,123 @@
+{
+ "id": "E356.a25_snap_s0",
+ "hypothesis": "E356 (card experiments/E356_node-spacing, section 0): E356.a25_snap_s0",
+ "prediction": "E356 card section 1 (prediction with hit windows): radius 2.0: E324 s snapped topo F1 -0.002 (window -0.006 .. +0.002), vert100_dp -0.3 (window -1.0 .. 0.0); radius 2.5: -0.010 (window -0.025 .. -0.002), vert100_dp -1.5 (window -3.0 .. -0.5); l25 topo F1 -0.030 against g1 (window -0.045 .. -0.020), l31 -0.045 (window -0.065 .. -0.030)",
+ "rule": "E356 card section 0 (by hand: replay of the cards, temp/e356/e356_table.py): a radius is taken when topo F1 loses at most 0.01 on both seeds and all four numbers sets with the guards held AND vert100_dp of E324 s snapped falls by at least 0.5 (mean of the seeds); part B: the E346 rule (loss against g1 at most 0.03 on topo F1, lanes found, F1@1.0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "nice -n 19 bash tools/env/_py14.sh jends_eval.py score --run e324_s_s0 --seed 0 --spec close:2.5@0.5 --tag c25 --snap --thr 0.1",
+ "argv": [
+  "nice",
+  "-n",
+  "19",
+  "bash",
+  "tools/env/_py14.sh",
+  "jends_eval.py",
+  "score",
+  "--run",
+  "e324_s_s0",
+  "--seed",
+  "0",
+  "--spec",
+  "close:2.5@0.5",
+  "--tag",
+  "c25",
+  "--snap",
+  "--thr",
+  "0.1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 617749,
+ "created": "2026-11-15T20:24:29",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E356",
+ "card_sha": "8cf4c1fd1f259a29",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "a20": {
+   "order": {},
+   "run_ids": [
+    "E356.a20_snap_s0",
+    "E356.a20_snap_s1"
+   ]
+  },
+  "a25": {
+   "order": {},
+   "run_ids": [
+    "E356.a25_snap_s0",
+    "E356.a25_snap_s1",
+    "E356.a15chk_snap_s0"
+   ]
+  },
+  "sp": {
+   "order": {},
+   "run_ids": [
+    "E356.nn_spacing"
+   ]
+  },
+  "l25": {
+   "order": {},
+   "run_ids": [
+    "E356.l25"
+   ]
+  },
+  "l31": {
+   "order": {},
+   "run_ids": [
+    "E356.l31"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "363e00ab4fa4",
+ "started": "2026-11-15T20:25:36",
+ "code_hash": "363e00ab4fa4",
+ "commit": "d7ea5cca68",
+ "tag": "lcr/E356.a25_snap_s0",
+ "git_note": "",
+ "pid": 618143,
+ "pgid": 618143,
+ "pid_start": 17292490,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py",
+   "bev_fusion_lane_center/temp/e357/e357_dbg_tmp.py",
+   "bev_fusion_lane_center/temp/e357/e357_run_tmp.sh",
+   "bev_fusion_lane_center/training/data/lane_tok_data.py",
+   "bev_fusion_lane_center/training/grid/test_jtok.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 363,
+ "attempts": 1,
+ "ended": "2026-11-15T20:33:39",
+ "last_lines": [
+  "=== attempt 2026-11-15T20:25:36: nice -n 19 bash tools/env/_py14.sh jends_eval.py score --run e324_s_s0 --seed 0 --spec close:2.5@0.5 --tag c25 --snap --thr 0.1",
+  "_py14.sh: evaluation/jends_eval.py",
+  "pyramid of the maps run == the base run's: True (False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')",
+  "  scored 200/873  58 s",
+  "  scored 400/873  113 s",
+  "  scored 600/873  157 s",
+  "  scored 800/873  229 s",
+  "                           Q      F1@1.0 lanes_found     topo_F1      topo_P      topo_R junction_F1  junction_P  junction_R    dup_frac  vert100_dp",
+  "base                  0.3957      0.3993      0.1600      0.1603      0.6473      0.0915      0.1520      0.4562      0.0912      0.2347     22.5398",
+  "head                  0.5565      0.6210      0.3892      0.3244      0.7059      0.2106      0.3041      0.4350      0.2337      0.2376     19.5131",
+  "difference           +0.1608     +0.2217     +0.2293     +0.1641     +0.0586     +0.1191     +0.1520     -0.0212     +0.1425     +0.0029     -3.0266",
+  "curves 11729 (wired at both ends 684); the rule of D79 holds for this seed: True {'topo_F1': True, 'F1_1': True, 'dup_frac': True, 'vert100_dp': True, 'junction_F1': True}"
+ ]
+}

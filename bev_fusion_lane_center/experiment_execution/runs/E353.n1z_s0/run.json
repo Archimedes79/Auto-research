@@ -1,0 +1,103 @@
+{
+ "id": "E353.n1z_s0",
+ "hypothesis": "E353 (card experiments/E353_paint-branch-width-25, section 0): E353.n1z_s0",
+ "prediction": "E353 card section 1 (prediction with hit windows): snapped topo F1 of n1 minus c -0.002, PRIMARY -0.002, attach-only -0.003; cp minus c +0.001; n1z (no fine-tune) -0.004 snapped",
+ "rule": "E353 card section 0 (by hand: replay with jrule_removal.py against c = E324 s of the same seed and against cp = the continuation): ADOPT when the topo F1 loss is at most 0.01 on both seeds and all three read-outs with the guards held, against c and against cp",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env CUDA_VISIBLE_DEVICES= BFLC_SIG=1.0 bash tools/env/_py14.sh jnarrow_train.py --name e353_n1z_s0 --init runs/e324_s_s0/model.pt --seed 0 --narrow experiments/E353_paint-branch-width-25/spec_n1_s0.json --steps 0 --e2e --scales --maps-w 1.0 --geom-w 0.5 --attach --workers 2",
+ "argv": [
+  "env",
+  "CUDA_VISIBLE_DEVICES=",
+  "BFLC_SIG=1.0",
+  "bash",
+  "tools/env/_py14.sh",
+  "jnarrow_train.py",
+  "--name",
+  "e353_n1z_s0",
+  "--init",
+  "runs/e324_s_s0/model.pt",
+  "--seed",
+  "0",
+  "--narrow",
+  "experiments/E353_paint-branch-width-25/spec_n1_s0.json",
+  "--steps",
+  "0",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--geom-w",
+  "0.5",
+  "--attach",
+  "--workers",
+  "2"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 590993,
+ "created": "2026-11-15T17:29:01",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 240.0,
+ "card_id": "E353",
+ "card_sha": "a9525141bb246156",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "cp": {
+   "order": {},
+   "run_ids": [
+    "E353.cp_s0",
+    "E353.cp_s1"
+   ]
+  },
+  "n1": {
+   "order": {},
+   "run_ids": [
+    "E353.n1_s0",
+    "E353.n1_s1",
+    "E353.n1z_s0",
+    "E353.n1z_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a68148636f61",
+ "started": "2026-11-15T17:29:34",
+ "code_hash": "a68148636f61",
+ "commit": "7d7614f70a",
+ "tag": "lcr/E353.n1z_s0",
+ "git_note": "",
+ "pid": 591806,
+ "pgid": 591806,
+ "pid_start": 16236242,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jprune_b.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 76,
+ "attempts": 1,
+ "ended": "2026-11-15T17:31:16",
+ "last_lines": [
+  "=== attempt 2026-11-15T17:29:34: env CUDA_VISIBLE_DEVICES= BFLC_SIG=1.0 bash tools/env/_py14.sh jnarrow_train.py --name e353_n1z_s0 --init runs/e324_s_s0/model.pt --seed 0 --narrow experiments/E353_paint-branch-width-25/spec_n1_s0.json --steps 0 --e2e --scales --maps-w 1.0 --geom-w 0.5 --attach --workers 2",
+  "_py14.sh: training/train/jnarrow_train.py",
+  "17:30:31 jnarrow init e324_s_s0 narrow [('jm.m05.2', 24)]: 0 steps, lr 0.0003, trainable 0.517 M of 2.713 M, e2e, geom_w 0.5, attach True",
+  "17:30:31 measured GMACs per frame (FlopCounterMode, batch 1; init -> this run): pyr 4.6768 -> 4.6768 maps 3.2563 -> 2.1504 pair 0.0256 -> 0.0256 total 8.2016 -> 7.0957, saved 1.1059",
+  "17:30:47 done 0",
+  "17:30:47 done e353_n1z_s0"
+ ]
+}

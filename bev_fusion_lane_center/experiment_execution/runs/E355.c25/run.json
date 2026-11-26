@@ -1,0 +1,113 @@
+{
+ "id": "E355.c25",
+ "hypothesis": "E355 step 0 (card experiments/E355_one-token-set-design, section 0): GT replay through B's node + link code, VAL 873 frames, scored against the old graph GT: c25 = the dense code on the 2.5 m lattice with every node position at its cell centre (no merge)",
+ "prediction": "loses 0.02 - 0.06 F1@1.0 against l25",
+ "rule": "by hand: GT replay. An arm PASSES the bar when it loses at most 0.03 against g1 on topo F1, lanes found and F1@1.0; X2 / spacing / lattice readings: card section 0 (report: e346_arm.py report355)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh e346_arm.py c25",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "e346_arm.py",
+  "c25"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 666657,
+ "created": "2026-11-16T01:23:43",
+ "status": "ok",
+ "after": "E355.m25",
+ "timeout_min": 120.0,
+ "card_id": "E355",
+ "card_sha": "7b6df56984c5ff1e",
+ "card_arms": {
+  "g1": {
+   "order": {}
+  },
+  "s25": {
+   "order": {},
+   "run_ids": [
+    "E355.s25"
+   ]
+  },
+  "s31": {
+   "order": {},
+   "run_ids": [
+    "E355.s31"
+   ]
+  },
+  "v20": {
+   "order": {},
+   "run_ids": [
+    "E355.v20"
+   ]
+  },
+  "v25": {
+   "order": {},
+   "run_ids": [
+    "E355.v25"
+   ]
+  },
+  "v31": {
+   "order": {},
+   "run_ids": [
+    "E355.v31"
+   ]
+  },
+  "m20": {
+   "order": {},
+   "run_ids": [
+    "E355.m20"
+   ]
+  },
+  "m25": {
+   "order": {},
+   "run_ids": [
+    "E355.m25"
+   ]
+  },
+  "c25": {
+   "order": {},
+   "run_ids": [
+    "E355.c25"
+   ]
+  },
+  "": {
+   "seeds": [
+    0
+   ]
+  }
+ },
+ "code_hash_first": "8c4ef96eecc5",
+ "started": "2026-11-16T02:22:48",
+ "code_hash": "8c4ef96eecc5",
+ "commit": "c131147475",
+ "tag": "lcr/E355.c25",
+ "git_note": "",
+ "pid": 693756,
+ "pgid": 693756,
+ "pid_start": 19435611,
+ "exit": 0,
+ "duration_s": 291,
+ "attempts": 1,
+ "ended": "2026-11-16T02:27:46",
+ "last_lines": [
+  "e346 self-test ok (43 s, grids 2.5 m): cell-size harness (mutations caught, 3.0 m refused), g0 = 1.000, planted degradations fall, parts by kind, l2 = qgraph_eval.score_frames, collision and link toys, E355: merge toys, suppression off / sparse / cell centres / merge on the toy lanes, wanted-but-lost by hand, arm c25's own predictions",
+  "arm c25: 873 of 873 VAL frames (every 1th, k 0 .. 872)",
+  "   c25: 100/873 frames, 16 s",
+  "   c25: 200/873 frames, 45 s",
+  "   c25: 300/873 frames, 68 s",
+  "   c25: 400/873 frames, 90 s",
+  "   c25: 500/873 frames, 102 s",
+  "   c25: 600/873 frames, 133 s",
+  "   c25: 700/873 frames, 159 s",
+  "   c25: 800/873 frames, 187 s",
+  "card /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e355_c25/val.json",
+  "   topo_F1 0.7744  F1@1.0 0.8699  lanes_found 0.8346  junction_F1 0.9441  vert100 25.8560  vert100_dp 17.4370   (0.229 s per frame)"
+ ]
+}

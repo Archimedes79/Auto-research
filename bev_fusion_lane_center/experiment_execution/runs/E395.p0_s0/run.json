@@ -1,0 +1,190 @@
+{
+ "id": "E395.p0_s0",
+ "hypothesis": "E395 (D142): Catmull-Rom curves through the nodes. Step 1 (no training, CPU, through run.py): the delivered links of the stage-1 controls c and r2 (and of the S4 champion) drawn as straight chords, uniform or centripetal Catmull-Rom curves through the delivered nodes (ghost nodes from the delivered neighbours, reflection at the ends), or Catmull-Rom for the short links and the Hermite connector for the long ones, against the Hermite connectors of the record; plus ORACLE node positions (every delivered token with a GT node moved onto that GT node's line, and onto the node) as the measured headroom for matched nodes. Step 2 (stage 1 on the cached K 512 tokens, the E373 recipe): a position head on the token head (a normal offset per node, zero start) trained with a loss on the Catmull-Rom curve through the GT-matched nodes (p0), with a node-level loss (p0n, the control of the curve loss), with the E392 message rounds (p2); step 3 (gated, section 1.5): soft neighbours for the ghost nodes of the curve loss (p2s). Read with the standard scorer at the D115 cell, VAL 873: the SAME dump with the nodes unmoved and moved (the primary contrast), Hermite connectors",
+ "prediction": "0.03 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"F1@0.5\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"min_effect\":0.0},{\"metric\":\"topo_F1\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: VERDICT BY HAND per section 1.3 (`jcr_eval.py verdict`); the JSON rule above is only what the tools register. CUT kills (verdict CUT, on any seed): the offsets saturate (more than half of the valid tokens at the 3 m cap in the step-2000 row: the trainer's log field `dpos_cap` > 0.5); the refined nodes are WORSE than the unmoved tokens on VAL (the mean absolute lateral error of the delivered matched tokens after the head above the one before it by more than 0.01 m, `jcr_eval.py nodeerr`; the mean and not the rms, because the loss is a smooth L1 and the rms follows outliers). INCONCLUSIVE kills (a diagnosis, no verdict; the names for `--flags`: nonfinite, no_learning, notparity, notfinished, tests): a loss is not finite (nonfinite); no learning (no_learning: the position loss of the arm, `curve` or `node` of the log rows, the mean of the rows at steps 1900 and 2000 not below 0.95 x the mean of the rows at steps 100 and 200; the trainer logs a row every 100 steps and the card names the columns `curve` / `node`: a weak clause, the head sees only cached features and part of the 0.48 m error is shared and not learnable from them); the `jarm --curve` fingerprint stops the arm (notparity); a started run does not finish (notfinished); the unit tests of section 2 fail (tests). The CUT kill 'saturate' is also a flag name. STOP (nothing is read): step 1 does not reproduce the record (mode H of the real run must equal the stored D115 card of the run within 1e-4 in topo F1, F1@0.5, F1@1.0, lanes found and junction F1; `jcr_eval.py` asserts it; the selftest asserts the `curves` path with the Hermite curves given explicitly on a toy frame)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_train.py --name e395_p0_s0 --seed 0 --head-seed 2 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 --none-weight 0.25 --pos-head --curve-w 0.5",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_train.py --name e395_p0_s0 --seed 0 --head-seed 2 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 --none-weight 0.25 --pos-head --curve-w 0.5"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 172,
+ "created": "2026-11-24T02:24:47",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E395",
+ "card_sha": "c33831f3d6c33605",
+ "card_arms": {
+  "step1": {
+   "order": {},
+   "run_ids": [
+    "E395.step1_c_s0",
+    "E395.step1_c_s1",
+    "E395.step1_r2_s0",
+    "E395.step1_r2_s1",
+    "E395.step1_s4_s0",
+    "E395.step1_s4_s1",
+    "E395.verdict_step1_c",
+    "E395.verdict_step1_r2",
+    "E395.verdict_step1_s4"
+   ]
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E395.score_c_s0",
+    "E395.score_c_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E395.score_r2_s0",
+    "E395.score_r2_s1"
+   ]
+  },
+  "p0": {
+   "order": {},
+   "run_ids": [
+    "E395.p0_s0",
+    "E395.dump_val_p0_s0",
+    "E395.dump_train_p0_s0",
+    "E395.sweep_p0_s0",
+    "E395.choose_p0_s0",
+    "E395.cell_vs_p0_s0",
+    "E395.d115_vs_p0_s0",
+    "E395.score_p0_s0",
+    "E395.nodeerr_p0_s0",
+    "E395.p0_s1",
+    "E395.dump_val_p0_s1",
+    "E395.dump_train_p0_s1",
+    "E395.sweep_p0_s1",
+    "E395.choose_p0_s1",
+    "E395.cell_vs_p0_s1",
+    "E395.d115_vs_p0_s1",
+    "E395.score_p0_s1",
+    "E395.nodeerr_p0_s1",
+    "E395.verdict_p0"
+   ]
+  },
+  "p0n": {
+   "order": {},
+   "run_ids": [
+    "E395.p0n_s0",
+    "E395.dump_val_p0n_s0",
+    "E395.dump_train_p0n_s0",
+    "E395.sweep_p0n_s0",
+    "E395.choose_p0n_s0",
+    "E395.cell_vs_p0n_s0",
+    "E395.d115_vs_p0n_s0",
+    "E395.score_p0n_s0",
+    "E395.nodeerr_p0n_s0",
+    "E395.p0n_s1",
+    "E395.dump_val_p0n_s1",
+    "E395.dump_train_p0n_s1",
+    "E395.sweep_p0n_s1",
+    "E395.choose_p0n_s1",
+    "E395.cell_vs_p0n_s1",
+    "E395.d115_vs_p0n_s1",
+    "E395.score_p0n_s1",
+    "E395.nodeerr_p0n_s1",
+    "E395.verdict_p0n",
+    "E395.verdict_diag"
+   ]
+  },
+  "p2": {
+   "order": {},
+   "run_ids": [
+    "E395.p2_s0",
+    "E395.dump_val_p2_s0",
+    "E395.dump_train_p2_s0",
+    "E395.sweep_p2_s0",
+    "E395.choose_p2_s0",
+    "E395.cell_vs_p2_s0",
+    "E395.d115_vs_p2_s0",
+    "E395.score_p2_s0",
+    "E395.nodeerr_p2_s0",
+    "E395.p2_s1",
+    "E395.dump_val_p2_s1",
+    "E395.dump_train_p2_s1",
+    "E395.sweep_p2_s1",
+    "E395.choose_p2_s1",
+    "E395.cell_vs_p2_s1",
+    "E395.d115_vs_p2_s1",
+    "E395.score_p2_s1",
+    "E395.nodeerr_p2_s1",
+    "E395.verdict_p2"
+   ]
+  },
+  "p2s": {
+   "order": {},
+   "run_ids": [
+    "E395.p2s_s0",
+    "E395.dump_val_p2s_s0",
+    "E395.dump_train_p2s_s0",
+    "E395.sweep_p2s_s0",
+    "E395.choose_p2s_s0",
+    "E395.cell_vs_p2s_s0",
+    "E395.d115_vs_p2s_s0",
+    "E395.score_p2s_s0",
+    "E395.nodeerr_p2s_s0",
+    "E395.p2s_s1",
+    "E395.dump_val_p2s_s1",
+    "E395.dump_train_p2s_s1",
+    "E395.sweep_p2s_s1",
+    "E395.choose_p2s_s1",
+    "E395.cell_vs_p2s_s1",
+    "E395.d115_vs_p2s_s1",
+    "E395.score_p2s_s1",
+    "E395.nodeerr_p2s_s1",
+    "E395.verdict_p2s"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "874d9256de1c",
+ "started": "2026-11-24T02:25:27",
+ "code_hash": "874d9256de1c",
+ "commit": "8b1cfa088c",
+ "tag": "lcr/E395.p0_s0",
+ "git_note": "",
+ "pid": 313,
+ "pgid": 313,
+ "pid_start": 1159529,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/tools/maintenance/run_gates.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2570,
+ "attempts": 1,
+ "ended": "2026-11-24T03:08:24",
+ "last_lines": [
+  "step 11700/12000 loss 0.4059 lr 1.72e-06 0.213 s/step nll_s 0.098 nll_l 0.027 ce1 0.254 ce3 0.218 gt_links 2217.000 pos_pairs 2198.000 gt_outside 19.000 gt_class 0.000 curve 0.074 node 0.097 n_curve 4715.000 n_gl 1276.000 n_links 1262.000 n_excl 319.000 dpos_abs 0.223 dpos_cap 0.000 scale_l1 0.093 gpu_gb 2.137 gpu_res_gb 2.286",
+  "03:07:32 clock: 0.214 s/step over the last 100 steps of this process; over all 11800 steps so far: peak GPU allocated 2.14 GB, reserved 2.29 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 13 of 2599, ylong against the token chord class 0; loss parts nll_s 0.068 nll_l 0.019 ce1 0.196 ce3 0.162 scale_l1 0.089; position head (E395) curve 0.0607 node 0.0840 (link samples 5605, GT links 1453, with both nodes present 1433, of which left out by the chord rule 312), mean |dpos| 0.267 m, at the cap 0.000",
+  "03:07:32 step 11800/12000 loss 0.4192 lr 7.67e-07 0.213 s/step nll_s 0.068 nll_l 0.019 ce1 0.196 ce3 0.162 gt_links 2599.000 pos_pairs 2586.000 gt_outside 13.000 gt_class 0.000 curve 0.061 node 0.084 n_curve 5605.000 n_gl 1453.000 n_links 1433.000 n_excl 312.000 dpos_abs 0.267 dpos_cap 0.000 scale_l1 0.089 gpu_gb 2.137 gpu_res_gb 2.286",
+  "03:07:54 clock: 0.217 s/step over the last 100 steps of this process; over all 11900 steps so far: peak GPU allocated 2.14 GB, reserved 2.29 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 32 of 2971, ylong against the token chord class 0; loss parts nll_s 0.093 nll_l 0.025 ce1 0.250 ce3 0.210 scale_l1 0.083; position head (E395) curve 0.0724 node 0.0867 (link samples 6425, GT links 1625, with both nodes present 1581, of which left out by the chord rule 296), mean |dpos| 0.250 m, at the cap 0.000",
+  "03:07:54 step 11900/12000 loss 0.4219 lr 1.94e-07 0.213 s/step nll_s 0.093 nll_l 0.025 ce1 0.250 ce3 0.210 gt_links 2971.000 pos_pairs 2939.000 gt_outside 32.000 gt_class 0.000 curve 0.072 node 0.087 n_curve 6425.000 n_gl 1625.000 n_links 1581.000 n_excl 296.000 dpos_abs 0.250 dpos_cap 0.000 scale_l1 0.083 gpu_gb 2.137 gpu_res_gb 2.286",
+  "03:08:15 clock: 0.217 s/step over the last 100 steps of this process; over all 12000 steps so far: peak GPU allocated 2.14 GB, reserved 2.29 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 25 of 2429, ylong against the token chord class 0; loss parts nll_s 0.112 nll_l 0.024 ce1 0.233 ce3 0.203 scale_l1 0.075; position head (E395) curve 0.0829 node 0.1058 (link samples 4920, GT links 1368, with both nodes present 1300, of which left out by the chord rule 316), mean |dpos| 0.286 m, at the cap 0.000",
+  "03:08:16 step 12000/12000 loss 0.3987 lr 1.90e-11 0.213 s/step nll_s 0.112 nll_l 0.024 ce1 0.233 ce3 0.203 gt_links 2429.000 pos_pairs 2404.000 gt_outside 25.000 gt_class 0.000 curve 0.083 node 0.106 n_curve 4920.000 n_gl 1368.000 n_links 1300.000 n_excl 316.000 dpos_abs 0.286 dpos_cap 0.000 scale_l1 0.075 gpu_gb 2.137 gpu_res_gb 2.286",
+  "03:08:16 done 12000",
+  "03:08:16 done e395_p0_s0"
+ ]
+}

@@ -1,0 +1,55 @@
+{
+ "id": "E376.dump_mx_s1",
+ "hypothesis": "E376 (card v2): a max-positive likelihood (-log max over the in-class GT successor group instead of -log of its sum, both classes) on the champion recipe (E365 head, none weight 0.25, 12000 steps) concentrates the successor mass on one token, removes fan-out and raises the junction F1 by >= 0.03 against the champion at the D115 cell without losing the topo score.",
+ "prediction": "junction F1 mx - ref +0.010 at the (b) cell (window -0.030 to +0.040), junction P up and R down, topo F1 within +-0.005, links per source above 0.3 from about 1.3 to about 1.0; ADOPT-LOSS about 15 %, ADOPT-SIMPLER about 35 %, NO about 45 %, INCONCLUSIVE about 5 %",
+ "rule": "E376 card v2 section 0 (by hand, written before any run): ADOPT-LOSS on both seeds at the (b) cell (own TRAIN-chosen per-class cell by the E375 rule): junction F1 >= ref (champion at D115) + 0.03 with the paired 95 % interval above 0, topo F1 / F1@1.0 not lower by > 0.005, lanes found not lower by > 0.010, dup_frac not above ref by > 0.010, D113 floors and E373 tie conditions hold, kill not fired; ADOPT-SIMPLER at the (d) cell (one link threshold); NO otherwise; INCONCLUSIVE when the seeds disagree in sign with both |d| >= 0.03; early stop on seed 0; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e376_mx_s1 --seed 1 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e376_mx_s1 --seed 1 --split train --every 3",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e376_mx_s1 --seed 1 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e376_mx_s1 --seed 1 --split train --every 3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 186205,
+ "created": "2026-11-17T15:13:25",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "8c283de69eb5",
+ "started": "2026-11-17T15:19:43",
+ "code_hash": "8c283de69eb5",
+ "commit": "30a0a11751",
+ "tag": "lcr/E376.dump_mx_s1",
+ "git_note": "480 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 188076,
+ "pgid": 188076,
+ "pid_start": 5852320,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/day1/day.sh",
+   "bev_fusion_lane_center/temp/e304/start_far.sh",
+   "bev_fusion_lane_center/temp/e377/choose377.py",
+   "bev_fusion_lane_center/temp/e377/ctl_mb.sh",
+   "bev_fusion_lane_center/training/data/lane_live_tok.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 221,
+ "attempts": 1,
+ "ended": "2026-11-17T15:24:19",
+ "last_lines": [
+  "=== attempt 2026-11-17T15:19:43: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e376_mx_s1 --seed 1 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e376_mx_s1 --seed 1 --split train --every 3",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e376_mx_s1/token_val.pkl: 873 frames, kept nodes per frame 200.3, links per frame rec 186.0 argmax 182.5, device cuda",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e376_mx_s1/token_train_every3.pkl: 291 frames, kept nodes per frame 203.2, links per frame rec 189.7 argmax 186.3, device cuda"
+ ]
+}

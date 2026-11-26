@@ -1,0 +1,97 @@
+{
+ "id": "E346.g1",
+ "hypothesis": "E346 control: the undecoded lane GT polylines (edges = succ) scored against the old graph GT",
+ "prediction": "topo_F1 0.985 (31-frame hand check), F1@1.0 and lanes found about 1.000",
+ "rule": "no rule of its own: the control of l2 / l1 (the part of the loss that is the difference of the two ground truths)",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash tools/env/_py14.sh e346_arm.py g1",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "e346_arm.py",
+  "g1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 476986,
+ "created": "2026-11-15T08:29:03",
+ "status": "ok",
+ "after": "E346.g0",
+ "timeout_min": 90.0,
+ "card_id": "E346",
+ "card_sha": "f132625527163c2e",
+ "card_arms": {
+  "g0": {
+   "order": {},
+   "run_ids": [
+    "E346.g0"
+   ]
+  },
+  "g1": {
+   "order": {},
+   "run_ids": [
+    "E346.g1"
+   ]
+  },
+  "l2": {
+   "order": {},
+   "run_ids": [
+    "E346.l2"
+   ]
+  },
+  "l1": {
+   "order": {},
+   "run_ids": [
+    "E346.l1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0
+   ]
+  }
+ },
+ "code_hash_first": "f7d8db6a8730",
+ "started": "2026-11-15T08:33:18",
+ "code_hash": "f7d8db6a8730",
+ "commit": "d51415d7ba",
+ "tag": "lcr/E346.g1",
+ "git_note": "",
+ "pid": 478091,
+ "pgid": 478091,
+ "pid_start": 13018655,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e347/control/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/stage/training/grid/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit22.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit23.py",
+   "bev_fusion_lane_center/temp/jr/build_total_report.py",
+   "bev_fusion_lane_center/temp/jr/patch_total_5.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 144,
+ "attempts": 1,
+ "ended": "2026-11-15T08:36:12",
+ "last_lines": [
+  "e346 self-test ok (25 s): cell-size harness (mutations caught), g0 = 1.000, planted degradations fall, parts by kind, l2 = qgraph_eval.score_frames, collision and link toys",
+  "arm g1: 873 of 873 VAL frames (every 1th, k 0 .. 872)",
+  "   g1: 100/873 frames, 6 s",
+  "   g1: 200/873 frames, 17 s",
+  "   g1: 300/873 frames, 26 s",
+  "   g1: 400/873 frames, 34 s",
+  "   g1: 500/873 frames, 39 s",
+  "   g1: 600/873 frames, 49 s",
+  "   g1: 700/873 frames, 59 s",
+  "   g1: 800/873 frames, 70 s",
+  "card /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e346_g1/val.json",
+  "   topo_F1 0.9858  F1@1.0 1.0000  lanes_found 1.0000  junction_F1 0.9995  vert100 10.3334  vert100_dp 10.3334   (0.086 s per frame)"
+ ]
+}

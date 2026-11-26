@@ -1,0 +1,99 @@
+{
+ "id": "E361.p3_s1",
+ "hypothesis": "E359 with 3.3 times the training steps (10000 instead of 3000): the failure of the node-type head and the per-source softmax on the oracle nodes of the 2.5 m lattice (FAIL, g1 0.267 / 0.232) was undertraining: the head reaches at least half of the gap to the GT links on topo F1 (>= 0.834) and an F1 of at least 0.75 on the junction links.",
+ "prediction": "topo F1 0.80 (window 0.77 - 0.85) against E359's 0.77, g1 about 0.37 (0.25 - 0.55), G2 0.60 (0.50 - 0.76), type long_out recall 0.70 (0.62 - 0.80), oracle-source top-1 0.82 (0.77 - 0.90); FAIL likeliest (about 65 %), INCONCLUSIVE 30 %, PASS 5 %",
+ "rule": "E361 card section 0 (by hand: oracle-node replay), section-free read-out, decode of record = argmax per source kept at type probability >= 0.5: FAIL first (both seeds g1 < 0.5, or both seeds G2 < 0.50), then PASS (both seeds g1 >= 0.5 AND G2 >= 0.75), else INCONCLUSIVE; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jtok2_train.py --name e361_p3_s1 --seed 1 --lattice 2.5 --steps 10000 --bs 8 --lr 1e-3 --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jtok2_train.py",
+  "--name",
+  "e361_p3_s1",
+  "--seed",
+  "1",
+  "--lattice",
+  "2.5",
+  "--steps",
+  "10000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 774840,
+ "created": "2026-11-16T12:08:12",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 21.0,
+ "attempts_before": 1,
+ "card_id": "E361",
+ "card_sha": "71909508048b243e",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "p3": {
+   "order": {},
+   "run_ids": [
+    "E361.p3_s0",
+    "E361.p3_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "6bf5dc65c608",
+ "started": "2026-11-16T12:09:46",
+ "code_hash": "9c6fdfbe8d83",
+ "commit": "2405184648",
+ "tag": "lcr/E361.p3_s1",
+ "git_note": "tag existed (resume): tag lcr/E361.p3_s1 is attempt 1 (43cfc39af5), this attempt ran 2405184648",
+ "pid": 775740,
+ "pgid": 775740,
+ "pid_start": 22957445,
+ "code_drift": {
+  "n": 7,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jwire_check.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e358/mut_bs/jwire_check.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/mut_bs.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_card358e.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_check_bs.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/patch_check_bs2.py",
+   "bev_fusion_lane_center/temp/e358/start_live8.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 354,
+ "attempts": 1,
+ "ended": "2026-11-16T12:16:08",
+ "last_lines": [
+  "12:14:53 clock: 0.090 s/step over the last 100 steps of this process; over all 2100 steps so far: peak GPU allocated 2.22 GB, reserved 5.77 GB, largest frame 371 nodes (memory grows with the square of it: a later batch can exceed this peak); GT links outside the gate in this batch 1 of 1124; loss parts nll_s 0.014 nll_l 0.044 bce_in 0.033 scale_l1 0.058",
+  "12:14:53 step 9600/10000 loss 0.1129 lr 2.43e-05 0.022 s/step nll_s 0.014 nll_l 0.044 bce_in 0.033 allowed 43674.000 pos_pairs 1123.000 gt_links 1124.000 gt_outside 1.000 scale_l1 0.058 nodes 256.000 gpu_gb 2.217 gpu_res_gb 5.765",
+  "12:15:05 clock: 0.118 s/step over the last 100 steps of this process; over all 2200 steps so far: peak GPU allocated 2.22 GB, reserved 5.77 GB, largest frame 371 nodes (memory grows with the square of it: a later batch can exceed this peak); GT links outside the gate in this batch 0 of 954; loss parts nll_s 0.012 nll_l 0.017 bce_in 0.023 scale_l1 0.075",
+  "12:15:05 step 9700/10000 loss 0.1049 lr 2.24e-05 0.023 s/step nll_s 0.012 nll_l 0.017 bce_in 0.023 allowed 36976.000 pos_pairs 954.000 gt_links 954.000 gt_outside 0.000 scale_l1 0.075 nodes 232.000 gpu_gb 2.217 gpu_res_gb 5.765",
+  "12:15:14 clock: 0.084 s/step over the last 100 steps of this process; over all 2300 steps so far: peak GPU allocated 2.22 GB, reserved 5.77 GB, largest frame 371 nodes (memory grows with the square of it: a later batch can exceed this peak); GT links outside the gate in this batch 2 of 1131; loss parts nll_s 0.015 nll_l 0.033 bce_in 0.036 scale_l1 0.095",
+  "12:15:14 step 9800/10000 loss 0.1107 lr 2.11e-05 0.024 s/step nll_s 0.015 nll_l 0.033 bce_in 0.036 allowed 42446.000 pos_pairs 1129.000 gt_links 1131.000 gt_outside 2.000 scale_l1 0.095 nodes 213.000 gpu_gb 2.217 gpu_res_gb 5.765",
+  "12:15:22 clock: 0.081 s/step over the last 100 steps of this process; over all 2400 steps so far: peak GPU allocated 2.22 GB, reserved 5.77 GB, largest frame 371 nodes (memory grows with the square of it: a later batch can exceed this peak); GT links outside the gate in this batch 0 of 1158; loss parts nll_s 0.016 nll_l 0.037 bce_in 0.040 scale_l1 0.088",
+  "12:15:22 step 9900/10000 loss 0.1091 lr 2.03e-05 0.024 s/step nll_s 0.016 nll_l 0.037 bce_in 0.040 allowed 54301.000 pos_pairs 1158.000 gt_links 1158.000 gt_outside 0.000 scale_l1 0.088 nodes 340.000 gpu_gb 2.217 gpu_res_gb 5.765",
+  "12:15:30 clock: 0.086 s/step over the last 100 steps of this process; over all 2500 steps so far: peak GPU allocated 2.22 GB, reserved 5.77 GB, largest frame 371 nodes (memory grows with the square of it: a later batch can exceed this peak); GT links outside the gate in this batch 2 of 1225; loss parts nll_s 0.010 nll_l 0.021 bce_in 0.019 scale_l1 0.065",
+  "12:15:30 step 10000/10000 loss 0.1107 lr 2.00e-05 0.025 s/step nll_s 0.010 nll_l 0.021 bce_in 0.019 allowed 51186.000 pos_pairs 1223.000 gt_links 1225.000 gt_outside 2.000 scale_l1 0.065 nodes 201.000 gpu_gb 2.217 gpu_res_gb 5.765",
+  "12:15:31 done 10000",
+  "12:15:31 done e361_p3_s1"
+ ]
+}

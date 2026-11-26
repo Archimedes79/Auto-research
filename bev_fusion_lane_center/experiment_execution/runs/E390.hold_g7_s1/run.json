@@ -1,0 +1,104 @@
+{
+ "id": "E390.hold_g7_s1",
+ "hypothesis": "E390 step 1 (card v7 = v6 + the map's stated count-error rate as an input, D130 / D135): a relation-biased graph encoding of the SD road graph (logical lanes per direction, links, junctions, route; node geometry cut at node boundaries) recovers lanes per direction (also copying the exact input), dropped links, hidden route flags and the association of perception proxies to their segment (with unassigned) above the measured nulls, invariant under rigid motion, with graceful decay",
+ "prediction": "(card v7, the third look at the same VAL frames) P1 at count error 0 about 0.998, P1 base about 0.94 or higher, the other probes as in v6, P4 0.0; SOUND 70 %, PARTLY 25 %",
+ "rule": "E390 card v7 (section 5) with the unchanged rule and bars of section 0 (by hand, bars from the v6 nulls measured before the v5 training): SOUND = on both seeds P1 >= 0.7335 (base) and >= 0.99 (ce0), P2 >= 0.9380 / 0.9354 (base / s2), P3 >= 0.7138, P6 >= 0.9420 (base), >= 0.8747 (pose2), nd accuracy >= 0.8444 and none recall >= 0.3918, false-unassigned <= 0.05, each with the paired interval vs its null above 0; graph clause g - n on P3 >= +0.05; P4 <= 1e-4; P5 graceful; P1 at count error 0 below 0.99 = a failing probe, the kill only below 0.90; order NOT SOUND > INCONCLUSIVE > PARTLY > SOUND; VAL 873, CPU, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py read --arm g7 --seed 1 --split holdout",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py read --arm g7 --seed 1 --split holdout"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 806,
+ "created": "2026-11-21T15:09:21",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E390",
+ "card_sha": "4570222d4c48f924",
+ "card_arms": {
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E390.g_s0",
+    "E390.g_s1",
+    "E390.read_g_s0",
+    "E390.read_g_s1",
+    "E390.clause_s0",
+    "E390.clause_s1",
+    "E390.g6_s0",
+    "E390.g6_s1",
+    "E390.read_g6_s0",
+    "E390.read_g6_s1",
+    "E390.clause6_s0",
+    "E390.clause6_s1",
+    "E390.g7_s0",
+    "E390.g7_s1",
+    "E390.hold_g7_s0",
+    "E390.hold_g7_s1",
+    "E390.read_g7_s0",
+    "E390.read_g7_s1",
+    "E390.clause7_s0",
+    "E390.clause7_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E390.n_s0",
+    "E390.n_s1",
+    "E390.read_n_s0",
+    "E390.read_n_s1",
+    "E390.n6_s0",
+    "E390.n6_s1",
+    "E390.read_n6_s0",
+    "E390.read_n6_s1",
+    "E390.n7_s0",
+    "E390.n7_s1",
+    "E390.hold_n7_s0",
+    "E390.hold_n7_s1",
+    "E390.read_n7_s0",
+    "E390.read_n7_s1"
+   ]
+  },
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "1e10142c441d",
+ "started": "2026-11-21T15:10:09",
+ "code_hash": "1e10142c441d",
+ "commit": "7567fbad4d",
+ "tag": "lcr/E390.hold_g7_s1",
+ "git_note": "1428 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 1247,
+ "pgid": 1247,
+ "pid_start": 749575,
+ "exit": 0,
+ "duration_s": 1510,
+ "attempts": 1,
+ "ended": "2026-11-21T15:35:28",
+ "last_lines": [
+  ".9852 [+0.9790, +0.9905], p3 +0.8527 [+0.8049, +0.9019], p6 +0.8275 [+0.7905, +0.8632], p6_seg +0.8275 [+0.7905, +0.8632], p6_none +nan [+nan, +nan], p6_false_none +0.0299 [+0.0213, +0.0418], p6_road +0.8713 [+0.8346, +0.9070], p6_inter +0.7951 [+0.7442, +0.8361], p1_minus_copy +0.2433 [+0.2211, +0.2637], p1_minus_vote +0.2395 [+0.2169, +0.2600], p1_minus_bayes +0.1891 [+0.1358, +0.2467], p2_minus_rule +0.1840 [+0.1538, +0.2175], p2_minus_lr +0.0637 [+0.0520, +0.0745], p3_minus_rule +0.2741 [+0.1851, +0.3824], p6_minus_rule +0.1787 [+0.1375, +0.2077], p6_minus_lr +0.0927 [+0.0718, +0.1120] (105 s)",
+  "g7_s1 nd: p1 +0.9026 [+0.8736, +0.9269], p2 +0.9776 [+0.9691, +0.9847], p2ap +0.8228 [+0.7594, +0.8801], p2all +0.9781 [+0.9695, +0.9852], p3 +0.8294 [+0.7791, +0.8802], p6 +0.9332 [+0.9024, +0.9576], p6_seg +0.9592 [+0.9308, +0.9789], p6_none +0.8179 [+0.7718, +0.8702], p6_false_none +0.0095 [+0.0054, +0.0160], p6_road +0.8983 [+0.8509, +0.9380], p6_inter +0.9591 [+0.9372, +0.9775], p1_minus_copy +0.2111 [+0.1875, +0.2312], p1_minus_vote +0.2083 [+0.1852, +0.2280], p1_minus_bayes +0.1718 [+0.1097, +0.2366], p2_minus_rule +0.1767 [+0.1460, +0.2075], p2_minus_lr +0.0663 [+0.0536, +0.0767], p3_minus_rule +0.2503 [+0.1688, +0.3570], p6_minus_rule +0.1551 [+0.1340, +0.1787], p6_minus_lr +0.2119 [+0.1941, +0.2324], p6_none_minus_rule +0.7308 [+0.6286, +0.8207], p6_none_minus_lr +0.8075 [+0.7667, +0.8540] (95 s)",
+  "g7_s1 mis_hi: p1 +0.9775 [+0.9634, +0.9889], p2 +0.9854 [+0.9796, +0.9908], p2ap +0.8820 [+0.8384, +0.9269], p2all +0.9858 [+0.9801, +0.9911], p3 +0.8601 [+0.8142, +0.9065], p6 +0.9629 [+0.9361, +0.9833], p6_seg +0.9629 [+0.9361, +0.9833], p6_none +nan [+nan, +nan], p6_false_none +0.0008 [+0.0002, +0.0019], p6_road +0.9458 [+0.9134, +0.9728], p6_inter +0.9756 [+0.9492, +0.9921], p1_minus_copy -0.0225 [-0.0366, -0.0111], p1_minus_vote -0.0216 [-0.0358, -0.0099], p1_minus_bayes +0.1731 [+0.1107, +0.2475], p2_minus_rule +0.1847 [+0.1541, +0.2184], p2_minus_lr +0.0643 [+0.0525, +0.0749], p3_minus_rule +0.2815 [+0.1952, +0.3873], p6_minus_rule +0.0411 [+0.0265, +0.0638], p6_minus_lr +0.1082 [+0.0889, +0.1287] (106 s)",
+  "g7_s1 mis_lo: p1 +0.8939 [+0.8662, +0.9179], p2 +0.9849 [+0.9787, +0.9904], p2ap +0.8846 [+0.8410, +0.9272], p2all +0.9853 [+0.9793, +0.9907], p3 +0.8441 [+0.7939, +0.8964], p6 +0.9610 [+0.9329, +0.9818], p6_seg +0.9610 [+0.9329, +0.9818], p6_none +nan [+nan, +nan], p6_false_none +0.0011 [+0.0004, +0.0023], p6_road +0.9407 [+0.9023, +0.9712], p6_inter +0.9760 [+0.9527, +0.9912], p1_minus_copy +0.2001 [+0.1784, +0.2203], p1_minus_vote +0.1963 [+0.1744, +0.2162], p1_minus_bayes +0.2001 [+0.1784, +0.2203], p2_minus_rule +0.1842 [+0.1539, +0.2174], p2_minus_lr +0.0638 [+0.0520, +0.0745], p3_minus_rule +0.2655 [+0.1768, +0.3747], p6_minus_rule +0.0392 [+0.0254, +0.0603], p6_minus_lr +0.1036 [+0.0882, +0.1193] (106 s)",
+  "P4: {'max_rel_change': 7.640533681296802e-07, 'flips': 0, 'frames': 868, 'draws': 2}",
+  "written runs/e390_g7_s1/probe_card_holdout.json"
+ ]
+}

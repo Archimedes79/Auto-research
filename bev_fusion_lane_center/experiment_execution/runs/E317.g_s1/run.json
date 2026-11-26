@@ -1,0 +1,103 @@
+{
+ "id": "E317.g_s1",
+ "hypothesis": "The delivered connector has no loss of its own (only the keypoints, the pair logit and the scales are trained): a Chamfer / smooth-L1 loss of the Bezier curve against the GT connector polyline and of the keypoint ends against the GT ends makes the shape a constraint; E320 trained it together with the attachment (own keypoints +0.006 / +0.008 unsnapped over E312), this run isolates the loss without the attachment.",
+ "prediction": "snapped p >= 0.1 topo F1 +0.005 over E312 of the same seed (a TIE); unsnapped p >= 0.1 topo F1 +0.006 over E312; snapped with the keypoint geometry (--snap --snap-nogeom) +0.008 over u' (E312 0.6706 / 0.6760)",
+ "rule": "E317 card section 0: by hand (jends_eval.py score --snap --thr 0.1 = the rule's read-out, score --thr 0.1 unsnapped, score --snap --snap-nogeom --thr 0.1 for the end-geometry claim; differences to the plain graph, then to E312 and, as context only, to E324 s); KEEP when snapped topo F1 over E312 rises by more than 0.01 on both seeds with the guards held; TIE kept; CUT below -0.01; the end-geometry claim holds when snap-nogeom topo F1 is at least u' + 0.005 on both seeds; the kill is a non-finite loss, maps keypoint F1 against E307 is reported (flag below -0.08); VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jends_train.py --name e317_g_s1 --seed 1 --maps /mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s1/model.pt --e2e --scales --maps-w 1.0 --steps 3000 --geom-w 0.5 --workers 3",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jends_train.py",
+  "--name",
+  "e317_g_s1",
+  "--seed",
+  "1",
+  "--maps",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s1/model.pt",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--steps",
+  "3000",
+  "--geom-w",
+  "0.5",
+  "--workers",
+  "3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 387200,
+ "created": "2026-11-14T18:57:56",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E317",
+ "card_sha": "ca88fd0ac7645d89",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E317.g_s0",
+    "E317.g_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "0259ac0584b5",
+ "started": "2026-11-14T20:17:36",
+ "code_hash": "0259ac0584b5",
+ "commit": "d947d14fb6",
+ "tag": "lcr/E317.g_s1",
+ "git_note": "",
+ "pid": 393074,
+ "pgid": 393074,
+ "pid_start": 8604453,
+ "code_drift": {
+  "n": 49,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/gpu_gate.py",
+   "bev_fusion_lane_center/evaluation/jends_eval.py",
+   "bev_fusion_lane_center/evaluation/jmaps_eval.py",
+   "bev_fusion_lane_center/evaluation/jprune_cost.py",
+   "bev_fusion_lane_center/evaluation/jprune_probe.py",
+   "bev_fusion_lane_center/evaluation/jprune_table.py",
+   "bev_fusion_lane_center/evaluation/jtest_eval.py",
+   "bev_fusion_lane_center/evaluation/tests/test_gpu_gate.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jprune_probe.py",
+   "bev_fusion_lane_center/evaluation/tests/test_jtest_eval.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 6894,
+ "attempts": 1,
+ "ended": "2026-11-14T22:13:06",
+ "last_lines": [
+  "21:45:19 step 2100/3000 loss 2.0678 lr 2.42e-04 2.476 s/step bce 0.123 pos_pairs 118.000 allowed 1475.000 dual 0.313 scale_l1 0.219 cross 0.000 geom_shape 0.136 geom_n 118.000 geom_d_curve 0.275 geom_d_gt 0.285 geom_end 0.549 geom_end_d 0.939 j_zone 0.172 j_heat 0.668 j_dir 0.020 j_paint 0.321",
+  "21:49:07 step 2200/3000 loss 1.9759 lr 1.99e-04 2.467 s/step bce 0.156 pos_pairs 146.000 allowed 2123.000 dual 0.398 scale_l1 0.179 cross 0.000 geom_shape 0.142 geom_n 146.000 geom_d_curve 0.276 geom_d_gt 0.282 geom_end 0.498 geom_end_d 0.885 j_zone 0.213 j_heat 0.784 j_dir 0.099 j_paint 0.260",
+  "21:52:06 step 2300/3000 loss 1.9737 lr 1.59e-04 2.437 s/step bce 0.085 pos_pairs 148.000 allowed 2177.000 dual 0.261 scale_l1 0.226 cross 0.000 geom_shape 0.153 geom_n 148.000 geom_d_curve 0.292 geom_d_gt 0.295 geom_end 0.542 geom_end_d 0.929 j_zone 0.248 j_heat 0.714 j_dir 0.046 j_paint 0.304",
+  "21:54:40 step 2400/3000 loss 1.9427 lr 1.24e-04 2.400 s/step bce 0.165 pos_pairs 108.000 allowed 1044.000 dual 0.331 scale_l1 0.196 cross 0.000 geom_shape 0.124 geom_n 108.000 geom_d_curve 0.241 geom_d_gt 0.249 geom_end 0.343 geom_end_d 0.704 j_zone 0.140 j_heat 0.690 j_dir 0.022 j_paint 0.294",
+  "21:57:21 step 2500/3000 loss 1.9131 lr 9.28e-05 2.368 s/step bce 0.107 pos_pairs 140.000 allowed 2296.000 dual 0.318 scale_l1 0.198 cross 0.000 geom_shape 0.131 geom_n 140.000 geom_d_curve 0.268 geom_d_gt 0.267 geom_end 0.452 geom_end_d 0.831 j_zone 0.237 j_heat 0.805 j_dir 0.114 j_paint 0.357",
+  "22:00:10 step 2600/3000 loss 1.9437 lr 6.71e-05 2.342 s/step bce 0.161 pos_pairs 91.000 allowed 1276.000 dual 0.480 scale_l1 0.185 cross 0.000 geom_shape 0.135 geom_n 91.000 geom_d_curve 0.278 geom_d_gt 0.282 geom_end 0.409 geom_end_d 0.787 j_zone 0.186 j_heat 0.652 j_dir 0.025 j_paint 0.281",
+  "22:03:03 step 2700/3000 loss 1.9291 lr 4.67e-05 2.320 s/step bce 0.116 pos_pairs 113.000 allowed 2026.000 dual 0.393 scale_l1 0.209 cross 0.000 geom_shape 0.138 geom_n 113.000 geom_d_curve 0.260 geom_d_gt 0.272 geom_end 0.502 geom_end_d 0.882 j_zone 0.314 j_heat 0.837 j_dir 0.087 j_paint 0.405",
+  "22:06:09 step 2800/3000 loss 1.8625 lr 3.20e-05 2.303 s/step bce 0.190 pos_pairs 134.000 allowed 1553.000 dual 0.445 scale_l1 0.204 cross 0.000 geom_shape 0.134 geom_n 134.000 geom_d_curve 0.272 geom_d_gt 0.277 geom_end 0.344 geom_end_d 0.716 j_zone 0.160 j_heat 0.676 j_dir 0.029 j_paint 0.329",
+  "22:09:11 step 2900/3000 loss 1.8937 lr 2.30e-05 2.287 s/step bce 0.208 pos_pairs 125.000 allowed 1290.000 dual 0.402 scale_l1 0.221 cross 0.000 geom_shape 0.126 geom_n 125.000 geom_d_curve 0.259 geom_d_gt 0.262 geom_end 0.448 geom_end_d 0.812 j_zone 0.222 j_heat 0.701 j_dir 0.040 j_paint 0.333",
+  "22:12:12 step 3000/3000 loss 1.9232 lr 2.00e-05 2.271 s/step bce 0.118 pos_pairs 107.000 allowed 1423.000 dual 0.303 scale_l1 0.180 cross 0.000 geom_shape 0.087 geom_n 107.000 geom_d_curve 0.219 geom_d_gt 0.221 geom_end 0.399 geom_end_d 0.764 j_zone 0.184 j_heat 0.702 j_dir 0.033 j_paint 0.178",
+  "22:12:13 done 3000",
+  "22:12:13 done e317_g_s1"
+ ]
+}

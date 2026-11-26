@@ -1,0 +1,58 @@
+{
+ "id": "E345.b_e312_s0",
+ "hypothesis": "D99 step 0 (E345 part A): how much of each unit of the stored junction system can be taken away without retraining; job E345.b_e312_s0",
+ "prediction": "E345 card section 3: v (all FREE head units) loses 0.005 topo F1 on the judgement half and saves 0.8 GMACs of the heads' 3.278; at least 15 of 45 units have a sweep-FREE point",
+ "rule": "E345 card sections 0 and 3, by hand: analysis, selected on half of the VAL scenes and judged on the other half; loss = null minus ablated on the worse of the snapped and the differentiable read-out",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh jprune_table.py boot --run e312_p_s0 --points temp/e345/e312_p_s0/score_points.json",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "jprune_table.py",
+  "boot",
+  "--run",
+  "e312_p_s0",
+  "--points",
+  "temp/e345/e312_p_s0/score_points.json"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 470064,
+ "created": "2026-11-15T07:24:36",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 720.0,
+ "code_hash_first": "6f955322e3ea",
+ "started": "2026-11-15T07:25:08",
+ "code_hash": "6f955322e3ea",
+ "commit": "4217932ef9",
+ "tag": "lcr/E345.b_e312_s0",
+ "git_note": "",
+ "pid": 470625,
+ "pgid": 470625,
+ "pid_start": 12609625,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e346/probe2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit14.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit15.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit16.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit17.py",
+   "bev_fusion_lane_center/temp/e346/e346_lib.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 506,
+ "attempts": 1,
+ "ended": "2026-11-15T07:34:01",
+ "last_lines": [
+  "=== attempt 2026-11-15T07:25:08: bash tools/env/_py14.sh jprune_table.py boot --run e312_p_s0 --points temp/e345/e312_p_s0/score_points.json",
+  "_py14.sh: evaluation/jprune_table.py"
+ ]
+}

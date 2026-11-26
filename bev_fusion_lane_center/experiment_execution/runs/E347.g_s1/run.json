@@ -1,0 +1,109 @@
+{
+ "id": "E347.g_s1",
+ "hypothesis": "E347 arm g: the junction maps head with its output at 2 m (50 x 50 grid, sub-cell offset, Gaussian heat sigma 1.0 m, 3 x 3 peak read-out) carries the ends as well as the 1 m head without the paint branch (E332 arm a)",
+ "prediction": "arm g: keypoint F1 at 3 m -0.02, crowded entry recall -0.10 against E332 arm a (INCONCLUSIVE or worse in the peak read-out); arm o: keypoint F1 at 3 m -0.015, at 1.5 m -0.03, crowded -0.03, duplicates within the bound",
+ "rule": "E347 card section 0: stage 1 is a label and a kill gate (by hand: maps scorer): PASS when keypoint F1 at 3 m is at most 0.01 below c, at 1.5 m at most 0.02 below, crowded entry recall at most 0.04 below, arm o also the duplicate clause, on both seeds at each run's own best threshold; FAIL: more than 0.03 / 0.05 below on both seeds",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "env BFLC_SIG=1.0 bash temp/e347/run_staged_gpu.sh jmaps_train.py --name e347_g_s1 --seed 1 --ctx dil --sigma 1.0 --steps 3000 --workers 4 --no-paint --r2",
+ "argv": [
+  "env",
+  "BFLC_SIG=1.0",
+  "bash",
+  "temp/e347/run_staged_gpu.sh",
+  "jmaps_train.py",
+  "--name",
+  "e347_g_s1",
+  "--seed",
+  "1",
+  "--ctx",
+  "dil",
+  "--sigma",
+  "1.0",
+  "--steps",
+  "3000",
+  "--workers",
+  "4",
+  "--no-paint",
+  "--r2"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 518315,
+ "created": "2026-11-15T11:37:20",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E347",
+ "card_sha": "b089e02b5ac7c468",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E347.g_s0",
+    "E347.g_s1"
+   ]
+  },
+  "o": {
+   "order": {},
+   "run_ids": [
+    "E347.o_s0",
+    "E347.o_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E347.p_s0",
+    "E347.p_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "20b68bfa3231",
+ "started": "2026-11-15T12:29:42",
+ "code_hash": "20b68bfa3231",
+ "commit": "78f57be3cc",
+ "tag": "lcr/E347.g_s1",
+ "git_note": "",
+ "pid": 527966,
+ "pgid": 527966,
+ "pid_start": 14437030,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e291_post.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e347_arm_table.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3079,
+ "attempts": 1,
+ "ended": "2026-11-15T13:21:38",
+ "last_lines": [
+  "13:08:18 step 2200/3000 loss 1.7640 lr 1.99e-04 1.017 s/step j_zone 0.233 j_heat 0.696 j_dir 0.099 j_paint 0.000 j_off 0.933",
+  "13:09:52 step 2300/3000 loss 1.7951 lr 1.59e-04 1.013 s/step j_zone 0.243 j_heat 0.641 j_dir 0.049 j_paint 0.000 j_off 0.907",
+  "13:11:27 step 2400/3000 loss 1.7566 lr 1.24e-04 1.010 s/step j_zone 0.137 j_heat 0.627 j_dir 0.021 j_paint 0.000 j_off 0.624",
+  "13:13:03 step 2500/3000 loss 1.7242 lr 9.28e-05 1.009 s/step j_zone 0.231 j_heat 0.727 j_dir 0.098 j_paint 0.000 j_off 0.962",
+  "13:14:39 step 2600/3000 loss 1.7567 lr 6.71e-05 1.007 s/step j_zone 0.203 j_heat 0.581 j_dir 0.040 j_paint 0.000 j_off 0.917",
+  "13:16:06 step 2700/3000 loss 1.7527 lr 4.67e-05 1.001 s/step j_zone 0.312 j_heat 0.782 j_dir 0.070 j_paint 0.000 j_off 1.057",
+  "13:17:34 step 2800/3000 loss 1.6621 lr 3.20e-05 0.997 s/step j_zone 0.139 j_heat 0.602 j_dir 0.033 j_paint 0.000 j_off 0.763",
+  "13:19:01 step 2900/3000 loss 1.7037 lr 2.30e-05 0.993 s/step j_zone 0.183 j_heat 0.633 j_dir 0.043 j_paint 0.000 j_off 0.803",
+  "13:20:43 step 3000/3000 loss 1.7266 lr 2.00e-05 0.994 s/step j_zone 0.182 j_heat 0.603 j_dir 0.030 j_paint 0.000 j_off 0.668",
+  "13:20:44 done 3000",
+  "13:20:45 done e347_g_s1",
+  "run_staged: stage = temp/_session_scratch_e347/stage | staged modules loaded: lane_gt_data -> temp/_session_scratch_e347/stage/training/data/lane_gt_data.py, jgt -> temp/_session_scratch_e347/stage/training/grid/jgt.py, jmaps -> temp/_session_scratch_e347/stage/training/grid/jmaps.py, qjunction -> temp/_session_scratch_e347/stage/training/grid/qjunction.py"
+ ]
+}

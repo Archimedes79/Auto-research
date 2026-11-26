@@ -1,0 +1,85 @@
+{
+ "id": "E373.read_s0",
+ "hypothesis": "E373: the b_bal25 recipe (the E365 head with none weight 0.25) frozen passes the okayish gate again with two fresh head seeds (2 on cache 0, 3 on cache 1), at the record decode or at the recipe cell 0.2 / 0.6 / gate off.",
+ "prediction": "at D-rec topo F1 about 0.650, the gate holds on both heads about 45 %; at D-cell topo F1 about 0.670, the gate holds about 85 %; CONFIRMED about 85 %; replacement of the S1 champion about 35 %",
+ "rule": "E373 card section 0 (by hand): the decode = D-rec if the okayish gate of E365 holds on both fresh heads at D-rec, else D-cell (0.2 / 0.6 / off) if it holds there, else NOT CONFIRMED; replacement of the S1 champion needs CONFIRMED and per cache topo F1 >= 0.6518 / 0.6650, F1@1.0 >= 0.8281 / 0.8310, lanes found >= 0.6698 / 0.6776 at the chosen decode; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e373_cb_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e373_cb_s0 --seed 0 --split val --drop 0.17 --drop-seed 0 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e373_cb_s0 --seed 0 --split train --every 3 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --link-thr 0.2 --keep-thr 0.6 --no-none-gate && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --drop 0.17 --drop-seed 0 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --drop 0.17 --drop-seed 0 --link-thr 0.2 --keep-thr 0.6 --no-none-gate && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --split train --every 3 --link-thr 0.2 --keep-thr 0.6 --no-none-gate",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e373_cb_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e373_cb_s0 --seed 0 --split val --drop 0.17 --drop-seed 0 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e373_cb_s0 --seed 0 --split train --every 3 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --link-thr 0.2 --keep-thr 0.6 --no-none-gate && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --drop 0.17 --drop-seed 0 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --drop 0.17 --drop-seed 0 --link-thr 0.2 --keep-thr 0.6 --no-none-gate && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e373_cb_s0 --seed 0 --split train --every 3 --link-thr 0.2 --keep-thr 0.6 --no-none-gate"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 89074,
+ "created": "2026-11-17T05:38:03",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E373",
+ "card_sha": "fd9b02ea6ae28415",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "cb": {
+   "order": {},
+   "run_ids": [
+    "E373.cb_s0",
+    "E373.cb_s1",
+    "E373.read_s0",
+    "E373.read_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "4211b2fdacd6",
+ "started": "2026-11-17T05:44:27",
+ "code_hash": "4211b2fdacd6",
+ "commit": "1a37ba3285",
+ "tag": "lcr/E373.read_s0",
+ "git_note": "257 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 91481,
+ "pgid": 91481,
+ "pid_start": 2400683,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_d113/map_stats.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/readme_blob2.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/step0_map.py",
+   "bev_fusion_lane_center/temp/e276/diag_s.sh",
+   "bev_fusion_lane_center/temp/e276/start_arm2.sh",
+   "bev_fusion_lane_center/temp/e276/summarise_diag.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1350,
+ "attempts": 1,
+ "ended": "2026-11-17T06:07:22",
+ "last_lines": [
+  "   400/873 frames, 45 s",
+  "   500/873 frames, 51 s",
+  "   600/873 frames, 63 s",
+  "   700/873 frames, 73 s",
+  "   800/873 frames, 85 s",
+  "   873/873 frames, 91 s",
+  "e373_cb_s0 rec_lt0.2_kt0.6_nng_drop0.17_s0topo_F1 0.5764  topo_P 0.6728  topo_R 0.5042  F1@1.0 0.8108  lanes_found 0.6223  Q 0.6463  junction_F1 0.2054  dup_frac 0.0503  vert100_dp 28.3867",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "   100/291 frames, 13 s",
+  "   200/291 frames, 26 s",
+  "   291/291 frames, 37 s",
+  "e373_cb_s0 rec_lt0.2_kt0.6_nng_train_every3topo_F1 0.7180  topo_P 0.7286  topo_R 0.7077  F1@1.0 0.9027  lanes_found 0.8095  Q 0.7218  junction_F1 0.2693  dup_frac 0.0477  vert100_dp 28.8164"
+ ]
+}

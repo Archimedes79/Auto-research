@@ -1,0 +1,60 @@
+{
+ "id": "diag383.bench_gate",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh bench_token_step.py gate",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "bench_token_step.py",
+  "gate"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 541940,
+ "created": "2026-11-18T05:40:31",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 20.0,
+ "code_hash_first": "077af5f0ad5b",
+ "started": "2026-11-18T05:42:02",
+ "code_hash": "077af5f0ad5b",
+ "commit": "f2d34aa20f",
+ "tag": "lcr/diag383.bench_gate",
+ "git_note": "1580 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 542667,
+ "pgid": 542667,
+ "pid_start": 11026223,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e291/cmp_dump.py",
+   "bev_fusion_lane_center/temp/_session_scratch_prof/e379_edit.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 205,
+ "attempts": 1,
+ "ended": "2026-11-18T05:46:18",
+ "last_lines": [
+  "  ],",
+  "  \"fast_ms_blocks\": [",
+  "   92.9,",
+  "   91.6",
+  "  ],",
+  "  \"plain_ms\": 98.8,",
+  "  \"fast_ms\": 92.3,",
+  "  \"ratio_plain_over_fast\": 1.071,",
+  "  \"peak_gb\": 3.09",
+  " },",
+  " \"gpu_loader_ms_per_batch\": 1.82",
+  "}"
+ ]
+}

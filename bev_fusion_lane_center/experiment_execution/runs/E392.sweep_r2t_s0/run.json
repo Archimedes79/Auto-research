@@ -1,0 +1,325 @@
+{
+ "id": "E392.sweep_r2t_s0",
+ "hypothesis": "E392 stage 1 (the head on the cached K 512 tokens, the E373 recipe: none weight 0.25, 12000 steps, bs 8, lr 1e-3, cache seed S, head seed S + 2): control c (champion code, no round, retrained), x = one round without a loss on the early read, r1 = one round (after layer 1) with the early wiring loss, r2 = two rounds (after layers 1 and 2) with the early wiring loss on each, u = the content null of the adopted arm (conditional); VAL 873 at the D115 decode; then a stage-2 (S4, end to end through B''s node head) diagnostic on one stage-1 head; follow-up arms a1 / a2 / u (section 1.7) and, from the plan of section 1.8, n / m0 / ct / r2t and the S4 trainings of r2 and n",
+ "prediction": "0.006 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"topo_F1\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"max_loss\":0.005},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: a loss is not finite (a `non-finite` line in the trainer's log; jarm and jlive_train enforce this one); or no learning, checked by hand at the read-out on the comparable parts of the loss (nll_s + nll_l + ce3, NOT the total, which holds the extra terms of the arms): the mean over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200 (a weak clause: the E373 heads reach a ratio of about 0.33); or the curve check of the control fires (section 1.4); or an arm's data-order fingerprint differs from c's at any logged step (the arm is then not paired with c; for ct there is no such check, for r2t the check is against ct); a run cut by run.py or the GPU is resumed from its checkpoint (resume steps reported); a crashed read-out is re-run unchanged, never with another cell; no GPU job starts before the conditions of section 1.5; core 7.3 GPU h (c, x, r1, r2 on two seeds = 8 runs of 0.7 - 0.9 h, the timing 0.3), conditional u 2.0, diagnostic s4 1.3 (two seeds, about 0.65 h each with the live read); the follow-up arms a1 / a2 / u (about 6 h) and the plan of section 1.8 (11.8 - 13.4 h) come on top, the JSON budget 28",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e392_r2t_s0 --seed 0 --split train --every 3 --grid perclass",
+ "argv": [
+  "bash",
+  "-c",
+  "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e392_r2t_s0 --seed 0 --split train --every 3 --grid perclass"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 11885,
+ "created": "2026-11-22T23:36:06",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E392",
+ "card_sha": "d5c7b766648fe18b",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E392.c_s0",
+    "E392.dump_val_c_s0",
+    "E392.dump_train_c_s0",
+    "E392.sweep_c_s0",
+    "E392.choose_c_s0",
+    "E392.cell_vs_c_s0",
+    "E392.d115_vs_c_s0",
+    "E392.c_s1",
+    "E392.dump_val_c_s1",
+    "E392.dump_train_c_s1",
+    "E392.sweep_c_s1",
+    "E392.choose_c_s1",
+    "E392.cell_vs_c_s1",
+    "E392.d115_vs_c_s1"
+   ]
+  },
+  "x": {
+   "order": {},
+   "run_ids": [
+    "E392.x_s0",
+    "E392.dump_val_x_s0",
+    "E392.dump_train_x_s0",
+    "E392.sweep_x_s0",
+    "E392.choose_x_s0",
+    "E392.cell_vs_x_s0",
+    "E392.d115_vs_x_s0",
+    "E392.x_s1",
+    "E392.dump_val_x_s1",
+    "E392.dump_train_x_s1",
+    "E392.sweep_x_s1",
+    "E392.choose_x_s1",
+    "E392.cell_vs_x_s1",
+    "E392.d115_vs_x_s1"
+   ]
+  },
+  "r1": {
+   "order": {},
+   "run_ids": [
+    "E392.r1_s0",
+    "E392.dump_val_r1_s0",
+    "E392.dump_train_r1_s0",
+    "E392.sweep_r1_s0",
+    "E392.choose_r1_s0",
+    "E392.cell_vs_r1_s0",
+    "E392.d115_vs_r1_s0",
+    "E392.r1_s1",
+    "E392.dump_val_r1_s1",
+    "E392.dump_train_r1_s1",
+    "E392.sweep_r1_s1",
+    "E392.choose_r1_s1",
+    "E392.cell_vs_r1_s1",
+    "E392.d115_vs_r1_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E392.r2_s0",
+    "E392.dump_val_r2_s0",
+    "E392.dump_train_r2_s0",
+    "E392.sweep_r2_s0",
+    "E392.choose_r2_s0",
+    "E392.cell_vs_r2_s0",
+    "E392.d115_vs_r2_s0",
+    "E392.r2_s1",
+    "E392.dump_val_r2_s1",
+    "E392.dump_train_r2_s1",
+    "E392.sweep_r2_s1",
+    "E392.choose_r2_s1",
+    "E392.cell_vs_r2_s1",
+    "E392.d115_vs_r2_s1"
+   ]
+  },
+  "a2": {
+   "order": {},
+   "run_ids": [
+    "E392.a2_s0",
+    "E392.dump_val_a2_s0",
+    "E392.dump_train_a2_s0",
+    "E392.sweep_a2_s0",
+    "E392.choose_a2_s0",
+    "E392.cell_vs_a2_s0",
+    "E392.d115_vs_a2_s0",
+    "E392.a2_s1",
+    "E392.dump_val_a2_s1",
+    "E392.dump_train_a2_s1",
+    "E392.sweep_a2_s1",
+    "E392.choose_a2_s1",
+    "E392.cell_vs_a2_s1",
+    "E392.d115_vs_a2_s1"
+   ]
+  },
+  "a1": {
+   "order": {},
+   "run_ids": [
+    "E392.a1_s0",
+    "E392.dump_val_a1_s0",
+    "E392.dump_train_a1_s0",
+    "E392.sweep_a1_s0",
+    "E392.choose_a1_s0",
+    "E392.cell_vs_a1_s0",
+    "E392.d115_vs_a1_s0",
+    "E392.a1_s1",
+    "E392.dump_val_a1_s1",
+    "E392.dump_train_a1_s1",
+    "E392.sweep_a1_s1",
+    "E392.choose_a1_s1",
+    "E392.cell_vs_a1_s1",
+    "E392.d115_vs_a1_s1"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": [
+    "E392.u_s0",
+    "E392.dump_val_u_s0",
+    "E392.dump_train_u_s0",
+    "E392.sweep_u_s0",
+    "E392.choose_u_s0",
+    "E392.cell_vs_u_s0",
+    "E392.d115_vs_u_s0",
+    "E392.u_s1",
+    "E392.dump_val_u_s1",
+    "E392.dump_train_u_s1",
+    "E392.sweep_u_s1",
+    "E392.choose_u_s1",
+    "E392.cell_vs_u_s1",
+    "E392.d115_vs_u_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E392.n_s0",
+    "E392.dump_val_n_s0",
+    "E392.dump_train_n_s0",
+    "E392.sweep_n_s0",
+    "E392.choose_n_s0",
+    "E392.cell_vs_n_s0",
+    "E392.d115_vs_n_s0",
+    "E392.n_s1",
+    "E392.dump_val_n_s1",
+    "E392.dump_train_n_s1",
+    "E392.sweep_n_s1",
+    "E392.choose_n_s1",
+    "E392.cell_vs_n_s1",
+    "E392.d115_vs_n_s1"
+   ]
+  },
+  "m0": {
+   "order": {},
+   "run_ids": [
+    "E392.m0_s0",
+    "E392.dump_val_m0_s0",
+    "E392.dump_train_m0_s0",
+    "E392.sweep_m0_s0",
+    "E392.choose_m0_s0",
+    "E392.cell_vs_m0_s0",
+    "E392.d115_vs_m0_s0",
+    "E392.m0_s1",
+    "E392.dump_val_m0_s1",
+    "E392.dump_train_m0_s1",
+    "E392.sweep_m0_s1",
+    "E392.choose_m0_s1",
+    "E392.cell_vs_m0_s1",
+    "E392.d115_vs_m0_s1"
+   ]
+  },
+  "ct": {
+   "order": {},
+   "run_ids": [
+    "E392.ct_s0",
+    "E392.dump_val_ct_s0",
+    "E392.dump_train_ct_s0",
+    "E392.sweep_ct_s0",
+    "E392.choose_ct_s0",
+    "E392.cell_vs_ct_s0",
+    "E392.d115_vs_ct_s0",
+    "E392.ct_s1",
+    "E392.dump_val_ct_s1",
+    "E392.dump_train_ct_s1",
+    "E392.sweep_ct_s1",
+    "E392.choose_ct_s1",
+    "E392.cell_vs_ct_s1",
+    "E392.d115_vs_ct_s1"
+   ]
+  },
+  "r2t": {
+   "order": {},
+   "run_ids": [
+    "E392.r2t_s0",
+    "E392.dump_val_r2t_s0",
+    "E392.dump_train_r2t_s0",
+    "E392.sweep_r2t_s0",
+    "E392.choose_r2t_s0",
+    "E392.cell_vs_r2t_s0",
+    "E392.d115_vs_r2t_s0",
+    "E392.r2t_s1",
+    "E392.dump_val_r2t_s1",
+    "E392.dump_train_r2t_s1",
+    "E392.sweep_r2t_s1",
+    "E392.choose_r2t_s1",
+    "E392.cell_vs_r2t_s1",
+    "E392.d115_vs_r2t_s1"
+   ]
+  },
+  "s4": {
+   "order": {},
+   "run_ids": [
+    "E392.s4_x_s0",
+    "E392.s4dump_x_s0",
+    "E392.s4score_x_s0",
+    "E392.s4_x_s1",
+    "E392.s4dump_x_s1",
+    "E392.s4score_x_s1",
+    "E392.s4_r1_s0",
+    "E392.s4dump_r1_s0",
+    "E392.s4score_r1_s0",
+    "E392.s4_r1_s1",
+    "E392.s4dump_r1_s1",
+    "E392.s4score_r1_s1",
+    "E392.s4_r2_s0",
+    "E392.s4dump_r2_s0",
+    "E392.s4score_r2_s0",
+    "E392.s4_r2_s1",
+    "E392.s4dump_r2_s1",
+    "E392.s4score_r2_s1",
+    "E392.s4_n_s0",
+    "E392.s4dump_n_s0",
+    "E392.s4score_n_s0",
+    "E392.s4_n_s1",
+    "E392.s4dump_n_s1",
+    "E392.s4score_n_s1",
+    "E392.s4_c_s0",
+    "E392.s4dump_c_s0",
+    "E392.s4score_c_s0",
+    "E392.s4_c_s1",
+    "E392.s4dump_c_s1",
+    "E392.s4score_c_s1",
+    "E392.s4self_r1_s0",
+    "E392.s4self_r1_s1",
+    "E392.s4self_r2_s0",
+    "E392.s4self_r2_s1",
+    "E392.s4self_c_s0",
+    "E392.s4self_c_s1",
+    "E392.s4self_n_s0",
+    "E392.s4self_n_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a32189262887",
+ "started": "2026-11-22T23:36:53",
+ "code_hash": "a32189262887",
+ "commit": "3bfb4905b0",
+ "tag": "lcr/E392.sweep_r2t_s0",
+ "git_note": "1481 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 12552,
+ "pgid": 12552,
+ "pid_start": 1142450,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/training/data/lane_live_tok.py",
+   "bev_fusion_lane_center/training/trainer.py",
+   "bev_fusion_lane_center/training/trainer_selftest.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1510,
+ "attempts": 1,
+ "ended": "2026-11-23T00:03:05",
+ "last_lines": [
+  "link 0.1   long 0.3   keep 0.6  gate off  topo_F1 0.6967  topo_P 0.6933  topo_R 0.7002  F1@1.0 0.8892  lanes_found 0.7851  dup_frac 0.0176  junction_F1 0.1899  junction_P 0.1098  junction_R 0.7013  links/frame 234.4",
+  "link 0.1   long 0.3   keep 0.7  gate off  topo_F1 0.6929  topo_P 0.6805  topo_R 0.7057  F1@1.0 0.8887  lanes_found 0.7940  dup_frac 0.0185  junction_F1 0.1794  junction_P 0.1022  junction_R 0.7303  links/frame 247.7",
+  "link 0.1   long 0.2   keep 0.5  gate off  topo_F1 0.7035  topo_P 0.6814  topo_R 0.7270  F1@1.0 0.9001  lanes_found 0.8087  dup_frac 0.0441  junction_F1 0.2142  junction_P 0.1248  junction_R 0.7543  links/frame 226.4",
+  "link 0.1   long 0.2   keep 0.6  gate off  topo_F1 0.6995  topo_P 0.6665  topo_R 0.7360  F1@1.0 0.9007  lanes_found 0.8194  dup_frac 0.0459  junction_F1 0.2003  junction_P 0.1149  junction_R 0.7782  links/frame 238.7",
+  "link 0.1   long 0.2   keep 0.7  gate off  topo_F1 0.6945  topo_P 0.6530  topo_R 0.7417  F1@1.0 0.9003  lanes_found 0.8285  dup_frac 0.0471  junction_F1 0.1879  junction_P 0.1065  junction_R 0.8012  links/frame 252.3",
+  "link 0.1   long 0.1   keep 0.5  gate off  topo_F1 0.6855  topo_P 0.6217  topo_R 0.7639  F1@1.0 0.9080  lanes_found 0.8530  dup_frac 0.1194  junction_F1 0.2173  junction_P 0.1250  junction_R 0.8334  links/frame 235.0",
+  "link 0.1   long 0.1   keep 0.6  gate off  topo_F1 0.6785  topo_P 0.6049  topo_R 0.7725  F1@1.0 0.9081  lanes_found 0.8640  dup_frac 0.1246  junction_F1 0.2025  junction_P 0.1149  junction_R 0.8500  links/frame 248.3",
+  "link 0.1   long 0.1   keep 0.7  gate off  topo_F1 0.6718  topo_P 0.5908  topo_R 0.7785  F1@1.0 0.9078  lanes_found 0.8732  dup_frac 0.1269  junction_F1 0.1895  junction_P 0.1064  junction_R 0.8661  links/frame 262.5",
+  "link 0.1   long 0.05  keep 0.5  gate off  topo_F1 0.6501  topo_P 0.5518  topo_R 0.7910  F1@1.0 0.9097  lanes_found 0.8870  dup_frac 0.2055  junction_F1 0.2164  junction_P 0.1232  junction_R 0.8914  links/frame 246.8",
+  "link 0.1   long 0.05  keep 0.6  gate off  topo_F1 0.6388  topo_P 0.5323  topo_R 0.7984  F1@1.0 0.9085  lanes_found 0.8978  dup_frac 0.2166  junction_F1 0.2010  junction_P 0.1131  junction_R 0.9020  links/frame 261.6",
+  "link 0.1   long 0.05  keep 0.7  gate off  topo_F1 0.6296  topo_P 0.5173  topo_R 0.8044  F1@1.0 0.9081  lanes_found 0.9079  dup_frac 0.2220  junction_F1 0.1874  junction_P 0.1044  junction_R 0.9126  links/frame 277.2",
+  "written runs/e392_r2t_s0/token_sweep_perclass_train_every3.json"
+ ]
+}

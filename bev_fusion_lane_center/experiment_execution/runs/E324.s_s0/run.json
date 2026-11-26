@@ -1,0 +1,108 @@
+{
+ "id": "E324.s_s0",
+ "hypothesis": "The duplicate excess of the E320 recipe is carried by false pairs (E320 delivers +788 / +352 false curves at p >= 0.1, E316 -716 / -1219); a more selective pair stage, the lever of E316 (the pair stage twice as long), applied to the E320 recipe removes part of the guard excess while the attached ends keep the geometry.",
+ "prediction": "read against E316 (snapped, 6000 steps): dup_frac of the PRIMARY read-out over E316 falls from +0.0253 / +0.0119 (E320 at 3000 steps) to +0.013 / +0.006; topo F1 over E316 -0.002 / +0.003; against E312: topo F1 +0.0051 / +0.0099, dup_frac +0.0115 / +0.0068 (seed 0 marginal against the 0.01 guard)",
+ "rule": "E324 card section 1 (the rule of E320 with the CUT branch replaced by D87): by hand (jends_eval.py score --attach --snap --snap-nogeom --thr 0.1); KEEP when on both seeds topo F1 of the PRIMARY read-out >= E312 snap-nogeom + 0.005 with the guards held (F1@1.0, dup_frac +0.01 against E312 snapped, vertices, junction F1); TIE kept and refined (D87) when a bound or guard is missed; CUT only by the kill (topo F1 below the floor u' on either seed, loss not finite); VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jends_train.py --name e324_s_s0 --seed 0 --maps /mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s0/model.pt --e2e --scales --maps-w 1.0 --steps 6000 --geom-w 0.5 --attach --workers 3",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jends_train.py",
+  "--name",
+  "e324_s_s0",
+  "--seed",
+  "0",
+  "--maps",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s0/model.pt",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--steps",
+  "6000",
+  "--geom-w",
+  "0.5",
+  "--attach",
+  "--workers",
+  "3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 8209,
+ "created": "2026-11-13T22:00:09",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E324",
+ "card_sha": "41f3efe326199687",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "u": {
+   "order": {}
+  },
+  "l": {
+   "order": {}
+  },
+  "s": {
+   "order": {},
+   "run_ids": [
+    "E324.s_s0",
+    "E324.s_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "cb384d0351cc",
+ "started": "2026-11-13T22:00:48",
+ "code_hash": "cb384d0351cc",
+ "commit": "988202819b",
+ "tag": "lcr/E324.s_s0",
+ "git_note": "",
+ "pid": 8563,
+ "pgid": 8563,
+ "pid_start": 583624,
+ "code_drift": {
+  "n": 69,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jdup.py",
+   "bev_fusion_lane_center/evaluation/jends_eval.py",
+   "bev_fusion_lane_center/evaluation/qends_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/cmp_cards.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/cmp_twin.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/dedupe_jdup.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/docs_wire.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/edit_scripts.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/fix_seedcheck.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/fix_test.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 8925,
+ "attempts": 1,
+ "ended": "2026-11-14T00:30:12",
+ "last_lines": [
+  "d 0.594 att_n 268.000 att_ce 0.669 att_acc 0.761 att_acc_nearest 0.571 att_bin 0.007 att_kp_d 0.935 att_d 0.594 j_zone 0.257 j_heat 0.749 j_dir 0.041 j_paint 0.317",
+  "00:11:25 step 5400/6000 loss 2.0366 lr 4.66e-05 1.447 s/step bce 0.148 pos_pairs 107.000 allowed 1159.000 dual 0.314 scale_l1 0.217 cross 0.000 geom_shape 0.220 geom_n 107.000 geom_d_curve 0.360 geom_d_gt 0.356 geom_end 0.269 geom_end_d 0.607 att_n 247.000 att_ce 0.692 att_acc 0.729 att_acc_nearest 0.599 att_bin 0.004 att_kp_d 0.949 att_d 0.605 j_zone 0.198 j_heat 0.700 j_dir 0.033 j_paint 0.195",
+  "00:14:07 step 5500/6000 loss 2.0293 lr 3.86e-05 1.450 s/step bce 0.115 pos_pairs 124.000 allowed 1608.000 dual 0.226 scale_l1 0.219 cross 0.000 geom_shape 0.255 geom_n 124.000 geom_d_curve 0.390 geom_d_gt 0.393 geom_end 0.251 geom_end_d 0.594 att_n 293.000 att_ce 0.828 att_acc 0.672 att_acc_nearest 0.539 att_bin 0.014 att_kp_d 0.904 att_d 0.585 j_zone 0.175 j_heat 0.745 j_dir 0.057 j_paint 0.315",
+  "00:16:52 step 5600/6000 loss 2.0227 lr 3.19e-05 1.454 s/step bce 0.053 pos_pairs 167.000 allowed 2648.000 dual 0.150 scale_l1 0.202 cross 0.000 geom_shape 0.232 geom_n 167.000 geom_d_curve 0.344 geom_d_gt 0.351 geom_end 0.264 geom_end_d 0.586 att_n 402.000 att_ce 0.596 att_acc 0.791 att_acc_nearest 0.577 att_bin 0.010 att_kp_d 0.954 att_d 0.581 j_zone 0.190 j_heat 0.779 j_dir 0.042 j_paint 0.255",
+  "00:19:36 step 5700/6000 loss 1.9451 lr 2.67e-05 1.457 s/step bce 0.047 pos_pairs 110.000 allowed 1467.000 dual 0.117 scale_l1 0.207 cross 0.000 geom_shape 0.152 geom_n 110.000 geom_d_curve 0.295 geom_d_gt 0.289 geom_end 0.216 geom_end_d 0.541 att_n 275.000 att_ce 0.603 att_acc 0.767 att_acc_nearest 0.585 att_bin 0.004 att_kp_d 0.888 att_d 0.541 j_zone 0.145 j_heat 0.664 j_dir 0.025 j_paint 0.223",
+  "00:22:54 step 5800/6000 loss 2.0287 lr 2.30e-05 1.466 s/step bce 0.053 pos_pairs 135.000 allowed 1728.000 dual 0.144 scale_l1 0.204 cross 0.000 geom_shape 0.247 geom_n 135.000 geom_d_curve 0.370 geom_d_gt 0.361 geom_end 0.249 geom_end_d 0.585 att_n 312.000 att_ce 0.594 att_acc 0.766 att_acc_nearest 0.603 att_bin 0.022 att_kp_d 0.911 att_d 0.585 j_zone 0.176 j_heat 0.738 j_dir 0.049 j_paint 0.216",
+  "00:26:09 step 5900/6000 loss 2.0255 lr 2.08e-05 1.474 s/step bce 0.054 pos_pairs 165.000 allowed 2065.000 dual 0.125 scale_l1 0.199 cross 0.000 geom_shape 0.154 geom_n 165.000 geom_d_curve 0.300 geom_d_gt 0.297 geom_end 0.174 geom_end_d 0.475 att_n 371.000 att_ce 0.576 att_acc 0.792 att_acc_nearest 0.612 att_bin 0.008 att_kp_d 0.756 att_d 0.468 j_zone 0.168 j_heat 0.725 j_dir 0.054 j_paint 0.276",
+  "00:29:18 step 6000/6000 loss 2.0328 lr 2.00e-05 1.481 s/step bce 0.068 pos_pairs 108.000 allowed 1809.000 dual 0.176 scale_l1 0.250 cross 0.000 geom_shape 0.250 geom_n 108.000 geom_d_curve 0.349 geom_d_gt 0.342 geom_end 0.341 geom_end_d 0.668 att_n 302.000 att_ce 0.778 att_acc 0.742 att_acc_nearest 0.573 att_bin 0.017 att_kp_d 1.036 att_d 0.670 j_zone 0.301 j_heat 0.839 j_dir 0.058 j_paint 0.288",
+  "00:29:19 done 6000",
+  "00:29:19 done e324_s_s0"
+ ]
+}

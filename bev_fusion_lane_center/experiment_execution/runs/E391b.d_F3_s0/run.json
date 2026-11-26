@@ -1,0 +1,117 @@
+{
+ "id": "E391b.d_F3_s0",
+ "hypothesis": "E391b (step 2b of the SD-map line): PART B the E391 protocol rerun with the loss on the delivered tokens only (arms P, F1, F2, F3 on two seeds, E391 section 5.1 bars and verdict), and PART A (CPU, no head trained) an existence gate on the zero-shot E390 P6 association, fitted on the DELIVERED tokens (the E373 p_none computed on the CPU for the TRAIN fit frames). g0 a logistic regression on the token's own outputs (the matched no-map null), g1n a gradient-boosted tree on the same inputs, g1 the tree on the own outputs + a summary of the P6 logits + the token-map geometry; the target is 'unassigned' (a false token or a token whose segment is missing); the P6 argmax assigns the tokens that are kept; the threshold is chosen on TRAIN validation scenes at the guard, the arms are read first on the TRAIN holdout re-weighted to the VAL composition (the stop rule), then ONCE on VAL by E391's association clause against the no-map nulls; two seeds",
+ "prediction": "0.84 vs g0",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"assoc_acc_dec\",\"vs\":\"g0\",\"min_effect\":0.0,\"note\":\"superseded by section 1.5: the bars of E391 section 5.1 (0.8427 / 0.8397), the paired interval against g0 AND g1n above 0, false_unassigned <= 0.05, by hand; decide.py cannot read it\"}] | kill: a value is not finite; the p_none pass does not reproduce the stored delivered mask of the holdout frames (pooled over the holdout frames, more than 0.1 % of the valid tokens differ from the stored `kept` = valid & p_none < 0.6); the tree cannot be fitted (fewer than 20000 delivered TRAIN tokens or fewer than 3000 unassigned ones); the step-1 encoder is not runs/e390_g7_s<S>; the threshold search finds no value with false_unassigned <= 0.04 on the TRAIN validation scenes (the arm cannot meet the guard: its stop rule fails); fewer labelled tokens at a read than the minimum counts of section 1.5; a TRAIN frame of the holdout is in the fit (asserted); part B: a loss that is not finite, no learning (the loss at step 3000 above 0.8 x the loss at step 100, E391's kill), the step-1 encoder is not runs/e390_g7_s<S>, a delivered-mask file that does not cover every TRAIN frame",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh evaluation/mapassoc_exist.py train_d --arm F3 --seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh evaluation/mapassoc_exist.py train_d --arm F3 --seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.12.15",
+ "conda_env": "gcar",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 237514,
+ "created": "2026-11-24T22:56:28",
+ "status": "ok",
+ "after": "E391b.pnone_s0",
+ "timeout_min": 60.0,
+ "card_id": "E391b",
+ "card_sha": "ccad94bd63d12ea8",
+ "card_arms": {
+  "g0": {
+   "order": {},
+   "run_ids": [
+    "E391b.pnone_s0",
+    "E391b.pnone_s1",
+    "E391b.nullread_s0",
+    "E391b.nullread_s1"
+   ]
+  },
+  "g1n": {
+   "order": {},
+   "run_ids": [
+    "E391b.fit_s0",
+    "E391b.fit_s1",
+    "E391b.hold_s0",
+    "E391b.hold_s1"
+   ]
+  },
+  "B": {
+   "order": {},
+   "run_ids": [
+    "E391b.d_P_s0",
+    "E391b.d_P_s1",
+    "E391b.d_F1_s0",
+    "E391b.d_F1_s1",
+    "E391b.d_F2_s0",
+    "E391b.d_F2_s1",
+    "E391b.d_F3_s0",
+    "E391b.d_F3_s1",
+    "E391b.hold_d_P_s0",
+    "E391b.hold_d_P_s1",
+    "E391b.hold_d_F1_s0",
+    "E391b.hold_d_F1_s1",
+    "E391b.hold_d_F2_s0",
+    "E391b.hold_d_F2_s1",
+    "E391b.hold_d_F3_s0",
+    "E391b.hold_d_F3_s1",
+    "E391b.read_d_P_s0",
+    "E391b.read_d_P_s1",
+    "E391b.read_d_F1_s0",
+    "E391b.read_d_F1_s1",
+    "E391b.read_d_F2_s0",
+    "E391b.read_d_F2_s1",
+    "E391b.read_d_F3_s0",
+    "E391b.read_d_F3_s1",
+    "E391b.verdict_d"
+   ]
+  },
+  "g1": {
+   "order": {},
+   "run_ids": [
+    "E391b.read_s0",
+    "E391b.read_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "abada2be11fe",
+ "started": "2026-11-24T22:56:42",
+ "code_hash": "abada2be11fe",
+ "commit": "cbd4d9d223",
+ "tag": "lcr/E391b.d_F3_s0",
+ "git_note": "",
+ "pid": 237797,
+ "pgid": 237797,
+ "pid_start": 5184130,
+ "exit": 0,
+ "duration_s": 532,
+ "attempts": 1,
+ "ended": "2026-11-24T23:05:34",
+ "last_lines": [
+  "{\"step\": 1900, \"loss\": 0.65585, \"lanes\": 0.10537, \"route\": 0.205, \"assoc\": 0.34547, \"s\": 315.4}",
+  "{\"step\": 2000, \"loss\": 0.55789, \"lanes\": 0.01251, \"route\": 0.11851, \"assoc\": 0.42688, \"s\": 331.3}",
+  "{\"step\": 2100, \"loss\": 0.55286, \"lanes\": 0.07069, \"route\": 0.14405, \"assoc\": 0.33812, \"s\": 347.5}",
+  "{\"step\": 2200, \"loss\": 0.76276, \"lanes\": 0.1214, \"route\": 0.26783, \"assoc\": 0.37353, \"s\": 364.3}",
+  "{\"step\": 2300, \"loss\": 0.7092, \"lanes\": 0.04374, \"route\": 0.24016, \"assoc\": 0.42529, \"s\": 380.6}",
+  "{\"step\": 2400, \"loss\": 0.6311, \"lanes\": 0.05585, \"route\": 0.15135, \"assoc\": 0.42391, \"s\": 396.1}",
+  "{\"step\": 2500, \"loss\": 0.41452, \"lanes\": 0.03255, \"route\": 0.19191, \"assoc\": 0.19007, \"s\": 411.9}",
+  "{\"step\": 2600, \"loss\": 0.77384, \"lanes\": 0.25008, \"route\": 0.19145, \"assoc\": 0.33231, \"s\": 427.9}",
+  "{\"step\": 2700, \"loss\": 0.4687, \"lanes\": 0.0191, \"route\": 0.15239, \"assoc\": 0.29722, \"s\": 444.1}",
+  "{\"step\": 2800, \"loss\": 0.57947, \"lanes\": 0.0468, \"route\": 0.16259, \"assoc\": 0.37008, \"s\": 460.9}",
+  "{\"step\": 2900, \"loss\": 0.58111, \"lanes\": 0.01821, \"route\": 0.21084, \"assoc\": 0.35205, \"s\": 477.6}",
+  "{\"step\": 3000, \"loss\": 0.53368, \"lanes\": 0.01616, \"route\": 0.15244, \"assoc\": 0.36508, \"s\": 493.2}"
+ ]
+}

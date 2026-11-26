@@ -1,0 +1,212 @@
+{
+ "id": "E392.dump_val_a2_s1",
+ "hypothesis": "E392 stage 1 (the head on the cached K 512 tokens, the E373 recipe: none weight 0.25, 12000 steps, bs 8, lr 1e-3, cache seed S, head seed S + 2): control c (champion code, no round, retrained), x = one round without a loss on the early read, r1 = one round (after layer 1) with the early wiring loss, r2 = two rounds (after layers 1 and 2) with the early wiring loss on each, u = the content null of the adopted arm (conditional); VAL 873 at the D115 decode; then a stage-2 (S4, end to end through B''s node head) diagnostic on one stage-1 head",
+ "prediction": "0.006 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"topo_F1\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"max_loss\":0.005},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: a loss is not finite (a `non-finite` line in the trainer's log; jarm and jlive_train enforce this one); or no learning, checked by hand at the read-out on the comparable parts of the loss (nll_s + nll_l + ce3, NOT the total, which holds the extra terms of the arms): the mean over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200 (a weak clause: the E373 heads reach a ratio of about 0.33); or the curve check of the control fires (section 1.4); or an arm's data-order fingerprint differs from c's at any logged step (the arm is then not paired with c); a run cut by run.py or the GPU is resumed from its checkpoint (resume steps reported); a crashed read-out is re-run unchanged, never with another cell; no GPU job starts before the conditions of section 1.5; core 7.3 GPU h (c, x, r1, r2 on two seeds = 8 runs of 0.7 - 0.9 h, the timing 0.3), conditional u 2.0, diagnostic s4 1.3 (two seeds, about 0.65 h each with the live read)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e392_a2_s1 --seed 1 --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e392_a2_s1 --seed 1 --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 40595,
+ "created": "2026-11-22T15:58:39",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E392",
+ "card_sha": "ad30768111d551b5",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E392.c_s0",
+    "E392.dump_val_c_s0",
+    "E392.dump_train_c_s0",
+    "E392.sweep_c_s0",
+    "E392.choose_c_s0",
+    "E392.cell_vs_c_s0",
+    "E392.d115_vs_c_s0",
+    "E392.c_s1",
+    "E392.dump_val_c_s1",
+    "E392.dump_train_c_s1",
+    "E392.sweep_c_s1",
+    "E392.choose_c_s1",
+    "E392.cell_vs_c_s1",
+    "E392.d115_vs_c_s1"
+   ]
+  },
+  "x": {
+   "order": {},
+   "run_ids": [
+    "E392.x_s0",
+    "E392.dump_val_x_s0",
+    "E392.dump_train_x_s0",
+    "E392.sweep_x_s0",
+    "E392.choose_x_s0",
+    "E392.cell_vs_x_s0",
+    "E392.d115_vs_x_s0",
+    "E392.x_s1",
+    "E392.dump_val_x_s1",
+    "E392.dump_train_x_s1",
+    "E392.sweep_x_s1",
+    "E392.choose_x_s1",
+    "E392.cell_vs_x_s1",
+    "E392.d115_vs_x_s1"
+   ]
+  },
+  "r1": {
+   "order": {},
+   "run_ids": [
+    "E392.r1_s0",
+    "E392.dump_val_r1_s0",
+    "E392.dump_train_r1_s0",
+    "E392.sweep_r1_s0",
+    "E392.choose_r1_s0",
+    "E392.cell_vs_r1_s0",
+    "E392.d115_vs_r1_s0",
+    "E392.r1_s1",
+    "E392.dump_val_r1_s1",
+    "E392.dump_train_r1_s1",
+    "E392.sweep_r1_s1",
+    "E392.choose_r1_s1",
+    "E392.cell_vs_r1_s1",
+    "E392.d115_vs_r1_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E392.r2_s0",
+    "E392.dump_val_r2_s0",
+    "E392.dump_train_r2_s0",
+    "E392.sweep_r2_s0",
+    "E392.choose_r2_s0",
+    "E392.cell_vs_r2_s0",
+    "E392.d115_vs_r2_s0",
+    "E392.r2_s1",
+    "E392.dump_val_r2_s1",
+    "E392.dump_train_r2_s1",
+    "E392.sweep_r2_s1",
+    "E392.choose_r2_s1",
+    "E392.cell_vs_r2_s1",
+    "E392.d115_vs_r2_s1"
+   ]
+  },
+  "a2": {
+   "order": {},
+   "run_ids": [
+    "E392.a2_s0",
+    "E392.dump_val_a2_s0",
+    "E392.dump_train_a2_s0",
+    "E392.sweep_a2_s0",
+    "E392.choose_a2_s0",
+    "E392.cell_vs_a2_s0",
+    "E392.d115_vs_a2_s0",
+    "E392.a2_s1",
+    "E392.dump_val_a2_s1",
+    "E392.dump_train_a2_s1",
+    "E392.sweep_a2_s1",
+    "E392.choose_a2_s1",
+    "E392.cell_vs_a2_s1",
+    "E392.d115_vs_a2_s1"
+   ]
+  },
+  "a1": {
+   "order": {},
+   "run_ids": [
+    "E392.a1_s0",
+    "E392.dump_val_a1_s0",
+    "E392.dump_train_a1_s0",
+    "E392.sweep_a1_s0",
+    "E392.choose_a1_s0",
+    "E392.cell_vs_a1_s0",
+    "E392.d115_vs_a1_s0",
+    "E392.a1_s1",
+    "E392.dump_val_a1_s1",
+    "E392.dump_train_a1_s1",
+    "E392.sweep_a1_s1",
+    "E392.choose_a1_s1",
+    "E392.cell_vs_a1_s1",
+    "E392.d115_vs_a1_s1"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": [
+    "E392.u_s0",
+    "E392.dump_val_u_s0",
+    "E392.dump_train_u_s0",
+    "E392.sweep_u_s0",
+    "E392.choose_u_s0",
+    "E392.cell_vs_u_s0",
+    "E392.d115_vs_u_s0",
+    "E392.u_s1",
+    "E392.dump_val_u_s1",
+    "E392.dump_train_u_s1",
+    "E392.sweep_u_s1",
+    "E392.choose_u_s1",
+    "E392.cell_vs_u_s1",
+    "E392.d115_vs_u_s1"
+   ]
+  },
+  "s4": {
+   "order": {},
+   "run_ids": [
+    "E392.s4_x_s0",
+    "E392.s4dump_x_s0",
+    "E392.s4score_x_s0",
+    "E392.s4_x_s1",
+    "E392.s4dump_x_s1",
+    "E392.s4score_x_s1",
+    "E392.s4_r1_s0",
+    "E392.s4dump_r1_s0",
+    "E392.s4score_r1_s0",
+    "E392.s4_r1_s1",
+    "E392.s4dump_r1_s1",
+    "E392.s4score_r1_s1",
+    "E392.s4_r2_s0",
+    "E392.s4dump_r2_s0",
+    "E392.s4score_r2_s0",
+    "E392.s4_r2_s1",
+    "E392.s4dump_r2_s1",
+    "E392.s4score_r2_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "3201216a7508",
+ "started": "2026-11-22T16:00:00",
+ "code_hash": "3201216a7508",
+ "commit": "7ec6646dbb",
+ "tag": "lcr/E392.dump_val_a2_s1",
+ "git_note": "1470 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 41021,
+ "pgid": 41021,
+ "pid_start": 5447603,
+ "exit": 0,
+ "duration_s": 85,
+ "attempts": 1,
+ "ended": "2026-11-22T16:01:34",
+ "last_lines": [
+  "=== attempt 2026-11-22T16:00:00: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e392_a2_s1 --seed 1 --split val",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e392_a2_s1/token_val.pkl: 873 frames, kept nodes per frame 201.0, links per frame rec 185.0 argmax 180.5, device cuda"
+ ]
+}

@@ -1,0 +1,55 @@
+{
+ "id": "E391.nulls_val_s1",
+ "hypothesis": "E391 step 2: the association nulls (zero-shot E390 P6 head, nearest and logistic rules fitted on TRAIN tokens, the oracle read) measured before any fusion training",
+ "prediction": "none (measurement)",
+ "rule": "measurement for the bars, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py nulls --seed 1 --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh mapassoc_probe.py nulls --seed 1 --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 12167,
+ "created": "2026-11-21T18:30:14",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "code_hash_first": "31690864cea8",
+ "started": "2026-11-21T18:30:44",
+ "code_hash": "31690864cea8",
+ "commit": "a5db56860b",
+ "tag": "lcr/E391.nulls_val_s1",
+ "git_note": "1437 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 12910,
+ "pgid": 12910,
+ "pid_start": 139695,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/e358/queue_w2.sh",
+   "bev_fusion_lane_center/temp/e361/wait_done.sh",
+   "bev_fusion_lane_center/temp/e391/smoke391.py",
+   "bev_fusion_lane_center/temp/e391/z391.sh",
+   "bev_fusion_lane_center/training/grid/test_mapassoc.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 497,
+ "attempts": 1,
+ "ended": "2026-11-21T18:39:51",
+ "last_lines": [
+  ".7695, lanes_acc_logistic 0.5407, route_f1_logistic 0.1256, assoc_acc_oracle 1.0000, seg_acc_oracle 1.0000, none_recall_oracle 1.0000, false_assign_oracle 0.0000, false_unassigned_oracle 0.0000, lanes_acc_oracle 0.8939, route_f1_oracle 0.4751; {'frames': 873, 'tokens': 132009, 'absent': 9200, 'false': 43637, 'lanes': 76285, 'route': 140270} (78 s)",
+  "exact: assoc_acc_p6zero 0.6435, seg_acc_p6zero 0.9118, none_recall_p6zero 0.3125, false_assign_p6zero 0.8995, false_unassigned_p6zero 0.0167, lanes_acc_p6zero 0.9651, route_f1_p6zero 0.6808, assoc_acc_nearest 0.2619, seg_acc_nearest 0.0233, none_recall_nearest 1.0000, false_assign_nearest 0.2552, false_unassigned_nearest 0.9361, lanes_acc_nearest 0.5246, route_f1_nearest 0.0625, assoc_acc_logistic 0.4511, seg_acc_logistic 0.2314, none_recall_logistic 1.0000, false_assign_logistic 0.1041, false_unassigned_logistic 0.7562, lanes_acc_logistic 0.5648, route_f1_logistic 0.1718, assoc_acc_oracle 1.0000, seg_acc_oracle 1.0000, none_recall_oracle 1.0000, false_assign_oracle 0.0000, false_unassigned_oracle 0.0000, lanes_acc_oracle 1.0000, route_f1_oracle 0.6384; {'frames': 873, 'tokens': 132009, 'absent': 16, 'false': 43637, 'lanes': 85199, 'route': 140270} (72 s)",
+  "pose2: assoc_acc_p6zero 0.6522, seg_acc_p6zero 0.8935, none_recall_p6zero 0.7816, false_assign_p6zero 0.8128, false_unassigned_p6zero 0.0334, lanes_acc_p6zero 0.8636, route_f1_p6zero 0.5276, assoc_acc_nearest 0.4143, seg_acc_nearest 0.0912, none_recall_nearest 0.9818, false_assign_nearest 0.1193, false_unassigned_nearest 0.8896, lanes_acc_nearest 0.5650, route_f1_nearest 0.0896, assoc_acc_logistic 0.4866, seg_acc_logistic 0.2021, none_recall_logistic 0.9891, false_assign_logistic 0.1034, false_unassigned_logistic 0.7861, lanes_acc_logistic 0.5408, route_f1_logistic 0.1158, assoc_acc_oracle 1.0000, seg_acc_oracle 1.0000, none_recall_oracle 1.0000, false_assign_oracle 0.0000, false_unassigned_oracle 0.0000, lanes_acc_oracle 0.8939, route_f1_oracle 0.4751; {'frames': 873, 'tokens': 132009, 'absent': 9200, 'false': 43637, 'lanes': 76285, 'route': 140270} (113 s)",
+  "nd2: assoc_acc_p6zero 0.6707, seg_acc_p6zero 0.8944, none_recall_p6zero 0.8079, false_assign_p6zero 0.7465, false_unassigned_p6zero 0.0441, lanes_acc_p6zero 0.8607, route_f1_p6zero 0.5040, assoc_acc_nearest 0.4541, seg_acc_nearest 0.0670, none_recall_nearest 0.9800, false_assign_nearest 0.1386, false_unassigned_nearest 0.9124, lanes_acc_nearest 0.5522, route_f1_nearest 0.0675, assoc_acc_logistic 0.5488, seg_acc_logistic 0.2182, none_recall_logistic 0.9875, false_assign_logistic 0.0990, false_unassigned_logistic 0.7716, lanes_acc_logistic 0.5425, route_f1_logistic 0.1156, assoc_acc_oracle 1.0000, seg_acc_oracle 1.0000, none_recall_oracle 1.0000, false_assign_oracle 0.0000, false_unassigned_oracle 0.0000, lanes_acc_oracle 0.8889, route_f1_oracle 0.4457; {'frames': 873, 'tokens': 132009, 'absent': 18005, 'false': 43637, 'lanes': 67767, 'route': 140270} (76 s)",
+  "written runs/e391_assoc/nulls_val_s1.json"
+ ]
+}

@@ -1,0 +1,112 @@
+{
+ "id": "E292.c2_s1",
+ "hypothesis": "E292 matched reference: B's final checkpoint fine-tuned with the schedule of the card (phases 3 4 5 6 9, pyramid frozen) WITHOUT the layer, read out with the hard close-node step, costs less than the band against E312 (precondition of the comparison)",
+ "prediction": "c2 topo F1 within -0.01 of c (E312 snapped 0.6825 / 0.6864) on both seeds with the guards held; not predicted more exactly (that is what c2 measures)",
+ "rule": "E292 card section 0: by hand (replay of the stored cards: jends_eval.py score --snap --thr 0.1 --full --base --spec --tag); a seed PASSES when topo F1 of a >= c2 - 0.01 and >= c - 0.01 with the guards held; PRECONDITION c2 passes against c; KEEP / TIE (kept and refined, D87) / CUT only by the kill (card section 0)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh qgraph_train.py --name e292_c2_s1 --seed 1 --workers 3 --phases 3 4 5 6 9 --steps 3000 2500 1000 750 1000 --resume-from /mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s1/model.pt --gate-phases 3 --gate-node-prec 0.75 --gate-node-rec 0.5",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "qgraph_train.py",
+  "--name",
+  "e292_c2_s1",
+  "--seed",
+  "1",
+  "--workers",
+  "3",
+  "--phases",
+  "3",
+  "4",
+  "5",
+  "6",
+  "9",
+  "--steps",
+  "3000",
+  "2500",
+  "1000",
+  "750",
+  "1000",
+  "--resume-from",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e273_p_s1/model.pt",
+  "--gate-phases",
+  "3",
+  "--gate-node-prec",
+  "0.75",
+  "--gate-node-rec",
+  "0.5"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 20618,
+ "created": "2026-11-14T00:32:14",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E292",
+ "card_sha": "4e0d7cecfc8dab9b",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "c2": {
+   "order": {},
+   "run_ids": [
+    "E292.c2_s0",
+    "E292.c2_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E292.a_s0",
+    "E292.a_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "e3aa51b23003",
+ "started": "2026-11-14T00:32:54",
+ "code_hash": "e3aa51b23003",
+ "commit": "29a8d498ab",
+ "tag": "lcr/E292.c2_s1",
+ "git_note": "",
+ "pid": 21186,
+ "pgid": 21186,
+ "pid_start": 1496210,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e324_table.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/fix_e324_text.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/maps_cmp.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/watch_logs.sh",
+   "bev_fusion_lane_center/temp/e324/boots_result.sh",
+   "bev_fusion_lane_center/temp/e324/verdict_e324.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3416,
+ "attempts": 1,
+ "ended": "2026-11-14T01:30:08",
+ "last_lines": [
+  "_flags 0.716 n_off 0.401 n_dir 0.020 n_s 0.180 n_u 0.300 l_link 0.191 l_long 0.122 l_deg 1.773 l_scale 0.180 l_pos 2203.000 l_pairs 47566.000 l_miss 0.000 s_ce 1.100 s_pair 0.345 a_asg 0.226 a_fp 1.134 a_road 0.263 a_struct 0.367 a_acc 0.922",
+  "01:24:33 step 700/1000 loss 4.1854 lr 4.87e-05 0.410 s/step n_e 0.092 n_flags 0.565 n_off 0.443 n_dir 0.034 n_s 0.169 n_u 0.248 l_link 0.192 l_long 0.090 l_deg 1.392 l_scale 0.158 l_pos 2200.000 l_pairs 50607.000 l_miss 0.000 s_ce 1.129 s_pair 0.274 a_asg 0.117 a_fp 1.207 a_road 0.068 a_struct 0.295 a_acc 0.965",
+  "01:25:13 step 800/1000 loss 4.3181 lr 2.49e-05 0.408 s/step n_e 0.069 n_flags 0.374 n_off 0.341 n_dir 0.021 n_s 0.137 n_u 0.135 l_link 0.173 l_long 0.091 l_deg 1.513 l_scale 0.158 l_pos 2143.000 l_pairs 45293.000 l_miss 0.000 s_ce 0.756 s_pair 0.230 a_asg 0.094 a_fp 1.052 a_road 0.074 a_struct 0.342 a_acc 0.975",
+  "01:25:52 step 900/1000 loss 3.9396 lr 9.42e-06 0.406 s/step n_e 0.102 n_flags 0.771 n_off 0.482 n_dir 0.089 n_s 0.223 n_u 0.334 l_link 0.252 l_long 0.119 l_deg 1.521 l_scale 0.151 l_pos 1763.000 l_pairs 47638.000 l_miss 0.000 s_ce 1.691 s_pair 0.364 a_asg 0.200 a_fp 0.957 a_road 0.471 a_struct 0.335 a_acc 0.946",
+  "01:26:28 step 1000/1000 loss 4.2187 lr 4.00e-06 0.402 s/step n_e 0.095 n_flags 0.683 n_off 0.465 n_dir 0.016 n_s 0.156 n_u 0.349 l_link 0.217 l_long 0.130 l_deg 1.455 l_scale 0.144 l_pos 1908.000 l_pairs 39736.000 l_miss 0.000 s_ce 1.354 s_pair 0.271 a_asg 0.134 a_fp 1.258 a_road 0.157 a_struct 0.310 a_acc 0.968",
+  "01:26:29 done 1000",
+  "01:29:41 GATE {\"p3\": {\"node_f1\": 0.7820471315459617, \"node_prec\": 0.9146128380613895, \"node_rec\": 0.683045264998314, \"node_prec_2m\": 0.9274801646302353, \"node_rec_2m\": 0.8975497157203677, \"e271_f1\": 0.6129707968622224, \"pos_err_med\": 0.25469495356082916, \"flag_recall\": {\"stop\": 0.5079365079365079, \"exit\": 0.4609297725024728, \"split\": 0.4318766066838046, \"merge\": 0.44175824175824174, \"start\": 0.24719101123595505, \"end\": 0.19540229885057472, \"win_in\": 0.676923076923077, \"win_out\": 0.7164804469273743}}, \"p4\": {\"link_prec\": 0.23348499989369167, \"link_rec\": 0.8227075217261013, \"link_f1\": 0.3637402494162071, \"junction_F1\": 0.11555741301849339, \"F1_1\": 0.8399118116841829, \"topo_F1\": 0.5945619259003442, \"lanes_found\": 0.661350042722871, \"Q\": 0.6391799099537597, \"pieces_per_gt_piece\": 1.31, \"id_switches\": 0.6857759757586167, \"vert100_dp\": 31.455351326913938, \"node_f1_scorer\": 0.852391782558443}, \"p5\": {\"section_start_acc\": 0.47059907834101383, \"junction_F1\": 0.11675294635973124, \"F1_1\": 0.8398735824310697, \"topo_F1\": 0.6067941772974301, \"lanes_found\": 0.6610652235830248, \"Q\": 0.6393353328986563, \"pieces_per_gt_piece\": 1.626, \"id_switches\": 1.4537469253559225, \"vert100_dp\": 31.533702562013993, \"node_f1_scorer\": 0.852391782558443}, \"p6\": {\"lane_acc_error\": 0.9021807589356007, \"geo_acc_error\": 0.8713588411273815, \"lane_acc_exact\": 0.9350414746543779, \"geo_acc_exact\": 0.9429308755760368}, \"pass\": true, \"why\": \"phase 9: numbers only\"}",
+  "01:29:41 all phases done [3, 4, 5, 6, 9]"
+ ]
+}

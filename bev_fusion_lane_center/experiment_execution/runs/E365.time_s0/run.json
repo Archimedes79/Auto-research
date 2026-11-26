@@ -1,0 +1,59 @@
+{
+ "id": "E365.time_s0",
+ "hypothesis": "E365 S1: the E2E token head (3 relative-geometry self-attention layers, per-source successor softmax with a none slot per class, 7-way node-type softmax, soft pruning) on the predicted nodes of the frozen lane head B-prime (cache K = 512), one training stage of 12000 steps, delivers the lane graph with no rule step at the okayish level of D113 point 4: topo F1 at least plain B + 0.01 on both seeds, F1@1.0 and lanes found not below B by more than 0.01 / 0.02, parameters and ms of the whole path not above E324 s.",
+ "prediction": "topo F1 about 0.665 (window 0.615 - 0.715), +0.04 over plain B (floors 0.6359 / 0.6349), F1@1.0 about 0.84 (0.80 - 0.88), lanes found about 0.70 (0.60 - 0.78), head 0.127 M parameters, whole path 14 - 18 ms; PASS 55 %, QUALITY-ONLY 10 %, INCONCLUSIVE 15 %, MISS 20 %",
+ "rule": "E365 card section 0 (by hand: the okayish gate of D113 point 4, written before the run): PASS = G-topo (topo F1 >= 0.6359 / 0.6349), G-found (F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937), G-cost (whole path <= E324 s 2.741 M parameters and 19.7 ms) and G-simple on both seeds; MISS = G-topo or G-found fails on both seeds; QUALITY-ONLY = G-topo and G-found hold, G-cost or G-simple fails; else INCONCLUSIVE; decode of record p >= 0.3 and >= p(none); VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_py14.sh jtoken_eval.py timing --run e365_s1_s0 --b-run e292_a_s0 && bash tools/env/_py14.sh jtoken_eval.py check-parity --run e365_s1_s0 --seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_py14.sh jtoken_eval.py timing --run e365_s1_s0 --b-run e292_a_s0 && bash tools/env/_py14.sh jtoken_eval.py check-parity --run e365_s1_s0 --seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 25096,
+ "created": "2026-11-17T00:59:46",
+ "status": "failed",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "020d32738832",
+ "started": "2026-11-17T01:00:28",
+ "code_hash": "020d32738832",
+ "commit": "5d8d7ce425",
+ "tag": "lcr/E365.time_s0",
+ "git_note": "112 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 25581,
+ "pgid": 25581,
+ "pid_start": 696731,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/temp/e365/record_old_losses.py",
+   "bev_fusion_lane_center/temp/fix_md.py"
+  ]
+ },
+ "exit": 1,
+ "duration_s": 52,
+ "attempts": 1,
+ "ended": "2026-11-17T01:01:49",
+ "last_lines": [
+  "    sd = torch.load(os.path.join(run_dir, \"ckpt.pt\"), map_location=\"cpu\", weights_only=False)",
+  "         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+  "  File \"/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/serialization.py\", line 1484, in load",
+  "    with _open_file_like(f, \"rb\") as opened_file:",
+  "         ^^^^^^^^^^^^^^^^^^^^^^^^",
+  "  File \"/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/serialization.py\", line 759, in _open_file_like",
+  "    return _open_file(name_or_buffer, mode)",
+  "           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^",
+  "  File \"/home/ml/miniconda3/envs/gcar/lib/python3.12/site-packages/torch/serialization.py\", line 740, in __init__",
+  "    super().__init__(open(name, mode))",
+  "                     ^^^^^^^^^^^^^^^^",
+  "FileNotFoundError: [Errno 2] No such file or directory: '/mnt/c/Auto-research/bev_fusion_lane_center/e292_a_s0/ckpt.pt'"
+ ]
+}

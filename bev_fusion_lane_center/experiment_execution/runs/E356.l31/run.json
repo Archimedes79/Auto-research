@@ -1,0 +1,106 @@
+{
+ "id": "E356.l31",
+ "hypothesis": "E356 (card experiments/E356_node-spacing, section 0): E356.l31",
+ "prediction": "E356 card section 1 (prediction with hit windows): radius 2.0: E324 s snapped topo F1 -0.002 (window -0.006 .. +0.002), vert100_dp -0.3 (window -1.0 .. 0.0); radius 2.5: -0.010 (window -0.025 .. -0.002), vert100_dp -1.5 (window -3.0 .. -0.5); l25 topo F1 -0.030 against g1 (window -0.045 .. -0.020), l31 -0.045 (window -0.065 .. -0.030)",
+ "rule": "E356 card section 0 (by hand: replay of the cards, temp/e356/e356_table.py): a radius is taken when topo F1 loses at most 0.01 on both seeds and all four numbers sets with the guards held AND vert100_dp of E324 s snapped falls by at least 0.5 (mean of the seeds); part B: the E346 rule (loss against g1 at most 0.03 on topo F1, lanes found, F1@1.0)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "nice -n 19 env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 bash tools/env/_py14.sh e346_arm.py l31",
+ "argv": [
+  "nice",
+  "-n",
+  "19",
+  "env",
+  "CUDA_VISIBLE_DEVICES=",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "bash",
+  "tools/env/_py14.sh",
+  "e346_arm.py",
+  "l31"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 624412,
+ "created": "2026-11-15T21:07:53",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E356",
+ "card_sha": "8cf4c1fd1f259a29",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "a20": {
+   "order": {},
+   "run_ids": [
+    "E356.a20_snap_s0",
+    "E356.a20_snap_s1"
+   ]
+  },
+  "a25": {
+   "order": {},
+   "run_ids": [
+    "E356.a25_snap_s0",
+    "E356.a25_snap_s1",
+    "E356.a15chk_snap_s0"
+   ]
+  },
+  "sp": {
+   "order": {},
+   "run_ids": [
+    "E356.nn_spacing"
+   ]
+  },
+  "l25": {
+   "order": {},
+   "run_ids": [
+    "E356.l25"
+   ]
+  },
+  "l31": {
+   "order": {},
+   "run_ids": [
+    "E356.l31"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "4143811ab412",
+ "started": "2026-11-15T21:09:07",
+ "code_hash": "4143811ab412",
+ "commit": "6e254d8a76",
+ "tag": "lcr/E356.l31",
+ "git_note": "",
+ "pid": 625144,
+ "pgid": 625144,
+ "pid_start": 17553588,
+ "exit": 0,
+ "duration_s": 378,
+ "attempts": 1,
+ "ended": "2026-11-15T21:15:39",
+ "last_lines": [
+  "e346 self-test ok (53 s, grids 3.125 m): cell-size harness (mutations caught, 3.0 m refused), g0 = 1.000, planted degradations fall, parts by kind, l2 = qgraph_eval.score_frames, collision and link toys",
+  "arm l31: 873 of 873 VAL frames (every 1th, k 0 .. 872)",
+  "   l31: 100/873 frames, 25 s",
+  "   l31: 200/873 frames, 62 s",
+  "   l31: 300/873 frames, 92 s",
+  "   l31: 400/873 frames, 121 s",
+  "   l31: 500/873 frames, 136 s",
+  "   l31: 600/873 frames, 175 s",
+  "   l31: 700/873 frames, 210 s",
+  "   l31: 800/873 frames, 249 s",
+  "card /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/e346_l31/val.json",
+  "   topo_F1 0.9646  F1@1.0 0.9944  lanes_found 0.9791  junction_F1 0.9363  vert100 21.7635  vert100_dp 11.3771   (0.305 s per frame)"
+ ]
+}

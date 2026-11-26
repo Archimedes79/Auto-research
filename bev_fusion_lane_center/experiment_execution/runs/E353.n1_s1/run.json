@@ -1,0 +1,113 @@
+{
+ "id": "E353.n1_s1",
+ "hypothesis": "E353 (card experiments/E353_paint-branch-width-25, section 0): E353.n1_s1",
+ "prediction": "E353 card section 1 (prediction with hit windows): snapped topo F1 of n1 minus c -0.002, PRIMARY -0.002, attach-only -0.003; cp minus c +0.001; n1z (no fine-tune) -0.004 snapped",
+ "rule": "E353 card section 0 (by hand: replay with jrule_removal.py against c = E324 s of the same seed and against cp = the continuation): ADOPT when the topo F1 loss is at most 0.01 on both seeds and all three read-outs with the guards held, against c and against cp",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "env BFLC_SIG=1.0 bash tools/env/_pyr.sh jnarrow_train.py --name e353_n1_s1 --init runs/e324_s_s1/model.pt --seed 1 --narrow experiments/E353_paint-branch-width-25/spec_n1_s1.json --steps 1500 --lr 3e-4 --e2e --scales --maps-w 1.0 --geom-w 0.5 --attach --workers 4",
+ "argv": [
+  "env",
+  "BFLC_SIG=1.0",
+  "bash",
+  "tools/env/_pyr.sh",
+  "jnarrow_train.py",
+  "--name",
+  "e353_n1_s1",
+  "--init",
+  "runs/e324_s_s1/model.pt",
+  "--seed",
+  "1",
+  "--narrow",
+  "experiments/E353_paint-branch-width-25/spec_n1_s1.json",
+  "--steps",
+  "1500",
+  "--lr",
+  "3e-4",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--geom-w",
+  "0.5",
+  "--attach",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 647100,
+ "created": "2026-11-15T23:56:56",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 240.0,
+ "card_id": "E353",
+ "card_sha": "a9525141bb246156",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "cp": {
+   "order": {},
+   "run_ids": [
+    "E353.cp_s0",
+    "E353.cp_s1"
+   ]
+  },
+  "n1": {
+   "order": {},
+   "run_ids": [
+    "E353.n1_s0",
+    "E353.n1_s1",
+    "E353.n1z_s0",
+    "E353.n1z_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "3bbd120f3f7e",
+ "started": "2026-11-15T23:58:31",
+ "code_hash": "3bbd120f3f7e",
+ "commit": "0cba37c198",
+ "tag": "lcr/E353.n1_s1",
+ "git_note": "",
+ "pid": 647892,
+ "pgid": 647892,
+ "pid_start": 18569977,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/make_day34.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/smokes_then_arms.sh",
+   "bev_fusion_lane_center/temp/day34/day34.sh",
+   "bev_fusion_lane_center/temp/e346/e346_arm.py",
+   "bev_fusion_lane_center/temp/e354/read_flip.py",
+   "bev_fusion_lane_center/temp/e354/verdict.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3037,
+ "attempts": 1,
+ "ended": "2026-11-16T00:49:35",
+ "last_lines": [
+  "d 0.605 att_n 271.000 att_ce 0.754 att_acc 0.749 att_acc_nearest 0.576 att_bin 0.022 att_kp_d 0.964 att_d 0.605 j_zone 0.179 j_heat 0.740 j_dir 0.033 j_paint 0.289",
+  "00:29:46 step 900/1500 loss 2.0134 lr 1.17e-04 1.953 s/step bce 0.066 pos_pairs 109.000 allowed 1568.000 dual 0.188 scale_l1 0.200 cross 0.000 geom_shape 0.196 geom_n 109.000 geom_d_curve 0.332 geom_d_gt 0.333 geom_end 0.270 geom_end_d 0.613 att_n 268.000 att_ce 0.676 att_acc 0.735 att_acc_nearest 0.552 att_bin 0.019 att_kp_d 0.927 att_d 0.598 j_zone 0.136 j_heat 0.728 j_dir 0.043 j_paint 0.187",
+  "00:33:06 step 1000/1500 loss 2.0314 lr 8.69e-05 1.958 s/step bce 0.061 pos_pairs 135.000 allowed 2209.000 dual 0.178 scale_l1 0.196 cross 0.000 geom_shape 0.190 geom_n 135.000 geom_d_curve 0.318 geom_d_gt 0.322 geom_end 0.203 geom_end_d 0.535 att_n 350.000 att_ce 0.655 att_acc 0.760 att_acc_nearest 0.614 att_bin 0.006 att_kp_d 0.843 att_d 0.529 j_zone 0.171 j_heat 0.757 j_dir 0.036 j_paint 0.248",
+  "00:36:15 step 1100/1500 loss 2.0551 lr 5.98e-05 1.952 s/step bce 0.036 pos_pairs 141.000 allowed 2162.000 dual 0.114 scale_l1 0.199 cross 0.000 geom_shape 0.158 geom_n 141.000 geom_d_curve 0.298 geom_d_gt 0.298 geom_end 0.249 geom_end_d 0.583 att_n 350.000 att_ce 0.577 att_acc 0.786 att_acc_nearest 0.611 att_bin 0.014 att_kp_d 0.863 att_d 0.577 j_zone 0.209 j_heat 0.749 j_dir 0.028 j_paint 0.266",
+  "00:39:17 step 1200/1500 loss 1.9739 lr 3.72e-05 1.941 s/step bce 0.025 pos_pairs 162.000 allowed 2380.000 dual 0.078 scale_l1 0.198 cross 0.000 geom_shape 0.152 geom_n 162.000 geom_d_curve 0.298 geom_d_gt 0.298 geom_end 0.158 geom_end_d 0.467 att_n 359.000 att_ce 0.544 att_acc 0.799 att_acc_nearest 0.585 att_bin 0.000 att_kp_d 0.838 att_d 0.466 j_zone 0.147 j_heat 0.714 j_dir 0.021 j_paint 0.250",
+  "00:42:28 step 1300/1500 loss 2.0363 lr 2.02e-05 1.939 s/step bce 0.058 pos_pairs 132.000 allowed 1732.000 dual 0.127 scale_l1 0.178 cross 0.000 geom_shape 0.233 geom_n 132.000 geom_d_curve 0.361 geom_d_gt 0.362 geom_end 0.295 geom_end_d 0.629 att_n 310.000 att_ce 0.696 att_acc 0.748 att_acc_nearest 0.542 att_bin 0.006 att_kp_d 0.965 att_d 0.629 j_zone 0.206 j_heat 0.782 j_dir 0.070 j_paint 0.304",
+  "00:45:42 step 1400/1500 loss 2.0059 lr 9.63e-06 1.939 s/step bce 0.078 pos_pairs 140.000 allowed 2109.000 dual 0.202 scale_l1 0.225 cross 0.000 geom_shape 0.188 geom_n 140.000 geom_d_curve 0.326 geom_d_gt 0.334 geom_end 0.300 geom_end_d 0.637 att_n 340.000 att_ce 0.854 att_acc 0.662 att_acc_nearest 0.529 att_bin 0.006 att_kp_d 0.968 att_d 0.638 j_zone 0.229 j_heat 0.804 j_dir 0.046 j_paint 0.333",
+  "00:48:45 step 1500/1500 loss 1.9763 lr 6.00e-06 1.931 s/step bce 0.058 pos_pairs 139.000 allowed 2372.000 dual 0.170 scale_l1 0.244 cross 0.000 geom_shape 0.241 geom_n 139.000 geom_d_curve 0.374 geom_d_gt 0.379 geom_end 0.326 geom_end_d 0.677 att_n 349.000 att_ce 0.768 att_acc 0.736 att_acc_nearest 0.573 att_bin 0.020 att_kp_d 0.949 att_d 0.671 j_zone 0.255 j_heat 0.838 j_dir 0.061 j_paint 0.426",
+  "00:48:53 done 1500",
+  "00:48:53 done e353_n1_s1"
+ ]
+}

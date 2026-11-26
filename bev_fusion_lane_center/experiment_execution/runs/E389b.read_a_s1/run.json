@@ -1,0 +1,91 @@
+{
+ "id": "E389b.read_a_s1",
+ "hypothesis": "E389b: the E389 route-association head with ONE learned cross-attention (arm a: attention A with the metre-scale pair-feature bias and the none key, the sharp attention B removed; arm p: a plain q.k attention without the bias, exploratory), against the E389 head with A and B (m) and the matched no-map head (z) on the same cache, labels, steps and seeds",
+ "prediction": "0.09 vs z",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"route_F1_road\",\"vs\":\"m\",\"min_effect\":-0.01,\"note\":\"by hand: the per-clause rule below (a is read against the stored E389 m and z cards, paired against z of the same seed); decide.py cannot judge it\"}] | kill: a loss is not finite; or no learning in an arm (the logged `total` of step 3000 (mean of steps 2901 - 3000) is not below 0.8 x the logged `total` of step 100); or the head ignores the map (a: F1_road at the mode wrong within 0.01 of its F1_road at the mode error on BOTH seeds AND a - z < 0.01 at the mode error: then the verdict is 'ONE ATTENTION DOES NOT READ THE MAP' with the status named); or the unit tests of the attn option fail (the code is not used before they are green and a code critic pass is done); `--timeout` as E389 (about 30 min per run, two slots at most)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash temp/e389b/e389b_read_one.sh a_s1 1",
+ "argv": [
+  "bash",
+  "temp/e389b/e389b_read_one.sh",
+  "a_s1",
+  "1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 63671,
+ "created": "2026-11-21T02:17:05",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E389b",
+ "card_sha": "640009ce27dad611",
+ "card_arms": {
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E389b.a_s0",
+    "E389b.a_s1",
+    "E389b.read_a_s0",
+    "E389b.read_a_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E389b.p_s0",
+    "E389b.read_p_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "710bc62295ac",
+ "started": "2026-11-21T02:17:34",
+ "code_hash": "710bc62295ac",
+ "commit": "9c1c121b14",
+ "tag": "lcr/E389b.read_a_s1",
+ "git_note": "1383 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 64724,
+ "pgid": 64724,
+ "pid_start": 902740,
+ "code_drift": {
+  "n": 7,
+  "paths": [
+   "bev_fusion_lane_center/temp/e358/fix13.py",
+   "bev_fusion_lane_center/temp/e358/fix15.py",
+   "bev_fusion_lane_center/temp/e358/fix16.py",
+   "bev_fusion_lane_center/temp/e389b/fix_fig2.py",
+   "bev_fusion_lane_center/temp/e389b/fix_text.py",
+   "bev_fusion_lane_center/temp/e389b/readme_row.py",
+   "bev_fusion_lane_center/tools/route_frames_fig.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 904,
+ "attempts": 1,
+ "ended": "2026-11-21T02:33:31",
+ "last_lines": [
+  "e389b_a_s1 gross [kept] nodes 140270  F1 road 0.9607 lane 0.8888  fork F1 0.9506 (234 frames)  success30 0.872  | vs e389_z_s1/error: road +0.0772 [+0.0508, +0.1081]",
+  "e389b_a_s1 gross [proxy] nodes 126153  F1 road 0.9637 lane 0.8953  fork F1 0.9566 (234 frames)  success30 0.880  | vs e389_z_s1/error: road +0.0709 [+0.0445, +0.1024]",
+  "written runs/e389b_a_s1/route_card_gross_vs_e389_z_s1_rmerror.json",
+  "_py14.sh: evaluation/jroute_eval.py",
+  "e389b_a_s1 wrong [kept] nodes 140270  F1 road 0.8361 lane 0.7503  fork F1 0.8018 (234 frames)  success30 0.700  | vs e389b_a_s1/error: road -0.1402 [-0.1983, -0.0905]",
+  "e389b_a_s1 wrong [proxy] nodes 126153  F1 road 0.8514 lane 0.7661  fork F1 0.8220 (234 frames)  success30 0.708  | vs e389b_a_s1/error: road -0.1267 [-0.1818, -0.0794]",
+  "written runs/e389b_a_s1/route_card_wrong_vs_e389b_a_s1_rmerror.json",
+  "_py14.sh: evaluation/jroute_eval.py",
+  "e389b_a_s1 error [kept] nodes 140270  F1 road 0.9764 lane 0.9015  fork F1 0.9791 (234 frames)  success30 0.939  | vs e389_m_s1/error: road -0.0043 [-0.0074, -0.0017]",
+  "e389b_a_s1 error [proxy] nodes 126153  F1 road 0.9781 lane 0.9071  fork F1 0.9841 (234 frames)  success30 0.934  | vs e389_m_s1/error: road -0.0046 [-0.0076, -0.0021]",
+  "written runs/e389b_a_s1/route_card_error_vs_e389_m_s1.json",
+  "read a_s1 ok"
+ ]
+}

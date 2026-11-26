@@ -1,0 +1,115 @@
+{
+ "id": "E291.b_s0",
+ "hypothesis": "The same trained with corrupted counts (rate per junction from {0, 0.1, 0.3}, 15 % of the arms unknown, 20 % of the junctions without a map, 20 % with all counts unknown and the geometry kept) learns to doubt the count: it gains with a clean map and does not lose with a wrong one.",
+ "prediction": "snapped topo F1 +0.008 over the twin with the clean table, +0.002 with all counts unknown (U), -0.003 at 30 % wrong counts",
+ "rule": "E291 card section 0 (by hand: replay, decide.py is not used): G / R / C from the pooled paired scene bootstrap of the means over the two seeds against the twin (jdiag.py boot_pooled), clean / 30 % wrong / U read-outs of b; KEEP AS AN OPTIONAL INPUT needs G+, R+, C+; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/e291/run_staged_gpu.sh jends_train.py --name e291_b_s0 --seed 0 --maps /mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s0/model.pt --e2e --scales --maps-w 1.0 --steps 3000 --workers 4 --lane-prior --prior-noise mix",
+ "argv": [
+  "bash",
+  "temp/e291/run_staged_gpu.sh",
+  "jends_train.py",
+  "--name",
+  "e291_b_s0",
+  "--seed",
+  "0",
+  "--maps",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e307_n_s0/model.pt",
+  "--e2e",
+  "--scales",
+  "--maps-w",
+  "1.0",
+  "--steps",
+  "3000",
+  "--workers",
+  "4",
+  "--lane-prior",
+  "--prior-noise",
+  "mix"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 525445,
+ "created": "2026-11-15T12:16:45",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E291",
+ "card_sha": "9f4d4fa3164b2256",
+ "card_arms": {
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E291.c_s0",
+    "E291.c_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E291.a_s0",
+    "E291.a_s1"
+   ]
+  },
+  "b": {
+   "order": {},
+   "run_ids": [
+    "E291.b_s0",
+    "E291.b_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "721e47fb28f6",
+ "started": "2026-11-15T13:24:06",
+ "code_hash": "721e47fb28f6",
+ "commit": "5f5c0ce10e",
+ "tag": "lcr/E291.b_s0",
+ "git_note": "",
+ "pid": 536470,
+ "pgid": 536470,
+ "pid_start": 14763462,
+ "code_drift": {
+  "n": 11,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/dropcache.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e345_result.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e347_ledger.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e347_result.py",
+   "bev_fusion_lane_center/temp/e353/e353_probe1.py",
+   "bev_fusion_lane_center/temp/e353/e353_probe2.py",
+   "bev_fusion_lane_center/temp/e353/e353_smoke.py",
+   "bev_fusion_lane_center/training/grid/jnarrow.py",
+   "bev_fusion_lane_center/training/grid/test_jnarrow.py",
+   "bev_fusion_lane_center/training/train/jnarrow_eval.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 4275,
+ "attempts": 1,
+ "ended": "2026-11-15T14:35:55",
+ "last_lines": [
+  "14:17:24 step 2200/3000 loss 1.6493 lr 1.99e-04 1.416 s/step bce 0.136 pos_pairs 67.000 allowed 862.000 dual 0.416 scale_l1 0.217 cross 0.000 prior_ratio 0.075 prior_gate 0.737 j_zone 0.202 j_heat 0.585 j_dir 0.018 j_paint 0.321",
+  "14:19:30 step 2300/3000 loss 1.6426 lr 1.59e-04 1.410 s/step bce 0.110 pos_pairs 90.000 allowed 1336.000 dual 0.283 scale_l1 0.192 cross 0.000 prior_ratio 0.068 prior_gate 0.776 j_zone 0.247 j_heat 0.803 j_dir 0.035 j_paint 0.237",
+  "14:21:50 step 2400/3000 loss 1.6193 lr 1.24e-04 1.409 s/step bce 0.113 pos_pairs 125.000 allowed 1526.000 dual 0.287 scale_l1 0.194 cross 0.000 prior_ratio 0.080 prior_gate 0.745 j_zone 0.172 j_heat 0.693 j_dir 0.075 j_paint 0.256",
+  "14:24:05 step 2500/3000 loss 1.6062 lr 9.28e-05 1.407 s/step bce 0.163 pos_pairs 107.000 allowed 1304.000 dual 0.397 scale_l1 0.200 cross 0.000 prior_ratio 0.076 prior_gate 0.730 j_zone 0.212 j_heat 0.752 j_dir 0.030 j_paint 0.204",
+  "14:26:18 step 2600/3000 loss 1.5523 lr 6.71e-05 1.404 s/step bce 0.100 pos_pairs 126.000 allowed 1671.000 dual 0.191 scale_l1 0.161 cross 0.000 prior_ratio 0.073 prior_gate 0.746 j_zone 0.179 j_heat 0.716 j_dir 0.018 j_paint 0.163",
+  "14:28:32 step 2700/3000 loss 1.5714 lr 4.67e-05 1.402 s/step bce 0.124 pos_pairs 70.000 allowed 765.000 dual 0.297 scale_l1 0.191 cross 0.000 prior_ratio 0.072 prior_gate 0.748 j_zone 0.157 j_heat 0.698 j_dir 0.022 j_paint 0.231",
+  "14:30:32 step 2800/3000 loss 1.5688 lr 3.20e-05 1.394 s/step bce 0.105 pos_pairs 107.000 allowed 1687.000 dual 0.298 scale_l1 0.152 cross 0.000 prior_ratio 0.074 prior_gate 0.746 j_zone 0.162 j_heat 0.706 j_dir 0.034 j_paint 0.201",
+  "14:32:46 step 2900/3000 loss 1.5439 lr 2.30e-05 1.393 s/step bce 0.096 pos_pairs 106.000 allowed 1410.000 dual 0.235 scale_l1 0.190 cross 0.000 prior_ratio 0.074 prior_gate 0.743 j_zone 0.270 j_heat 0.773 j_dir 0.053 j_paint 0.284",
+  "14:35:01 step 3000/3000 loss 1.5558 lr 2.00e-05 1.391 s/step bce 0.136 pos_pairs 113.000 allowed 1710.000 dual 0.350 scale_l1 0.194 cross 0.000 prior_ratio 0.070 prior_gate 0.728 j_zone 0.210 j_heat 0.793 j_dir 0.063 j_paint 0.276",
+  "14:35:02 done 3000",
+  "14:35:02 done e291_b_s0",
+  "run_staged: stage = temp/_session_scratch_e291/stage | staged modules loaded: lane_gt_data -> temp/_session_scratch_e291/stage/training/data/lane_gt_data.py, jends -> temp/_session_scratch_e291/stage/training/grid/jends.py"
+ ]
+}

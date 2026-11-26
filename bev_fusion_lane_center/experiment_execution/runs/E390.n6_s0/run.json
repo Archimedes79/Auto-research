@@ -1,0 +1,96 @@
+{
+ "id": "E390.n6_s0",
+ "hypothesis": "E390 step 1 (card v6 = v5 + the two P4 fixes + the P1 copy path, D130 / D135): a relation-biased graph encoding of the SD road graph (logical lanes per direction, links, junctions, route; node geometry cut at node boundaries) recovers lanes per direction, dropped links, hidden route flags and the association of perception proxies to their segment (with unassigned) above the measured nulls, invariant under rigid motion, with graceful decay",
+ "prediction": "(card v6, a second look at the same VAL frames) P4 passes; P1 at count error 0 about 0.99; P1 base about 0.94, P2 about 0.985, P3 about 0.85, P6 about 0.955 at base / 0.93 at pose2, none recall at nd about 0.8; SOUND 40 %, PARTLY 55 %",
+ "rule": "E390 card v6 (section 4) with the unchanged rule and bars of section 0 (by hand, bars from the v6 nulls measured before the v5 training): SOUND = on both seeds P1 >= 0.7335 (base) and >= 0.99 (ce0), P2 >= 0.9380 / 0.9354 (base / s2), P3 >= 0.7138, P6 >= 0.9420 (base), >= 0.8747 (pose2), nd accuracy >= 0.8444 and none recall >= 0.3918, false-unassigned <= 0.05, each with the paired interval vs its null above 0; graph clause g - n on P3 >= +0.05; P4 <= 1e-4; P5 graceful; v6: P1 at count error 0 below 0.99 = a failing probe, the kill only below 0.90; order NOT SOUND > INCONCLUSIVE > PARTLY > SOUND; VAL 873, CPU, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py train --arm n6 --seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py train --arm n6 --seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 248,
+ "created": "2026-11-21T06:25:29",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 180.0,
+ "card_id": "E390",
+ "card_sha": "4570222d4c48f924",
+ "card_arms": {
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E390.g_s0",
+    "E390.g_s1",
+    "E390.read_g_s0",
+    "E390.read_g_s1",
+    "E390.clause_s0",
+    "E390.clause_s1",
+    "E390.g6_s0",
+    "E390.g6_s1",
+    "E390.read_g6_s0",
+    "E390.read_g6_s1",
+    "E390.clause6_s0",
+    "E390.clause6_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E390.n_s0",
+    "E390.n_s1",
+    "E390.read_n_s0",
+    "E390.read_n_s1",
+    "E390.n6_s0",
+    "E390.n6_s1",
+    "E390.read_n6_s0",
+    "E390.read_n6_s1"
+   ]
+  },
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "ce6d43fbe898",
+ "started": "2026-11-21T06:26:15",
+ "code_hash": "ce6d43fbe898",
+ "commit": "c4637826e2",
+ "tag": "lcr/E390.n6_s0",
+ "git_note": "1419 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 924,
+ "pgid": 924,
+ "pid_start": 40407,
+ "exit": 0,
+ "duration_s": 2705,
+ "attempts": 1,
+ "ended": "2026-11-21T07:11:27",
+ "last_lines": [
+  "{\"epoch\": 0, \"loss\": 1.91817, \"p1\": 0.32626, \"p2\": 0.4506, \"p3\": 0.15178, \"p6\": 0.98953, \"s\": 219.2}",
+  "{\"epoch\": 1, \"loss\": 1.29321, \"p1\": 0.28943, \"p2\": 0.31234, \"p3\": 0.13617, \"p6\": 0.55527, \"s\": 438.0}",
+  "{\"epoch\": 2, \"loss\": 1.11089, \"p1\": 0.28822, \"p2\": 0.27547, \"p3\": 0.13792, \"p6\": 0.40928, \"s\": 654.2}",
+  "{\"epoch\": 3, \"loss\": 1.0018, \"p1\": 0.2801, \"p2\": 0.25461, \"p3\": 0.13327, \"p6\": 0.33382, \"s\": 871.8}",
+  "{\"epoch\": 4, \"loss\": 0.95798, \"p1\": 0.28426, \"p2\": 0.24031, \"p3\": 0.13692, \"p6\": 0.2965, \"s\": 1088.7}",
+  "{\"epoch\": 5, \"loss\": 0.90105, \"p1\": 0.27595, \"p2\": 0.22663, \"p3\": 0.13354, \"p6\": 0.26493, \"s\": 1306.5}",
+  "{\"epoch\": 6, \"loss\": 0.87686, \"p1\": 0.27244, \"p2\": 0.22513, \"p3\": 0.12908, \"p6\": 0.25019, \"s\": 1525.7}",
+  "{\"epoch\": 7, \"loss\": 0.85878, \"p1\": 0.27013, \"p2\": 0.21243, \"p3\": 0.13447, \"p6\": 0.24175, \"s\": 1744.9}",
+  "{\"epoch\": 8, \"loss\": 0.8362, \"p1\": 0.26716, \"p2\": 0.20342, \"p3\": 0.13209, \"p6\": 0.23353, \"s\": 1963.1}",
+  "{\"epoch\": 9, \"loss\": 0.82247, \"p1\": 0.26449, \"p2\": 0.19877, \"p3\": 0.1331, \"p6\": 0.22611, \"s\": 2182.5}",
+  "{\"epoch\": 10, \"loss\": 0.80799, \"p1\": 0.26083, \"p2\": 0.19495, \"p3\": 0.13318, \"p6\": 0.21903, \"s\": 2400.7}",
+  "{\"epoch\": 11, \"loss\": 0.80068, \"p1\": 0.26907, \"p2\": 0.18494, \"p3\": 0.12834, \"p6\": 0.21833, \"s\": 2619.0}"
+ ]
+}

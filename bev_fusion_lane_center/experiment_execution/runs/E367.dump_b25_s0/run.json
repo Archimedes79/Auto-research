@@ -1,0 +1,56 @@
+{
+ "id": "E367.dump_b25_s0",
+ "hypothesis": "E367: after the miss of E365 S1 (VAL topo F1 0.549 / 0.574), a cheap change of the token head lifts it over the okayish gate of D113 point 4: a_wide = capacity only (d 96, 4 layers), b_bal = a lower weight of the none target (0.5 / 0.25), c_long = a longer schedule (24000 steps, one seed control); decode selected per head on its TRAIN sample.",
+ "prediction": "mean VAL topo F1 at the selected decode: a_wide 0.59 (0.54 - 0.65), b_bal5 0.60 (0.54 - 0.66), b_bal25 0.60 (0.53 - 0.66), c_long 0.56 (0.52 - 0.60); a_wide expected QUALITY-ONLY (cost); some arm PASSES the quality gate on both seeds about 20 %, a full PASS about 12 %",
+ "rule": "E367 card section 0 (by hand: the gate of E365 section 0, written before any run, per arm): PASS = G-topo (>= 0.6359 / 0.6349), G-found (F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937), G-cost, G-simple on both seeds at the decode selected per head on its TRAIN sample (291 frames); MISS = G-topo or G-found fails on both seeds; QUALITY-ONLY = quality holds, cost or simplicity fails; else INCONCLUSIVE; champion = the passing arm with the highest mean topo F1, confirmed on two fresh head seeds; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split train --every 3 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split val --drop 0.17 --drop-seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split train --every 3 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split val --drop 0.17 --drop-seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 54517,
+ "created": "2026-11-17T03:07:22",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "code_hash_first": "b2e4c4118e5b",
+ "started": "2026-11-17T03:08:19",
+ "code_hash": "b2e4c4118e5b",
+ "commit": "05fd4f7374",
+ "tag": "lcr/E367.dump_b25_s0",
+ "git_note": "201 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 55471,
+ "pgid": 55471,
+ "pid_start": 1463876,
+ "code_drift": {
+  "n": 4,
+  "paths": [
+   "bev_fusion_lane_center/temp/e274/live_vs_final.sh",
+   "bev_fusion_lane_center/temp/e366/patch_e371.py",
+   "bev_fusion_lane_center/training/grid/test_jtoken.py",
+   "bev_fusion_lane_center/training/train/jtoken_train.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 237,
+ "attempts": 1,
+ "ended": "2026-11-17T03:12:54",
+ "last_lines": [
+  "=== attempt 2026-11-17T03:08:19: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split train --every 3 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e367_b25_s0 --seed 0 --split val --drop 0.17 --drop-seed 0",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e367_b25_s0/token_train_every3.pkl: 291 frames, kept nodes per frame 203.2, links per frame rec 188.8 argmax 182.9, device cuda",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e367_b25_s0/token_val.pkl: 873 frames, kept nodes per frame 200.1, links per frame rec 182.9 argmax 178.1, device cuda",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e367_b25_s0/token_val_drop0.17_s0.pkl: 873 frames, kept nodes per frame 167.4, links per frame rec 140.9 argmax 136.4, device cuda"
+ ]
+}

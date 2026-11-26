@@ -1,0 +1,62 @@
+{
+ "id": "E388.lab_s1",
+ "hypothesis": "E388 (card v2, D125): three decode thresholds (link short, link long, node keep; none gate off) fitted by Adam on a soft F1 of the delivered decision on the TRAIN sample of the frozen S4 champion reproduce the hand-tuned decode's VAL graph quality on both seeds",
+ "prediction": "t - c topo F1 -0.002 (window -0.008 to +0.003), junction F1 -0.005; taus near 0.35 / 0.3 / 0.55; ADOPT-LEARNED 55 %, INCONCLUSIVE 30 %, NO 15 %, KEEP < 5 %",
+ "rule": "E388 card v2 section 0 (by hand, written before any run): per seed PASS = t - c topo F1 >= -0.005 with the interval's low end >= -0.010, junction F1 >= -0.010, dup_frac <= +0.010, F1@1.0 >= -0.010, lanes found >= -0.010 (paired_vs_ref_cell on the same VAL live dump); ADOPT-LEARNED = both pass and no fit label; KEEP = ADOPT and topo F1 > +0.010 with the interval above 0 on both; NO = both fail; INCONCLUSIVE = a split or a fit label; c reproduced exactly; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jthresh.py dump --run e372_s4_s1 --seed 1 --split train --every 3",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jthresh.py dump --run e372_s4_s1 --seed 1 --split train --every 3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 669,
+ "created": "2026-11-19T01:15:47",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 45.0,
+ "card_id": "E388",
+ "card_sha": "3048a1eeee992fbb",
+ "card_arms": {
+  "t": {
+   "order": {},
+   "run_ids": [
+    "E388.lab_s0",
+    "E388.lab_s1",
+    "E388.fit_s0",
+    "E388.fit_s1",
+    "E388.t_s0",
+    "E388.t_s1"
+   ]
+  },
+  "c": {
+   "order": {},
+   "run_ids": []
+  }
+ },
+ "code_hash_first": "c5f66815b390",
+ "started": "2026-11-19T01:16:45",
+ "code_hash": "c5f66815b390",
+ "commit": "d1aa911c1b",
+ "tag": "lcr/E388.lab_s1",
+ "git_note": "1088 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 1083,
+ "pgid": 1083,
+ "pid_start": 114972,
+ "exit": 0,
+ "duration_s": 88,
+ "attempts": 1,
+ "ended": "2026-11-19T01:18:23",
+ "last_lines": [
+  "=== attempt 2026-11-19T01:16:45: bash -c bash tools/env/_pyr.sh jthresh.py dump --run e372_s4_s1 --seed 1 --split train --every 3",
+  "_py14.sh: evaluation/jthresh.py",
+  "written runs/e372_s4_s1/token_train_every3_live_labels.pkl: 291 frames, candidates per frame 370.4, GT links per frame 307.4, GT nodes per frame 180.2"
+ ]
+}

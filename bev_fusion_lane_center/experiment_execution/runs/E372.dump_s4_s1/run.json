@@ -1,0 +1,58 @@
+{
+ "id": "E372.dump_s4_s1",
+ "hypothesis": "E372 (card v3.2): one joint fine-tune of the champion head with B''s node head trainable (s4: the head's loss + B''s own node loss, live tokens and labels) keeps the delivered graph's topo F1 and junction F1 within 0.01 of the same live fine-tune with B' frozen (z) and within the E373 guards of the champion read live (ref), on both seeds; b (B on its own loss only) separates 'B trains more' from 'the head's gradient reaches B'.",
+ "prediction": "s4 - z topo F1 -0.003 (window -0.02 to +0.01), junction F1 -0.005; s4 - b about 0; s4 - ref topo F1 -0.005; the update share 0.2 - 0.4; S4-HOLDS about 55 % (S4-GAINS about 10 % inside it), S4-LOSES about 35 %, voided / killed about 10 %",
+ "rule": "E372 card v3.2 section 0 (by hand, written before any run): S4-HOLDS = on both seeds at D115: s4 - z topo F1 and junction F1 not lower by > 0.01; s4 - ref (the champion read live) topo F1 / junction F1 / F1@1.0 >= -0.01, lanes found >= -0.01; the D113 floors; the parity rule passed; B''s node head proven s4's own; the kill did not fire; labels 'in structure only' / 'with moving labels'; S4-GAINS inside it with the credit through b; S4-LOSES otherwise; z and b never adopted; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --live --run e372_s4_s1 --seed 1 --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --live --run e372_s4_s1 --seed 1 --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 496528,
+ "created": "2026-11-18T02:47:23",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "45a010ac311a",
+ "started": "2026-11-18T02:48:30",
+ "code_hash": "45a010ac311a",
+ "commit": "cce633c4b5",
+ "tag": "lcr/E372.dump_s4_s1",
+ "git_note": "1576 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 498098,
+ "pgid": 498098,
+ "pid_start": 9984987,
+ "code_drift": {
+  "n": 10,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e291/cmp_dump.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_test4.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/chain7.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e347/control/test_jmaps_r2.py",
+   "bev_fusion_lane_center/temp/e347/stage_launch.py",
+   "bev_fusion_lane_center/temp/e379/reread_d_s1.sh",
+   "bev_fusion_lane_center/temp/simplify/u5c_after.sh",
+   "bev_fusion_lane_center/temp/tmp8atbqy4o/m29.py",
+   "bev_fusion_lane_center/temp/tmp8atbqy4o/m30.py",
+   "bev_fusion_lane_center/temp/tmp8atbqy4o/m31.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 151,
+ "attempts": 1,
+ "ended": "2026-11-18T02:52:08",
+ "last_lines": [
+  "=== attempt 2026-11-18T02:48:30: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --live --run e372_s4_s1 --seed 1 --split val",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e372_s4_s1/token_val_live.pkl: 873 frames, kept nodes per frame 200.4, links per frame rec 184.6 argmax 180.3, device cuda"
+ ]
+}

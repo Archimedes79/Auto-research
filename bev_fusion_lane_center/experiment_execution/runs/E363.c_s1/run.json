@@ -1,0 +1,121 @@
+{
+ "id": "E363.c_s1",
+ "hypothesis": "E363: the end-to-end stack on faithful graphs: the pair run of E324 s with the node head of B' (c2 plain / a with the Matrix-NMS layer), end-to-end read-out, scoring job E363.c_s1",
+ "prediction": "a - c topo F1 +0.016 seed 0 / +0.024 seed 1 (hit +-0.008); aw - a +0.0019 / +0.0016 (hit +-0.003); expected token TIE",
+ "rule": "E363 card section 0 (by hand: D87 replay by temp/e363/verdict_e363.py; KEEP = candidate only, nothing adopted)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jends_eval.py score --run e363_c2_s1 --seed 1 --thr 0.1 --attach --snap --snap-nogeom --full /mnt/c/Auto-research/bev_fusion_lane_center/temp/e292/predfull_e292_c2_s1.pkl --base /mnt/c/Auto-research/bev_fusion_lane_center/runs/e292_c2_s1/model.pt --spec plain@0.5 --tag e363c",
+ "argv": [
+  "env",
+  "OMP_NUM_THREADS=2",
+  "MKL_NUM_THREADS=2",
+  "nice",
+  "-n",
+  "10",
+  "bash",
+  "tools/env/_py14.sh",
+  "jends_eval.py",
+  "score",
+  "--run",
+  "e363_c2_s1",
+  "--seed",
+  "1",
+  "--thr",
+  "0.1",
+  "--attach",
+  "--snap",
+  "--snap-nogeom",
+  "--full",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/temp/e292/predfull_e292_c2_s1.pkl",
+  "--base",
+  "/mnt/c/Auto-research/bev_fusion_lane_center/runs/e292_c2_s1/model.pt",
+  "--spec",
+  "plain@0.5",
+  "--tag",
+  "e363c"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 803635,
+ "created": "2026-11-16T14:16:23",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E363",
+ "card_sha": "75f060406ffa6ef2",
+ "card_arms": {
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E363.c_s0",
+    "E363.c_s1"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E363.a_s0",
+    "E363.a_s1"
+   ]
+  },
+  "cw": {
+   "order": {},
+   "run_ids": [
+    "E363.cw_s0",
+    "E363.cw_s1"
+   ]
+  },
+  "aw": {
+   "order": {},
+   "run_ids": [
+    "E363.aw_s0",
+    "E363.aw_s1"
+   ]
+  },
+  "t": {
+   "order": {},
+   "run_ids": [
+    "E363.t_s0",
+    "E363.t_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "efc1ad35ef50",
+ "started": "2026-11-16T14:16:56",
+ "code_hash": "efc1ad35ef50",
+ "commit": "b44c85db4a",
+ "tag": "lcr/E363.c_s1",
+ "git_note": "34 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 804392,
+ "pgid": 804392,
+ "pid_start": 23720429,
+ "exit": 0,
+ "duration_s": 293,
+ "attempts": 1,
+ "ended": "2026-11-16T14:21:56",
+ "last_lines": [
+  "=== attempt 2026-11-16T14:16:56: env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jends_eval.py score --run e363_c2_s1 --seed 1 --thr 0.1 --attach --snap --snap-nogeom --full /mnt/c/Auto-research/bev_fusion_lane_center/temp/e292/predfull_e292_c2_s1.pkl --base /mnt/c/Auto-research/bev_fusion_lane_center/runs/e292_c2_s1/model.pt --spec plain@0.5 --tag e363c",
+  "_py14.sh: evaluation/jends_eval.py",
+  "pyramid of the maps run == the base run's: True (False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')",
+  "  scored 200/873  59 s",
+  "  scored 400/873  120 s",
+  "  scored 600/873  168 s",
+  "  scored 800/873  225 s",
+  "                           Q      F1@1.0 lanes_found     topo_F1      topo_P      topo_R junction_F1  junction_P  junction_R    dup_frac  vert100_dp",
+  "base                  0.6365      0.8342      0.6568      0.6037      0.5934      0.6145      0.1176      0.0648      0.6364      0.1945     31.4418",
+  "head                  0.6652      0.8807      0.7827      0.6612      0.6173      0.7117      0.1389      0.0760      0.8056      0.1495     31.0520",
+  "difference           +0.0287     +0.0465     +0.1259     +0.0574     +0.0239     +0.0973     +0.0214     +0.0113     +0.1692     -0.0450     -0.3897",
+  "curves 11880 (wired at both ends 7121); the rule of D79 holds for this seed: True {'topo_F1': True, 'F1_1': True, 'dup_frac': True, 'vert100_dp': True, 'junction_F1': True}"
+ ]
+}

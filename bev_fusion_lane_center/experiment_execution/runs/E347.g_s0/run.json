@@ -1,0 +1,117 @@
+{
+ "id": "E347.g_s0",
+ "hypothesis": "E347 arm g: the junction maps head with its output at 2 m (50 x 50 grid, sub-cell offset, Gaussian heat sigma 1.0 m, 3 x 3 peak read-out) carries the ends as well as the 1 m head without the paint branch (E332 arm a)",
+ "prediction": "arm g: keypoint F1 at 3 m -0.02, crowded entry recall -0.10 against E332 arm a (INCONCLUSIVE or worse in the peak read-out); arm o: keypoint F1 at 3 m -0.015, at 1.5 m -0.03, crowded -0.03, duplicates within the bound",
+ "rule": "E347 card section 0: stage 1 is a label and a kill gate (by hand: maps scorer): PASS when keypoint F1 at 3 m is at most 0.01 below c, at 1.5 m at most 0.02 below, crowded entry recall at most 0.04 below, arm o also the duplicate clause, on both seeds at each run's own best threshold; FAIL: more than 0.03 / 0.05 below on both seeds",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "env BFLC_SIG=1.0 bash temp/e347/run_staged_gpu.sh jmaps_train.py --name e347_g_s0 --seed 0 --ctx dil --sigma 1.0 --steps 3000 --workers 4 --no-paint --r2",
+ "argv": [
+  "env",
+  "BFLC_SIG=1.0",
+  "bash",
+  "temp/e347/run_staged_gpu.sh",
+  "jmaps_train.py",
+  "--name",
+  "e347_g_s0",
+  "--seed",
+  "0",
+  "--ctx",
+  "dil",
+  "--sigma",
+  "1.0",
+  "--steps",
+  "3000",
+  "--workers",
+  "4",
+  "--no-paint",
+  "--r2"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 518251,
+ "created": "2026-11-15T11:36:40",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E347",
+ "card_sha": "b089e02b5ac7c468",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E347.g_s0",
+    "E347.g_s1"
+   ]
+  },
+  "o": {
+   "order": {},
+   "run_ids": [
+    "E347.o_s0",
+    "E347.o_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E347.p_s0",
+    "E347.p_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "35ecf560647e",
+ "started": "2026-11-15T11:37:44",
+ "code_hash": "35ecf560647e",
+ "commit": "25382a0f1a",
+ "tag": "lcr/E347.g_s0",
+ "git_note": "",
+ "pid": 518631,
+ "pgid": 518631,
+ "pid_start": 14125256,
+ "code_drift": {
+  "n": 35,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_e291/apply_hunks.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/chain3.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/final_chain2.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_mut4.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_mut5.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_plan.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_sc.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_sh.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_test8.py",
+   "bev_fusion_lane_center/temp/_session_scratch_e291/fix_test9.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 3079,
+ "attempts": 1,
+ "ended": "2026-11-15T12:29:22",
+ "last_lines": [
+  "12:16:05 step 2200/3000 loss 1.8021 lr 1.99e-04 1.019 s/step j_zone 0.159 j_heat 0.517 j_dir 0.025 j_paint 0.000 j_off 0.959",
+  "12:17:43 step 2300/3000 loss 1.7857 lr 1.59e-04 1.017 s/step j_zone 0.256 j_heat 0.712 j_dir 0.033 j_paint 0.000 j_off 1.045",
+  "12:19:28 step 2400/3000 loss 1.7723 lr 1.24e-04 1.018 s/step j_zone 0.174 j_heat 0.607 j_dir 0.036 j_paint 0.000 j_off 0.733",
+  "12:21:02 step 2500/3000 loss 1.7277 lr 9.28e-05 1.015 s/step j_zone 0.229 j_heat 0.674 j_dir 0.037 j_paint 0.000 j_off 0.922",
+  "12:22:43 step 2600/3000 loss 1.7180 lr 6.71e-05 1.015 s/step j_zone 0.189 j_heat 0.629 j_dir 0.019 j_paint 0.000 j_off 0.705",
+  "12:24:18 step 2700/3000 loss 1.7354 lr 4.67e-05 1.012 s/step j_zone 0.155 j_heat 0.590 j_dir 0.028 j_paint 0.000 j_off 0.795",
+  "12:25:50 step 2800/3000 loss 1.7131 lr 3.20e-05 1.009 s/step j_zone 0.165 j_heat 0.631 j_dir 0.022 j_paint 0.000 j_off 0.746",
+  "12:27:21 step 2900/3000 loss 1.6945 lr 2.30e-05 1.006 s/step j_zone 0.256 j_heat 0.720 j_dir 0.058 j_paint 0.000 j_off 0.991",
+  "12:28:48 step 3000/3000 loss 1.7166 lr 2.00e-05 1.001 s/step j_zone 0.202 j_heat 0.737 j_dir 0.055 j_paint 0.000 j_off 1.078",
+  "12:28:48 done 3000",
+  "12:28:49 done e347_g_s0",
+  "run_staged: stage = temp/_session_scratch_e347/stage | staged modules loaded: lane_gt_data -> temp/_session_scratch_e347/stage/training/data/lane_gt_data.py, jgt -> temp/_session_scratch_e347/stage/training/grid/jgt.py, jmaps -> temp/_session_scratch_e347/stage/training/grid/jmaps.py, qjunction -> temp/_session_scratch_e347/stage/training/grid/qjunction.py"
+ ]
+}

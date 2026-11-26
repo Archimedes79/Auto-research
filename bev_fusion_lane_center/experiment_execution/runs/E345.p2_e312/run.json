@@ -1,0 +1,58 @@
+{
+ "id": "E345.p2_e312",
+ "hypothesis": "D99 step 0 (E345 part A): how much of each unit of the stored junction system can be taken away without retraining; job E345.p2_e312",
+ "prediction": "E345 card section 3: v (all FREE head units) loses 0.005 topo F1 on the judgement half and saves 0.8 GMACs of the heads' 3.278; at least 15 of 45 units have a sweep-FREE point",
+ "rule": "E345 card sections 0 and 3, by hand: analysis, selected on half of the VAL scenes and judged on the other half; loss = null minus ablated on the worse of the snapped and the differentiable read-out",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh jprune_table.py plan --sweep temp/e345/e312_p_s0/sweep.json --out temp/e345/e312_p_s0/score_points.json",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "jprune_table.py",
+  "plan",
+  "--sweep",
+  "temp/e345/e312_p_s0/sweep.json",
+  "--out",
+  "temp/e345/e312_p_s0/score_points.json"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 454205,
+ "created": "2026-11-15T05:21:44",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 720.0,
+ "code_hash_first": "264b921a656c",
+ "started": "2026-11-15T05:23:26",
+ "code_hash": "264b921a656c",
+ "commit": "67f63e57f7",
+ "tag": "lcr/E345.p2_e312",
+ "git_note": "",
+ "pid": 454579,
+ "pgid": 454579,
+ "pid_start": 11879428,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/fix348.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit10.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/ho_edit9.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/hwm.sh",
+   "bev_fusion_lane_center/temp/day27/day27.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 116,
+ "attempts": 1,
+ "ended": "2026-11-15T05:26:21",
+ "last_lines": [
+  "=== attempt 2026-11-15T05:23:26: bash tools/env/_py14.sh jprune_table.py plan --sweep temp/e345/e312_p_s0/sweep.json --out temp/e345/e312_p_s0/score_points.json",
+  "_py14.sh: evaluation/jprune_table.py",
+  "18 point sets -> /mnt/c/Auto-research/bev_fusion_lane_center/temp/e345/e312_p_s0/score_points.json"
+ ]
+}

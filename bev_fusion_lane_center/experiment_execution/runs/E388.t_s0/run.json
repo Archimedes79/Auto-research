@@ -1,0 +1,71 @@
+{
+ "id": "E388.t_s0",
+ "hypothesis": "E388 (card v2, D125): three decode thresholds (link short, link long, node keep; none gate off) fitted by Adam on a soft F1 of the delivered decision on the TRAIN sample of the frozen S4 champion reproduce the hand-tuned decode's VAL graph quality on both seeds",
+ "prediction": "t - c topo F1 -0.002 (window -0.008 to +0.003), junction F1 -0.005; taus near 0.35 / 0.3 / 0.55; ADOPT-LEARNED 55 %, INCONCLUSIVE 30 %, NO 15 %, KEEP < 5 %",
+ "rule": "E388 card v2 section 0 (by hand, written before any run): per seed PASS = t - c topo F1 >= -0.005 with the interval's low end >= -0.010, junction F1 >= -0.010, dup_frac <= +0.010, F1@1.0 >= -0.010, lanes found >= -0.010 (paired_vs_ref_cell on the same VAL live dump); ADOPT-LEARNED = both pass and no fit label; KEEP = ADOPT and topo F1 > +0.010 with the interval above 0 on both; NO = both fail; INCONCLUSIVE = a split or a fit label; c reproduced exactly; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e372_s4_s0 --seed 0 --link-thr 0.05 --link-thr-long 0.19 --keep-thr 0.388 --no-none-gate --ref-cell 0.3,0.2,0.6,off",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e372_s4_s0 --seed 0 --link-thr 0.05 --link-thr-long 0.19 --keep-thr 0.388 --no-none-gate --ref-cell 0.3,0.2,0.6,off"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1631,
+ "created": "2026-11-19T01:20:56",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E388",
+ "card_sha": "3048a1eeee992fbb",
+ "card_arms": {
+  "t": {
+   "order": {},
+   "run_ids": [
+    "E388.lab_s0",
+    "E388.lab_s1",
+    "E388.fit_s0",
+    "E388.fit_s1",
+    "E388.t_s0",
+    "E388.t_s1"
+   ]
+  },
+  "c": {
+   "order": {},
+   "run_ids": []
+  }
+ },
+ "code_hash_first": "c5f66815b390",
+ "started": "2026-11-19T01:21:51",
+ "code_hash": "c5f66815b390",
+ "commit": "c06617d997",
+ "tag": "lcr/E388.t_s0",
+ "git_note": "1088 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 2045,
+ "pgid": 2045,
+ "pid_start": 145593,
+ "exit": 0,
+ "duration_s": 318,
+ "attempts": 1,
+ "ended": "2026-11-19T01:27:18",
+ "last_lines": [
+  "=== attempt 2026-11-19T01:21:51: bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e372_s4_s0 --seed 0 --link-thr 0.05 --link-thr-long 0.19 --keep-thr 0.388 --no-none-gate --ref-cell 0.3,0.2,0.6,off",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "   100/873 frames, 12 s",
+  "   200/873 frames, 25 s",
+  "   300/873 frames, 41 s",
+  "   400/873 frames, 53 s",
+  "   500/873 frames, 60 s",
+  "   600/873 frames, 71 s",
+  "   700/873 frames, 81 s",
+  "   800/873 frames, 92 s",
+  "   873/873 frames, 99 s",
+  "e372_s4_s0 rec_lt0.05_ltl0.19_kt0.388_nng_livetopo_F1 0.6430  topo_P 0.6082  topo_R 0.6819  F1@1.0 0.8367  lanes_found 0.7126  Q 0.6331  junction_F1 0.1349  dup_frac 0.0512  vert100_dp 34.8751"
+ ]
+}

@@ -1,0 +1,124 @@
+{
+ "id": "E393.score_e_vs_ref_s0",
+ "hypothesis": "E393 (card v1.3, D145): the pyramid of B-prime trained end to end by the token loss, its pixel loss off; arms c / n / p / e from the champion e372_s4, 3000 steps, VAL 873, D115 cell",
+ "prediction": "e - c topo F1 +0.003 (window -0.02 .. +0.02), p - c +0.004, n - c -0.002 (card 1.5)",
+ "rule": "by hand, card section 1.4, written before the run: per seed VOID / LOSES / GAINS (topo F1 D >= +0.010 with lo > 0) / HOLDS with the paired 95 % intervals and the guards against ref; per arm NOT RUN / E2E-LOSES / INCONCLUSIVE / E2E-GAINS / E2E-HOLDS; e needs e - n >= +0.010 (lo > 0) for the pyramid claim",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c flock /tmp/e393_score.lock env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e393_e_s0 --seed 0 --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.6 --no-none-gate --ref-run e372_s4_s0",
+ "argv": [
+  "bash",
+  "-c",
+  "flock /tmp/e393_score.lock env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --live --run e393_e_s0 --seed 0 --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.6 --no-none-gate --ref-run e372_s4_s0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 244568,
+ "created": "2026-11-25T00:03:08",
+ "status": "ok",
+ "after": "E393.dump_e_s0",
+ "timeout_min": 30.0,
+ "card_id": "E393",
+ "card_sha": "879c85cb255467cf",
+ "card_arms": {
+  "ref": {
+   "order": {},
+   "run_ids": []
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E393.c_s0",
+    "E393.dump_c_s0",
+    "E393.score_c_vs_ref_s0",
+    "E393.c_s1",
+    "E393.dump_c_s1",
+    "E393.score_c_vs_ref_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E393.n_s0",
+    "E393.dump_n_s0",
+    "E393.score_n_vs_c_s0",
+    "E393.score_n_vs_ref_s0",
+    "E393.n_s1",
+    "E393.dump_n_s1",
+    "E393.score_n_vs_c_s1",
+    "E393.score_n_vs_ref_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E393.p_s0",
+    "E393.dump_p_s0",
+    "E393.score_p_vs_c_s0",
+    "E393.score_p_vs_ref_s0",
+    "E393.score_p_vs_e_s0",
+    "E393.pyr_p_s0",
+    "E393.p_s1",
+    "E393.dump_p_s1",
+    "E393.score_p_vs_c_s1",
+    "E393.score_p_vs_ref_s1",
+    "E393.score_p_vs_e_s1",
+    "E393.pyr_p_s1"
+   ]
+  },
+  "e": {
+   "order": {},
+   "run_ids": [
+    "E393.e_s0",
+    "E393.dump_e_s0",
+    "E393.score_e_vs_c_s0",
+    "E393.score_e_vs_ref_s0",
+    "E393.score_e_vs_n_s0",
+    "E393.pyr_e_s0",
+    "E393.e_s1",
+    "E393.dump_e_s1",
+    "E393.score_e_vs_c_s1",
+    "E393.score_e_vs_ref_s1",
+    "E393.score_e_vs_n_s1",
+    "E393.pyr_e_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "abada2be11fe",
+ "started": "2026-11-25T00:03:29",
+ "code_hash": "abada2be11fe",
+ "commit": "0786c1c6f1",
+ "tag": "lcr/E393.score_e_vs_ref_s0",
+ "git_note": "",
+ "pid": 244817,
+ "pgid": 244817,
+ "pid_start": 5584829,
+ "exit": 0,
+ "duration_s": 323,
+ "attempts": 1,
+ "ended": "2026-11-25T00:08:53",
+ "last_lines": [
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "   100/873 frames, 10 s",
+  "   200/873 frames, 21 s",
+  "   300/873 frames, 31 s",
+  "   400/873 frames, 42 s",
+  "   500/873 frames, 47 s",
+  "   600/873 frames, 58 s",
+  "   700/873 frames, 68 s",
+  "   800/873 frames, 81 s",
+  "   873/873 frames, 87 s",
+  "e393_e_s0 rec_lt0.3_ltl0.2_kt0.6_nng_livetopo_F1 0.6805  topo_P 0.7136  topo_R 0.6502  F1@1.0 0.8499  lanes_found 0.7240  Q 0.6871  junction_F1 0.2634  dup_frac 0.0600  vert100_dp 22.4866",
+  "  ref e372_s4_s0                  topo_F1 0.6682  topo_P 0.7040  topo_R 0.6358  F1@1.0 0.8459  lanes_found 0.7232  Q 0.6796  junction_F1 0.2538  dup_frac 0.0628  vert100_dp 23.8116"
+ ]
+}

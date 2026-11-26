@@ -1,0 +1,89 @@
+{
+ "id": "E389b.read_a_s0",
+ "hypothesis": "E389b: the E389 route-association head with ONE learned cross-attention (arm a: attention A with the metre-scale pair-feature bias and the none key, the sharp attention B removed; arm p: a plain q.k attention without the bias, exploratory), against the E389 head with A and B (m) and the matched no-map head (z) on the same cache, labels, steps and seeds",
+ "prediction": "0.09 vs z",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"route_F1_road\",\"vs\":\"m\",\"min_effect\":-0.01,\"note\":\"by hand: the per-clause rule below (a is read against the stored E389 m and z cards, paired against z of the same seed); decide.py cannot judge it\"}] | kill: a loss is not finite; or no learning in an arm (the logged `total` of step 3000 (mean of steps 2901 - 3000) is not below 0.8 x the logged `total` of step 100); or the head ignores the map (a: F1_road at the mode wrong within 0.01 of its F1_road at the mode error on BOTH seeds AND a - z < 0.01 at the mode error: then the verdict is 'ONE ATTENTION DOES NOT READ THE MAP' with the status named); or the unit tests of the attn option fail (the code is not used before they are green and a code critic pass is done); `--timeout` as E389 (about 30 min per run, two slots at most)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/e389b/e389b_read_one.sh a_s0 0",
+ "argv": [
+  "bash",
+  "temp/e389b/e389b_read_one.sh",
+  "a_s0",
+  "0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 63670,
+ "created": "2026-11-21T02:17:05",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E389b",
+ "card_sha": "640009ce27dad611",
+ "card_arms": {
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E389b.a_s0",
+    "E389b.a_s1",
+    "E389b.read_a_s0",
+    "E389b.read_a_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E389b.p_s0",
+    "E389b.read_p_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "710bc62295ac",
+ "started": "2026-11-21T02:18:05",
+ "code_hash": "710bc62295ac",
+ "commit": "631f397aa0",
+ "tag": "lcr/E389b.read_a_s0",
+ "git_note": "1384 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 65136,
+ "pgid": 65136,
+ "pid_start": 905824,
+ "code_drift": {
+  "n": 5,
+  "paths": [
+   "bev_fusion_lane_center/temp/e358/fix15.py",
+   "bev_fusion_lane_center/temp/e358/fix16.py",
+   "bev_fusion_lane_center/temp/e389b/fix_fig2.py",
+   "bev_fusion_lane_center/temp/e389b/readme_row.py",
+   "bev_fusion_lane_center/tools/route_frames_fig.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 911,
+ "attempts": 1,
+ "ended": "2026-11-21T02:34:05",
+ "last_lines": [
+  "e389b_a_s0 gross [kept] nodes 140321  F1 road 0.9650 lane 0.8606  fork F1 0.9605 (234 frames)  success30 0.887  | vs e389_z_s0/error: road +0.0821 [+0.0562, +0.1115]",
+  "e389b_a_s0 gross [proxy] nodes 125971  F1 road 0.9675 lane 0.8632  fork F1 0.9640 (234 frames)  success30 0.895  | vs e389_z_s0/error: road +0.0764 [+0.0501, +0.1074]",
+  "written runs/e389b_a_s0/route_card_gross_vs_e389_z_s0_rmerror.json",
+  "_py14.sh: evaluation/jroute_eval.py",
+  "e389b_a_s0 wrong [kept] nodes 140321  F1 road 0.8468 lane 0.7423  fork F1 0.8087 (234 frames)  success30 0.731  | vs e389b_a_s0/error: road -0.1296 [-0.1862, -0.0818]",
+  "e389b_a_s0 wrong [proxy] nodes 125971  F1 road 0.8599 lane 0.7528  fork F1 0.8274 (234 frames)  success30 0.751  | vs e389b_a_s0/error: road -0.1186 [-0.1706, -0.0746]",
+  "written runs/e389b_a_s0/route_card_wrong_vs_e389b_a_s0_rmerror.json",
+  "_py14.sh: evaluation/jroute_eval.py",
+  "e389b_a_s0 error [kept] nodes 140321  F1 road 0.9765 lane 0.8759  fork F1 0.9801 (234 frames)  success30 0.941  | vs e389_m_s0/error: road -0.0003 [-0.0020, +0.0015]",
+  "e389b_a_s0 error [proxy] nodes 125971  F1 road 0.9784 lane 0.8782  fork F1 0.9835 (234 frames)  success30 0.944  | vs e389_m_s0/error: road -0.0002 [-0.0019, +0.0016]",
+  "written runs/e389b_a_s0/route_card_error_vs_e389_m_s0.json",
+  "read a_s0 ok"
+ ]
+}

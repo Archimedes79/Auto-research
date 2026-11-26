@@ -1,0 +1,101 @@
+{
+ "id": "E389.read_z_s0",
+ "hypothesis": "E389 A6: a route-association head on the cached B' tokens of the champion (cross-attention of the tokens to the SD route tokens with the protocol's map errors, metre-scale registration features; per token: on the route's carriageway / on the ego lane), against the same head without the map",
+ "prediction": "0.15 vs z",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"route_F1_road\",\"vs\":\"z\",\"min_effect\":0.1}] | kill: a loss is not finite; or no learning in an arm (z, z2, m, m2: the logged `total` of step 3000 (mean of steps 2901 - 3000) is not below 0.8 x the logged `total` of step 100 (mean of steps 1 - 100); the 100-step means are what `trainer.fit` logs); or the head ignores the map: the absolute F1_road of m at the mode wrong is within 0.01 of its F1_road at the mode error (the two score cards' `by_delivered.kept.numbers.route_F1_road`: arithmetic on the cards, no extra score run) on BOTH seeds AND m - z < 0.01 at the mode error (the verdict is then TIE (NO GAIN) with the status 'the head did not learn to read the map'); or the labels are wrong (the data fixture fails, section 1); or the learnability sanity step fails (section 2: the 300-step run of m, read at the mode exact, must reach F1_road >= straight prior + 0.03 = 0.757 on VAL covered nodes (the straight prior 0.7272 / 0.7286, section 3)); `--timeout` is set from the launch gate; two slots at most",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash temp/e389/e389_read_one.sh z_s0 0 z_s0",
+ "argv": [
+  "bash",
+  "temp/e389/e389_read_one.sh",
+  "z_s0",
+  "0",
+  "z_s0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 8206,
+ "created": "2026-11-20T00:50:26",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E389",
+ "card_sha": "220d5e9265692ae0",
+ "card_arms": {
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E389.z_s0",
+    "E389.z_s1",
+    "E389.read_z_s0",
+    "E389.read_z_s1"
+   ]
+  },
+  "z2": {
+   "order": {},
+   "run_ids": [
+    "E389.z2_s0",
+    "E389.read_z2_s0"
+   ]
+  },
+  "m": {
+   "order": {},
+   "run_ids": [
+    "E389.m_s0",
+    "E389.m_s1",
+    "E389.read_m_s0",
+    "E389.read_m_s1"
+   ]
+  },
+  "m2": {
+   "order": {},
+   "run_ids": [
+    "E389.m2_s0",
+    "E389.read_m2_s0"
+   ]
+  },
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E389.zg_s0",
+    "E389.mg_s0",
+    "E389.read_zg_s0",
+    "E389.read_mg_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "83c01afd0e4b",
+ "started": "2026-11-20T00:51:03",
+ "code_hash": "83c01afd0e4b",
+ "commit": "291757a60d",
+ "tag": "lcr/E389.read_z_s0",
+ "git_note": "1198 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 9035,
+ "pgid": 9035,
+ "pid_start": 427018,
+ "exit": 0,
+ "duration_s": 136,
+ "attempts": 1,
+ "ended": "2026-11-20T00:53:26",
+ "last_lines": [
+  "=== attempt 2026-11-20T00:51:03: bash temp/e389/e389_read_one.sh z_s0 0 z_s0",
+  "_py14.sh: evaluation/jroute_eval.py",
+  "written runs/e389_z_s0/route_error.pkl: 873 frames, K 512, arm z, mode error, device cpu",
+  "_py14.sh: evaluation/jroute_eval.py",
+  "e389_z_s0 error [kept] nodes 140321  F1 road 0.8828 lane 0.7764  fork F1 0.8434 (234 frames)  success30 0.730",
+  "e389_z_s0 error [proxy] nodes 125971  F1 road 0.8911 lane 0.7854  fork F1 0.8547 (234 frames)  success30 0.750",
+  "written runs/e389_z_s0/route_card_error.json",
+  "read z_s0 ok"
+ ]
+}

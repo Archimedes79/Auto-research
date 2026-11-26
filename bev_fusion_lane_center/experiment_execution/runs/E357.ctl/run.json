@@ -1,0 +1,101 @@
+{
+ "id": "E357.ctl",
+ "hypothesis": "Given the ground-truth nodes of the 2.5 m lattice and no types, ONE pair head recovers at least half of the gap between the best link rule and the GT links on topo F1 and joins the junction links with an F1 of at least 0.75 (stage T0 of the token design E355).",
+ "prediction": "best rule topo F1 0.82 (seen on 31 frames before the run: 0.69), hi 0.955, p 0.92 (gap share about 0.75); junction-link F1 of p 0.80; the degraded read-out loses about 0.25 topo F1",
+ "rule": "E357 card section 0 (by hand: oracle-node replay), section-free read-out, p >= 0.5: FAIL first (both seeds gap share on topo F1 < 0.5, or junction-link F1 < 0.50), then PASS (both seeds gap share >= 0.5 AND junction-link F1 >= 0.75), else INCONCLUSIVE; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "nice -n 19 bash tools/env/_py14.sh jtok_eval.py ctl --lattice 2.5",
+ "argv": [
+  "nice",
+  "-n",
+  "19",
+  "bash",
+  "tools/env/_py14.sh",
+  "jtok_eval.py",
+  "ctl",
+  "--lattice",
+  "2.5"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 637071,
+ "created": "2026-11-15T22:34:18",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 240.0,
+ "card_id": "E357",
+ "card_sha": "f5454dbb8c737024",
+ "card_arms": {
+  "lo": {
+   "order": {},
+   "run_ids": [
+    "E357.ctl"
+   ]
+  },
+  "hi": {
+   "order": {},
+   "run_ids": [
+    "E357.ctl"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E357.p_s0",
+    "E357.p_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "3608b9922cc7",
+ "started": "2026-11-15T22:35:15",
+ "code_hash": "3608b9922cc7",
+ "commit": "79e8baf881",
+ "tag": "lcr/E357.ctl",
+ "git_note": "",
+ "pid": 637582,
+ "pgid": 637582,
+ "pid_start": 18070378,
+ "code_drift": {
+  "n": 9,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jflip.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/night_go.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/smokes_then_arms.sh",
+   "bev_fusion_lane_center/temp/e346/e346_arm.py",
+   "bev_fusion_lane_center/temp/e354/read_flip.py",
+   "bev_fusion_lane_center/temp/e354/redo_flip.sh",
+   "bev_fusion_lane_center/temp/e354/redo_launch.sh",
+   "bev_fusion_lane_center/temp/jr/build_ergebnis.py",
+   "bev_fusion_lane_center/temp/jr/pack_paket.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 6397,
+ "attempts": 1,
+ "ended": "2026-11-16T00:24:12",
+ "last_lines": [
+  "   600/873 frames, 984 s",
+  "   700/873 frames, 1240 s",
+  "   800/873 frames, 1497 s",
+  "lo sec0                     topo_F1 0.6056  junction_F1 0.0167  lanes_found 0.6025  F1@1.0 0.7766  dup_frac 0.0000  vert100 44.2462  link_junction_P 0.0000  link_junction_R 0.0000  link_junction_F1 0.0000  link_lane_long_F1 nan  link_short_F1 0.9889",
+  "lo gtsec                    topo_F1 0.6056  junction_F1 0.0129  lanes_found 0.6025  F1@1.0 0.7766  dup_frac 0.0037  vert100 44.2462  link_junction_P 0.0000  link_junction_R 0.0000  link_junction_F1 0.0000  link_lane_long_F1 nan  link_short_F1 0.9889",
+  "lo_near sec0                topo_F1 0.7011  junction_F1 0.1868  lanes_found 0.7404  F1@1.0 0.8607  dup_frac 0.0010  vert100 33.6508  link_junction_P 0.5354  link_junction_R 0.3608  link_junction_F1 0.4311  link_lane_long_F1 0.0000  link_short_F1 0.9889",
+  "lo_near gtsec               topo_F1 0.7063  junction_F1 0.2183  lanes_found 0.7405  F1@1.0 0.8609  dup_frac 0.0128  vert100 33.6508  link_junction_P 0.5354  link_junction_R 0.3608  link_junction_F1 0.4311  link_lane_long_F1 0.0000  link_short_F1 0.9889",
+  "lo_all sec0                 topo_F1 0.6995  junction_F1 0.4399  lanes_found 0.9271  F1@1.0 0.8355  dup_frac 0.3584  vert100 9.1181  link_junction_P 0.2192  link_junction_R 0.7460  link_junction_F1 0.3388  link_lane_long_F1 0.0000  link_short_F1 0.9889",
+  "lo_all gtsec                topo_F1 0.7362  junction_F1 0.5162  lanes_found 0.9272  F1@1.0 0.8356  dup_frac 0.4178  vert100 9.1181  link_junction_P 0.2192  link_junction_R 0.7460  link_junction_F1 0.3388  link_lane_long_F1 0.0000  link_short_F1 0.9889",
+  "hi sec0                     topo_F1 0.9666  junction_F1 0.9467  lanes_found 0.9838  F1@1.0 0.9953  dup_frac 0.0046  vert100 27.0009  link_junction_P 1.0000  link_junction_R 1.0000  link_junction_F1 1.0000  link_lane_long_F1 nan  link_short_F1 1.0000",
+  "hi gtsec                    topo_F1 0.9656  junction_F1 0.9467  lanes_found 0.9836  F1@1.0 0.9953  dup_frac 0.0213  vert100 27.0009  link_junction_P 1.0000  link_junction_R 1.0000  link_junction_F1 1.0000  link_lane_long_F1 nan  link_short_F1 1.0000",
+  "cards: runs/eval/e357_<arm>_<readout>, 873 frames, 1642 s"
+ ]
+}

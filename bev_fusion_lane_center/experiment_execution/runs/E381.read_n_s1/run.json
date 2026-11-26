@@ -1,0 +1,60 @@
+{
+ "id": "E381.read_n_s1",
+ "hypothesis": "E381 (card v2.1, D126): the stage-1 head trained with input noise calibrated to B''s TRAIN-to-VAL token gap (pos jitter 0.184 / 0.181 m per axis, e / e_raw noise 0.621 / 0.601, valid tokens; label tensors clean, gate targets from the perturbed positions) generalises better to VAL than the E373 heads at D115",
+ "prediction": "n - ref topo F1 +0.003 (window -0.005 to +0.010), junction F1 +0.005; ADOPT-NOISE 15 %, TIE 65 %, NO 20 %",
+ "rule": "E381 card v2.1 section 0 (by hand, written before any run): per seed at the verdict cell (the common pinned (b) cell, or the recipe cell when the heads differ) vs ref e373_cb at D115: ADOPT-NOISE = both seeds topo F1 >= +0.005 with the interval's low end > 0, junction F1 >= -0.010, F1@1.0 >= -0.005, lanes found >= -0.010, dup_frac <= +0.010, the E373 floors, no kill; NO = both seeds topo <= -0.005 or a guard broken on both; INVALID = a kill or a cut; TIE otherwise; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e381_n_s1 --seed 1 --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.5 --no-none-gate --ref-run e373_cb_s1 --ref-run-cell 0.3,0.2,0.6,off && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py anatomy --run e381_n_s1 --seed 1 --link-thr-long 0.2 --keep-thr 0.6",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e381_n_s1 --seed 1 --link-thr 0.3 --link-thr-long 0.2 --keep-thr 0.5 --no-none-gate --ref-run e373_cb_s1 --ref-run-cell 0.3,0.2,0.6,off && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py anatomy --run e381_n_s1 --seed 1 --link-thr-long 0.2 --keep-thr 0.6"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 17997,
+ "created": "2026-11-19T03:50:04",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "code_hash_first": "aa21a0f285ca",
+ "started": "2026-11-19T03:51:07",
+ "code_hash": "aa21a0f285ca",
+ "commit": "da0d5a9e24",
+ "tag": "lcr/E381.read_n_s1",
+ "git_note": "1150 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 18479,
+ "pgid": 18479,
+ "pid_start": 768322,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/tests/test_jroute_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_446710/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e389/e389_eval_probe4.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 494,
+ "attempts": 1,
+ "ended": "2026-11-19T04:00:19",
+ "last_lines": [
+  "e381_n_s1 rec_lt0.3_ltl0.2_kt0.5_nngtopo_F1 0.6803  topo_P 0.7098  topo_R 0.6531  F1@1.0 0.8456  lanes_found 0.7133  Q 0.6812  junction_F1 0.2577  dup_frac 0.0617  vert100_dp 23.5154",
+  "  ref e373_cb_s1_rc0.3_0.2_0.6_offtopo_F1 0.6762  topo_P 0.7063  topo_R 0.6485  F1@1.0 0.8467  lanes_found 0.7205  Q 0.6802  junction_F1 0.2452  dup_frac 0.0637  vert100_dp 24.2067",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "e381_n_s1 val, 873 frames: GT long links 7748, delivered long links (p >= 0.2, both ends p_none < 0.6) 12309",
+  "  tp              2187  share 0.178  median p 0.50  typed 0.006  B' uout*uin 0.94",
+  "  dup_of_true     1587  share 0.129  median p 0.42  typed 0.006  B' uout*uin 0.92",
+  "  wrong_pair      4379  share 0.356  median p 0.33  typed 0.005  B' uout*uin 0.81",
+  "  false_end       4156  share 0.338  median p 0.32  typed 0.012  B' uout*uin 0.87",
+  "  tp / GT long links 0.282; AP long links 0.2736 over 37062 kept long candidates (recall ceiling 0.440); AP existence 0.9389 over 380188 valid tokens (150296 assigned)",
+  "  short 138805 sources with a GT successor (0 with no mass on it): largest member's share of G(i)'s mass median 1.000 mean 0.964; candidates >= 0.3 per source 0.963, 2 or more 0.031, per source with one or more 1.033",
+  "  long  6318 sources with a GT successor (0 with no mass on it): largest member's share of G(i)'s mass median 0.956 mean 0.861; candidates >= 0.3 per source 0.562, 2 or more 0.054, per source with one or more 1.106",
+  "written runs/e381_n_s1/token_anatomy_long_ltl0.2_kt0.6.json"
+ ]
+}

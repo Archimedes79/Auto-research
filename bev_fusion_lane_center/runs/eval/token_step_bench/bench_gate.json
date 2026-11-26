@@ -1,0 +1,56 @@
+{
+ "mode": "gate",
+ "code": {
+  "git_head": "fa41e0ce",
+  "files": {
+   "training/grid/jtoken_fast.py": "clean",
+   "training/data/lane_ptok_gpu.py": "clean",
+   "training/data/lane_ptok_data.py": "clean",
+   "training/grid/jtoken.py": "clean",
+   "training/train/jtoken_train.py": "clean",
+   "training/train/bench_token_step.py": "clean"
+  }
+ },
+ "host_load": 1.08740234375,
+ "gpu_used_mb_before": 1095,
+ "date": "2026-11-18 05:43:02",
+ "plain_cpu_loader_w2": {
+  "ms_per_step": 99.6,
+  "peak_gb": 2.12,
+  "loss_end": 0.8389
+ },
+ "fast_head_cpu_loader_w2": {
+  "ms_per_step": 113.8,
+  "peak_gb": 2.15,
+  "loss_end": 0.8995
+ },
+ "gpu_loader_load_s": 3.5,
+ "gpu_loader_frames": 8414,
+ "gpu_loader_pairs_P": 646,
+ "gpu_resident_GB": 0.94,
+ "fast_head_gpu_loader": {
+  "ms_per_step": 92.2,
+  "peak_gb": 3.08,
+  "loss_end": 0.8544
+ },
+ "fast_head_gpu_loader_compile": {
+  "ms_per_step": 72.3,
+  "peak_gb": 2.73,
+  "loss_end": 0.8591
+ },
+ "gate_abba": {
+  "plain_ms_blocks": [
+   98.2,
+   99.5
+  ],
+  "fast_ms_blocks": [
+   92.9,
+   91.6
+  ],
+  "plain_ms": 98.8,
+  "fast_ms": 92.3,
+  "ratio_plain_over_fast": 1.071,
+  "peak_gb": 3.09
+ },
+ "gpu_loader_ms_per_batch": 1.82
+}

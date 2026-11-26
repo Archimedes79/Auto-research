@@ -1,0 +1,85 @@
+{
+ "id": "E371.read_s0",
+ "hypothesis": "E371: the E366 recipe frozen (the E365 S1 training recipe + the decode link 0.1 / keep 0.6 / none gate off) passes the okayish gate again with two fresh head seeds (2 on the B-prime cache 0, 3 on cache 1).",
+ "prediction": "VAL topo F1 cache 0 about 0.655 (0.63 - 0.68), cache 1 about 0.670 (0.645 - 0.695); the tightest condition F1@1.0 on cache 0; CONFIRMED about 75 %",
+ "rule": "E371 card section 0 (by hand): CONFIRMED = the okayish gate of E365 (G-topo >= 0.6359 / 0.6349, F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937) holds on BOTH fresh heads at the frozen decode; NOT CONFIRMED otherwise (no third head, no pooled rule); VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e371_cf_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e371_cf_s0 --seed 0 --split train --every 3 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e371_cf_s0 --seed 0 --link-thr 0.1 --keep-thr 0.6 --no-none-gate && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e371_cf_s0 --seed 0",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e371_cf_s0 --seed 0 --split val && bash tools/env/_pyr.sh jtoken_eval.py dump --run e371_cf_s0 --seed 0 --split train --every 3 && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e371_cf_s0 --seed 0 --link-thr 0.1 --keep-thr 0.6 --no-none-gate && env OMP_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py score --run e371_cf_s0 --seed 0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 68331,
+ "created": "2026-11-17T04:04:10",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E371",
+ "card_sha": "b14c5e6da47041ea",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "cf": {
+   "order": {},
+   "run_ids": [
+    "E371.cf_s0",
+    "E371.cf_s1",
+    "E371.read_s0",
+    "E371.read_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "8a24d129fa86",
+ "started": "2026-11-17T04:05:07",
+ "code_hash": "8a24d129fa86",
+ "commit": "723d5c1339",
+ "tag": "lcr/E371.read_s0",
+ "git_note": "218 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 69381,
+ "pgid": 69381,
+ "pid_start": 1804717,
+ "code_drift": {
+  "n": 6,
+  "paths": [
+   "bev_fusion_lane_center/temp/e276/dbg_cov.py",
+   "bev_fusion_lane_center/temp/e276/run_tests.sh",
+   "bev_fusion_lane_center/temp/e365/readme_eval_blob.py",
+   "bev_fusion_lane_center/temp/e372fix/run_new_e372fix.py",
+   "bev_fusion_lane_center/temp/e372fix/suite_e372fix.sh",
+   "bev_fusion_lane_center/temp/e372fix/wait_e372fix.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 619,
+ "attempts": 1,
+ "ended": "2026-11-17T04:15:58",
+ "last_lines": [
+  "   873/873 frames, 74 s",
+  "e371_cf_s0 rec                    topo_F1 0.5499  topo_P 0.8469  topo_R 0.4071  F1@1.0 0.7577  lanes_found 0.5071  Q 0.6294  junction_F1 0.1971  dup_frac 0.0043  vert100_dp 18.1839",
+  "   100/873 frames, 7 s",
+  "   200/873 frames, 17 s",
+  "   300/873 frames, 25 s",
+  "   400/873 frames, 34 s",
+  "   500/873 frames, 39 s",
+  "   600/873 frames, 50 s",
+  "   700/873 frames, 58 s",
+  "   800/873 frames, 67 s",
+  "   873/873 frames, 73 s",
+  "e371_cf_s0 argmax                 topo_F1 0.5361  topo_P 0.8501  topo_R 0.3915  F1@1.0 0.7571  lanes_found 0.5025  Q 0.6281  junction_F1 0.2012  dup_frac 0.0032  vert100_dp 17.5003"
+ ]
+}

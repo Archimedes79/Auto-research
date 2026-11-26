@@ -1,0 +1,120 @@
+{
+ "id": "E393.p_s1",
+ "hypothesis": "E393 (card v1.3, D145): the pyramid of B-prime trained end to end by the token loss, its pixel loss off; arms c / n / p / e from the champion e372_s4, 3000 steps, VAL 873, D115 cell",
+ "prediction": "e - c topo F1 +0.003 (window -0.02 .. +0.02), p - c +0.004, n - c -0.002 (card 1.5)",
+ "rule": "by hand, card section 1.4, written before the run: per seed VOID / LOSES / GAINS (topo F1 D >= +0.010 with lo > 0) / HOLDS with the paired 95 % intervals and the guards against ref; per arm NOT RUN / E2E-LOSES / INCONCLUSIVE / E2E-GAINS / E2E-HOLDS; e needs e - n >= +0.010 (lo > 0) for the pyramid claim",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jlive_train.py --name e393_p_s1 --seed 1 --head-run e372_s4_s1 --b-state-from e372_s4_s1 --train-nodes 1 --live-inputs 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 --train-pyr 1 --pyr-lr-mult 0.1 --b-weight 1.0",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jlive_train.py --name e393_p_s1 --seed 1 --head-run e372_s4_s1 --b-state-from e372_s4_s1 --train-nodes 1 --live-inputs 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 --train-pyr 1 --pyr-lr-mult 0.1 --b-weight 1.0"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 250781,
+ "created": "2026-11-25T00:53:20",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 45.0,
+ "card_id": "E393",
+ "card_sha": "879c85cb255467cf",
+ "card_arms": {
+  "ref": {
+   "order": {},
+   "run_ids": []
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E393.c_s0",
+    "E393.dump_c_s0",
+    "E393.score_c_vs_ref_s0",
+    "E393.c_s1",
+    "E393.dump_c_s1",
+    "E393.score_c_vs_ref_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E393.n_s0",
+    "E393.dump_n_s0",
+    "E393.score_n_vs_c_s0",
+    "E393.score_n_vs_ref_s0",
+    "E393.n_s1",
+    "E393.dump_n_s1",
+    "E393.score_n_vs_c_s1",
+    "E393.score_n_vs_ref_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E393.p_s0",
+    "E393.dump_p_s0",
+    "E393.score_p_vs_c_s0",
+    "E393.score_p_vs_ref_s0",
+    "E393.score_p_vs_e_s0",
+    "E393.pyr_p_s0",
+    "E393.p_s1",
+    "E393.dump_p_s1",
+    "E393.score_p_vs_c_s1",
+    "E393.score_p_vs_ref_s1",
+    "E393.score_p_vs_e_s1",
+    "E393.pyr_p_s1"
+   ]
+  },
+  "e": {
+   "order": {},
+   "run_ids": [
+    "E393.e_s0",
+    "E393.dump_e_s0",
+    "E393.score_e_vs_c_s0",
+    "E393.score_e_vs_ref_s0",
+    "E393.score_e_vs_n_s0",
+    "E393.pyr_e_s0",
+    "E393.e_s1",
+    "E393.dump_e_s1",
+    "E393.score_e_vs_c_s1",
+    "E393.score_e_vs_ref_s1",
+    "E393.score_e_vs_n_s1",
+    "E393.pyr_e_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "abada2be11fe",
+ "started": "2026-11-25T00:54:44",
+ "code_hash": "abada2be11fe",
+ "commit": "ad4df7bd29",
+ "tag": "lcr/E393.p_s1",
+ "git_note": "",
+ "pid": 251311,
+ "pgid": 251311,
+ "pid_start": 5892286,
+ "exit": 0,
+ "duration_s": 1316,
+ "attempts": 1,
+ "ended": "2026-11-25T01:16:40",
+ "last_lines": [
+  "0/3000 loss 1.7290 lr 1.22e-06 0.163 s/step nll_s 0.094 nll_l 0.024 ce1 0.227 ce3 0.188 gt_links 2859.000 pos_pairs 2841.000 gt_outside 18.000 gt_class 0.000 scale_l1 0.068 gpu_gb 4.822 gpu_res_gb 5.283 nn_min 0.862 pos_grad_max 0.002 head 0.360 b_loss 1.339 b_e 0.110 b_flags 0.532 b_off 0.441 b_dir 0.019 b_s 0.143 b_u 0.221 b_start 1.402 b_mean 1.352 h_start 0.374 overflow 0.000 pair_cov 0.991 gt_cov 0.984 n_valid 443.225 label_s 0.050 cov_start 0.983 cov_mean 0.984 nact_start 521.418 nact_mean 528.214 ushare 0.266 gshare 0.207 clip_head 1.000 clip_nodes 0.698 upd_head 0.000 gn_head 0.408 gn_nodes 4.301 gn_pyr 3.696 pshare 0.440 clip_pyr 0.812 upd_nodes 0.000 upd_pyr 0.000",
+  "01:15:57 clock: 0.319 s/step over the last 100 steps of this process; over all 1400 steps so far: peak GPU allocated 4.82 GB, reserved 5.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 21 of 2233, ylong against the token chord class 0; loss parts nll_s 0.086 nll_l 0.023 ce1 0.207 ce3 0.179 scale_l1 0.086",
+  "01:15:57 step 2900/3000 loss 1.7480 lr 3.10e-07 0.168 s/step nll_s 0.086 nll_l 0.023 ce1 0.207 ce3 0.179 gt_links 2233.000 pos_pairs 2212.000 gt_outside 21.000 gt_class 0.000 scale_l1 0.086 gpu_gb 4.822 gpu_res_gb 5.283 nn_min 0.796 pos_grad_max 0.002 head 0.345 b_loss 1.475 b_e 0.129 b_flags 0.517 b_off 0.460 b_dir 0.054 b_s 0.091 b_u 0.278 b_start 1.402 b_mean 1.368 h_start 0.374 overflow 0.000 pair_cov 0.991 gt_cov 0.982 n_valid 435.516 label_s 0.047 cov_start 0.983 cov_mean 0.983 nact_start 521.418 nact_mean 525.714 clip_head 1.000 clip_nodes 0.599 upd_head 0.000 gn_head 0.426 gn_nodes 5.012 gn_pyr 4.680 pshare 0.463 clip_pyr 0.641 upd_nodes 0.000 upd_pyr 0.000",
+  "01:16:31 clock: 0.336 s/step over the last 100 steps of this process; over all 1500 steps so far: peak GPU allocated 4.82 GB, reserved 5.28 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 18 of 2226, ylong against the token chord class 0; loss parts nll_s 0.049 nll_l 0.013 ce1 0.174 ce3 0.135 scale_l1 0.060",
+  "01:16:31 step 3000: update share of the head's loss on B''s node head 0.344 (one step, preconditioned by AdamW's v_hat), gradient-norm share 0.238",
+  "01:16:31 step 3000/3000 loss 1.7597 lr 3.04e-11 0.174 s/step nll_s 0.049 nll_l 0.013 ce1 0.174 ce3 0.135 gt_links 2226.000 pos_pairs 2208.000 gt_outside 18.000 gt_class 0.000 scale_l1 0.060 gpu_gb 4.822 gpu_res_gb 5.283 nn_min 0.800 pos_grad_max 0.002 head 0.247 b_loss 0.953 b_e 0.088 b_flags 0.365 b_off 0.428 b_dir 0.024 b_s 0.069 b_u 0.104 b_start 1.402 b_mean 1.381 h_start 0.374 overflow 0.000 pair_cov 0.991 gt_cov 0.982 n_valid 439.486 label_s 0.056 cov_start 0.983 cov_mean 0.982 nact_start 521.418 nact_mean 521.899 ushare 0.344 gshare 0.238 clip_head 1.000 clip_nodes 0.706 upd_head 0.000 gn_head 0.510 gn_nodes 4.251 gn_pyr 3.341 pshare 0.412 clip_pyr 0.898 upd_nodes 0.000 upd_pyr 0.000",
+  "01:16:32 done 3000",
+  "01:16:33 done e393_p_s1: model.pt holds the head and B' (b_state), read back and checked"
+ ]
+}

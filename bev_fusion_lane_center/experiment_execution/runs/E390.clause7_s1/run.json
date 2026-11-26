@@ -1,0 +1,101 @@
+{
+ "id": "E390.clause7_s1",
+ "hypothesis": "E390 step 1 (card v7 = v6 + the map's stated count-error rate as an input, D130 / D135): a relation-biased graph encoding of the SD road graph (logical lanes per direction, links, junctions, route; node geometry cut at node boundaries) recovers lanes per direction (also copying the exact input), dropped links, hidden route flags and the association of perception proxies to their segment (with unassigned) above the measured nulls, invariant under rigid motion, with graceful decay",
+ "prediction": "(card v7, the third look at the same VAL frames) P1 at count error 0 about 0.998, P1 base about 0.94 or higher, the other probes as in v6, P4 0.0; SOUND 70 %, PARTLY 25 %",
+ "rule": "E390 card v7 (section 5) with the unchanged rule and bars of section 0 (by hand, bars from the v6 nulls measured before the v5 training): SOUND = on both seeds P1 >= 0.7335 (base) and >= 0.99 (ce0), P2 >= 0.9380 / 0.9354 (base / s2), P3 >= 0.7138, P6 >= 0.9420 (base), >= 0.8747 (pose2), nd accuracy >= 0.8444 and none recall >= 0.3918, false-unassigned <= 0.05, each with the paired interval vs its null above 0; graph clause g - n on P3 >= +0.05; P4 <= 1e-4; P5 graceful; P1 at count error 0 below 0.99 = a failing probe, the kill only below 0.90; order NOT SOUND > INCONCLUSIVE > PARTLY > SOUND; VAL 873, CPU, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py clause --seed 1 --tag 7",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py clause --seed 1 --tag 7"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 3541,
+ "created": "2026-11-21T16:27:38",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E390",
+ "card_sha": "4570222d4c48f924",
+ "card_arms": {
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E390.g_s0",
+    "E390.g_s1",
+    "E390.read_g_s0",
+    "E390.read_g_s1",
+    "E390.clause_s0",
+    "E390.clause_s1",
+    "E390.g6_s0",
+    "E390.g6_s1",
+    "E390.read_g6_s0",
+    "E390.read_g6_s1",
+    "E390.clause6_s0",
+    "E390.clause6_s1",
+    "E390.g7_s0",
+    "E390.g7_s1",
+    "E390.hold_g7_s0",
+    "E390.hold_g7_s1",
+    "E390.read_g7_s0",
+    "E390.read_g7_s1",
+    "E390.clause7_s0",
+    "E390.clause7_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E390.n_s0",
+    "E390.n_s1",
+    "E390.read_n_s0",
+    "E390.read_n_s1",
+    "E390.n6_s0",
+    "E390.n6_s1",
+    "E390.read_n6_s0",
+    "E390.read_n6_s1",
+    "E390.n7_s0",
+    "E390.n7_s1",
+    "E390.hold_n7_s0",
+    "E390.hold_n7_s1",
+    "E390.read_n7_s0",
+    "E390.read_n7_s1"
+   ]
+  },
+  "nulls": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "1e10142c441d",
+ "started": "2026-11-21T16:28:26",
+ "code_hash": "1e10142c441d",
+ "commit": "37e5f37a00",
+ "tag": "lcr/E390.clause7_s1",
+ "git_note": "1428 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 3889,
+ "pgid": 3889,
+ "pid_start": 1219246,
+ "exit": 0,
+ "duration_s": 117,
+ "attempts": 1,
+ "ended": "2026-11-21T16:30:31",
+ "last_lines": [
+  "=== attempt 2026-11-21T16:28:26: bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh sdgraph_probe.py clause --seed 1 --tag 7",
+  "_py14.sh: evaluation/sdgraph_probe.py",
+  "{\"seed\": 1, \"level\": \"base\", \"p1_g_minus_n\": [0.14238178633975485, 0.1067794747562492, 0.18583176919075634], \"p2_g_minus_n\": [0.012167921337979504, 0.008070309768856546, 0.016122864449642327], \"p3_g_minus_n\": [0.10092577182325047, 0.06240273680996952, 0.14885540527343394], \"p6_g_minus_n\": [0.0020347549268965315, -0.006783454643549883, 0.010421587277499924]}"
+ ]
+}

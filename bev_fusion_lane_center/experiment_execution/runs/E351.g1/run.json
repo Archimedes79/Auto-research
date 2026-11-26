@@ -1,0 +1,79 @@
+{
+ "id": "E351.g1",
+ "hypothesis": "E351 g1: one CUDA graph of the junction front (pyramid + maps head + B's node head) with the pair head eager, against the eager forward, ms per frame on a quiet host, E312 and E324 s (seed-0 checkpoints)",
+ "prediction": "E312 -4 ms (-24 %), E324 s -9 ms (-35 %), both beyond the minimum effect of 15 % of the control median (2.6 / 3.7 ms); outputs identical",
+ "rule": "E351 card section 0: ADOPT when the equality holds (tier 1, all 873 frames of both seeds) AND the drop is at least 15 % of the c median with a paired 95 % interval over the rounds that excludes 0 on a quiet host (load < 3 and an idle GPU before and after), else TIE / INCONCLUSIVE; label by jtiming.py graph; by hand: replay",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_py14.sh jtiming.py graph --runs e312_p_s0,e324_s_s0 --tag e351_graph_20261115",
+ "argv": [
+  "bash",
+  "tools/env/_py14.sh",
+  "jtiming.py",
+  "graph",
+  "--runs",
+  "e312_p_s0,e324_s_s0",
+  "--tag",
+  "e351_graph_20261115"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 516228,
+ "created": "2026-11-15T11:23:07",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E351",
+ "card_sha": "521c8eec5abf3da8",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "g1": {
+   "order": {},
+   "run_ids": [
+    "E351.g1"
+   ]
+  },
+  "g2": {
+   "order": {},
+   "run_ids": [
+    "E351.g2"
+   ]
+  },
+  "": {
+   "seeds": [
+    0
+   ]
+  }
+ },
+ "code_hash_first": "5c122546194e",
+ "started": "2026-11-15T11:26:39",
+ "code_hash": "5c122546194e",
+ "commit": "2f46ebafce",
+ "tag": "lcr/E351.g1",
+ "git_note": "",
+ "pid": 516692,
+ "pgid": 516692,
+ "pid_start": 14058705,
+ "exit": 0,
+ "duration_s": 86,
+ "attempts": 1,
+ "ended": "2026-11-15T11:28:10",
+ "last_lines": [
+  "=== attempt 2026-11-15T11:26:39: bash tools/env/_py14.sh jtiming.py graph --runs e312_p_s0,e324_s_s0 --tag e351_graph_20261115",
+  "_py14.sh: evaluation/jtiming.py",
+  "load average (1 min) 0.87, cudnn.benchmark False",
+  "GPU NVIDIA GeForce RTX 3060, bf16 autocast, batch 1, no_grad; GPU before {'util_max': 1.0, 'mem_mib': 792.0, 'temp_c': 45.0, 'sm_clock_mhz': 210.0}, after {'util_max': 42.0, 'mem_mib': 1442.0, 'temp_c': 58.0, 'sm_clock_mhz': 1198.4}",
+  "host load (1 min) before 0.87 after 0.88, limit 3.0; GPU before util max 1 %, after util max 42 % (idle: at most 5 %): NOT QUIET",
+  "",
+  "ms per frame (median of the 10 block medians of 30 forwards), paired g1 - c over the rounds (95 % bootstrap)",
+  "  e312_p_s0      c  14.733  g1  12.763  g1 - c -1.808 [-1.936, -1.681] = -12.3 %  | speed half: INCONCLUSIVE (the host was not quiet)",
+  "  e324_s_s0      c  19.468  g1  17.344  g1 - c -1.997 [-2.408, -1.604] = -10.3 %  | speed half: INCONCLUSIVE (the host was not quiet)",
+  "written /mnt/c/Auto-research/bev_fusion_lane_center/runs/eval/jtiming/e351_graph_20261115.json"
+ ]
+}

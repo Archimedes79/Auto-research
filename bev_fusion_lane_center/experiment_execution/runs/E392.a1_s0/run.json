@@ -1,0 +1,221 @@
+{
+ "id": "E392.a1_s0",
+ "hypothesis": "E392 stage 1 (the head on the cached K 512 tokens, the E373 recipe: none weight 0.25, 12000 steps, bs 8, lr 1e-3, cache seed S, head seed S + 2): control c (champion code, no round, retrained), x = one round without a loss on the early read, r1 = one round (after layer 1) with the early wiring loss, r2 = two rounds (after layers 1 and 2) with the early wiring loss on each, u = the content null of the adopted arm (conditional); VAL 873 at the D115 decode; then a stage-2 (S4, end to end through B''s node head) diagnostic on one stage-1 head",
+ "prediction": "0.006 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"topo_F1\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"max_loss\":0.005},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: a loss is not finite (a `non-finite` line in the trainer's log; jarm and jlive_train enforce this one); or no learning, checked by hand at the read-out on the comparable parts of the loss (nll_s + nll_l + ce3, NOT the total, which holds the extra terms of the arms): the mean over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200 (a weak clause: the E373 heads reach a ratio of about 0.33); or the curve check of the control fires (section 1.4); or an arm's data-order fingerprint differs from c's at any logged step (the arm is then not paired with c); a run cut by run.py or the GPU is resumed from its checkpoint (resume steps reported); a crashed read-out is re-run unchanged, never with another cell; no GPU job starts before the conditions of section 1.5; core 7.3 GPU h (c, x, r1, r2 on two seeds = 8 runs of 0.7 - 0.9 h, the timing 0.3), conditional u 2.0, diagnostic s4 1.3 (two seeds, about 0.65 h each with the live read)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_train.py --name e392_a1_s0 --seed 0 --head-seed 2 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 --none-weight 0.25 --rounds 1 --wire-weight 0.5 --msg none",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_train.py --name e392_a1_s0 --seed 0 --head-seed 2 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 --none-weight 0.25 --rounds 1 --wire-weight 0.5 --msg none"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 42941,
+ "created": "2026-11-22T16:05:23",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E392",
+ "card_sha": "ad30768111d551b5",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E392.c_s0",
+    "E392.dump_val_c_s0",
+    "E392.dump_train_c_s0",
+    "E392.sweep_c_s0",
+    "E392.choose_c_s0",
+    "E392.cell_vs_c_s0",
+    "E392.d115_vs_c_s0",
+    "E392.c_s1",
+    "E392.dump_val_c_s1",
+    "E392.dump_train_c_s1",
+    "E392.sweep_c_s1",
+    "E392.choose_c_s1",
+    "E392.cell_vs_c_s1",
+    "E392.d115_vs_c_s1"
+   ]
+  },
+  "x": {
+   "order": {},
+   "run_ids": [
+    "E392.x_s0",
+    "E392.dump_val_x_s0",
+    "E392.dump_train_x_s0",
+    "E392.sweep_x_s0",
+    "E392.choose_x_s0",
+    "E392.cell_vs_x_s0",
+    "E392.d115_vs_x_s0",
+    "E392.x_s1",
+    "E392.dump_val_x_s1",
+    "E392.dump_train_x_s1",
+    "E392.sweep_x_s1",
+    "E392.choose_x_s1",
+    "E392.cell_vs_x_s1",
+    "E392.d115_vs_x_s1"
+   ]
+  },
+  "r1": {
+   "order": {},
+   "run_ids": [
+    "E392.r1_s0",
+    "E392.dump_val_r1_s0",
+    "E392.dump_train_r1_s0",
+    "E392.sweep_r1_s0",
+    "E392.choose_r1_s0",
+    "E392.cell_vs_r1_s0",
+    "E392.d115_vs_r1_s0",
+    "E392.r1_s1",
+    "E392.dump_val_r1_s1",
+    "E392.dump_train_r1_s1",
+    "E392.sweep_r1_s1",
+    "E392.choose_r1_s1",
+    "E392.cell_vs_r1_s1",
+    "E392.d115_vs_r1_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E392.r2_s0",
+    "E392.dump_val_r2_s0",
+    "E392.dump_train_r2_s0",
+    "E392.sweep_r2_s0",
+    "E392.choose_r2_s0",
+    "E392.cell_vs_r2_s0",
+    "E392.d115_vs_r2_s0",
+    "E392.r2_s1",
+    "E392.dump_val_r2_s1",
+    "E392.dump_train_r2_s1",
+    "E392.sweep_r2_s1",
+    "E392.choose_r2_s1",
+    "E392.cell_vs_r2_s1",
+    "E392.d115_vs_r2_s1"
+   ]
+  },
+  "a2": {
+   "order": {},
+   "run_ids": [
+    "E392.a2_s0",
+    "E392.dump_val_a2_s0",
+    "E392.dump_train_a2_s0",
+    "E392.sweep_a2_s0",
+    "E392.choose_a2_s0",
+    "E392.cell_vs_a2_s0",
+    "E392.d115_vs_a2_s0",
+    "E392.a2_s1",
+    "E392.dump_val_a2_s1",
+    "E392.dump_train_a2_s1",
+    "E392.sweep_a2_s1",
+    "E392.choose_a2_s1",
+    "E392.cell_vs_a2_s1",
+    "E392.d115_vs_a2_s1"
+   ]
+  },
+  "a1": {
+   "order": {},
+   "run_ids": [
+    "E392.a1_s0",
+    "E392.dump_val_a1_s0",
+    "E392.dump_train_a1_s0",
+    "E392.sweep_a1_s0",
+    "E392.choose_a1_s0",
+    "E392.cell_vs_a1_s0",
+    "E392.d115_vs_a1_s0",
+    "E392.a1_s1",
+    "E392.dump_val_a1_s1",
+    "E392.dump_train_a1_s1",
+    "E392.sweep_a1_s1",
+    "E392.choose_a1_s1",
+    "E392.cell_vs_a1_s1",
+    "E392.d115_vs_a1_s1"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": [
+    "E392.u_s0",
+    "E392.dump_val_u_s0",
+    "E392.dump_train_u_s0",
+    "E392.sweep_u_s0",
+    "E392.choose_u_s0",
+    "E392.cell_vs_u_s0",
+    "E392.d115_vs_u_s0",
+    "E392.u_s1",
+    "E392.dump_val_u_s1",
+    "E392.dump_train_u_s1",
+    "E392.sweep_u_s1",
+    "E392.choose_u_s1",
+    "E392.cell_vs_u_s1",
+    "E392.d115_vs_u_s1"
+   ]
+  },
+  "s4": {
+   "order": {},
+   "run_ids": [
+    "E392.s4_x_s0",
+    "E392.s4dump_x_s0",
+    "E392.s4score_x_s0",
+    "E392.s4_x_s1",
+    "E392.s4dump_x_s1",
+    "E392.s4score_x_s1",
+    "E392.s4_r1_s0",
+    "E392.s4dump_r1_s0",
+    "E392.s4score_r1_s0",
+    "E392.s4_r1_s1",
+    "E392.s4dump_r1_s1",
+    "E392.s4score_r1_s1",
+    "E392.s4_r2_s0",
+    "E392.s4dump_r2_s0",
+    "E392.s4score_r2_s0",
+    "E392.s4_r2_s1",
+    "E392.s4dump_r2_s1",
+    "E392.s4score_r2_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "3201216a7508",
+ "started": "2026-11-22T16:06:53",
+ "code_hash": "3201216a7508",
+ "commit": "030337c359",
+ "tag": "lcr/E392.a1_s0",
+ "git_note": "1470 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 43868,
+ "pgid": 43868,
+ "pid_start": 5488887,
+ "exit": 0,
+ "duration_s": 2610,
+ "attempts": 1,
+ "ended": "2026-11-22T16:50:32",
+ "last_lines": [
+  "g against the token chord class 0; loss parts nll_s 0.067 nll_l 0.016 ce1 0.199 ce3 0.175 scale_l1 0.060; early reads (E392) nll1_s 0.078 nll1_l 0.025",
+  "16:49:38 step 11600/12000 loss 0.4478 lr 3.05e-06 0.213 s/step nll_s 0.067 nll_l 0.016 ce1 0.199 ce3 0.175 gt_links 2101.000 pos_pairs 2086.000 gt_outside 15.000 gt_class 0.000 nll1_s 0.078 nll1_l 0.025 scale_l1 0.060 gpu_gb 2.161 gpu_res_gb 2.420",
+  "16:49:48 clock: 0.105 s/step over the last 100 steps of this process; over all 11700 steps so far: peak GPU allocated 2.16 GB, reserved 2.42 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 19 of 2217, ylong against the token chord class 0; loss parts nll_s 0.096 nll_l 0.026 ce1 0.257 ce3 0.216 scale_l1 0.088; early reads (E392) nll1_s 0.112 nll1_l 0.037",
+  "16:49:48 step 11700/12000 loss 0.4470 lr 1.72e-06 0.212 s/step nll_s 0.096 nll_l 0.026 ce1 0.257 ce3 0.216 gt_links 2217.000 pos_pairs 2198.000 gt_outside 19.000 gt_class 0.000 nll1_s 0.112 nll1_l 0.037 scale_l1 0.088 gpu_gb 2.161 gpu_res_gb 2.420",
+  "16:49:59 clock: 0.107 s/step over the last 100 steps of this process; over all 11800 steps so far: peak GPU allocated 2.16 GB, reserved 2.42 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 13 of 2599, ylong against the token chord class 0; loss parts nll_s 0.065 nll_l 0.019 ce1 0.192 ce3 0.159 scale_l1 0.084; early reads (E392) nll1_s 0.078 nll1_l 0.026",
+  "16:49:59 step 11800/12000 loss 0.4610 lr 7.67e-07 0.211 s/step nll_s 0.065 nll_l 0.019 ce1 0.192 ce3 0.159 gt_links 2599.000 pos_pairs 2586.000 gt_outside 13.000 gt_class 0.000 nll1_s 0.078 nll1_l 0.026 scale_l1 0.084 gpu_gb 2.161 gpu_res_gb 2.420",
+  "16:50:10 clock: 0.107 s/step over the last 100 steps of this process; over all 11900 steps so far: peak GPU allocated 2.16 GB, reserved 2.42 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 32 of 2971, ylong against the token chord class 0; loss parts nll_s 0.096 nll_l 0.024 ce1 0.247 ce3 0.204 scale_l1 0.078; early reads (E392) nll1_s 0.111 nll1_l 0.028",
+  "16:50:10 step 11900/12000 loss 0.4618 lr 1.94e-07 0.210 s/step nll_s 0.096 nll_l 0.024 ce1 0.247 ce3 0.204 gt_links 2971.000 pos_pairs 2939.000 gt_outside 32.000 gt_class 0.000 nll1_s 0.111 nll1_l 0.028 scale_l1 0.078 gpu_gb 2.161 gpu_res_gb 2.420",
+  "16:50:20 clock: 0.106 s/step over the last 100 steps of this process; over all 12000 steps so far: peak GPU allocated 2.16 GB, reserved 2.42 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 25 of 2429, ylong against the token chord class 0; loss parts nll_s 0.117 nll_l 0.024 ce1 0.234 ce3 0.200 scale_l1 0.071; early reads (E392) nll1_s 0.130 nll1_l 0.030",
+  "16:50:20 step 12000/12000 loss 0.4359 lr 1.90e-11 0.209 s/step nll_s 0.117 nll_l 0.024 ce1 0.234 ce3 0.200 gt_links 2429.000 pos_pairs 2404.000 gt_outside 25.000 gt_class 0.000 nll1_s 0.130 nll1_l 0.030 scale_l1 0.071 gpu_gb 2.161 gpu_res_gb 2.420",
+  "16:50:20 done 12000",
+  "16:50:20 done e392_a1_s0"
+ ]
+}

@@ -1,0 +1,133 @@
+{
+ "schema": 1,
+ "made": "2026-11-24T14:37:29",
+ "gt": {
+  "key": "0.5_4_a107e0b4e8",
+  "signature": "a107e0b4e8",
+  "version": "v13",
+  "dataset": "v1.0-trainval",
+  "res": 0.5,
+  "ss": 4,
+  "options": {},
+  "index_hash": "a35c02047885"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "v1.0-trainval",
+  "manifest_hash": "f615a7387e73",
+  "scenes": 850,
+  "samples": 34149
+ },
+ "subject": {
+  "run": "t25.A2_s0",
+  "ckpt": "ckpt_00001500.pt",
+  "ckpt_hash": "490ce791a052p",
+  "config_hash": "0063511655b4",
+  "step": 1500,
+  "train_gt": {
+   "key": "0.5_4_a107e0b4e8",
+   "signature": "a107e0b4e8",
+   "version": "v13",
+   "dataset": "v1.0-trainval",
+   "res": 0.5,
+   "ss": 4,
+   "options": {},
+   "index_hash": "a35c02047885"
+  }
+ },
+ "environment": {
+  "python": "3.12.15",
+  "torch": "2.8.0+cu129",
+  "cuda": "12.9",
+  "numpy": "1.26.4",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "the interpreter of the run, read 2026-11-24 (the environment may have changed since the run): /home/ml/miniconda3/envs/gcar/bin/python"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "bf/t25.A2_s0",
+  "commit": "ee6af4b47d",
+  "code_hash": "36b79156f309",
+  "drift_files": [],
+  "command": "bash tools/run_ar.sh temp/compose/t25_A2_s0.json",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "47e5b4e91366",
+  "files": [
+   "augment.py",
+   "bev_trunk.py",
+   "bevfusion_camera.py",
+   "blocks_new.py",
+   "camera_encoder.py",
+   "extract.py",
+   "fallbacks.py",
+   "fusion.py",
+   "lane_branch.py",
+   "launch_saving.py",
+   "layers.py",
+   "lift_pd.py",
+   "loss_extras.py",
+   "losses.py",
+   "model.py",
+   "motion_block.py",
+   "object_head.py",
+   "precompute.py",
+   "radar_bev.py",
+   "radar_encoder.py",
+   "splat.py",
+   "splits.py",
+   "student_encoder.py",
+   "temporal_fusion.py",
+   "timed_head.py",
+   "trainkit/__init__.py",
+   "trainkit/checkpoint.py",
+   "trainkit/optim.py"
+  ],
+  "repo_files": [
+   "GtGenerator/__init__.py",
+   "GtGenerator/coverage.py",
+   "GtGenerator/layers.py"
+  ],
+  "repo_imports_unfollowed": [
+   "GtGenerator/coverage.py -> GtGenerator/grid.py"
+  ],
+  "roots": [
+   "model.py",
+   "losses.py"
+  ],
+  "missing_roots": [],
+  "excluded": [
+   "train.py",
+   "nuscenes_dataset.py",
+   "feature_cache.py"
+  ],
+  "imports_excluded": [
+   "lane_branch.py -> nuscenes_dataset.py",
+   "lane_branch.py -> train.py"
+  ],
+  "test_imports": [
+   "augment.py -> nuscenes_dataset.py",
+   "augment.py -> train.py",
+   "lane_branch.py -> train.py",
+   "model.py -> nuscenes_dataset.py",
+   "precompute.py -> feature_cache.py"
+  ],
+  "unparsed": [],
+  "external_local": [],
+  "dynamic_imports": [],
+  "source": "t25_A2_s0/code",
+  "repo_files_from": "bf/t25.A2_s0",
+  "config_hash": "0063511655b4",
+  "copied_to": "bundle"
+ }
+}

@@ -1,0 +1,110 @@
+{
+ "id": "E381.n_s1",
+ "hypothesis": "E381 (card v2.1, D126): the stage-1 head trained with input noise calibrated to B''s TRAIN-to-VAL token gap (pos jitter 0.184 / 0.181 m per axis, e / e_raw noise 0.621 / 0.601, valid tokens; label tensors clean, gate targets from the perturbed positions) generalises better to VAL than the E373 heads at D115",
+ "prediction": "n - ref topo F1 +0.003 (window -0.005 to +0.010), junction F1 +0.005; ADOPT-NOISE 15 %, TIE 65 %, NO 20 %",
+ "rule": "E381 card v2.1 section 0 (by hand, written before any run): per seed at the verdict cell (the common pinned (b) cell, or the recipe cell when the heads differ) vs ref e373_cb at D115: ADOPT-NOISE = both seeds topo F1 >= +0.005 with the interval's low end > 0, junction F1 >= -0.010, F1@1.0 >= -0.005, lanes found >= -0.010, dup_frac <= +0.010, the E373 floors, no kill; NO = both seeds topo <= -0.005 or a guard broken on both; INVALID = a kill or a cut; TIE otherwise; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jtoken_train.py --name e381_n_s1 --seed 1 --head-seed 3 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 --none-weight 0.25 --noise-pos 0.181 --noise-e 0.601",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jtoken_train.py",
+  "--name",
+  "e381_n_s1",
+  "--seed",
+  "1",
+  "--head-seed",
+  "3",
+  "--ident",
+  "e292_a",
+  "--steps",
+  "12000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4",
+  "--none-weight",
+  "0.25",
+  "--noise-pos",
+  "0.181",
+  "--noise-e",
+  "0.601"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 8338,
+ "created": "2026-11-19T02:15:01",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E381",
+ "card_sha": "1403002e7641388a",
+ "card_arms": {
+  "ref": {
+   "order": {},
+   "run_ids": []
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E381.n_s0",
+    "E381.n_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "bf32be0d8dc8",
+ "started": "2026-11-19T02:16:09",
+ "code_hash": "bf32be0d8dc8",
+ "commit": "bf0757b28e",
+ "tag": "lcr/E381.n_s1",
+ "git_note": "1140 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 9285,
+ "pgid": 9285,
+ "pid_start": 198564,
+ "code_drift": {
+  "n": 49,
+  "paths": [
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/fix_smoke.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/fix_smoke2.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/driver.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_445865/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_445868/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/mut/evaluation_445985/jtest_eval.py",
+   "bev_fusion_lane_center/temp/e343/run_rehearsal_smoke_r4.sh",
+   "bev_fusion_lane_center/temp/e388b/append388b.py",
+   "bev_fusion_lane_center/temp/e388b/note388b.py",
+   "bev_fusion_lane_center/temp/e388b/tab388b.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2497,
+ "attempts": 1,
+ "ended": "2026-11-19T02:58:38",
+ "last_lines": [
+  "nt 0.2271 m, mean |noise e| 0.4824",
+  "02:56:30 step 11600/12000 loss 0.3878 lr 3.05e-06 0.201 s/step nll_s 0.099 nll_l 0.022 ce1 0.251 ce3 0.216 gt_links 2143.000 pos_pairs 2124.000 gt_outside 19.000 gt_class 0.000 scale_l1 0.076 noise_disp 0.227 noise_e_abs 0.482 gpu_gb 2.128 gpu_res_gb 2.431",
+  "02:56:50 clock: 0.200 s/step over the last 100 steps of this process; over all 11700 steps so far: peak GPU allocated 2.13 GB, reserved 2.43 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 25 of 2525, ylong against the token chord class 0; loss parts nll_s 0.121 nll_l 0.021 ce1 0.218 ce3 0.183 scale_l1 0.043; input noise: mean displacement 0.2271 m, mean |noise e| 0.4849",
+  "02:56:50 step 11700/12000 loss 0.3799 lr 1.72e-06 0.201 s/step nll_s 0.121 nll_l 0.021 ce1 0.218 ce3 0.183 gt_links 2525.000 pos_pairs 2500.000 gt_outside 25.000 gt_class 0.000 scale_l1 0.043 noise_disp 0.227 noise_e_abs 0.485 gpu_gb 2.128 gpu_res_gb 2.431",
+  "02:57:10 clock: 0.197 s/step over the last 100 steps of this process; over all 11800 steps so far: peak GPU allocated 2.13 GB, reserved 2.43 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 28 of 2547, ylong against the token chord class 0; loss parts nll_s 0.131 nll_l 0.028 ce1 0.289 ce3 0.250 scale_l1 0.068; input noise: mean displacement 0.2238 m, mean |noise e| 0.4810",
+  "02:57:10 step 11800/12000 loss 0.3882 lr 7.67e-07 0.201 s/step nll_s 0.131 nll_l 0.028 ce1 0.289 ce3 0.250 gt_links 2547.000 pos_pairs 2519.000 gt_outside 28.000 gt_class 0.000 scale_l1 0.068 noise_disp 0.224 noise_e_abs 0.481 gpu_gb 2.128 gpu_res_gb 2.431",
+  "02:57:30 clock: 0.202 s/step over the last 100 steps of this process; over all 11900 steps so far: peak GPU allocated 2.13 GB, reserved 2.43 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 30 of 2445, ylong against the token chord class 3; loss parts nll_s 0.066 nll_l 0.014 ce1 0.180 ce3 0.143 scale_l1 0.035; input noise: mean displacement 0.2267 m, mean |noise e| 0.4700",
+  "02:57:30 step 11900/12000 loss 0.3957 lr 1.94e-07 0.201 s/step nll_s 0.066 nll_l 0.014 ce1 0.180 ce3 0.143 gt_links 2445.000 pos_pairs 2415.000 gt_outside 30.000 gt_class 3.000 scale_l1 0.035 noise_disp 0.227 noise_e_abs 0.470 gpu_gb 2.128 gpu_res_gb 2.431",
+  "02:57:43 clock: 0.132 s/step over the last 100 steps of this process; over all 12000 steps so far: peak GPU allocated 2.13 GB, reserved 2.43 GB, valid tokens in the largest frame 512; GT links outside the gate in this batch 20 of 2198, ylong against the token chord class 1; loss parts nll_s 0.093 nll_l 0.020 ce1 0.200 ce3 0.169 scale_l1 0.066; input noise: mean displacement 0.2244 m, mean |noise e| 0.4830",
+  "02:57:43 step 12000/12000 loss 0.3838 lr 1.90e-11 0.200 s/step nll_s 0.093 nll_l 0.020 ce1 0.200 ce3 0.169 gt_links 2198.000 pos_pairs 2178.000 gt_outside 20.000 gt_class 1.000 scale_l1 0.066 noise_disp 0.224 noise_e_abs 0.483 gpu_gb 2.128 gpu_res_gb 2.431",
+  "02:57:43 done 12000",
+  "02:57:43 done e381_n_s1"
+ ]
+}

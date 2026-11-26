@@ -1,0 +1,9 @@
+{
+ "id": "E319.p_s0",
+ "who": "BEV Fusion Spurmitte Experiments (eff3a5)",
+ "when": "2026-11-12T23:06:15",
+ "why": "D85: E320 (differentiable attachment) is finished and measured first; E317 / E318 / E319 wait",
+ "words": "ok, dann priorisier das gegenueber neueren Experimenten, damit sie auf der richtigen Basis aufbauen und schliesse es ab. Lass aber ein existierendes Experiment zu Ende laufen. (D85, chat BEV Fusion Spurmitte Experiments, 2026-11-12; chosen: Differenzierbarer Anbau E320 first, E317-E319 wait until E320 is measured)",
+ "cleared": "2026-11-14T17:44:02",
+ "cleared_words": "D96 (Mirko 2026-11-14, 3. ja): holds lifted after the critic's second pass answered; E318.c stays held (control = E317.g)"
+}

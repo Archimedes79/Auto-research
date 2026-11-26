@@ -1,0 +1,56 @@
+{
+ "id": "E354.post_s1",
+ "hypothesis": "E354: the read-outs of the recursive feature state (stream, off, shuffle, trunc), the control arm and the layer-1 control of the new stream-order driver on E341, scored unsnapped and snapped at p >= 0.1, with the flip rates at matched delivery.",
+ "prediction": "the driver reproduces the stored E341 cards within 0.0005; r minus z +0.004 unsnapped topo F1; flip rate -3 points at matched delivery",
+ "rule": "E354 card section 0 (by hand: replay); the layer-1 control must hold before any arm is read; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash temp/e354/post_seed.sh 1",
+ "argv": [
+  "bash",
+  "temp/e354/post_seed.sh",
+  "1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 608202,
+ "created": "2026-11-15T18:55:46",
+ "status": "ok",
+ "after": "E354.r_s1,E354.z_s1",
+ "timeout_min": 300.0,
+ "code_hash_first": "3bbd120f3f7e",
+ "started": "2026-11-15T23:54:39",
+ "code_hash": "3bbd120f3f7e",
+ "commit": "c5d26a2e76",
+ "tag": "lcr/E354.post_s1",
+ "git_note": "",
+ "pid": 646386,
+ "pgid": 646386,
+ "pid_start": 18546771,
+ "code_drift": {
+  "n": 11,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/cache_guard.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/make_day34.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/smokes_then_arms.sh",
+   "bev_fusion_lane_center/temp/day34/day34.sh",
+   "bev_fusion_lane_center/temp/e346/e346_arm.py",
+   "bev_fusion_lane_center/temp/e346/launch_arms_retry_0116.sh",
+   "bev_fusion_lane_center/temp/e354/read_flip.py",
+   "bev_fusion_lane_center/temp/e354/verdict.py",
+   "bev_fusion_lane_center/temp/e357/chain2.sh",
+   "bev_fusion_lane_center/temp/e357/launch2.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 8904,
+ "attempts": 1,
+ "ended": "2026-11-16T02:23:41",
+ "last_lines": [
+  "=== attempt 2026-11-15T23:54:39: bash temp/e354/post_seed.sh 1"
+ ]
+}

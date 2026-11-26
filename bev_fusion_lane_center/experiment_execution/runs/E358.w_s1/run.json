@@ -1,0 +1,92 @@
+{
+ "id": "E358.w_s1",
+ "hypothesis": "E358: the E325 wiring head (545 parameters) trained on TRAIN records of E324 s with the ATTACHED ends and read out at the end-to-end read-out replaces the nearest-piece distance rule there: topo F1 at least E324 s PRIMARY - 0.005, guards held (training run, seed 1)",
+ "prediction": "w - c = +0.001 topo F1 at the end-to-end read-out (hit |w - c| <= 0.003 on both seeds; the attached-end oracle gap is +0.0009 / +0.0019); real-choice agreement above the rule's",
+ "rule": "E358 card section 0 (by hand: jwire_verdict.py --read-out primary; KEEP when topo F1 of w >= c - 0.005 on both seeds with the six guards held, TIE kept and refined (D87) otherwise, CUT only by the kill: the head does not learn)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh jwire_train.py run --seed 1 --pair-run e324_s_s1 --ends att --name e358_w_s1 --heads 3 --epochs 60 --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jwire_train.py",
+  "run",
+  "--seed",
+  "1",
+  "--pair-run",
+  "e324_s_s1",
+  "--ends",
+  "att",
+  "--name",
+  "e358_w_s1",
+  "--heads",
+  "3",
+  "--epochs",
+  "60",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 784628,
+ "created": "2026-11-16T12:49:07",
+ "status": "ok",
+ "after": "E358.live_faithful_s0,E358.live_faithful_s1",
+ "timeout_min": 5400.0,
+ "card_id": "E358",
+ "card_sha": "6513b61786fa87dc",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "t": {
+   "order": {}
+  },
+  "w": {
+   "order": {},
+   "run_ids": [
+    "E358.w_s0",
+    "E358.w_s1",
+    "E358.sc_s0",
+    "E358.sc_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a10a33962aec",
+ "started": "2026-11-16T12:50:42",
+ "code_hash": "a10a33962aec",
+ "commit": "8a8b84ec3a",
+ "tag": "lcr/E358.w_s1",
+ "git_note": "5 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 785508,
+ "pgid": 785508,
+ "pid_start": 23203095,
+ "exit": 0,
+ "duration_s": 1625,
+ "attempts": 1,
+ "ended": "2026-11-16T13:17:54",
+ "last_lines": [
+  "  7600/8414  525 s",
+  "  8000/8414  545 s",
+  "  8400/8414  566 s",
+  "13:03:03 pilot TRAIN {\"matched_ends\": 234709, \"err_mean\": 1.105884001899617, \"err_median\": 0.9479076842389798, \"err_p90\": 2.1873936305000172, \"overall\": 0.8549868260040349, \"multi\": 0.7219791600617167, \"kp_p_mean\": 0.93956579783189, \"kp_p_p10\": 0.8822759389877319, \"node_e_mean\": 0.6486601285542541, \"link_p_mean\": 0.7834040986842014, \"multi_share\": 0.5215910218390678, \"near05\": 0.46781466006680705} VAL {\"matched_ends\": 17565, \"err_mean\": 1.31251741027477, \"err_median\": 1.125838275038359, \"err_p90\": 2.6249120826880206, \"overall\": 0.8537188804700788, \"multi\": 0.747867803837953, \"kp_p_mean\": 0.903459584767231, \"kp_p_p10\": 0.6493905901908875, \"node_e_mean\": 0.6476235233442765, \"link_p_mean\": 0.783682453755127, \"multi_share\": 0.5801762795732178, \"near05\": 0.4638162981289624} -> jitter scale 0.328 m (median error 1.126 m, VAL 1.126 m); the keypoint probabilities are blind columns of the head (jwire_head.BLIND)",
+  "13:06:10 pilot TRAIN jittered (scale 0.328 m, 3 draws): labelled ends within 0.5 m of a piece end 0.258 (unperturbed TRAIN 0.468, VAL 0.464)",
+  "13:06:17 training ends 598137 (591113 labelled), VAL ends 17331 (12934 with an oracle label)",
+  "13:08:40 head 0: VAL overall 0.873 (rule 0.854) real choices 0.782 (rule 0.748); TRAIN+jitter real choices 0.784 (rule 0.706)",
+  "13:10:46 head 1: VAL overall 0.874 (rule 0.854) real choices 0.782 (rule 0.748); TRAIN+jitter real choices 0.788 (rule 0.706)",
+  "13:12:48 head 2: VAL overall 0.871 (rule 0.854) real choices 0.777 (rule 0.748); TRAIN+jitter real choices 0.781 (rule 0.706)",
+  "13:14:39 head 3 (distance-only): VAL overall 0.855 (rule 0.854) real choices 0.751 (rule 0.748); TRAIN+jitter real choices 0.717 (rule 0.706)",
+  "13:17:43 no-jitter head (wn): VAL overall 0.873 (rule 0.854) real choices 0.781 (rule 0.748); TRAIN real choices 0.806 (rule 0.722)",
+  "13:17:43 KILL (agreement below the rule's by more than 0.02 on the VAL real choices or on the TRAIN ends): False (VAL False, TRAIN False); parameters 545"
+ ]
+}

@@ -1,0 +1,106 @@
+{
+ "id": "E389b.a_s0",
+ "hypothesis": "E389b: the E389 route-association head with ONE learned cross-attention (arm a: attention A with the metre-scale pair-feature bias and the none key, the sharp attention B removed; arm p: a plain q.k attention without the bias, exploratory), against the E389 head with A and B (m) and the matched no-map head (z) on the same cache, labels, steps and seeds",
+ "prediction": "0.09 vs z",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"route_F1_road\",\"vs\":\"m\",\"min_effect\":-0.01,\"note\":\"by hand: the per-clause rule below (a is read against the stored E389 m and z cards, paired against z of the same seed); decide.py cannot judge it\"}] | kill: a loss is not finite; or no learning in an arm (the logged `total` of step 3000 (mean of steps 2901 - 3000) is not below 0.8 x the logged `total` of step 100); or the head ignores the map (a: F1_road at the mode wrong within 0.01 of its F1_road at the mode error on BOTH seeds AND a - z < 0.01 at the mode error: then the verdict is 'ONE ATTENTION DOES NOT READ THE MAP' with the status named); or the unit tests of the attn option fail (the code is not used before they are green and a code critic pass is done); `--timeout` as E389 (about 30 min per run, two slots at most)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jroute_train.py --name e389b_a_s0 --seed 0 --arm m --attn a --inputs full --ident e292_a --steps 3000 --bs 8 --lr 1e-3 --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jroute_train.py",
+  "--name",
+  "e389b_a_s0",
+  "--seed",
+  "0",
+  "--arm",
+  "m",
+  "--attn",
+  "a",
+  "--inputs",
+  "full",
+  "--ident",
+  "e292_a",
+  "--steps",
+  "3000",
+  "--bs",
+  "8",
+  "--lr",
+  "1e-3",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 57769,
+ "created": "2026-11-21T02:01:11",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "card_id": "E389b",
+ "card_sha": "640009ce27dad611",
+ "card_arms": {
+  "a": {
+   "order": {},
+   "run_ids": [
+    "E389b.a_s0",
+    "E389b.a_s1",
+    "E389b.read_a_s0",
+    "E389b.read_a_s1"
+   ]
+  },
+  "p": {
+   "order": {},
+   "run_ids": [
+    "E389b.p_s0",
+    "E389b.read_p_s0"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "cc975985593f",
+ "started": "2026-11-21T02:03:09",
+ "code_hash": "cc975985593f",
+ "commit": "c757aa115e",
+ "tag": "lcr/E389b.a_s0",
+ "git_note": "1377 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 59179,
+ "pgid": 59179,
+ "pid_start": 816298,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/e359/chain.sh",
+   "bev_fusion_lane_center/temp/e390/peek390c.py",
+   "bev_fusion_lane_center/tools/route_frames_fig.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 268,
+ "attempts": 1,
+ "ended": "2026-11-21T02:08:36",
+ "last_lines": [
+  "02:06:45 step 2100/3000 loss 0.4055 lr 2.27e-04 0.055 s/step bce_road 0.065 bce_lane 0.216 acc_lane 0.912 acc_road 0.970 lab_lane 0.393 lab_road 0.393 pos_lane 0.241 pos_road 0.364",
+  "02:06:50 step 2200/3000 loss 0.3814 lr 1.83e-04 0.055 s/step bce_road 0.045 bce_lane 0.256 acc_lane 0.914 acc_road 0.969 lab_lane 0.401 lab_road 0.401 pos_lane 0.238 pos_road 0.351",
+  "02:06:56 step 2300/3000 loss 0.4089 lr 1.42e-04 0.055 s/step bce_road 0.054 bce_lane 0.272 acc_lane 0.913 acc_road 0.967 lab_lane 0.396 lab_road 0.396 pos_lane 0.235 pos_road 0.351",
+  "02:07:01 step 2400/3000 loss 0.3664 lr 1.06e-04 0.055 s/step bce_road 0.239 bce_lane 0.443 acc_lane 0.915 acc_road 0.971 lab_lane 0.410 lab_road 0.410 pos_lane 0.249 pos_road 0.371",
+  "02:07:07 step 2500/3000 loss 0.4035 lr 7.43e-05 0.055 s/step bce_road 0.202 bce_lane 0.335 acc_lane 0.912 acc_road 0.969 lab_lane 0.395 lab_road 0.395 pos_lane 0.246 pos_road 0.363",
+  "02:07:12 step 2600/3000 loss 0.4305 lr 4.81e-05 0.055 s/step bce_road 0.050 bce_lane 0.173 acc_lane 0.907 acc_road 0.968 lab_lane 0.400 lab_road 0.400 pos_lane 0.244 pos_road 0.365",
+  "02:07:17 step 2700/3000 loss 0.4150 lr 2.73e-05 0.055 s/step bce_road 0.180 bce_lane 0.315 acc_lane 0.912 acc_road 0.968 lab_lane 0.395 lab_road 0.395 pos_lane 0.247 pos_road 0.368",
+  "02:07:23 step 2800/3000 loss 0.3959 lr 1.22e-05 0.055 s/step bce_road 0.189 bce_lane 0.377 acc_lane 0.910 acc_road 0.970 lab_lane 0.401 lab_road 0.401 pos_lane 0.248 pos_road 0.370",
+  "02:07:28 step 2900/3000 loss 0.3813 lr 3.10e-06 0.055 s/step bce_road 0.095 bce_lane 0.243 acc_lane 0.918 acc_road 0.969 lab_lane 0.391 lab_road 0.391 pos_lane 0.248 pos_road 0.365",
+  "02:07:33 step 3000/3000 loss 0.3771 lr 3.04e-10 0.055 s/step bce_road 0.036 bce_lane 0.220 acc_lane 0.918 acc_road 0.970 lab_lane 0.402 lab_road 0.402 pos_lane 0.240 pos_road 0.359",
+  "02:07:34 done 3000",
+  "02:07:34 done e389b_a_s0"
+ ]
+}

@@ -1,0 +1,355 @@
+{
+ "id": "E392.sweep_r2tb_s0",
+ "hypothesis": "E392 stage 1 (the head on the cached K 512 tokens, the E373 recipe: none weight 0.25, 12000 steps, bs 8, lr 1e-3, cache seed S, head seed S + 2): control c (champion code, no round, retrained), x = one round without a loss on the early read, r1 = one round (after layer 1) with the early wiring loss, r2 = two rounds (after layers 1 and 2) with the early wiring loss on each, u = the content null of the adopted arm (conditional); VAL 873 at the D115 decode; then a stage-2 (S4, end to end through B''s node head) diagnostic on one stage-1 head; follow-up arms a1 / a2 / u (section 1.7) and, from the plan of section 1.8, n / m0 / ct / r2t and the S4 trainings of r2 and n",
+ "prediction": "0.006 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"topo_F1\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"max_loss\":0.005},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: a loss is not finite (a `non-finite` line in the trainer's log; jarm and jlive_train enforce this one); or no learning, checked by hand at the read-out on the comparable parts of the loss (nll_s + nll_l + ce3, NOT the total, which holds the extra terms of the arms): the mean over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200 (a weak clause: the E373 heads reach a ratio of about 0.33); or the curve check of the control fires (section 1.4); or an arm's data-order fingerprint differs from c's at any logged step (the arm is then not paired with c; for ct there is no such check, for r2t the check is against ct); a run cut by run.py or the GPU is resumed from its checkpoint (resume steps reported); a crashed read-out is re-run unchanged, never with another cell; no GPU job starts before the conditions of section 1.5; core 7.3 GPU h (c, x, r1, r2 on two seeds = 8 runs of 0.7 - 0.9 h, the timing 0.3), conditional u 2.0, diagnostic s4 1.3 (two seeds, about 0.65 h each with the live read); the follow-up arms a1 / a2 / u (about 6 h) and the plan of section 1.8 (11.8 - 13.4 h) come on top, and the second replication round of section 1.9 (about 5.2 h); the JSON budget 33.5",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e392_r2tb_s0 --seed 0 --split train --every 3 --grid perclass",
+ "argv": [
+  "bash",
+  "-c",
+  "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e392_r2tb_s0 --seed 0 --split train --every 3 --grid perclass"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 53532,
+ "created": "2026-11-23T04:40:11",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E392",
+ "card_sha": "863d862ed8157526",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E392.c_s0",
+    "E392.dump_val_c_s0",
+    "E392.dump_train_c_s0",
+    "E392.sweep_c_s0",
+    "E392.choose_c_s0",
+    "E392.cell_vs_c_s0",
+    "E392.d115_vs_c_s0",
+    "E392.c_s1",
+    "E392.dump_val_c_s1",
+    "E392.dump_train_c_s1",
+    "E392.sweep_c_s1",
+    "E392.choose_c_s1",
+    "E392.cell_vs_c_s1",
+    "E392.d115_vs_c_s1"
+   ]
+  },
+  "x": {
+   "order": {},
+   "run_ids": [
+    "E392.x_s0",
+    "E392.dump_val_x_s0",
+    "E392.dump_train_x_s0",
+    "E392.sweep_x_s0",
+    "E392.choose_x_s0",
+    "E392.cell_vs_x_s0",
+    "E392.d115_vs_x_s0",
+    "E392.x_s1",
+    "E392.dump_val_x_s1",
+    "E392.dump_train_x_s1",
+    "E392.sweep_x_s1",
+    "E392.choose_x_s1",
+    "E392.cell_vs_x_s1",
+    "E392.d115_vs_x_s1"
+   ]
+  },
+  "r1": {
+   "order": {},
+   "run_ids": [
+    "E392.r1_s0",
+    "E392.dump_val_r1_s0",
+    "E392.dump_train_r1_s0",
+    "E392.sweep_r1_s0",
+    "E392.choose_r1_s0",
+    "E392.cell_vs_r1_s0",
+    "E392.d115_vs_r1_s0",
+    "E392.r1_s1",
+    "E392.dump_val_r1_s1",
+    "E392.dump_train_r1_s1",
+    "E392.sweep_r1_s1",
+    "E392.choose_r1_s1",
+    "E392.cell_vs_r1_s1",
+    "E392.d115_vs_r1_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E392.r2_s0",
+    "E392.dump_val_r2_s0",
+    "E392.dump_train_r2_s0",
+    "E392.sweep_r2_s0",
+    "E392.choose_r2_s0",
+    "E392.cell_vs_r2_s0",
+    "E392.d115_vs_r2_s0",
+    "E392.r2_s1",
+    "E392.dump_val_r2_s1",
+    "E392.dump_train_r2_s1",
+    "E392.sweep_r2_s1",
+    "E392.choose_r2_s1",
+    "E392.cell_vs_r2_s1",
+    "E392.d115_vs_r2_s1"
+   ]
+  },
+  "a2": {
+   "order": {},
+   "run_ids": [
+    "E392.a2_s0",
+    "E392.dump_val_a2_s0",
+    "E392.dump_train_a2_s0",
+    "E392.sweep_a2_s0",
+    "E392.choose_a2_s0",
+    "E392.cell_vs_a2_s0",
+    "E392.d115_vs_a2_s0",
+    "E392.a2_s1",
+    "E392.dump_val_a2_s1",
+    "E392.dump_train_a2_s1",
+    "E392.sweep_a2_s1",
+    "E392.choose_a2_s1",
+    "E392.cell_vs_a2_s1",
+    "E392.d115_vs_a2_s1"
+   ]
+  },
+  "a1": {
+   "order": {},
+   "run_ids": [
+    "E392.a1_s0",
+    "E392.dump_val_a1_s0",
+    "E392.dump_train_a1_s0",
+    "E392.sweep_a1_s0",
+    "E392.choose_a1_s0",
+    "E392.cell_vs_a1_s0",
+    "E392.d115_vs_a1_s0",
+    "E392.a1_s1",
+    "E392.dump_val_a1_s1",
+    "E392.dump_train_a1_s1",
+    "E392.sweep_a1_s1",
+    "E392.choose_a1_s1",
+    "E392.cell_vs_a1_s1",
+    "E392.d115_vs_a1_s1"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": [
+    "E392.u_s0",
+    "E392.dump_val_u_s0",
+    "E392.dump_train_u_s0",
+    "E392.sweep_u_s0",
+    "E392.choose_u_s0",
+    "E392.cell_vs_u_s0",
+    "E392.d115_vs_u_s0",
+    "E392.u_s1",
+    "E392.dump_val_u_s1",
+    "E392.dump_train_u_s1",
+    "E392.sweep_u_s1",
+    "E392.choose_u_s1",
+    "E392.cell_vs_u_s1",
+    "E392.d115_vs_u_s1"
+   ]
+  },
+  "n": {
+   "order": {},
+   "run_ids": [
+    "E392.n_s0",
+    "E392.dump_val_n_s0",
+    "E392.dump_train_n_s0",
+    "E392.sweep_n_s0",
+    "E392.choose_n_s0",
+    "E392.cell_vs_n_s0",
+    "E392.d115_vs_n_s0",
+    "E392.n_s1",
+    "E392.dump_val_n_s1",
+    "E392.dump_train_n_s1",
+    "E392.sweep_n_s1",
+    "E392.choose_n_s1",
+    "E392.cell_vs_n_s1",
+    "E392.d115_vs_n_s1"
+   ]
+  },
+  "m0": {
+   "order": {},
+   "run_ids": [
+    "E392.m0_s0",
+    "E392.dump_val_m0_s0",
+    "E392.dump_train_m0_s0",
+    "E392.sweep_m0_s0",
+    "E392.choose_m0_s0",
+    "E392.cell_vs_m0_s0",
+    "E392.d115_vs_m0_s0",
+    "E392.m0_s1",
+    "E392.dump_val_m0_s1",
+    "E392.dump_train_m0_s1",
+    "E392.sweep_m0_s1",
+    "E392.choose_m0_s1",
+    "E392.cell_vs_m0_s1",
+    "E392.d115_vs_m0_s1"
+   ]
+  },
+  "ct": {
+   "order": {},
+   "run_ids": [
+    "E392.ct_s0",
+    "E392.dump_val_ct_s0",
+    "E392.dump_train_ct_s0",
+    "E392.sweep_ct_s0",
+    "E392.choose_ct_s0",
+    "E392.cell_vs_ct_s0",
+    "E392.d115_vs_ct_s0",
+    "E392.ct_s1",
+    "E392.dump_val_ct_s1",
+    "E392.dump_train_ct_s1",
+    "E392.sweep_ct_s1",
+    "E392.choose_ct_s1",
+    "E392.cell_vs_ct_s1",
+    "E392.d115_vs_ct_s1"
+   ]
+  },
+  "r2t": {
+   "order": {},
+   "run_ids": [
+    "E392.r2t_s0",
+    "E392.dump_val_r2t_s0",
+    "E392.dump_train_r2t_s0",
+    "E392.sweep_r2t_s0",
+    "E392.choose_r2t_s0",
+    "E392.cell_vs_r2t_s0",
+    "E392.d115_vs_r2t_s0",
+    "E392.r2t_s1",
+    "E392.dump_val_r2t_s1",
+    "E392.dump_train_r2t_s1",
+    "E392.sweep_r2t_s1",
+    "E392.choose_r2t_s1",
+    "E392.cell_vs_r2t_s1",
+    "E392.d115_vs_r2t_s1"
+   ]
+  },
+  "ctb": {
+   "order": {},
+   "run_ids": [
+    "E392.ctb_s0",
+    "E392.dump_val_ctb_s0",
+    "E392.dump_train_ctb_s0",
+    "E392.sweep_ctb_s0",
+    "E392.choose_ctb_s0",
+    "E392.cell_vs_ctb_s0",
+    "E392.d115_vs_ctb_s0",
+    "E392.ctb_s1",
+    "E392.dump_val_ctb_s1",
+    "E392.dump_train_ctb_s1",
+    "E392.sweep_ctb_s1",
+    "E392.choose_ctb_s1",
+    "E392.cell_vs_ctb_s1",
+    "E392.d115_vs_ctb_s1"
+   ]
+  },
+  "r2tb": {
+   "order": {},
+   "run_ids": [
+    "E392.r2tb_s0",
+    "E392.dump_val_r2tb_s0",
+    "E392.dump_train_r2tb_s0",
+    "E392.sweep_r2tb_s0",
+    "E392.choose_r2tb_s0",
+    "E392.cell_vs_r2tb_s0",
+    "E392.d115_vs_r2tb_s0",
+    "E392.r2tb_s1",
+    "E392.dump_val_r2tb_s1",
+    "E392.dump_train_r2tb_s1",
+    "E392.sweep_r2tb_s1",
+    "E392.choose_r2tb_s1",
+    "E392.cell_vs_r2tb_s1",
+    "E392.d115_vs_r2tb_s1"
+   ]
+  },
+  "s4": {
+   "order": {},
+   "run_ids": [
+    "E392.s4_x_s0",
+    "E392.s4dump_x_s0",
+    "E392.s4score_x_s0",
+    "E392.s4_x_s1",
+    "E392.s4dump_x_s1",
+    "E392.s4score_x_s1",
+    "E392.s4_r1_s0",
+    "E392.s4dump_r1_s0",
+    "E392.s4score_r1_s0",
+    "E392.s4_r1_s1",
+    "E392.s4dump_r1_s1",
+    "E392.s4score_r1_s1",
+    "E392.s4_r2_s0",
+    "E392.s4dump_r2_s0",
+    "E392.s4score_r2_s0",
+    "E392.s4_r2_s1",
+    "E392.s4dump_r2_s1",
+    "E392.s4score_r2_s1",
+    "E392.s4_n_s0",
+    "E392.s4dump_n_s0",
+    "E392.s4score_n_s0",
+    "E392.s4_n_s1",
+    "E392.s4dump_n_s1",
+    "E392.s4score_n_s1",
+    "E392.s4_c_s0",
+    "E392.s4dump_c_s0",
+    "E392.s4score_c_s0",
+    "E392.s4_c_s1",
+    "E392.s4dump_c_s1",
+    "E392.s4score_c_s1",
+    "E392.s4self_r1_s0",
+    "E392.s4self_r1_s1",
+    "E392.s4self_r2_s0",
+    "E392.s4self_r2_s1",
+    "E392.s4self_c_s0",
+    "E392.s4self_c_s1",
+    "E392.s4self_n_s0",
+    "E392.s4self_n_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "1a80e38a9fe4",
+ "started": "2026-11-23T04:41:03",
+ "code_hash": "1a80e38a9fe4",
+ "commit": "d9ab8295c1",
+ "tag": "lcr/E392.sweep_r2tb_s0",
+ "git_note": "1492 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 53938,
+ "pgid": 53938,
+ "pid_start": 2967428,
+ "exit": 0,
+ "duration_s": 1142,
+ "attempts": 1,
+ "ended": "2026-11-23T05:00:14",
+ "last_lines": [
+  "link 0.1   long 0.3   keep 0.6  gate off  topo_F1 0.6959  topo_P 0.6918  topo_R 0.7000  F1@1.0 0.8886  lanes_found 0.7845  dup_frac 0.0157  junction_F1 0.1926  junction_P 0.1111  junction_R 0.7216  links/frame 236.1",
+  "link 0.1   long 0.3   keep 0.7  gate off  topo_F1 0.6926  topo_P 0.6782  topo_R 0.7077  F1@1.0 0.8888  lanes_found 0.7940  dup_frac 0.0164  junction_F1 0.1813  junction_P 0.1030  junction_R 0.7533  links/frame 249.6",
+  "link 0.1   long 0.2   keep 0.5  gate off  topo_F1 0.7024  topo_P 0.6805  topo_R 0.7257  F1@1.0 0.9003  lanes_found 0.8090  dup_frac 0.0438  junction_F1 0.2160  junction_P 0.1256  junction_R 0.7722  links/frame 227.5",
+  "link 0.1   long 0.2   keep 0.6  gate off  topo_F1 0.6985  topo_P 0.6652  topo_R 0.7354  F1@1.0 0.9005  lanes_found 0.8192  dup_frac 0.0437  junction_F1 0.2039  junction_P 0.1168  junction_R 0.8030  links/frame 240.5",
+  "link 0.1   long 0.2   keep 0.7  gate off  topo_F1 0.6940  topo_P 0.6518  topo_R 0.7421  F1@1.0 0.9004  lanes_found 0.8289  dup_frac 0.0449  junction_F1 0.1901  junction_P 0.1074  junction_R 0.8256  links/frame 254.1",
+  "link 0.1   long 0.1   keep 0.5  gate off  topo_F1 0.6873  topo_P 0.6212  topo_R 0.7691  F1@1.0 0.9097  lanes_found 0.8577  dup_frac 0.1201  junction_F1 0.2185  junction_P 0.1253  junction_R 0.8500  links/frame 236.6",
+  "link 0.1   long 0.1   keep 0.6  gate off  topo_F1 0.6797  topo_P 0.6039  topo_R 0.7774  F1@1.0 0.9091  lanes_found 0.8680  dup_frac 0.1238  junction_F1 0.2042  junction_P 0.1157  junction_R 0.8693  links/frame 250.4",
+  "link 0.1   long 0.1   keep 0.7  gate off  topo_F1 0.6732  topo_P 0.5899  topo_R 0.7839  F1@1.0 0.9089  lanes_found 0.8774  dup_frac 0.1280  junction_F1 0.1898  junction_P 0.1063  junction_R 0.8840  links/frame 264.8",
+  "link 0.1   long 0.05  keep 0.5  gate off  topo_F1 0.6510  topo_P 0.5532  topo_R 0.7910  F1@1.0 0.9093  lanes_found 0.8886  dup_frac 0.2086  junction_F1 0.2142  junction_P 0.1216  junction_R 0.8955  links/frame 248.6",
+  "link 0.1   long 0.05  keep 0.6  gate off  topo_F1 0.6398  topo_P 0.5336  topo_R 0.7988  F1@1.0 0.9081  lanes_found 0.8987  dup_frac 0.2161  junction_F1 0.1985  junction_P 0.1115  junction_R 0.9038  links/frame 263.9",
+  "link 0.1   long 0.05  keep 0.7  gate off  topo_F1 0.6304  topo_P 0.5178  topo_R 0.8055  F1@1.0 0.9076  lanes_found 0.9091  dup_frac 0.2222  junction_F1 0.1844  junction_P 0.1025  junction_R 0.9144  links/frame 279.7",
+  "written runs/e392_r2tb_s0/token_sweep_perclass_train_every3.json"
+ ]
+}

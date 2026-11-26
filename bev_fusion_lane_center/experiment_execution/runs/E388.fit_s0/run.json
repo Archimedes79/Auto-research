@@ -1,0 +1,62 @@
+{
+ "id": "E388.fit_s0",
+ "hypothesis": "E388 (card v2, D125): three decode thresholds (link short, link long, node keep; none gate off) fitted by Adam on a soft F1 of the delivered decision on the TRAIN sample of the frozen S4 champion reproduce the hand-tuned decode's VAL graph quality on both seeds",
+ "prediction": "t - c topo F1 -0.002 (window -0.008 to +0.003), junction F1 -0.005; taus near 0.35 / 0.3 / 0.55; ADOPT-LEARNED 55 %, INCONCLUSIVE 30 %, NO 15 %, KEEP < 5 %",
+ "rule": "E388 card v2 section 0 (by hand, written before any run): per seed PASS = t - c topo F1 >= -0.005 with the interval's low end >= -0.010, junction F1 >= -0.010, dup_frac <= +0.010, F1@1.0 >= -0.010, lanes found >= -0.010 (paired_vs_ref_cell on the same VAL live dump); ADOPT-LEARNED = both pass and no fit label; KEEP = ADOPT and topo F1 > +0.010 with the interval above 0 on both; NO = both fail; INCONCLUSIVE = a split or a fit label; c reproduced exactly; VAL 873, no TEST",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jthresh.py fit --run e372_s4_s0 --seed 0 --split train --every 3",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jthresh.py fit --run e372_s4_s0 --seed 0 --split train --every 3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 1155,
+ "created": "2026-11-19T01:18:25",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "card_id": "E388",
+ "card_sha": "3048a1eeee992fbb",
+ "card_arms": {
+  "t": {
+   "order": {},
+   "run_ids": [
+    "E388.lab_s0",
+    "E388.lab_s1",
+    "E388.fit_s0",
+    "E388.fit_s1",
+    "E388.t_s0",
+    "E388.t_s1"
+   ]
+  },
+  "c": {
+   "order": {},
+   "run_ids": []
+  }
+ },
+ "code_hash_first": "c5f66815b390",
+ "started": "2026-11-19T01:19:19",
+ "code_hash": "c5f66815b390",
+ "commit": "95f5741ac7",
+ "tag": "lcr/E388.fit_s0",
+ "git_note": "1088 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 1569,
+ "pgid": 1569,
+ "pid_start": 130392,
+ "exit": 0,
+ "duration_s": 86,
+ "attempts": 1,
+ "ended": "2026-11-19T01:20:55",
+ "last_lines": [
+  "=== attempt 2026-11-19T01:19:19: bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jthresh.py fit --run e372_s4_s0 --seed 0 --split train --every 3",
+  "_py14.sh: evaluation/jthresh.py",
+  "e372_s4_s0: learned taus short 0.05 long 0.19 keep 0.388 (step 400; from the hand cell [0.05, 0.19, 0.387], gap 0.001); TRAIN hard token F1 learned {'short': 0.6595404246164602, 'long': 0.36465994733496776, 'keep': 0.9217719306315838}, hand cell {'short': 0.6483951837858832, 'long': 0.37100628374192407, 'keep': 0.8972188421909606}; GT links without a candidate {'short': 29827, 'long': 3677, 'share': 0.36}; labels none; cell 0.05,0.19,0.388,off; written runs/e372_s4_s0/thresh_fit_train_every3.json"
+ ]
+}

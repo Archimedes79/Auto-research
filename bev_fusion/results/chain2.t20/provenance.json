@@ -1,0 +1,137 @@
+{
+ "schema": 1,
+ "made": "2026-11-10T12:05:31",
+ "gt": {
+  "key": "0.5_4_6a7aa7864a",
+  "signature": "c643a7539d",
+  "version": "v8",
+  "code_signature": "6a7aa7864a",
+  "dataset": "v1.0-trainval",
+  "res": 0.5,
+  "ss": 4,
+  "options": {
+   "use_flow": "True",
+   "use_radar": "True"
+  },
+  "index_hash": "ea812714bcb0"
+ },
+ "data": {
+  "split": "train",
+  "n": 0,
+  "frame_hash": "unknown",
+  "dataset": "v1.0-trainval",
+  "manifest_hash": "f615a7387e73",
+  "scenes": 850,
+  "samples": 34149
+ },
+ "subject": {
+  "run": "chain2.t20",
+  "ckpt": "ckpt_00000030.pt",
+  "ckpt_hash": "88083c4ba99bp",
+  "config_hash": "c7138a2b08f5",
+  "step": 30,
+  "train_gt": {
+   "key": "0.5_4_6a7aa7864a",
+   "signature": "c643a7539d",
+   "version": "v8",
+   "code_signature": "6a7aa7864a",
+   "dataset": "v1.0-trainval",
+   "res": 0.5,
+   "ss": 4,
+   "options": {
+    "use_flow": "True",
+    "use_radar": "True"
+   },
+   "index_hash": "ea812714bcb0"
+  }
+ },
+ "environment": {
+  "python": "3.12.15",
+  "torch": "2.8.0+cu129",
+  "cuda": "12.9",
+  "numpy": "1.26.4",
+  "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+  "host": "Desktop-I511600",
+  "conda_env": "unknown",
+  "source": "the interpreter of the run, read 2026-11-10 (the environment may have changed since the run): /home/ml/miniconda3/envs/gcar/bin/python"
+ },
+ "seed": 0,
+ "code": {
+  "tag": "bf/chain2.t20",
+  "commit": "451cf1c069",
+  "code_hash": "9afc7c2b1925",
+  "drift_files": [],
+  "command": "bash tools/run_ar.sh temp/compose/chain2_t20.json",
+  "cwd": "/mnt/c/Auto-research/bev_fusion"
+ },
+ "run_status": {
+  "status": "ok",
+  "exit": 0,
+  "final": true
+ },
+ "bundle": {
+  "code_hash": "2eeaf89d862b",
+  "files": [
+   "augment.py",
+   "bev_trunk.py",
+   "bevfusion_camera.py",
+   "blocks_new.py",
+   "camera_encoder.py",
+   "extract.py",
+   "fallbacks.py",
+   "fusion.py",
+   "lane_branch.py",
+   "launch_saving.py",
+   "layers.py",
+   "lift_pd.py",
+   "loss_extras.py",
+   "losses.py",
+   "model.py",
+   "motion_block.py",
+   "object_head.py",
+   "precompute.py",
+   "radar_bev.py",
+   "radar_encoder.py",
+   "splat.py",
+   "student_encoder.py",
+   "temporal_fusion.py",
+   "timed_head.py",
+   "trainkit/__init__.py",
+   "trainkit/checkpoint.py",
+   "trainkit/optim.py"
+  ],
+  "repo_files": [
+   "GtGenerator/__init__.py",
+   "GtGenerator/coverage.py",
+   "GtGenerator/layers.py"
+  ],
+  "repo_imports_unfollowed": [
+   "GtGenerator/coverage.py -> GtGenerator/grid.py"
+  ],
+  "roots": [
+   "model.py",
+   "losses.py"
+  ],
+  "missing_roots": [],
+  "excluded": [
+   "train.py",
+   "nuscenes_dataset.py",
+   "feature_cache.py"
+  ],
+  "imports_excluded": [],
+  "test_imports": [
+   "augment.py -> nuscenes_dataset.py",
+   "augment.py -> train.py",
+   "lane_branch.py -> train.py",
+   "model.py -> nuscenes_dataset.py",
+   "precompute.py -> feature_cache.py"
+  ],
+  "unparsed": [],
+  "external_local": [],
+  "dynamic_imports": [],
+  "source": "chain2_t20/code",
+  "repo_files_from": "bf/chain2.t20",
+  "config_hash": "c7138a2b08f5",
+  "copied_to": "bundle"
+ }
+}

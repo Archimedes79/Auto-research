@@ -1,0 +1,25 @@
+{
+ "id": "E390.build3_val",
+ "hypothesis": "E390 step 1 v3 data and nulls: the SD road graphs (divider lanes fixed) and the nulls measured before any encoder is trained",
+ "prediction": "none (data)",
+ "rule": "data preparation, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py build --split val && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py stats --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py build --split val && env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh lane_sdgraph_data.py stats --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 40779,
+ "created": "2026-11-21T01:09:16",
+ "status": "waiting",
+ "after": "",
+ "timeout_min": 60.0
+}

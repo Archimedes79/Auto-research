@@ -1,0 +1,63 @@
+{
+ "id": "E365.tc_a_s1_val",
+ "hypothesis": "",
+ "prediction": "",
+ "rule": "",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash tools/env/_pyr.sh lane_tokcache.py build --run runs/e292_a_s1 --split val --K 512 --workers 2",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "lane_tokcache.py",
+  "build",
+  "--run",
+  "runs/e292_a_s1",
+  "--split",
+  "val",
+  "--K",
+  "512",
+  "--workers",
+  "2"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 5735,
+ "created": "2026-11-16T23:43:43",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 3600.0,
+ "code_hash_first": "e16d016f0d68",
+ "started": "2026-11-16T23:44:48",
+ "code_hash": "e16d016f0d68",
+ "commit": "5818b64a55",
+ "tag": "lcr/E365.tc_a_s1_val",
+ "git_note": "75 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 6192,
+ "pgid": 6192,
+ "pid_start": 242756,
+ "code_drift": {
+  "n": 1,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jtoken_eval.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 68,
+ "attempts": 1,
+ "ended": "2026-11-16T23:46:19",
+ "last_lines": [
+  "=== attempt 2026-11-16T23:44:48: bash tools/env/_pyr.sh lane_tokcache.py build --run runs/e292_a_s1 --split val --K 512 --workers 2",
+  "_py14.sh: training/data/lane_tokcache.py",
+  "   val: 200/873 frames, 6 s",
+  "   val: 400/873 frames, 9 s",
+  "   val: 600/873 frames, 13 s",
+  "   val: 800/873 frames, 16 s",
+  "   val: 873/873 frames, 17 s",
+  "cache /mnt/c/Auto-research/bev_fusion_lane_center/runs/e365_cache/be292_a_1_K512_9ad1d4ce30_v1/val: 873 frames"
+ ]
+}

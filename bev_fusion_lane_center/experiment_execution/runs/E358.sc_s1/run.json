@@ -1,0 +1,77 @@
+{
+ "id": "E358.sc_s1",
+ "hypothesis": "E358: scoring of the heads of seed 1 (heads 0 - 2 and the no-jitter ablation) at the end-to-end read-out on the staged scorer, plus the paired bootstrap against the stored PRIMARY card",
+ "prediction": "w - c = +0.001 topo F1 (hit |w - c| <= 0.003 on both seeds)",
+ "rule": "E358 card section 0 (by hand: jwire_verdict.py --read-out primary)",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash temp/e358/score_heads.sh 1",
+ "argv": [
+  "bash",
+  "temp/e358/score_heads.sh",
+  "1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 784660,
+ "created": "2026-11-16T12:49:15",
+ "status": "ok",
+ "after": "E358.w_s1",
+ "timeout_min": 0,
+ "card_id": "E358",
+ "card_sha": "6513b61786fa87dc",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "t": {
+   "order": {}
+  },
+  "w": {
+   "order": {},
+   "run_ids": [
+    "E358.w_s0",
+    "E358.w_s1",
+    "E358.sc_s0",
+    "E358.sc_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "a10a33962aec",
+ "started": "2026-11-16T13:18:31",
+ "code_hash": "a10a33962aec",
+ "commit": "7a82708d98",
+ "tag": "lcr/E358.sc_s1",
+ "git_note": "5 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 788583,
+ "pgid": 788583,
+ "pid_start": 23369904,
+ "exit": 0,
+ "duration_s": 951,
+ "attempts": 1,
+ "ended": "2026-11-16T13:34:28",
+ "last_lines": [
+  "curves 11880 (wired at both ends 6412); the rule of D79 holds for this seed: True {'topo_F1': True, 'F1_1': True, 'dup_frac': True, 'vert100_dp': True, 'junction_F1': True}",
+  "pyramid of the maps run == the base run's: True (False = a joint pyramid: the delivered graph is B's, the connectors come from other pixel features: label the result 'maps-only')",
+  "  scored 200/873  44 s",
+  "  scored 400/873  86 s",
+  "  scored 600/873  123 s",
+  "  scored 800/873  165 s",
+  "                           Q      F1@1.0 lanes_found     topo_F1      topo_P      topo_R junction_F1  junction_P  junction_R    dup_frac  vert100_dp",
+  "base                  0.6560      0.8159      0.6137      0.6249      0.6928      0.5691      0.2493      0.1660      0.5005      0.2012     20.0803",
+  "head                  0.7075      0.8786      0.7648      0.6966      0.7012      0.6920      0.3066      0.1935      0.7387      0.1601     19.8382",
+  "difference           +0.0515     +0.0626     +0.1511     +0.0717     +0.0084     +0.1229     +0.0573     +0.0275     +0.2382     -0.0412     -0.2420",
+  "curves 11880 (wired at both ends 6412); the rule of D79 holds for this seed: True {'topo_F1': True, 'F1_1': True, 'dup_frac': True, 'vert100_dp': True, 'junction_F1': True}",
+  "score_heads seed 1 done Mon Nov 16 13:34:22 CET 2026"
+ ]
+}

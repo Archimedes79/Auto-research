@@ -1,0 +1,94 @@
+{
+ "id": "E325.w_s0",
+ "hypothesis": "A small softmax head over the delivered piece PLACES in reach (15 features, 545 parameters), trained on TRAIN frames with the oracle label (the rule applied at the matched GT end) and a heavy-tailed keypoint jitter, replaces the nearest-piece rule at the read-out of E312 at equal topology: the one rule step of the delivered graph that had no differentiable replacement",
+ "prediction": "w - c = 0.000 topo F1 (an imitation of a label that ties the rule); place-level agreement with the oracle label on the real choices: rule 0.750 / 0.745, head 0.790 / 0.785 (the VAL cross-validation diagnostic gave 0.772 / 0.775, distance-only 0.758 / 0.755); lanes found, F1@1.0, dup_frac, junction F1 within 0.003 of c",
+ "rule": "E325 card section 0 (by hand: replay; KEEP when snapped topo F1 of w >= c - 0.005 on both seeds with the guards held, TIE kept and refined (D87) otherwise, CUT only by the kill: the head does not learn)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jwire_train.py run --seed 0 --name e325_w_s0 --heads 3 --epochs 60 --workers 3",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jwire_train.py",
+  "run",
+  "--seed",
+  "0",
+  "--name",
+  "e325_w_s0",
+  "--heads",
+  "3",
+  "--epochs",
+  "60",
+  "--workers",
+  "3"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 402038,
+ "created": "2026-11-14T22:00:27",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 0,
+ "card_id": "E325",
+ "card_sha": "42e4a8d0f4f80584",
+ "card_arms": {
+  "c": {
+   "order": {}
+  },
+  "t": {
+   "order": {}
+  },
+  "w": {
+   "order": {},
+   "run_ids": [
+    "E325.w_s0",
+    "E325.w_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "8f0d2bf13468",
+ "started": "2026-11-14T22:13:09",
+ "code_hash": "8f0d2bf13468",
+ "commit": "69e0e4a9d4",
+ "tag": "lcr/E325.w_s0",
+ "git_note": "",
+ "pid": 404194,
+ "pgid": 404194,
+ "pid_start": 9297711,
+ "code_drift": {
+  "n": 3,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e343_confirm.py",
+   "bev_fusion_lane_center/temp/_session_scratch_s292/e343_fix2.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r2.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 1903,
+ "attempts": 1,
+ "ended": "2026-11-14T22:45:16",
+ "last_lines": [
+  "  6800/8414  616 s",
+  "  7200/8414  660 s",
+  "  7600/8414  701 s",
+  "  8000/8414  741 s",
+  "  8400/8414  782 s",
+  "22:30:22 pilot TRAIN {\"matched_ends\": 218368, \"err_mean\": 1.1585368948112753, \"err_median\": 1.016327233375074, \"err_p90\": 2.100415615479997, \"overall\": 0.8563586074198786, \"multi\": 0.7275806230899056, \"kp_p_mean\": 0.937148084601072, \"kp_p_p10\": 0.8635575771331787, \"node_e_mean\": 0.6520132422447205, \"link_p_mean\": 0.7804489731788635, \"multi_share\": 0.5272803800132283} VAL {\"matched_ends\": 16917, \"err_mean\": 1.3558301395245462, \"err_median\": 1.160904416506748, \"err_p90\": 2.611010809849839, \"overall\": 0.8563707828365542, \"multi\": 0.7566930226106257, \"kp_p_mean\": 0.901685374773388, \"kp_p_p10\": 0.5970396995544434, \"node_e_mean\": 0.6475792527198792, \"link_p_mean\": 0.7815052270889282, \"multi_share\": 0.5903209957418932} -> jitter scale 0.305 m (median error 1.161 m, VAL 1.161 m); the keypoint probabilities are blind columns of the head (jwire_head.BLIND)",
+  "22:35:41 training ends 554831 (549238 labelled), VAL ends 16384 (12212 with an oracle label)",
+  "22:38:03 head 0: VAL overall 0.870 (rule 0.856) real choices 0.780 (rule 0.757); TRAIN+jitter real choices 0.798 (rule 0.714)",
+  "22:40:18 head 1: VAL overall 0.871 (rule 0.856) real choices 0.782 (rule 0.757); TRAIN+jitter real choices 0.797 (rule 0.714)",
+  "22:42:30 head 2: VAL overall 0.875 (rule 0.856) real choices 0.789 (rule 0.757); TRAIN+jitter real choices 0.795 (rule 0.714)",
+  "22:44:43 head 3 (distance-only): VAL overall 0.854 (rule 0.856) real choices 0.753 (rule 0.757); TRAIN+jitter real choices 0.739 (rule 0.714)",
+  "22:44:43 KILL (agreement below the rule's by more than 0.02 on the VAL real choices or on the TRAIN ends): False (VAL False, TRAIN False); parameters 545"
+ ]
+}

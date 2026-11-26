@@ -1,0 +1,52 @@
+{
+ "id": "E366.dump_s0",
+ "hypothesis": "E366: the two trained heads of E365 S1 with a decode selected on the TRAIN sample (every third of the 873 evenly spaced TRAIN frames: 291 frames; link threshold x keep threshold x none gate, 24 cells) and applied once to VAL lift the delivered graph; the miss of S1 is largely the conservative decode.",
+ "prediction": "the chosen cell looser than the record (T <= 0.2) 85 %; VAL topo F1 +0.03 over the record (0 to +0.08), about 0.58 / 0.60; PASS-DECODE about 5 %, MISS-DECODE about 85 %",
+ "rule": "E366 card section 0 (by hand): the cell with the highest mean TRAIN-sample topo F1 over both seeds among the cells with mean TRAIN dup_frac <= 0.05, ties to the record; applied once to VAL; PASS-DECODE = G-topo (>= 0.6359 / 0.6349) and G-found (F1@1.0 >= 0.8182 / 0.8060, lanes found >= 0.6066 / 0.5937) on both seeds; MISS-DECODE = G-topo or G-found fails on both seeds; else INCONCLUSIVE; decide.py not used",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e365_s1_s0 --seed 0 --split train --every 3 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e365_s1_s0 --seed 0 --split val",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jtoken_eval.py dump --run e365_s1_s0 --seed 0 --split train --every 3 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e365_s1_s0 --seed 0 --split val"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 36133,
+ "created": "2026-11-17T01:48:50",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 30.0,
+ "code_hash_first": "9302f13dde18",
+ "started": "2026-11-17T02:18:03",
+ "code_hash": "9302f13dde18",
+ "commit": "4161246ed1",
+ "tag": "lcr/E366.dump_s0",
+ "git_note": "173 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 41376,
+ "pgid": 41376,
+ "pid_start": 1162283,
+ "code_drift": {
+  "n": 2,
+  "paths": [
+   "bev_fusion_lane_center/training/data/lane_past_data.py",
+   "bev_fusion_lane_center/training/grid/test_jtoken.py"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 123,
+ "attempts": 1,
+ "ended": "2026-11-17T02:20:35",
+ "last_lines": [
+  "=== attempt 2026-11-17T02:18:03: bash -c bash tools/env/_pyr.sh jtoken_eval.py dump --run e365_s1_s0 --seed 0 --split train --every 3 && bash tools/env/_pyr.sh jtoken_eval.py dump --run e365_s1_s0 --seed 0 --split val",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e365_s1_s0/token_train_every3.pkl: 291 frames, kept nodes per frame 175.7, links per frame rec 157.8 argmax 154.2, device cuda",
+  "_py14.sh: evaluation/jtoken_eval.py",
+  "written runs/e365_s1_s0/token_val.pkl: 873 frames, kept nodes per frame 169.2, links per frame rec 148.8 argmax 146.0, device cuda"
+ ]
+}

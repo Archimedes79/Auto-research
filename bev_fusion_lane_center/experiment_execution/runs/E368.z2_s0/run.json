@@ -1,0 +1,116 @@
+{
+ "id": "E368.z2_s0",
+ "hypothesis": "E368 S2: the E365 token head with ONE cross-attention block after self-attention layer 1 to the ego-warped token states of the previous keyframe (the head's own states carried recursively, sequences of 3 keyframes, one input per step) decides weak tokens better than the same head trained on the same sequences without the block",
+ "prediction": "topo F1 of r minus z about +0.004 (hit window -0.006 to +0.020; recall ceiling of step 0 +3.2 points), parameters +17.4 k, +22 percent per training step (launch gate 0.268 against 0.220 s/step); odds KEEP 15, TIE 65, CUT 20 percent",
+ "rule": "E368 card section 0 (by hand: written before the runs): KEEP = r - z >= +0.010 topo F1 on BOTH seeds at the primary read-out (each arm at its own TRAIN-selected decode, stream mode) with the paired bootstrap interval above 0, AP not below, guards held and the noise band z2 below 0.010; CUT = r - z <= -0.010 on both seeds or a guard broken on both; TIE otherwise (default: z, the cheaper)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash tools/env/_pyr.sh jpast_train.py --name e368_z2_s0 --seed 0 --init-seed 1 --no-past --seq 3 --bs 4 --steps 8000 --lr 1e-3 --ident e292_a --workers 4",
+ "argv": [
+  "bash",
+  "tools/env/_pyr.sh",
+  "jpast_train.py",
+  "--name",
+  "e368_z2_s0",
+  "--seed",
+  "0",
+  "--init-seed",
+  "1",
+  "--no-past",
+  "--seq",
+  "3",
+  "--bs",
+  "4",
+  "--steps",
+  "8000",
+  "--lr",
+  "1e-3",
+  "--ident",
+  "e292_a",
+  "--workers",
+  "4"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 146612,
+ "created": "2026-11-17T11:29:23",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 90.0,
+ "card_id": "E368",
+ "card_sha": "24d6414696cfb3c8",
+ "card_arms": {
+  "z": {
+   "order": {},
+   "run_ids": [
+    "E368.z_s0",
+    "E368.z_s1"
+   ]
+  },
+  "z2": {
+   "order": {},
+   "run_ids": [
+    "E368.z2_s0"
+   ]
+  },
+  "r": {
+   "order": {},
+   "run_ids": [
+    "E368.r_s0",
+    "E368.r_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "4efb59687f41",
+ "started": "2026-11-17T11:31:16",
+ "code_hash": "4efb59687f41",
+ "commit": "cc9d7b9c1a",
+ "tag": "lcr/E368.z2_s0",
+ "git_note": "399 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 147173,
+ "pgid": 147173,
+ "pid_start": 4481625,
+ "code_drift": {
+  "n": 40,
+  "paths": [
+   "bev_fusion_lane_center/evaluation/jmap_eval.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/work3/fix_cap200.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/work3/fix_nt.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/work3/fix_tm3.py",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/work3/run_sub3.sh",
+   "bev_fusion_lane_center/temp/_session_scratch_d113/work3/run_tm3.sh",
+   "bev_fusion_lane_center/temp/e284/p19_clean_ends_oracle.py",
+   "bev_fusion_lane_center/temp/e284/p20_noisy_ends_oracle.py",
+   "bev_fusion_lane_center/temp/e284/p21_stopline.py",
+   "bev_fusion_lane_center/temp/e284/tag_scratch3.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 2099,
+ "attempts": 1,
+ "ended": "2026-11-17T12:06:59",
+ "last_lines": [
+  "12:04:26 clock: 0.269 s/step over the last 100 steps of this process; over all 7600 steps so far: peak GPU allocated 2.96 GB, reserved 3.03 GB, valid tokens in the largest frame 512; loss parts nll_s 0.115 nll_l 0.037 ce1 0.151 ce3 0.141 scale_l1 0.071",
+  "12:04:26 step 7600/8000 loss 0.4568 lr 6.85e-06 0.250 s/step ce1 0.151 ce3 0.141 gt_class 0.000 gt_links 1363.000 gt_outside 6.667 nll_l 0.037 nll_s 0.115 pos_pairs 1356.333 scale_l1 0.071 gpu_gb 2.963 gpu_res_gb 3.026",
+  "12:04:57 clock: 0.308 s/step over the last 100 steps of this process; over all 7700 steps so far: peak GPU allocated 2.96 GB, reserved 3.03 GB, valid tokens in the largest frame 512; loss parts nll_s 0.170 nll_l 0.032 ce1 0.212 ce3 0.201 scale_l1 0.103",
+  "12:04:57 step 7700/8000 loss 0.4450 lr 3.87e-06 0.251 s/step ce1 0.212 ce3 0.201 gt_class 0.000 gt_links 762.000 gt_outside 10.333 nll_l 0.032 nll_s 0.170 pos_pairs 751.667 scale_l1 0.103 gpu_gb 2.963 gpu_res_gb 3.026",
+  "12:05:23 clock: 0.254 s/step over the last 100 steps of this process; over all 7800 steps so far: peak GPU allocated 2.96 GB, reserved 3.03 GB, valid tokens in the largest frame 512; loss parts nll_s 0.131 nll_l 0.030 ce1 0.227 ce3 0.178 scale_l1 0.068",
+  "12:05:23 step 7800/8000 loss 0.4676 lr 1.72e-06 0.251 s/step ce1 0.227 ce3 0.178 gt_class 0.000 gt_links 935.333 gt_outside 7.333 nll_l 0.030 nll_s 0.131 pos_pairs 928.000 scale_l1 0.068 gpu_gb 2.963 gpu_res_gb 3.026",
+  "12:05:47 clock: 0.243 s/step over the last 100 steps of this process; over all 7900 steps so far: peak GPU allocated 2.96 GB, reserved 3.03 GB, valid tokens in the largest frame 512; loss parts nll_s 0.232 nll_l 0.040 ce1 0.276 ce3 0.258 scale_l1 0.089",
+  "12:05:47 step 7900/8000 loss 0.4563 lr 4.36e-07 0.251 s/step ce1 0.276 ce3 0.258 gt_class 0.000 gt_links 1289.667 gt_outside 11.333 nll_l 0.040 nll_s 0.232 pos_pairs 1278.333 scale_l1 0.089 gpu_gb 2.963 gpu_res_gb 3.026",
+  "12:06:13 clock: 0.257 s/step over the last 100 steps of this process; over all 8000 steps so far: peak GPU allocated 2.96 GB, reserved 3.03 GB, valid tokens in the largest frame 512; loss parts nll_s 0.161 nll_l 0.051 ce1 0.206 ce3 0.177 scale_l1 0.112",
+  "12:06:13 step 8000/8000 loss 0.4570 lr 4.27e-11 0.251 s/step ce1 0.206 ce3 0.177 gt_class 0.000 gt_links 982.667 gt_outside 8.667 nll_l 0.051 nll_s 0.161 pos_pairs 974.000 scale_l1 0.112 gpu_gb 2.963 gpu_res_gb 3.026",
+  "12:06:13 done 8000",
+  "12:06:13 done e368_z2_s0"
+ ]
+}

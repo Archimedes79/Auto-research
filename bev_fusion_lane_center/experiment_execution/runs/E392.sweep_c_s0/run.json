@@ -1,0 +1,183 @@
+{
+ "id": "E392.sweep_c_s0",
+ "hypothesis": "E392 stage 1 (the head on the cached K 512 tokens, the E373 recipe: none weight 0.25, 12000 steps, bs 8, lr 1e-3, cache seed S, head seed S + 2): control c (champion code, no round, retrained), x = one round without a loss on the early read, r1 = one round (after layer 1) with the early wiring loss, r2 = two rounds (after layers 1 and 2) with the early wiring loss on each, u = the content null of the adopted arm (conditional); VAL 873 at the D115 decode; then a stage-2 (S4, end to end through B''s node head) diagnostic on one stage-1 head",
+ "prediction": "0.006 vs c",
+ "rule": "the card's rule (hard rule 4: written before the run): [{\"metric\":\"topo_F1\",\"vs\":\"c\",\"min_effect\":0.01},{\"metric\":\"F1@1.0\",\"vs\":\"c\",\"max_loss\":0.005},{\"metric\":\"lanes_found\",\"vs\":\"c\",\"max_loss\":0.01},{\"metric\":\"junction_F1\",\"vs\":\"c\",\"max_loss\":0.015}] | kill: a loss is not finite (a `non-finite` line in the trainer's log; jarm and jlive_train enforce this one); or no learning, checked by hand at the read-out on the comparable parts of the loss (nll_s + nll_l + ce3, NOT the total, which holds the extra terms of the arms): the mean over steps 1801 - 2000 not below 0.8 x the mean over steps 101 - 200 (a weak clause: the E373 heads reach a ratio of about 0.33); or the curve check of the control fires (section 1.4); or an arm's data-order fingerprint differs from c's at any logged step (the arm is then not paired with c); a run cut by run.py or the GPU is resumed from its checkpoint (resume steps reported); a crashed read-out is re-run unchanged, never with another cell; no GPU job starts before the conditions of section 1.5; core 7.3 GPU h (c, x, r1, r2 on two seeds = 8 runs of 0.7 - 0.9 h, the timing 0.3), conditional u 2.0, diagnostic s4 1.3 (two seeds, about 0.65 h each with the live read)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e392_c_s0 --seed 0 --split train --every 3 --grid perclass",
+ "argv": [
+  "bash",
+  "-c",
+  "env OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh jtoken_eval.py sweep --run e392_c_s0 --seed 0 --split train --every 3 --grid perclass"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 2822,
+ "created": "2026-11-22T02:02:46",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 120.0,
+ "card_id": "E392",
+ "card_sha": "7f898cc46ef6816d",
+ "card_arms": {
+  "ref": {
+   "order": {}
+  },
+  "c": {
+   "order": {},
+   "run_ids": [
+    "E392.c_s0",
+    "E392.dump_val_c_s0",
+    "E392.dump_train_c_s0",
+    "E392.sweep_c_s0",
+    "E392.choose_c_s0",
+    "E392.cell_vs_c_s0",
+    "E392.d115_vs_c_s0",
+    "E392.c_s1",
+    "E392.dump_val_c_s1",
+    "E392.dump_train_c_s1",
+    "E392.sweep_c_s1",
+    "E392.choose_c_s1",
+    "E392.cell_vs_c_s1",
+    "E392.d115_vs_c_s1"
+   ]
+  },
+  "x": {
+   "order": {},
+   "run_ids": [
+    "E392.x_s0",
+    "E392.dump_val_x_s0",
+    "E392.dump_train_x_s0",
+    "E392.sweep_x_s0",
+    "E392.choose_x_s0",
+    "E392.cell_vs_x_s0",
+    "E392.d115_vs_x_s0",
+    "E392.x_s1",
+    "E392.dump_val_x_s1",
+    "E392.dump_train_x_s1",
+    "E392.sweep_x_s1",
+    "E392.choose_x_s1",
+    "E392.cell_vs_x_s1",
+    "E392.d115_vs_x_s1"
+   ]
+  },
+  "r1": {
+   "order": {},
+   "run_ids": [
+    "E392.r1_s0",
+    "E392.dump_val_r1_s0",
+    "E392.dump_train_r1_s0",
+    "E392.sweep_r1_s0",
+    "E392.choose_r1_s0",
+    "E392.cell_vs_r1_s0",
+    "E392.d115_vs_r1_s0",
+    "E392.r1_s1",
+    "E392.dump_val_r1_s1",
+    "E392.dump_train_r1_s1",
+    "E392.sweep_r1_s1",
+    "E392.choose_r1_s1",
+    "E392.cell_vs_r1_s1",
+    "E392.d115_vs_r1_s1"
+   ]
+  },
+  "r2": {
+   "order": {},
+   "run_ids": [
+    "E392.r2_s0",
+    "E392.dump_val_r2_s0",
+    "E392.dump_train_r2_s0",
+    "E392.sweep_r2_s0",
+    "E392.choose_r2_s0",
+    "E392.cell_vs_r2_s0",
+    "E392.d115_vs_r2_s0",
+    "E392.r2_s1",
+    "E392.dump_val_r2_s1",
+    "E392.dump_train_r2_s1",
+    "E392.sweep_r2_s1",
+    "E392.choose_r2_s1",
+    "E392.cell_vs_r2_s1",
+    "E392.d115_vs_r2_s1"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": [
+    "E392.u_s0",
+    "E392.dump_val_u_s0",
+    "E392.dump_train_u_s0",
+    "E392.sweep_u_s0",
+    "E392.choose_u_s0",
+    "E392.cell_vs_u_s0",
+    "E392.d115_vs_u_s0",
+    "E392.u_s1",
+    "E392.dump_val_u_s1",
+    "E392.dump_train_u_s1",
+    "E392.sweep_u_s1",
+    "E392.choose_u_s1",
+    "E392.cell_vs_u_s1",
+    "E392.d115_vs_u_s1"
+   ]
+  },
+  "s4": {
+   "order": {},
+   "run_ids": [
+    "E392.s4_x_s0",
+    "E392.s4dump_x_s0",
+    "E392.s4score_x_s0",
+    "E392.s4_x_s1",
+    "E392.s4dump_x_s1",
+    "E392.s4score_x_s1",
+    "E392.s4_r1_s0",
+    "E392.s4dump_r1_s0",
+    "E392.s4score_r1_s0",
+    "E392.s4_r1_s1",
+    "E392.s4dump_r1_s1",
+    "E392.s4score_r1_s1",
+    "E392.s4_r2_s0",
+    "E392.s4dump_r2_s0",
+    "E392.s4score_r2_s0",
+    "E392.s4_r2_s1",
+    "E392.s4dump_r2_s1",
+    "E392.s4score_r2_s1"
+   ]
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "09522676138d",
+ "started": "2026-11-22T02:03:36",
+ "code_hash": "09522676138d",
+ "commit": "fda0679af6",
+ "tag": "lcr/E392.sweep_c_s0",
+ "git_note": "1465 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 3257,
+ "pgid": 3257,
+ "pid_start": 429230,
+ "exit": 0,
+ "duration_s": 1153,
+ "attempts": 1,
+ "ended": "2026-11-22T02:22:58",
+ "last_lines": [
+  "link 0.1   long 0.3   keep 0.6  gate off  topo_F1 0.6981  topo_P 0.7034  topo_R 0.6928  F1@1.0 0.8873  lanes_found 0.7777  dup_frac 0.0165  junction_F1 0.1858  junction_P 0.1071  junction_R 0.7013  links/frame 236.3",
+  "link 0.1   long 0.3   keep 0.7  gate off  topo_F1 0.6970  topo_P 0.6911  topo_R 0.7029  F1@1.0 0.8877  lanes_found 0.7877  dup_frac 0.0171  junction_F1 0.1764  junction_P 0.1003  junction_R 0.7326  links/frame 249.4",
+  "link 0.1   long 0.2   keep 0.5  gate off  topo_F1 0.7044  topo_P 0.6886  topo_R 0.7211  F1@1.0 0.8993  lanes_found 0.8033  dup_frac 0.0426  junction_F1 0.2104  junction_P 0.1222  junction_R 0.7556  links/frame 227.8",
+  "link 0.1   long 0.2   keep 0.6  gate off  topo_F1 0.7021  topo_P 0.6749  topo_R 0.7317  F1@1.0 0.9002  lanes_found 0.8153  dup_frac 0.0434  junction_F1 0.1971  junction_P 0.1128  junction_R 0.7809  links/frame 240.7",
+  "link 0.1   long 0.2   keep 0.7  gate off  topo_F1 0.6995  topo_P 0.6621  topo_R 0.7414  F1@1.0 0.9003  lanes_found 0.8248  dup_frac 0.0439  junction_F1 0.1860  junction_P 0.1051  junction_R 0.8067  links/frame 253.9",
+  "link 0.1   long 0.1   keep 0.5  gate off  topo_F1 0.6890  topo_P 0.6262  topo_R 0.7659  F1@1.0 0.9090  lanes_found 0.8520  dup_frac 0.1194  junction_F1 0.2172  junction_P 0.1245  junction_R 0.8518  links/frame 237.2",
+  "link 0.1   long 0.1   keep 0.6  gate off  topo_F1 0.6833  topo_P 0.6108  topo_R 0.7754  F1@1.0 0.9097  lanes_found 0.8649  dup_frac 0.1232  junction_F1 0.2016  junction_P 0.1141  junction_R 0.8652  links/frame 250.8",
+  "link 0.1   long 0.1   keep 0.7  gate off  topo_F1 0.6781  topo_P 0.5970  topo_R 0.7846  F1@1.0 0.9098  lanes_found 0.8747  dup_frac 0.1248  junction_F1 0.1887  junction_P 0.1057  junction_R 0.8790  links/frame 264.8",
+  "link 0.1   long 0.05  keep 0.5  gate off  topo_F1 0.6511  topo_P 0.5533  topo_R 0.7908  F1@1.0 0.9094  lanes_found 0.8867  dup_frac 0.2060  junction_F1 0.2131  junction_P 0.1209  junction_R 0.8988  links/frame 249.7",
+  "link 0.1   long 0.05  keep 0.6  gate off  topo_F1 0.6416  topo_P 0.5356  topo_R 0.7999  F1@1.0 0.9097  lanes_found 0.8993  dup_frac 0.2166  junction_F1 0.1971  junction_P 0.1105  junction_R 0.9061  links/frame 264.9",
+  "link 0.1   long 0.05  keep 0.7  gate off  topo_F1 0.6336  topo_P 0.5208  topo_R 0.8088  F1@1.0 0.9093  lanes_found 0.9094  dup_frac 0.2218  junction_F1 0.1840  junction_P 0.1022  junction_R 0.9158  links/frame 280.2",
+  "written runs/e392_c_s0/token_sweep_perclass_train_every3.json"
+ ]
+}

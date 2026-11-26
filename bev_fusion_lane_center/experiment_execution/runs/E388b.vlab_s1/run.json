@@ -1,0 +1,58 @@
+{
+ "id": "E388b.vlab_s1",
+ "hypothesis": "E388b diagnostic (D126 item 2, no verdict): does the E388 learned cell lose on TRAIN too (surrogate wrong) or only on VAL (TRAIN-to-VAL shift)",
+ "prediction": "none (diagnostic)",
+ "rule": "diagnostic, no verdict",
+ "split": "val",
+ "basis": "",
+ "seed": "1",
+ "command": "bash -c bash tools/env/_pyr.sh jthresh.py dump --run e372_s4_s1 --seed 1 --split val --every 1",
+ "argv": [
+  "bash",
+  "-c",
+  "bash tools/env/_pyr.sh jthresh.py dump --run e372_s4_s1 --seed 1 --split val --every 1"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 3630,
+ "created": "2026-11-19T01:56:11",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 45.0,
+ "code_hash_first": "0824c1d5b541",
+ "started": "2026-11-19T01:57:20",
+ "code_hash": "0824c1d5b541",
+ "commit": "d3bd930d8d",
+ "tag": "lcr/E388b.vlab_s1",
+ "git_note": "1097 scratch script(s) not in the tag (over 1000 kB, or beyond the first 2000)",
+ "pid": 4527,
+ "pgid": 4527,
+ "pid_start": 85679,
+ "code_drift": {
+  "n": 15,
+  "paths": [
+   "bev_fusion_lane_center/temp/_session_scratch_critic_e389/probe3.py",
+   "bev_fusion_lane_center/temp/_session_scratch_critic_e389/stats2.py",
+   "bev_fusion_lane_center/temp/day24/day24.sh",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/cmp_digest.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/fixt2.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r3_tests.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/patch_r3e.py",
+   "bev_fusion_lane_center/temp/e343/_session_scratch_/run_each.py",
+   "bev_fusion_lane_center/temp/e348/smoke_cpu.sh",
+   "bev_fusion_lane_center/temp/e381/calib2_run.sh"
+  ]
+ },
+ "exit": 0,
+ "duration_s": 118,
+ "attempts": 1,
+ "ended": "2026-11-19T02:00:32",
+ "last_lines": [
+  "=== attempt 2026-11-19T01:57:20: bash -c bash tools/env/_pyr.sh jthresh.py dump --run e372_s4_s1 --seed 1 --split val --every 1",
+  "_py14.sh: evaluation/jthresh.py",
+  "written runs/e372_s4_s1/token_val_every1_live_labels.pkl: 873 frames, candidates per frame 387.7, GT links per frame 280.2, GT nodes per frame 172.2"
+ ]
+}

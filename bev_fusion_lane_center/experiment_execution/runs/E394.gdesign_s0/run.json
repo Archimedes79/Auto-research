@@ -1,0 +1,90 @@
+{
+ "id": "E394.gdesign_s0",
+ "hypothesis": "E394 v1.1 (D145): the label-free consistency gate g on E391's F1 at the card's deciding levels on 400 held TRAIN frames: does any threshold meet clauses W and F together; plus the feature-set bound",
+ "prediction": "no threshold meets W (>= -0.03) and F (trust >= 0.95) together; the bound fitted on the deciding levels reaches W >= -0.03 at trust >= 0.95 only if the four features separate dec from wrong_scene+dec",
+ "rule": "by hand, card section 3.3: arm g is CLOSED on TRAIN (no holdout or VAL read) if no quantile of the mix-fitted gate meets W and F together on the held frames; the bound qualifies the claim (this fit vs these features)",
+ "split": "val",
+ "basis": "",
+ "seed": "0",
+ "command": "bash -c env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh experiments/E394_sd-map-error-models-and-trust/scripts/e394/e394_design.py 0 rerun",
+ "argv": [
+  "bash",
+  "-c",
+  "env CUDA_VISIBLE_DEVICES= OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 nice -n 10 bash tools/env/_py14.sh experiments/E394_sd-map-error-models-and-trust/scripts/e394/e394_design.py 0 rerun"
+ ],
+ "cwd": "/mnt/c/Auto-research/bev_fusion_lane_center",
+ "host": "Desktop-I511600",
+ "python": "3.10.12",
+ "conda_env": "",
+ "gpu": "NVIDIA GeForce RTX 3060, 610.88",
+ "launcher_pid": 97303,
+ "created": "2026-11-24T10:16:32",
+ "status": "ok",
+ "after": "",
+ "timeout_min": 60.0,
+ "card_id": "E394",
+ "card_sha": "8c58322849ab4088",
+ "card_arms": {
+  "step0": {
+   "order": {},
+   "run_ids": [
+    "E394.step0_a_s0"
+   ]
+  },
+  "a": {
+   "order": {},
+   "run_ids": []
+  },
+  "z": {
+   "order": {},
+   "run_ids": []
+  },
+  "g": {
+   "order": {},
+   "run_ids": [
+    "E394.gdesign_s0"
+   ]
+  },
+  "u": {
+   "order": {},
+   "run_ids": []
+  },
+  "c": {
+   "order": {},
+   "run_ids": []
+  },
+  "": {
+   "seeds": [
+    0,
+    1
+   ]
+  }
+ },
+ "code_hash_first": "e1da3ca2f6cd",
+ "started": "2026-11-24T10:16:46",
+ "code_hash": "e1da3ca2f6cd",
+ "commit": "e11899b262",
+ "tag": "lcr/E394.gdesign_s0",
+ "git_note": "",
+ "pid": 97578,
+ "pgid": 97578,
+ "pid_start": 624537,
+ "exit": 0,
+ "duration_s": 173,
+ "attempts": 1,
+ "ended": "2026-11-24T10:19:40",
+ "last_lines": [
+  "  bound q 0.95: trust RIGHT 0.950 | g - z WRONG -0.0535 | g - a RIGHT +0.0054",
+  "  bound q 0.96: trust RIGHT 0.960 | g - z WRONG -0.0626 | g - a RIGHT +0.0055",
+  "  bound q 0.975: trust RIGHT 0.975 | g - z WRONG -0.0726 | g - a RIGHT +0.0056",
+  "  bound q 0.99: trust RIGHT 0.990 | g - z WRONG -0.1286 | g - a RIGHT +0.0023",
+  "q 0.9: trust RIGHT 0.840 | g - z WRONG -0.0212 (rejects 0.853) | g - a RIGHT +0.0089",
+  "q 0.925: trust RIGHT 0.870 | g - z WRONG -0.0310 (rejects 0.833) | g - a RIGHT +0.0091",
+  "q 0.95: trust RIGHT 0.910 | g - z WRONG -0.0443 (rejects 0.785) | g - a RIGHT +0.0085",
+  "q 0.96: trust RIGHT 0.925 | g - z WRONG -0.0467 (rejects 0.772) | g - a RIGHT +0.0070",
+  "q 0.975: trust RIGHT 0.938 | g - z WRONG -0.0562 (rejects 0.748) | g - a RIGHT +0.0077",
+  "q 0.99: trust RIGHT 0.978 | g - z WRONG -0.1267 (rejects 0.597) | g - a RIGHT +0.0062",
+  "q 0.995: trust RIGHT 0.993 | g - z WRONG -0.2129 (rejects 0.432) | g - a RIGHT +0.0019",
+  "q 1.0: trust RIGHT 1.000 | g - z WRONG -0.4282 (rejects 0.002) | g - a RIGHT +0.0000"
+ ]
+}
