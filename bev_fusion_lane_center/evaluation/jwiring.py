@@ -28,7 +28,8 @@ import numpy as np
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
-from qends_eval import WIRE_ANG, WIRE_POS, KEYS, _ang, _tan, add_connectors, make_pairs  # noqa: E402
+from jwire import WIRE_ANG, WIRE_POS, _ang, _tan  # noqa: E402
+from qends_eval import KEYS, add_connectors, make_pairs  # noqa: E402
 
 MATCH_POS, MATCH_ANG = 4.0, 30.0
 GT_PATH = os.path.join(ROOT, "runs", "kept", "jwiring", "gt_ends_val.pkl")

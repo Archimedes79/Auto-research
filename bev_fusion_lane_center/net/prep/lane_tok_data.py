@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import time
+import zlib
 
 import numpy as np
 import torch
@@ -24,7 +25,6 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import jtok as JT  # noqa: E402
 import lane_gt_data as LD  # noqa: E402
 import qtargets as QT  # noqa: E402
 
@@ -47,8 +47,8 @@ def connector_points(g):
 
 def frame_table(g, res):
     """the table of a lane GT graph on the `res` m lattice (module docstring); the lattice is in force only inside this call and is checked in the calling process (main or worker)"""
-    with JT.lattice(res):
-        JT.check_lattice(res)
+    with QT.lattice(res):
+        QT.check_lattice(res)
         nt = QT.node_table(g)
     gk = connector_points(g)
     return dict(pos=nt["pos"].astype(np.float64), dirv=nt["dirv"].astype(np.float64), cell=nt["cell"].astype(np.int16), flags=nt["flags"].astype(bool), piece=nt["piece"].astype(np.int32), sstart=nt["sstart"].astype(bool),
@@ -105,6 +105,42 @@ class TokData(torch.utils.data.Dataset):
             x = np.concatenate([np.asarray(m[self.rows[i]], np.float32) for m in self.qd.mm], 0)
             out["x"] = torch.from_numpy(((x - bd.mean[:39, None, None]) / bd.std[:39, None, None]).astype(np.float16))
         return out
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ degraded nodes
+def keep_nodes(token, n, drop, seed):
+    """(n,) bool, the nodes of a frame that stay: each is removed with probability `drop` by a generator seeded with (seed, the frame's token)"""
+    return np.ones(n, bool) if drop <= 0 else np.random.default_rng([seed, zlib.crc32(token.encode())]).random(n) >= drop
+
+
+def sub_table(t, keep):
+    """the table of the kept nodes. Links: a GT link between two kept nodes stays (with its scale and class); a chain of GT links through removed nodes becomes ONE link between its kept ends (conn = a link of the
+    chain is on a connector path, no fitted scale), unless the direct link exists"""
+    keep = np.asarray(keep, bool)
+    new = np.cumsum(keep) - 1
+    outs = [[] for _ in keep]
+    for l, s in enumerate(t["src"]):
+        outs[s].append(l)
+    links = {}                                                              # (a, b) -> (conn, scale)
+    for l, (a, b) in enumerate(zip(t["src"], t["dst"])):
+        if keep[a] and keep[b] and a != b:
+            links[(int(a), int(b))] = (bool(t["conn"][l]), t["scale"][l])
+    for a in np.flatnonzero(keep):
+        stack, seen = [(l, bool(t["conn"][l])) for l in outs[a] if not keep[t["dst"][l]]], set()
+        while stack:
+            l, conn = stack.pop()
+            b = int(t["dst"][l])
+            if keep[b]:
+                if b != a:
+                    links.setdefault((int(a), b), (conn, np.full(2, np.nan)))
+            elif b not in seen:
+                seen.add(b)
+                stack += [(l2, conn or bool(t["conn"][l2])) for l2 in outs[b]]
+    src, dst = (np.array([k[i] for k in links], int) for i in (0, 1))
+    out = {k: t[k][keep] for k in ("pos", "dirv", "cell", "flags", "piece", "sstart")}
+    out.update(src=new[src].astype(np.int32), dst=new[dst].astype(np.int32), long=np.linalg.norm(t["pos"][src] - t["pos"][dst], axis=1) > QT.SHORT,
+               scale=np.array([v[1] for v in links.values()], float).reshape(-1, 2), conn=np.array([v[0] for v in links.values()], bool))
+    return out
 
 
 def collate(b):

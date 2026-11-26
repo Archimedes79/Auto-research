@@ -15,9 +15,8 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "training", "data"))   # p16_data (the legacy data chain)
 import lane_gt_data as LD  # noqa: E402
-import p16_data as PD  # noqa: E402
+import frames as FR  # noqa: E402
 
 
 def rel_pose(Rc, tc, Rp, tp):
@@ -47,7 +46,7 @@ def stream_order(pose, rows):
 class SeqData(torch.utils.data.Dataset):
     def __init__(self, split="train", K=3, **kw):
         self.ds, self.K = LD.QData(split, **kw), K
-        self.pose = dict(np.load(f"{PD.D}/poses_{self.ds.bd.part}.npz"))
+        self.pose = dict(np.load(f"{FR.D}/poses_{self.ds.bd.part}.npz"))
         self.i_of_row = {int(self.ds.bd.rows[k]): i for i, k in enumerate(self.ds.ks)}                   # row of the part -> index of the QData
         self.seqs = chains(self.pose["prev"], self.i_of_row, K)
 

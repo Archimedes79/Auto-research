@@ -3,7 +3,7 @@
 ChainData(split, T=3): item i = the frame k = ks[i] and its T - 1 predecessors through `poses["prev"]` (2 Hz keyframes of the same scene). A missing predecessor repeats the earliest
 frame that exists (step 0, flag `has[t]` = 0: the hold sees the same frame twice, a no-op). Item: x (T, 39, 200, 200) float16 (normalised as `data.GridData`), g05 / t05 per frame
 (the GT lane points of every frame, for the per-frame head loss), `step` (T - 1, 3) = pose of frame t + 1 in frame t as (tx, ty, yaw) in the axes of the raster (rows = x right, columns =
-y forward, the frame of the graphs), the SD map tokens of the last frame (`assign.map_tokens`, grid frame x forward, y left) and `gmask` (G, R + 1) bool: the roads that are a PLAUSIBLE
+y forward, the frame of the graphs), the SD map tokens of the last frame (`sd_tokens.map_tokens`, grid frame x forward, y left) and `gmask` (G, R + 1) bool: the roads that are a PLAUSIBLE
 label of every GT point of the last frame (the road token nearest to the point, or any road within 0.5 m of it, with a heading within 30 degrees; no such road within 3 m: the dustbin
 bit R). The SD map holds duplicate roads (two carriageways within 0.5 m), so a label is a set, not one id.
 Poses: R, t map the ego frame to the world (as `p16_builder.warp_prior`), so p_prev = R_p^T (R_c p_cur + t_c - t_p).
@@ -17,9 +17,9 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub in ("net/prep", "net/model", "net/loss", "training/data"):
     sys.path.insert(0, os.path.join(ROOT, sub))
-import assign as AS  # noqa: E402
 import data as GD  # noqa: E402
-import p16_data as PD  # noqa: E402
+import frames as FR  # noqa: E402
+from sd_tokens import map_tokens  # noqa: E402
 
 
 def ego_step(pose, row, prow):
@@ -32,7 +32,7 @@ def ego_step(pose, row, prow):
 
 
 def road_labels(g05, t05, mp, dmax=3.0, slack=0.5, ang_deg=30.0):
-    """GT points (G, 2) and tangents (G, 2) in the metric frame (x right, y forward) + the map tokens `mp` of `assign.map_tokens` -> bool (G, R + 1): the plausible roads of every point,
+    """GT points (G, 2) and tangents (G, 2) in the metric frame (x right, y forward) + the map tokens `mp` of `sd_tokens.map_tokens` -> bool (G, R + 1): the plausible roads of every point,
     the dustbin bit R when no road with a matching heading lies within dmax"""
     G, R = len(g05), int(mp["n_ids"])
     out = np.zeros((G, R + 1), bool)
@@ -61,10 +61,9 @@ class ChainData(torch.utils.data.Dataset):
         self.T = T
         self.gd = GD.GridData(split)
         self.bd = self.gd.bd
-        self.pose = dict(np.load(f"{PD.D}/poses_{self.bd.part}.npz"))
+        self.pose = dict(np.load(f"{FR.D}/poses_{self.bd.part}.npz"))
         self.row2k = {int(r): k for k, r in enumerate(self.bd.rows)}
-        import p8_lib as L
-        self.sds = L.cache("sd", self.bd.part)
+        self.sds = FR.cache("sd", self.bd.part)
 
     def __len__(self):
         return len(self.gd)
@@ -92,7 +91,7 @@ class ChainData(torch.utils.data.Dataset):
         sd = self.sds[row]
         mp, gmask = None, None
         if sd is not None:
-            mp = AS.map_tokens(dict(roads=sd["roads"], route=[]))
+            mp = map_tokens(dict(roads=sd["roads"], route=[]))
             gmask = road_labels(items[-1]["g05"].numpy().astype(np.float64), items[-1]["t05"].numpy().astype(np.float64), mp)
         return dict(x=torch.stack([o["x"] for o in items]), g05=[o["g05"] for o in items], t05=[o["t05"] for o in items], step=torch.from_numpy(np.stack(steps)),
                     has=torch.tensor(has, dtype=torch.float32), mp=mp, gmask=None if gmask is None else torch.from_numpy(gmask), k=k, row=row)

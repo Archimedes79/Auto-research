@@ -6,7 +6,7 @@
     ["token"], ["row"], ["tokens_np"] (a list of per-frame dicts, float64 pos / dirv / e_p / flags_p / s_p, int cell, bool valid: what the read-out writer needs; NO GT field), ["label"] (the GT-side fields
     gt_id, gd, gt_flags, gt_aux for the controls and diagnostics: the model must not read them)
     to_pred(tokens_np[b], keep, e_node, links)                                                                       # the qformat prediction of a frame from tokens + the head's output, no GT field
-Token drop: `token_drop` > 0 removes each token with that probability by a generator seeded with (the loader's seed, the frame's token) (`jtok_eval.keep_nodes`): a removed token is not valid, has type 0 and no target
+Token drop: `token_drop` > 0 removes each token with that probability by a generator seeded with (the loader's seed, the frame's token) (`lane_tok_data.keep_nodes`): a removed token is not valid, has type 0 and no target
 pair (the contraction of the targets is NOT recomputed: this is for the degraded read-out only).
 geom (E395, default False = the items and batches of before): + the flat GT geometry keys of `lane_gtgeom_data` (read from its file, checked against the cache; no token drop): per frame ["gt_pos"], ["gt_dir"] (Ng, 2), ["gt_btok"] (Ng,) the best token of
 each GT node (-1 none), ["gl"] (Lg, 4) = (u, v, pre, suc) the GT links with their ghost nodes (-1 none); `collate` pads them to the batch maximum (pos / dir 0, btok / gl -1: tensors (B, Ng, 2), (B, Ng, 2), (B, Ng) long, (B, Lg, 4) long). Tests: net/tests/test_lane_tokcache.py
@@ -76,7 +76,7 @@ class PTokData(torch.utils.data.Dataset):
         f = self.c.f
         keep = np.ones(self.K, bool)
         if self.drop > 0:
-            from jtok_eval import keep_nodes
+            from lane_tok_data import keep_nodes
             keep = keep_nodes(self.tokens[i], self.K, self.drop, self.seed)
         valid = np.array(f["valid"][i]) & keep
         y, _, ys = densify(np.array(f["ypair"][i]), np.array(f["ypair_long"][i]), np.array(f["ypair_scale"][i]), self.K, keep if self.drop > 0 else None)

@@ -704,9 +704,9 @@ def train_guard(rows, tokens, splits, train_tokens, val_tokens):
 
 def guards(seed=0, ident="e292_a", cache=LC.CACHE, log=print):
     """the TEST guards on the frame lists of the E365 caches: VAL = data/splits.json['val'] (873), TRAIN = data/splits.json['train'] (8414) and none of its frames a VAL / TEST frame -> dict"""
-    import p16_data as PD
+    import frames as FR
     splits = json.load(open(os.path.join(ROOT, "data", "splits.json")))
-    tok_files = [json.load(open(f"{PD.D}/feats/{part}_tokens.json")) for part in ("train", "val")]
+    tok_files = [json.load(open(f"{FR.D}/feats/{part}_tokens.json")) for part in ("train", "val")]
     res = {}
     for split in ("val", "train"):
         fr = json.load(open(os.path.join(LP.cache_dir(split, seed, ident, None, cache), "frames.json")))

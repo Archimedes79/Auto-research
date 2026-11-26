@@ -1,8 +1,9 @@
 """D152: the lane model is separate from the training system and layered. net/prep (preprocessing: ground-truth targets, datasets, caches) < net/model
 (the networks) < net/loss (the losses) < training/ (trainer, train scripts, probes). A module of net/ imports only its own layer and layers below it,
 nothing of training/ or evaluation/. Imports inside a self-test (a function with "selftest" in its name, `test_...`, `_t_...`, the named test helpers,
-or an `if __name__ == "__main__"` block) are exempt. The dependencies the code had before D152 that go against this are NAMED here, each one: the
-list is the open debt, a new one fails the test and an entry that is gone must be taken out.
+or an `if __name__ == "__main__"` block) are exempt: a command line there hands a preprocessing function the stored model it runs (the token cache
+build, the champion's p_none of the map association). The 21 dependencies the code had before D152 that went against this were resolved on
+2026-11-26; KNOWN names exceptions one by one and is empty: a new import fails the test, and an entry that does not occur must be taken out.
 A module name of net/ exists only once on the lane's search path (modules are imported flat). And no module reaches a moved loss through its
 model module (`jtoken.jtoken_loss`): the token test lends jtoken those names, so only this check sees such a call in a trainer. CPU, a second, no data.
 Run (from the problem folder): wsl bash tools/env/_py14.sh net/tests/test_net_layering.py"""
@@ -14,19 +15,8 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 ORDER = ["prep", "model", "loss"]
 TOOLING = ("Evaluation", "Training", "trainkit", "run", "jobrunner")          # packages and tools of autoresearch/ that net/ must not read
 TEST_HELPERS = {("jroute", "_fit")}                                  # a helper of the learn tests of the self-test
-# (module of net/, imported module, the function the import must be inside, or None for anywhere)
-KNOWN = {
-    # the legacy data chain (loops 8 - 16, training/data) that the lane data is built on: frozen BEV features, rows, the SD map of a frame
-    ("data", "p16_data", None), ("chain_data", "p16_data", None), ("chain_data", "p8_lib", "__init__"), ("junction_paint", "p16_data", "paint_dir"),
-    ("lane_gt_data", "p16_data", None), ("lane_past_data", "p16_data", "pose_path"), ("lane_route_data", "p16_data", "guards"), ("lane_route_data", "sd_lib", None),
-    ("lane_seq_data", "p16_data", None),
-    # functions of the evaluation that the data or the model calls
-    ("data", "graph_eval", "__getitem__"), ("lane_ptok_data", "jtok_eval", "__getitem__"), ("lane_tokcache", "jtok_eval", "label_frame"),
-    ("jwire", "qends_eval", "kept_ends"), ("jwire", "qends_eval", "candidates"), ("jwire", "qends_eval", "rule_pick"),
-    # preprocessing that uses the model (and once the trainer's loader): the road labels of the grid chain, the token lattice, offline steps that run a stored head
-    ("chain_data", "assign", None), ("lane_tok_data", "jtok", None), ("lane_tokcache", "jtok", "build"), ("lane_tokcache", "qpredict", "build"),
-    ("lane_mapassoc_data", "jtoken", "e373_pnone"), ("lane_mapassoc_data", "jtoken_train", "e373_pnone"),
-}
+# (module of net/, imported module, the function the import must be inside, or None for anywhere); empty since 2026-11-26: keep it so
+KNOWN = set()
 
 
 def modules():
@@ -134,11 +124,11 @@ def main():
             fh.write("import jtoken as JK\nloss = JK.jtoken_loss\n")
         assert through_model([planted_file], moved), "a planted loss read through the model module was not found"
     # the check bites: planted imports against the layers are found
-    for name, target in (("qtargets", "jtoken"), ("jtoken", "loss_jtoken"), ("loss_jtoken", "jtoken_train"), ("qgraph", "qends_eval"), ("map_sim", "trainer"), ("qtargets", "sparse_lanes"), ("qtargets", "lg_model"), ("jtoken", "Evaluation")):
+    for name, target in (("qtargets", "jtoken"), ("jtoken", "loss_jtoken"), ("loss_jtoken", "jtoken_train"), ("qgraph", "qends_eval"), ("map_sim", "trainer"), ("qtargets", "sparse_lanes"), ("qtargets", "lg_model"), ("jtoken", "Evaluation"), ("lane_gt_data", "p16_data"), ("jwire", "qends_eval"), ("lane_tok_data", "jtok")):
         planted, _ = problems(mods, extra=[(name, target, 1, ())])
         assert any(f"{name}.py:1" in p for p in planted), f"planted import {name} -> {target} not found"
-    print(f"test_net_layering passed: {count['prep']} preprocessing, {count['model']} network and {count['loss']} loss modules; no new import goes up a layer or out of net/ "
-          f"({len(KNOWN)} named ones from before D152 remain); planted imports are found")
+    print(f"test_net_layering passed: {count['prep']} preprocessing, {count['model']} network and {count['loss']} loss modules; no import goes up a layer or out of net/ "
+          f"({len(KNOWN)} named exceptions); planted imports are found")
 
 
 if __name__ == "__main__":

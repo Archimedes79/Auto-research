@@ -166,10 +166,10 @@
 <text x="124.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(GtGenerator)</text>
 <text x="124.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_gt.py</text>
 </g>
-<g><title>data: net/prep/lane_gt_data.py; net/prep/lane_gtgeom_data.py; training/data/p16_data.py; training/data/p16_common.py; training/data/p8_lib.py; training/data/assoc_lib.py; net/prep/qtargets.py; net/prep/qraster.py; net/prep/qzones.py</title><rect x="244" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>data: net/prep/lane_gt_data.py; net/prep/lane_gtgeom_data.py; training/data/p16_data.py; training/data/p16_common.py; training/data/p8_lib.py; net/prep/frames.py; net/prep/polylines.py; net/prep/assoc_lib.py; net/prep/qtargets.py; net/prep/qraster.py; net/prep/qzones.py</title><rect x="244" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="324.0" y="718.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Frames, features,</text>
 <text x="324.0" y="733.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">splits and GT targets</text>
-<text x="324.0" y="747.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_gt_data.py +8</text>
+<text x="324.0" y="747.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">lane_gt_data.py +10</text>
 </g>
 <g><title>st0: training/train/qgraph_train.py; training/train/qgates.py; net/loss/loss_qgraph.py::qgraph_loss; net/loss/losses.py; net/model/soft_lines.py; net/prep/targets.py</title><rect x="444" y="697.0" width="160" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="524.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Stage 0: lane head B&#x27;</text>
@@ -177,7 +177,7 @@
 <text x="524.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">frozen (E273, E292)</text>
 <text x="524.0" y="755.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qgraph_train.py +5</text>
 </g>
-<g><title>cache: net/prep/lane_tokcache.py; net/prep/lane_ptok_data.py; net/prep/lane_tok_data.py; evaluation/jtok_eval.py::sub_table</title><rect x="644" y="697.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/>
+<g><title>cache: net/prep/lane_tokcache.py; net/prep/lane_ptok_data.py; net/prep/lane_tok_data.py; net/prep/lane_tok_data.py::sub_table</title><rect x="644" y="697.0" width="160" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="1.4"/>
 <text x="724.0" y="711.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Token cache (stage 1)</text>
 <text x="724.0" y="726.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">B&#x27; run once, tokens</text>
 <text x="724.0" y="741.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ GT labels stored</text>
@@ -205,7 +205,7 @@
 <text x="1224.0" y="833.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">+ 0.5 type CE + 0.5 L1 of the handle scales</text>
 <text x="1224.0" y="847.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jtoken.py::jtoken_loss</text>
 </g>
-<g><title>sd_route: net/prep/lane_route_data.py::route_of; training/data/sd_lib.py</title><rect x="444" y="997.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<g><title>sd_route: net/prep/lane_route_data.py::route_of; net/prep/sd_lib.py</title><rect x="444" y="997.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
 <text x="524.0" y="1011.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SD route of the frame</text>
 <text x="524.0" y="1026.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">route tokens / 2 m,</text>
 <text x="524.0" y="1041.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">simulated map errors</text>
@@ -258,7 +258,7 @@
 <text x="224.0" y="1433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E): trained in B, not run on the token path</text>
 <text x="224.0" y="1447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">qlinks.py +3</text>
 </g>
-<g><title>ref_grid: net/model/chain.py; net/loss/loss_chain.py; net/prep/chain_data.py; net/model/hold.py; net/model/assign.py; net/prep/data.py; training/train/grid_train.py; evaluation/vertex_eval.py; evaluation/lane_grid/</title><rect x="444" y="1397.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<g><title>ref_grid: net/model/chain.py; net/loss/loss_chain.py; net/prep/chain_data.py; net/model/hold.py; net/model/assign.py; net/prep/sd_tokens.py; net/prep/data.py; training/train/grid_train.py; evaluation/vertex_eval.py; evaluation/lane_grid/</title><rect x="444" y="1397.0" width="160" height="62" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
 <text x="524.0" y="1411.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E271 / E272 grid</text>
 <text x="524.0" y="1426.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">chain: 1 m head,</text>
 <text x="524.0" y="1441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">sparsify, hold, assign</text>
@@ -281,7 +281,7 @@
 <text x="1224.0" y="1433.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ensemble cost (E379)</text>
 <text x="1224.0" y="1447.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jthresh.py +1</text>
 </g>
-<g><title>e391: net/prep/lane_mapassoc_data.py; net/model/jmapassoc.py; evaluation/mapassoc_probe.py; net/tests/test_mapassoc.py</title><rect x="44" y="1102.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
+<g><title>e391: net/prep/lane_mapassoc_data.py; training/train/champion_pnone.py; net/model/jmapassoc.py; evaluation/mapassoc_probe.py; net/tests/test_mapassoc.py</title><rect x="44" y="1102.0" width="360" height="52" rx="7" fill="#fff7ed" stroke="#a16207" stroke-width="1.4"/>
 <text x="224.0" y="1118.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">E391 step 2: association of the champion&#x27;s tokens to</text>
 <text x="224.0" y="1133.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">the road graph (NO FUSION)</text>
 <text x="224.0" y="1147.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">jmapassoc.py +3</text>

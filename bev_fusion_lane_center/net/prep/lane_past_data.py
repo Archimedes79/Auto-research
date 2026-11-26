@@ -77,8 +77,8 @@ def _sha(path):
 
 
 def pose_path(split):
-    import p16_data as PD  # heavy (scipy, graph_eval): only the build and the checks need the poses
-    return os.path.join(PD.D, f"poses_{split}.npz")
+    import frames as FR
+    return os.path.join(FR.D, f"poses_{split}.npz")
 
 
 def link(pose, rows):

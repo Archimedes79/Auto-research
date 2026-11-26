@@ -24,8 +24,8 @@ NUSC = os.path.expanduser("~/data/nuscenes_full")
 
 
 def paint_dir():
-    import p16_data as PD
-    return os.path.join(PD.D, "paint")
+    import frames as FR
+    return os.path.join(FR.D, "paint")
 
 
 def load(token):

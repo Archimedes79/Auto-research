@@ -17,6 +17,10 @@ The rules (card E273, section 3.3), all by LOCATION, no matching:
 Frame of the maps: row = x, column = y, cell (i, j) has its centre at -50 + 2 (i + 0.5) / -50 + 2 (j + 0.5), as the feature raster of the project.
 Run the self-test: python qtargets.py     (real frames of the lane GT store: `test_qtargets.py`)
 """
+import contextlib
+import os
+import sys
+
 import numpy as np
 
 N, RES, HALF = 50, 2.0, 50.0
@@ -393,6 +397,41 @@ def _selftest():
     cov = coverage(decode(nt), g)
     assert cov["lane"] > 0.999 and cov["prec"] > 0.97, cov
     print("qtargets selftest ok", st, {k: round(v, 4) for k, v in cov.items()})
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ lattice
+def _set_lattice(res):
+    global N, RES
+    n = 2 * HALF / res
+    if abs(n - round(n)) > 1e-9:
+        raise ValueError(f"cell size {res} m does not divide the {2 * HALF} m window")
+    N, RES = int(round(n)), float(res)
+
+
+@contextlib.contextmanager
+def lattice(res):
+    """this module on a `res` m lattice inside the block (the mechanism of E346): N and RES are module constants that `cell_of` / `centre_of` read at call time, so every holder of the module sees them (qformat,
+    qgraph_eval.LaneRef); a default bound at import does NOT (`grid_targets(n=N)`: pass n). Restored at the end, also after an exception. A data-loader worker enters the block itself (`lane_tok_data.frame_table`)."""
+    global N, RES
+    old = N, RES
+    _set_lattice(res)
+    try:
+        yield
+    finally:
+        N, RES = old
+
+
+def check_lattice(res):
+    """AssertionError unless this module is on the `res` m lattice in THIS process and nobody holds a second copy of the module (a copy would keep 2 m silently)"""
+    me = sys.modules[__name__]
+    n = int(round(2 * HALF / res))
+    assert (N, RES) == (n, float(res)), f"qtargets is on N = {N}, RES = {RES}, not on the {res} m lattice"
+    mods = [(name, m) for name, m in list(sys.modules.items()) if m is not None]
+    stale = [name for name, m in mods if getattr(getattr(m, "QT", None), "__name__", "").startswith("qtargets") and m.QT is not me]
+    copies = [name for name, m in mods if os.path.basename(getattr(m, "__file__", "") or "") == "qtargets.py" and m is not me]
+    assert not stale and not copies, f"a second copy of qtargets: held by {stale}, modules {copies}"
+    xy = np.array([[-49.9, -49.9], [0.3, -0.7], [49.9, 49.9]])
+    assert np.array_equal(cell_of(xy), np.floor((xy + HALF) / res).astype(int)), "cell_of does not use the lattice"
 
 
 if __name__ == "__main__":

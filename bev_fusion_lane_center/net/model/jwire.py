@@ -16,12 +16,30 @@ import numpy as np
 
 WIRE_SIGMA = 1.2                                                                                  # m: the scale of the fixed dustbin logit of the card (-R^2 / (2 sigma^2) = -5.556 at R = 4 m)
 MAX_CAND = 8
+WIRE_POS, WIRE_ANG = 4.0, 45.0                                                                    # m, degrees: the reach of the delivered wiring
+COVER_POS = 4.0
+
+
+def cover_pos(wire_pos=None):
+    """the radius within which a connector's ends cover (drop) a long link of B: COVER_POS, and under a tight wiring radius the smaller of the two (N1, critic 2026-11-13); the one place `qends_eval.add_connectors` and the
+    caller that builds the kept list for a `wire_choice` (E325) read it"""
+    return COVER_POS if wire_pos is None else min(COVER_POS, float(wire_pos))
+
+
+def _tan(P, at_end):
+    q = P[-3:] if at_end else P[:3]
+    d = q[-1] - q[0]
+    n = np.linalg.norm(d)
+    return d / n if n > 1e-9 else np.array([0.0, 1.0])
+
+
+def _ang(u, v):
+    return float(np.degrees(np.arccos(np.clip(u @ v, -1.0, 1.0))))
 
 
 def kept_ends(lines, kinds, links, long_mask, pairs, cover_pos):
     """-> (keep, ends): `keep` = the indices of the pieces that stay (a LONG link whose first point lies within `cover_pos` of a pair's entry end and whose last point lies within `cover_pos` of its exit end is
     dropped: a connector covers it), `ends` = [(last point, heading at the end, first point, heading at the start)] of the kept pieces in order. The one place the read-out and the features of a head compute it."""
-    import qends_eval as QE
     keep = []
     for i, k in enumerate(kinds):
         if k == "link" and bool(long_mask[links[i][0]]):
@@ -32,21 +50,20 @@ def kept_ends(lines, kinds, links, long_mask, pairs, cover_pos):
     ends = []
     for i in keep:
         P = np.asarray(lines[i], float)
-        ends.append((P[-1], QE._tan(P, True), P[0], QE._tan(P, False)))
+        ends.append((P[-1], _tan(P, True), P[0], _tan(P, False)))
     return keep, ends
 
 
 def candidates(ends, pos, tan, entry, wire_pos, wire_ang=None):
     """the piece ends in reach of a connector end at `pos` with heading `tan` (entry = True: compare with the LAST point of the pieces, False: with the FIRST point): within `wire_pos` m and `wire_ang` degrees,
     [(distance, index into `ends`, point, tangent)] nearest first (a stable sort: a tie keeps the list order), cut at MAX_CAND"""
-    import qends_eval as QE
-    wire_ang = QE.WIRE_ANG if wire_ang is None else wire_ang                                          # the module value at call time (a sweep may set QE.WIRE_ANG)
+    wire_ang = WIRE_ANG if wire_ang is None else wire_ang                                             # the module value at call time (a sweep sets jwire.WIRE_ANG: it reaches the rule too)
     out = []
     pos, tan = np.asarray(pos, float), np.asarray(tan, float)
     for i, en in enumerate(ends):
         q, t = (en[0], en[1]) if entry else (en[2], en[3])
         d = float(np.linalg.norm(q - pos))
-        if d <= wire_pos and QE._ang(t, tan) <= wire_ang:
+        if d <= wire_pos and _ang(t, tan) <= wire_ang:
             out.append((d, i, q, t))
     out.sort(key=lambda c: c[0])
     return out[:MAX_CAND]
@@ -70,14 +87,13 @@ def twin_choice(ends, pairs, wire_pos, wire_ang=None):
 
 def rule_pick(ends, pos, tan, entry, wire_pos, wire_ang=None):
     """the nearest-piece rule as `add_connectors` writes it (strict `d < d_in`, the first of equal distances): the independent reference of the self-test"""
-    import qends_eval as QE
-    wire_ang = QE.WIRE_ANG if wire_ang is None else wire_ang
+    wire_ang = WIRE_ANG if wire_ang is None else wire_ang
     best, d_best = None, np.inf
     pos, tan = np.asarray(pos, float), np.asarray(tan, float)
     for i, en in enumerate(ends):
         q, t = (en[0], en[1]) if entry else (en[2], en[3])
         d = np.linalg.norm(q - pos)
-        if d <= wire_pos and QE._ang(t, tan) <= wire_ang and d < d_best:
+        if d <= wire_pos and _ang(t, tan) <= wire_ang and d < d_best:
             best, d_best = i, d
     return best
 
@@ -116,7 +132,7 @@ def _selftest():
             if lines and rng.random() < 0.7:                                                               # near a piece end, roughly along it: several candidates in reach
                 k_ = int(rng.integers(len(lines)))
                 pos = np.asarray(lines[k_][-1] if entry else lines[k_][0], float) + rng.normal(0, 1.5, 2)
-                t0, th = QE._tan(np.asarray(lines[k_], float), entry), rng.normal(0, 0.3)
+                t0, th = _tan(np.asarray(lines[k_], float), entry), rng.normal(0, 0.3)
                 tan = np.array([t0[0] * np.cos(th) - t0[1] * np.sin(th), t0[0] * np.sin(th) + t0[1] * np.cos(th)])
             r, t = rule_pick(ends, pos, tan, entry, R), twin_pick(ends, pos, tan, entry, R)
             assert r == t, (r, t, entry)
@@ -145,8 +161,8 @@ def _selftest():
     for off, rad, dropped in ((3.9, 4.0, True), (3.9, 3.5, False), (4.1, 4.0, False)):
         prs = [(lines[2][0] + np.array([0.0, off]), np.array([0.0, 1.0]), lines[2][-1] + np.array([0.0, off]), np.array([0.0, 1.0]))]
         assert (2 not in kept_ends(lines, kinds, links, lm, prs, rad)[0]) == dropped, (off, rad)
-        assert (2 not in kept_ends(lines, kinds, links, lm, prs, QE.cover_pos(rad))[0]) == dropped
-    assert QE.cover_pos() == QE.COVER_POS and QE.cover_pos(1.0) == 1.0 and QE.cover_pos(9.0) == QE.COVER_POS
+        assert (2 not in kept_ends(lines, kinds, links, lm, prs, cover_pos(rad))[0]) == dropped
+    assert cover_pos() == COVER_POS and cover_pos(1.0) == 1.0 and cover_pos(9.0) == COVER_POS
     # 5. add_connectors through the twin choice = the rule, bit for bit, on random scenes with random pairs (snap and its refinements; scenes with covered long links); mutations
     def unit():
         a = rng.uniform(0, 2 * np.pi)
@@ -166,9 +182,9 @@ def _selftest():
             pairs.append((P[0] + rng.normal(0, 0.3, 2), unit(), P[-1] + rng.normal(0, 0.3, 2), unit()))
         kw = dict(snap=True, snap_nogeom=bool(rng.random() < 0.3), snap_dedup=bool(rng.random() < 0.3), snap_both=bool(rng.random() < 0.3))                  # snap_all and snap_guard override a choice: refused with a wire_choice (tested below)
         base = QE.add_connectors(lines, [], [[i] for i in range(len(lines))], kinds, links, lm, pairs, **kw)
-        keep, ends = kept_ends(lines, kinds, links, lm, pairs, QE.cover_pos())
+        keep, ends = kept_ends(lines, kinds, links, lm, pairs, cover_pos())
         n_covered += len(keep) < len(lines)
-        wc = twin_choice(ends, pairs, QE.WIRE_POS)
+        wc = twin_choice(ends, pairs, WIRE_POS)
         assert same(base, QE.add_connectors(lines, [], [[i] for i in range(len(lines))], kinds, links, lm, pairs, wire_choice=wc, **kw)), "the twin choice must reproduce the rule bit for bit"
         sw = [(b, a) if a is not None and b is not None and a != b else (a, b) for a, b in wc]
         if sw != wc:
@@ -197,6 +213,21 @@ def _selftest():
         except AssertionError:
             continue
         raise AssertionError(f"accepted {bad}")
+    # one binding of the reach: a value set on the module reaches the rule (`qends_eval.add_connectors`) and the head's gate (`candidates`, the twin) alike
+    import jwire as one
+    ln = [np.array([[0.0, -9.0], [0.0, -1.0]])]                                       # one piece that ends 1 m before a connector whose heading is 30 degrees off
+    h30 = np.array([np.sin(np.radians(30.0)), np.cos(np.radians(30.0))])
+    prs_ = [(np.array([0.0, 0.0]), h30, np.array([40.0, 40.0]), np.array([0.0, 1.0]), 1.0, 1.0)]
+    old = one.WIRE_ANG
+    try:
+        for ang, wired in ((45.0, True), (10.0, False)):
+            one.WIRE_ANG = ang
+            edges = QE.add_connectors(ln, [], [[0]], ["section"], [[0]], np.zeros(1, bool), prs_, snap=True)[0]["edges"]
+            ends_ = one.kept_ends(ln, ["section"], [[0]], np.zeros(1, bool), prs_, one.cover_pos())[1]
+            pick = one.twin_pick(ends_, prs_[0][0], prs_[0][1], True, one.WIRE_POS)
+            assert ((0, 1) in edges) == wired and (pick == 0) == wired, (ang, edges, pick)
+    finally:
+        one.WIRE_ANG = old
     print(f"jwire selftest ok ({n_cmp} twin / rule comparisons, {n_some} with a candidate; {n_multi} of them with two or more candidates; {n_graphs} graphs through add_connectors, {n_covered} with a covered long link)")
 
 

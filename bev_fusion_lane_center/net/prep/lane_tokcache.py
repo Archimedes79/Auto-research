@@ -17,7 +17,7 @@ node token of the node head: the input of B's link head, which adds its own cont
 Labels (r = 1.5 m, cosine of the headings >= 0.5; a valid token is NEAR a GT node when both hold): gt_id (int32, the row of the frame's GT table, -1 none) and gd (metres, NaN none): the tokens in descending existence take, one after
 the other, the NEAREST still unassigned GT node near them (ties: the lower GT node) = a function of the input; gt_type (int8, `TYPES`: 0 none, 1 lane point, 2 fork (split), 3 merge, 4 entry (stop), 5 exit, 6 boundary (start, end, win_in,
 win_out); several flags: the first of split > merge > stop > exit > boundary), gt_flags (8 bool: the raw flags of the assigned node), gt_aux (3 bool: section start, start of a long link, end of a long link). A GT node is COVERED when
-a valid token is near it. Link targets: the GT links are contracted over the uncovered GT nodes (`jtok_eval.sub_table`: a chain through removed nodes becomes one link, class long = chord > 8 m, fitted scale only for direct links); for every
+a valid token is near it. Link targets: the GT links are contracted over the uncovered GT nodes (`lane_tok_data.sub_table`: a chain through removed nodes becomes one link, class long = chord > 8 m, fitted scale only for direct links); for every
 contracted link a -> b with a token i assigned to a: the pairs (i, j) for every valid token j near b (assigned or not; j != i): stored sparse as ypair (token i, token j; -1 pad), ypair_long, ypair_scale (NaN unless a fitted scale
 exists), ypair_gate (the pair is inside the allowed gate of `jtok.pair_geometry` on the stored tokens); `lane_ptok_data` makes the dense y / ylong / yscale of the spec from them (a pair that two links claim with two classes is kept as
 long; counted in n_conflict). Per frame counts: n_gt, n_gt_assigned, n_links (GT links), n_links_c (contracted), gt_out (GT links with an end covered by no token: counted BEFORE the contraction, which re-joins a chain through such ends into one link), n_nosrc (contracted
@@ -108,7 +108,7 @@ def types_of(flags):
 def label_frame(tk, table, r=R_NEAR, cos=COS_NEAR, K=None, allowed=None, ks=KST):
     """the labels of one frame. tk: numpy dict of the tokens in rank order (pos, dirv, valid, e_p; T >= K rows), table: the GT table of `lane_tok_data` (pos, dirv, flags, sstart, src, dst, long, conn, scale, cell, piece),
     allowed: (K, K) bool, the gate of `jtok.pair_geometry` on the first K tokens (None: all False) -> dict of the label fields (module docstring); the coverage statistics use the first ks[j] of the T given tokens"""
-    from jtok_eval import sub_table
+    from lane_tok_data import sub_table
     T = len(tk["pos"])
     K = T if K is None else K
     M = len(table["pos"])
@@ -323,10 +323,10 @@ def _collate(b):
     return dict(x=torch.stack([o["x"] for o in b]), row=[o["row"] for o in b], token=[o["token"] for o in b], table=[{k: o[k] for k in ("pos", "dirv", "cell", "flags", "piece", "sstart", "src", "dst", "long", "scale", "conn")} for o in b])
 
 
-def build(a):
-    import jtok as JT
+def build(a, load_model, pair_geometry):
+    """one cache of the command line `build`: load_model(run, dev) = the stored lane head B (`qpredict.load_model`), pair_geometry = the gate of the token pairs (`jtok.pair_geometry`).
+    Both come from the caller: preprocessing does not import the model."""
     import lane_tok_data as LT
-    import qpredict as QP
     import qtargets as QT
     assert tuple(QT.FLAGS) == FLAGS
     split = {"val": "val", "val_clean": "val", "train": "train"}[a.split]
@@ -336,7 +336,7 @@ def build(a):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     ds = LT.TokData(split, res=2.0, feats=True)
     n_all = len(ds) if not a.limit else min(a.limit, len(ds))
-    m = QP.load_model(run, dev)
+    m = load_model(run, dev)
     bs, kfull = 4, max(a.K, max(KST))
     prog = os.path.join(out, "progress.json")
     done = json.load(open(prog))["done"] if os.path.exists(prog) else 0
@@ -361,7 +361,7 @@ def build(a):
             P = m.pyr(x)
             no = m.node_stage(P)
             tkt = select_tokens(no, P["feat2"] if a.f2 else None, kfull)                                       # all the tokens the coverage statistics need, K of them are stored
-            allowed = JT.pair_geometry(tkt["pos"][:, :a.K], tkt["dirv"][:, :a.K], tkt["valid"][:, :a.K])[1].cpu().numpy()
+            allowed = pair_geometry(tkt["pos"][:, :a.K], tkt["dirv"][:, :a.K], tkt["valid"][:, :a.K])[1].cpu().numpy()
         tk = {k: v.cpu().numpy() for k, v in tkt.items()}
         for k_ in ("tok", "f2"):
             assert k_ not in tk or np.isfinite(tk[k_]).all(), f"{k_} is not finite in float16 (batch ending at frame {i + len(b['row'])})"
@@ -696,7 +696,9 @@ if __name__ == "__main__":
     if a.cmd == "selftest":
         selftest()
     elif a.cmd == "build":
-        build(a)
+        import jtok as JT  # the command line runs the stored B' (net/model)
+        import qpredict as QP
+        build(a, QP.load_model, JT.pair_geometry)
     elif a.cmd == "summary":
         out_ = {}
         for d_ in sorted(glob.glob(os.path.join(CACHE, "*", "*", "manifest.json"))):

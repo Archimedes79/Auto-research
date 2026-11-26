@@ -44,6 +44,6 @@ def original_graph(pred: dict, e: dict, attached: bool) -> tuple:
     pairs = QEV.make_pairs(e, ia, ib, e["kp_pos"].shape[0] // 2, attach=attached)
     long = np.asarray(pr["links"]["long"], bool)
     raw = QEV.add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], long, pairs, snap=True, snap_nogeom=attached)[0]
-    keep = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], long, pairs, QEV.cover_pos())[0]
+    keep = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], long, pairs, JW.cover_pos())[0]
     kinds = [{"section": "lane", "link": "link"}[bk["kind"][i]] for i in keep] + ["connector"] * len(pairs)
     return raw, kinds

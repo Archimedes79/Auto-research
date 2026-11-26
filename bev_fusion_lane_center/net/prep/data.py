@@ -1,9 +1,9 @@
-"""Data of the grid head: the 39 frozen BEV channels of a frame and its ground-truth lane points (light: no point-graph / Dijkstra of `BuilderData.__getitem__`).
+"""Data of the grid head: the 39 frozen BEV channels of a frame and its ground-truth lane points (light: no point-graph / Dijkstra of the reference chain's items).
 
-GridData(split) with split "train" (8414 frames) or "val_clean" (873 frames, the VAL split through `BuilderData.rows`: the stored feature files also hold the TEST rows and are
-never iterated). Item: x (39, 200, 200) float16 (normalised as `BuilderData`: the 39 channels dec32 + logit7, the old dense head's 3 channels are not loaded), g05 / t05 (G, 2) the
+GridData(split) with split "train" (8414 frames) or "val_clean" (873 frames, the VAL split through `frames.Frames` rows: the stored feature files also hold the TEST rows and are
+never iterated). Item: x (39, 200, 200) float16 (normalised with `frames.norm_stats`: the 39 channels dec32 + logit7, the old dense head's 3 channels are not loaded), g05 / t05 (G, 2) the
 GT lane points every 0.5 m inside |x|, |y| < 48 and their travel tangents, row (the dataset row), k (position in the split), scene.
-`collate` pads g05 with 1e4 and t05 with 0 and gives the mask m05. Paths, rows, GT graphs and the normalisation come from `BuilderData` (one source of truth).
+`collate` pads g05 with 1e4 and t05 with 0 and gives the mask m05. Paths, rows, GT graphs and the normalisation come from `frames.py` (one source of truth).
 """
 import os
 import sys
@@ -13,14 +13,14 @@ import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(ROOT, "training", "data"))
-import p16_data as PD  # noqa: E402
+import frames as FR  # noqa: E402
 
 BOX = 48.0
 
 
 class GridData(torch.utils.data.Dataset):
     def __init__(self, split="train", ks=None):
-        self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
+        self.bd = FR.Frames(split, ks=ks)
         self.mm = None
 
     def __len__(self):
@@ -28,16 +28,16 @@ class GridData(torch.utils.data.Dataset):
 
     def _open(self):
         if self.mm is None:
-            self.mm = [np.load(f"{PD.D}/feats/{self.bd.part}_{g}.npy", mmap_mode="r") for g in ("dec32", "logit7")]
+            self.mm = [np.load(f"{FR.D}/feats/{self.bd.part}_{g}.npy", mmap_mode="r") for g in ("dec32", "logit7")]
 
     def __getitem__(self, i):
-        import graph_eval as GE
+        from polylines import dense_points
         self._open()
         k = int(self.bd.ks[i])
         row = int(self.bd.rows[k])
         x = np.concatenate([np.asarray(m[row], np.float32) for m in self.mm], 0)
         x = ((x - self.bd.mean[:39, None, None]) / self.bd.std[:39, None, None]).astype(np.float16)
-        P, T, _ = GE.dense_points(self.bd.gt[row], 0.5)
+        P, T, _ = dense_points(self.bd.gt[row], 0.5)
         P, T = np.asarray(P, np.float32).reshape(-1, 2), np.asarray(T, np.float32).reshape(-1, 2)
         keep = (np.abs(P[:, 0]) < BOX) & (np.abs(P[:, 1]) < BOX)
         return dict(x=torch.from_numpy(x), g05=torch.from_numpy(P[keep]), t05=torch.from_numpy(T[keep]), k=k, row=row)

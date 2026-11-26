@@ -60,6 +60,8 @@ run "registration K188 (synthetic shifts, gradient)" p18_regis.py
 run "numba union == FastUnion graphs (120 frames)" p18_asm_check.py --n 120 --reps 1
 run "layering: preprocessing < network < losses < training; the older exceptions named (D152)" net/tests/test_net_layering.py
 run "a model and its losses read as one module for the textual mutants (D152)" net/tests/merged_source.py
+run "cached frames of the lane data: rows of train and val_clean, normalisation, one read per file (D152 follow-up)" net/prep/frames.py
+run "champion p_none for the map association: the run of the seed, column 0 (stubbed head)" champion_pnone.py
 run "grid chain parts (soft_lines, hold, assign, targets, head, losses; E271 / E272)" net/model/soft_lines.py
 run "grid hold: ego warp reproduces the second observation" net/model/hold.py
 run "grid assign: soft assignment with a dustbin" net/model/assign.py

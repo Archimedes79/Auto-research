@@ -355,12 +355,14 @@
     "training/data/p16_data.py",
     "training/data/p16_common.py",
     "training/data/p8_lib.py",
-    "training/data/assoc_lib.py",
+    "net/prep/frames.py",
+    "net/prep/polylines.py",
+    "net/prep/assoc_lib.py",
     "net/prep/qtargets.py",
     "net/prep/qraster.py",
     "net/prep/qzones.py"
    ],
-   "note": "the 39 frozen channels of a frame and the targets drawn from the lane GT (nodes on a 2 m grid, links, pixel maps); the splits and cached files still come through p16_data.BuilderData of the old chain (a dependency of the removal of D97)"
+   "note": "the 39 frozen channels of a frame and the targets drawn from the lane GT (nodes on a 2 m grid, links, pixel maps); rows, normalisation and the stored per-part files come through net/prep/frames.py, which the old chain reads too (p16_data, p8_lib)"
   },
   {
    "id": "st0",
@@ -388,7 +390,7 @@
     "net/prep/lane_tokcache.py",
     "net/prep/lane_ptok_data.py",
     "net/prep/lane_tok_data.py",
-    "evaluation/jtok_eval.py::sub_table"
+    "net/prep/lane_tok_data.py::sub_table"
    ],
    "note": "derived data, not in git: the K = 512 tokens of the frozen B' on every TRAIN and VAL frame with the labels of every token (assignment to the GT nodes, contracted link targets); the loader batches it"
   },
@@ -454,7 +456,7 @@
    "row": 9,
    "code": [
     "net/prep/lane_route_data.py::route_of",
-    "training/data/sd_lib.py"
+    "net/prep/sd_lib.py"
    ],
    "note": "the driven route from the lane GT, at most 160 samples (the nearest to the ego are kept), the map-error modes exact / error / train / none / wrong / gross; no piece id or node label enters a route token",
    "sub": "lane_route_data.py +1"
@@ -609,7 +611,7 @@
     "evaluation/drivers/",
     "evaluation/loops/"
    ],
-   "note": "the registry systems champion / recall / fast_recall and the control (Q 0.735 - 0.740, 17 - 24 ms; the control 628 ms), the prototype of record recall_sp0_dp; p16_data / p8_lib / sd_lib of this chain are still read by the champion's data layer",
+   "note": "the registry systems champion / recall / fast_recall and the control (Q 0.735 - 0.740, 17 - 24 ms; the control 628 ms), the prototype of record recall_sp0_dp; the champion's data layer no longer imports a module of this chain (2026-11-26)",
    "w": 3,
    "hpx": 52,
    "sub": "models/ +14"
@@ -644,6 +646,7 @@
     "net/prep/chain_data.py",
     "net/model/hold.py",
     "net/model/assign.py",
+    "net/prep/sd_tokens.py",
     "net/prep/data.py",
     "training/train/grid_train.py",
     "evaluation/vertex_eval.py",
@@ -706,6 +709,7 @@
    "hpx": 52,
    "code": [
     "net/prep/lane_mapassoc_data.py",
+    "training/train/champion_pnone.py",
     "net/model/jmapassoc.py",
     "evaluation/mapassoc_probe.py",
     "net/tests/test_mapassoc.py"

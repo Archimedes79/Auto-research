@@ -12,16 +12,16 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "net", "prep"))   # the cached frames and the SD libraries (net/prep)
 import assoc_lib as AL  # noqa: E402
 import graph_eval as GE  # noqa: E402
+from frames import D, cache, load_src  # noqa: E402,F401 (the stored per-part files; the lane data reads them without this chain)
 import sd_lib as SL  # noqa: E402
 
 HOME = os.path.expanduser("~")
-D = f"{HOME}/exp_gcar_b123"
 OUT = BP.RUNS
 LANE_W = 3.5
 KPT = 6  # sampled points per piece
-_C = {}
 
 
 def seed_of(x, salt=0):
@@ -29,30 +29,6 @@ def seed_of(x, salt=0):
 
 
 # ------------------------------------------------------------------ data
-
-
-def cache(name, part):
-    key = (name, part)
-    if key not in _C:
-        if name == "gt":
-            _C[key] = pickle.load(open(f"{D}/graph_gt_{part}.pkl", "rb"))
-        elif name == "rt":
-            _C[key] = pickle.load(open(f"{D}/route_gt_{part}.pkl", "rb"))
-        elif name == "sd":
-            _C[key] = pickle.load(open(f"{D}/sd_{part}.pkl", "rb"))
-        elif name == "rpts":
-            _C[key] = pickle.load(open(f"{D}/route_pts_{part}.pkl", "rb"))
-        elif name == "poses":
-            z = np.load(f"{D}/poses_{part}.npz")
-            _C[key] = {k: z[k] for k in z.files}
-        elif name == "src":
-            _C[key] = pickle.load(open(f"{D}/p8/{part}.pkl", "rb"))
-    return _C[key]
-
-
-def load_src(src):
-    """perceived-graph cache of p8_build.py"""
-    return cache("src", src)
 
 
 def gt_lane_points(part, row, ds=0.5):

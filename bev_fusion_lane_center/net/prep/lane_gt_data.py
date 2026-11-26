@@ -2,7 +2,7 @@
 
     ds, dl = loader("train" | "val_clean", bs=4, workers=3, map_mode="train" | "error" | "exact")
 
-Frames = the project's splits through `BuilderData` (TRAIN 8414, VAL 873 via `BuilderData.rows`: the stored feature files also hold the TEST rows, which are never iterated); the sample token of
+Frames = the project's splits through `frames.Frames` (TRAIN 8414, VAL 873 via its rows: the stored feature files also hold the TEST rows, which are never iterated); the sample token of
 a row is `~/exp_gcar_b123/feats/{train,val}_tokens.json[row]`; the lane GT of the token comes from the store of the lane GT of this checkout (`GtGenerator.lane_gt.load`). A frame whose graph is not
 stored (yet) is left out of the dataset (`missing` says how many; `strict=True` raises instead).
 Item (numpy -> torch): x (39, 200, 200) float16 (normalised as `GridData`); node targets `qtargets.grid_targets` on the 50 x 50 grid of 2 m cells: exists, flags (8), offset (m), dirv, sstart,
@@ -23,7 +23,7 @@ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirna
 for sub in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import map_sim as MS  # noqa: E402
-import p16_data as PD  # noqa: E402
+import frames as FR  # noqa: E402
 import qends as QEND  # noqa: E402
 import qjunction as QJ  # noqa: E402
 import qtargets as QT  # noqa: E402
@@ -48,7 +48,7 @@ class QData(torch.utils.data.Dataset):
     DEFAULT_ENDS = False                                         # E284: set by `qgraph_train.py --phases 8`: the batch also carries the junction ends and the true pairs (`qends.end_table`)
 
     def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None, junction=None, pscale=None, ppts=None):
-        self.bd = PD.BuilderData(split, ks=ks, train=(split == "train"))
+        self.bd = FR.Frames(split, ks=ks)
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
         sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
         self.sparse = None if sparse is None else (float(sparse[0]), float(sparse[1]))                   # E276: the sparse node target (eps, max chord) in metres, None = a node in every 2 m cell
@@ -60,7 +60,7 @@ class QData(torch.utils.data.Dataset):
         self.ppts = QData.DEFAULT_PPTS if ppts is None else bool(ppts)
         assert not self.zone or self.sparse is not None, "the zone maps need the sparse node target"
         part = "train" if split == "train" else "val"
-        self.tokens = json.load(open(f"{PD.D}/feats/{part}_tokens.json"))
+        self.tokens = json.load(open(f"{FR.D}/feats/{part}_tokens.json"))
         self.lg, d = lane_store()
         held = self.lg.held(d)
         ks_all = [int(k) for k in self.bd.ks]
@@ -80,7 +80,7 @@ class QData(torch.utils.data.Dataset):
 
     def _open(self):
         if self.mm is None:
-            self.mm = [np.load(f"{PD.D}/feats/{self.bd.part}_{g}.npy", mmap_mode="r") for g in ("dec32", "logit7")]
+            self.mm = [np.load(f"{FR.D}/feats/{self.bd.part}_{g}.npy", mmap_mode="r") for g in ("dec32", "logit7")]
 
     def __getitem__(self, i):
         self._open()

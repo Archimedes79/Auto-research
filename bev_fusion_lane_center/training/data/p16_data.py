@@ -15,12 +15,14 @@ from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "net", "prep"))   # the cached frames and the SD libraries (net/prep)
+import frames as FR  # noqa: E402
 import graph_eval as GE  # noqa: E402
 import p10_infer as PI  # noqa: E402
 import p8_lib as L  # noqa: E402
 
 HOME = os.path.expanduser("~")
-D = f"{HOME}/exp_gcar_b123"
+D = FR.D
 # folder of <part>_gt_dist_exact.npy (the seed / direction / builder target); default = the CPU-exact rebuild of the b123 map (D14, decided 2026-10-26: a defective map is not used for new training).
 # LCR_DIST_DIR=$HOME/exp_crn_b123/feats selects the stored map (made with TF32 matrix products, D10; the loop-18/19 runs used it); the card of every run records env.dist_dir.
 DIST_DIR = os.environ.get("LCR_DIST_DIR") or f"{HOME}/exp_gcar_b123x/feats"
@@ -50,13 +52,12 @@ class BuilderData(torch.utils.data.Dataset):
 
     def __init__(self, split="train", ks=None, train=True, with_prev=False):
         self.split, self.train, self.with_prev = split, train, with_prev
-        z = np.load(f"{OUT}/refiner_stats_dec32_logit7.npz")
-        self.mean, self.std = z["mean"].astype(np.float32), z["std"].astype(np.float32)
+        self.mean, self.std = FR.norm_stats()
         self.mm = None
         if split == "train":
             self.part = "train"
             self.gt = L.cache("gt", "train")
-            self.rows = np.arange(len(self.gt))
+            self.rows = FR.train_rows(self.gt)
             self.ids = self.rows
         else:
             self.es = PI.EvalSet(split)

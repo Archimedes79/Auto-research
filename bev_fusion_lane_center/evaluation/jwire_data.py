@@ -68,7 +68,7 @@ def record_of(pred, graph, bk, e, g, thr=0.1, row=-1, scene=-1, ends="kp"):
     p = 1.0 / (1.0 + np.exp(-e["logit"])) * e["allowed"]
     ia, ib = np.nonzero(p >= thr)
     pairs = QEV.make_pairs(e, ia, ib, k, attach=attach)
-    keep, kept = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, QEV.cover_pos())
+    keep, kept = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, JW.cover_pos())
     attrs = JH.piece_attrs(graph.lines, bk["kind"], bk["piece_nodes"], bk["piece_links"], np.asarray(pred["nodes"]["e"], float).reshape(-1), np.asarray(pred["links"]["p"], float).reshape(-1), keep)
     valid = np.asarray(e["valid"], bool)
     m_in = match(e["kp_pos"][:k], e["kp_dir"][:k], valid[0], g["ent"], g["ent_m"])
@@ -849,7 +849,7 @@ def _selftest():
     assert rec2["pairs"].shape == (1, 8) and np.allclose(rec2["gts"][0, 0], g["ent"][0]) and np.allclose(rec2["gts"][0, 1], g["ext"][0]), rec2["gts"]
     assert not np.allclose(rec2["gts"][0, 0], g["ext"][0])                                                     # an entry / exit swap in record_of would put the exit GT in the entry slot
     pa = [(np.array([0.2, 0.0]), up, np.array([0.1, 1.0]), up)]
-    keep_, en_ = JW.kept_ends(lines, bk["kind"], bk["piece_links"], np.zeros(2, bool), pa, QEV.cover_pos())
+    keep_, en_ = JW.kept_ends(lines, bk["kind"], bk["piece_links"], np.zeros(2, bool), pa, JW.cover_pos())
     at_ = H.piece_attrs(lines, bk["kind"], bk["piece_nodes"], bk["piece_links"], pred["nodes"]["e"], pred["links"]["p"], keep_)
     direct = H.build_instances(en_, at_, pa, [(0.7, 0.6)], [(g["ent"][0], g["ext"][0])])
     viarec = instances_of(rec2)

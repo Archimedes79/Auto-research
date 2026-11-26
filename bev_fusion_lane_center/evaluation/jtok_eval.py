@@ -31,7 +31,6 @@ import pickle
 import subprocess
 import sys
 import time
-import zlib
 
 import numpy as np
 import torch
@@ -41,6 +40,7 @@ for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "tra
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtok as JT  # noqa: E402
 import lane_tok_data as TD  # noqa: E402
+from lane_tok_data import keep_nodes, sub_table  # noqa: E402,F401 (the data's own table operations; read here by name)
 import qformat  # noqa: E402
 import qgraph_eval as QE  # noqa: E402
 
@@ -131,42 +131,6 @@ def with_readout(pred, readout):
     """sec0: every node in section 0 (no GT piece id reaches the read-out); gtsec: the prediction as written"""
     assert readout in READOUTS, readout
     return pred if readout == "gtsec" else dict(pred, nodes=dict(pred["nodes"], section=np.zeros(len(pred["nodes"]["pos"]), int)))
-
-
-# ------------------------------------------------------------------------------------------------------------------------------ degraded nodes
-def keep_nodes(token, n, drop, seed):
-    """(n,) bool, the nodes of a frame that stay: each is removed with probability `drop` by a generator seeded with (seed, the frame's token)"""
-    return np.ones(n, bool) if drop <= 0 else np.random.default_rng([seed, zlib.crc32(token.encode())]).random(n) >= drop
-
-
-def sub_table(t, keep):
-    """the table of the kept nodes. Links: a GT link between two kept nodes stays (with its scale and class); a chain of GT links through removed nodes becomes ONE link between its kept ends (conn = a link of the
-    chain is on a connector path, no fitted scale), unless the direct link exists"""
-    keep = np.asarray(keep, bool)
-    new = np.cumsum(keep) - 1
-    outs = [[] for _ in keep]
-    for l, s in enumerate(t["src"]):
-        outs[s].append(l)
-    links = {}                                                              # (a, b) -> (conn, scale)
-    for l, (a, b) in enumerate(zip(t["src"], t["dst"])):
-        if keep[a] and keep[b] and a != b:
-            links[(int(a), int(b))] = (bool(t["conn"][l]), t["scale"][l])
-    for a in np.flatnonzero(keep):
-        stack, seen = [(l, bool(t["conn"][l])) for l in outs[a] if not keep[t["dst"][l]]], set()
-        while stack:
-            l, conn = stack.pop()
-            b = int(t["dst"][l])
-            if keep[b]:
-                if b != a:
-                    links.setdefault((int(a), b), (conn, np.full(2, np.nan)))
-            elif b not in seen:
-                seen.add(b)
-                stack += [(l2, conn or bool(t["conn"][l2])) for l2 in outs[b]]
-    src, dst = (np.array([k[i] for k in links], int) for i in (0, 1))
-    out = {k: t[k][keep] for k in ("pos", "dirv", "cell", "flags", "piece", "sstart")}
-    out.update(src=new[src].astype(np.int32), dst=new[dst].astype(np.int32), long=np.linalg.norm(t["pos"][src] - t["pos"][dst], axis=1) > JT.SHORT,
-               scale=np.array([v[1] for v in links.values()], float).reshape(-1, 2), conn=np.array([v[0] for v in links.values()], bool))
-    return out
 
 
 class Degraded(torch.utils.data.Dataset):

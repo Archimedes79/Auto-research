@@ -14,7 +14,7 @@ New chat: "Read HANDOVER.md and continue". Results: cards, `LEDGER.md`, `DESIGN.
 - Skipped by rule: E391b.read_s0 / s1, E395 step 3; held E317 - E319. E392 r2 (11-23): quality holds, cost bar missed, not adopted.
 - BEV t25 (BEV chat, `../bev_fusion/records/d145_account_2026-11-25.md`): A1 and A2 FAIL against ctl and are CUT (velocity guards), R NOT PASS (static velocity error +0.019 m/s over its limit, detection unchanged), memory A2 - A1 TIE (+0.031); one seed, short trainings. Deviations: A1 training ended 1 min after 17:30; R's evaluation started 03:32 (lead's reading: it belongs to the arm started before 03:00).
 
-**Layout since D152 (2026-11-25):** the model is in `net/` (`prep/` < `model/` < `loss/`; tests `net/tests/`; losses of `model/<m>.py` in `loss/loss_<m>.py`), apart from `training/`; start every script through `tools/env/_py14.sh`. Older cards name the old paths. A TEST pass needs a new VAL rehearsal first (the code pin of `jtest_eval.py` covers file paths).
+**Layout since D152 (2026-11-25):** the model is in `net/` (`prep/` < `model/` < `loss/`; tests `net/tests/`; losses of `model/<m>.py` in `loss/loss_<m>.py`), apart from `training/`; no cross-layer import is left (2026-11-26); start every script through `tools/env/_py14.sh`. Older cards name the old paths. A TEST pass needs a new VAL rehearsal first (the code pin of `jtest_eval.py` covers file paths).
 
 **Earlier closed:** E375 ADOPT-DECODE; S2 / S2b / S3 TIE; E376 NO; E377 TARGETING-ONLY; E378 NO; E379 NO / MISS; E381 TIE; E383 MISS; E384 CUT; E388 NO; E389 TIE / E389b; E390 SOUND (v7). Reports: `results/E2E_Report_2026-11-23/` (sent by mail and chat), the new one as above.
 

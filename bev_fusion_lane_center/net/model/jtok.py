@@ -15,15 +15,14 @@ The allowed gate (a candidate selection by geometry, named in the card): both he
 Loss (`tok_loss`, the exact form is in its docstring): BCE in two groups by chord (short <= 8 m, long > 8 m), each balanced on its own, + 1.0 x the dual softmax of `qendnet` + 0.5 x L1 on the handle scales of the long GT links.
 No hard-negative mining and no averaging over the two directions of a pair (left out, named). Tests: test_jtok.py
 """
-import contextlib
 import os
-import sys
 
 import torch
 import torch.nn as nn
 
 import jmaps as JM
 import qtargets as QT
+from qtargets import check_lattice, lattice  # noqa: E402,F401 (the lattice is a property of the targets; read here by name)
 from jends import _hermite, _sample
 from qendnet import COS_TURN
 from qlinks import SetBlock
@@ -34,39 +33,6 @@ NG, NEV = 13, 2                                                             # ge
 MIN_CHORD, MAX_CHORD = 0.3, 100.0                                           # m: the chord range of the allowed gate
 SHORT = QT.SHORT                                                            # 8 m: a link with a longer chord is a long link (`qtargets.node_table`)
 HALF = QT.HALF
-
-
-# ------------------------------------------------------------------------------------------------------------------------------ lattice
-def _set_lattice(res):
-    n = 2 * QT.HALF / res
-    if abs(n - round(n)) > 1e-9:
-        raise ValueError(f"cell size {res} m does not divide the {2 * QT.HALF} m window")
-    QT.N, QT.RES = int(round(n)), float(res)
-
-
-@contextlib.contextmanager
-def lattice(res):
-    """`qtargets` on a `res` m lattice inside the block (the mechanism of E346): N and RES are module constants that `cell_of` / `centre_of` read at call time, so every holder of the module sees them (qformat,
-    qgraph_eval.LaneRef); a default bound at import does NOT (`grid_targets(n=N)`: pass n). Restored at the end, also after an exception. A data-loader worker enters the block itself (`lane_tok_data.frame_table`)."""
-    old = QT.N, QT.RES
-    _set_lattice(res)
-    try:
-        yield
-    finally:
-        QT.N, QT.RES = old
-
-
-def check_lattice(res):
-    """AssertionError unless `qtargets` is on the `res` m lattice in THIS process and nobody holds a second copy of the module (a copy would keep 2 m silently)"""
-    import numpy as np
-    n = int(round(2 * QT.HALF / res))
-    assert (QT.N, QT.RES) == (n, float(res)), f"qtargets is on N = {QT.N}, RES = {QT.RES}, not on the {res} m lattice"
-    mods = [(name, m) for name, m in list(sys.modules.items()) if m is not None]
-    stale = [name for name, m in mods if getattr(getattr(m, "QT", None), "__name__", "").startswith("qtargets") and m.QT is not QT]
-    copies = [name for name, m in mods if os.path.basename(getattr(m, "__file__", "") or "") == "qtargets.py" and m is not QT]
-    assert not stale and not copies, f"a second copy of qtargets: held by {stale}, modules {copies}"
-    xy = np.array([[-49.9, -49.9], [0.3, -0.7], [49.9, 49.9]])
-    assert np.array_equal(QT.cell_of(xy), np.floor((xy + QT.HALF) / res).astype(int)), "cell_of does not use the lattice"
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ pairs

@@ -32,6 +32,7 @@ import torch  # noqa: E402
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 for sub_ in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", "training/train", "evaluation", ".."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import champion_pnone  # noqa: E402
 import lane_mapassoc_data as MA  # noqa: E402
 import lane_sdgraph_data as SG  # noqa: E402
 import mapassoc_probe as MP  # noqa: E402
@@ -81,7 +82,7 @@ def pnone_table(split, seed):
         return pn
     import lane_ptok_data as LP
     ds = LP.PTokData(split, seed, "e292_a", None, 0.0)
-    return MA.e373_pnone(split, seed, list(range(len(ds))), ds)
+    return MA.e373_pnone(split, seed, list(range(len(ds))), ds, head=champion_pnone.head_pnone)
 
 
 def pnone(seed, log=print):
@@ -92,7 +93,7 @@ def pnone(seed, log=print):
     ds = LP.PTokData("train", seed, "e292_a", None, 0.0)
     lab = MA.load("train", seed)
     assert list(ds.tokens) == list(lab["tokens"])
-    pn = MA.e373_pnone("train", seed, list(range(len(ds))), ds, log=log)
+    pn = MA.e373_pnone("train", seed, list(range(len(ds))), ds, log=log, head=champion_pnone.head_pnone)
     assert len(pn) == len(ds) and all(np.isfinite(v).all() for v in pn.values()), "a non-finite p_none"
     bad = tot = 0
     for i, rec in enumerate(lab["frames"]):

@@ -95,29 +95,25 @@ def holdout_scenes(scenes):
     return set(u[np.arange(len(u)) % 10 == 0].tolist())
 
 
-def e373_pnone(split, seed, idx, ds, log=print):
-    """the E373 stage-1 head's p_none of every token of the frames idx: VAL from the stored dump, TRAIN by the head on the CPU (`jtoken_train.load_model`, the cached tokens of seed S) -> {frame index: (K,) float32}"""
+def e373_pnone(split, seed, idx, ds, log=print, head=None):
+    """the E373 stage-1 head's p_none of every token of the frames idx: VAL from the stored dump, TRAIN by the head on the CPU (head = `champion_pnone.head_pnone`, passed in: preprocessing does not import the model or the trainer; the cached tokens of seed S) -> {frame index: (K,) float32}"""
     run = f"e373_cb_s{seed}"
     if split == "val":
         d = pickle.load(open(os.path.join(ROOT, "runs", run, "token_val.pkl"), "rb"))
         assert [f["token"] for f in d["frames"]] == [ds.tokens[i] for i in range(len(ds))], "the E373 VAL dump is not in the cache order"
         return {i: np.asarray(d["frames"][i]["pnone"], np.float32) for i in idx}
-    import torch
-    import jtoken as JK
-    import jtoken_train as JKT
+    assert head is not None, "TRAIN needs the stored head: pass head=champion_pnone.head_pnone (training/train; the command line of this module does)"
     import lane_ptok_data as LP
-    torch.set_num_threads(2)
-    m, _ = JKT.load_model(run, "cpu")
+    pnone = head(seed)
     out = {}
-    with torch.no_grad():
-        for s in range(0, len(idx), 8):
-            ii = idx[s: s + 8]
-            b = LP.collate([ds[i] for i in ii])
-            pt = JK.probs(m(b))["pt"][..., 0].numpy()
-            for r, i in enumerate(ii):
-                out[i] = pt[r].astype(np.float32)
-            if s % 400 == 0:
-                log(f"  p_none {s}/{len(idx)}", flush=True)
+    for s in range(0, len(idx), 8):
+        ii = idx[s: s + 8]
+        b = LP.collate([ds[i] for i in ii])
+        pt = pnone(b)
+        for r, i in enumerate(ii):
+            out[i] = pt[r].astype(np.float32)
+        if s % 400 == 0:
+            log(f"  p_none {s}/{len(idx)}", flush=True)
     return out
 
 
@@ -125,7 +121,7 @@ def cache_path(split, seed, cache=CACHE):
     return os.path.join(cache, f"{split}_s{seed}.pkl")
 
 
-def build(split, seed, cache=CACHE, log=print):
+def build(split, seed, cache=CACHE, log=print, head=None):
     """the label cache of a split and cache seed (module docstring) -> runs/e391_assoc/<split>_s<S>.pkl (never overwritten)"""
     import lane_gt_data as LD
     import lane_ptok_data as LP
@@ -142,7 +138,7 @@ def build(split, seed, cache=CACHE, log=print):
     assert list(ds.tokens) == list(td.tokens) == list(rc.tokens) == list(sg["tokens"]), "the token cache, the E357 tables, the route cache and the E390 graphs are not the same frames in order"
     hold = holdout_scenes(sg["scene"]) if split == "train" else set()
     pidx = list(range(len(ds))) if split == "val" else [i for i, sc in enumerate(sg["scene"]) if sc in hold]
-    pnone = e373_pnone(split, seed, pidx, ds, log)
+    pnone = e373_pnone(split, seed, pidx, ds, log, head)
     frames = []
     for i in range(len(ds)):
         it = ds[i]
@@ -207,7 +203,7 @@ def selftest():
     print("lane_mapassoc_data selftest ok")
 
 
-def main(argv=None):
+def main(argv=None, head=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd", choices=("build", "stats", "selftest"))
     ap.add_argument("--split", choices=("val", "train"))
@@ -216,9 +212,10 @@ def main(argv=None):
     if a.cmd == "selftest":
         return selftest()
     if a.cmd == "build":
-        return build(a.split, a.seed)
+        return build(a.split, a.seed, head=head)
     return stats(a.split, a.seed)
 
 
 if __name__ == "__main__":
-    main()
+    import champion_pnone  # the command line runs the stored champion head (training/train)
+    main(head=champion_pnone.head_pnone)

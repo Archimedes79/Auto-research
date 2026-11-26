@@ -31,25 +31,6 @@ import jwire as JW  # noqa: E402
 import qends as QEND  # noqa: E402
 
 KEYS = ("Q", "F1@1.0", "lanes_found", "topo_F1", "topo_P", "topo_R", "junction_F1", "junction_P", "junction_R", "dup_frac", "vert100_dp")
-WIRE_POS, WIRE_ANG = 4.0, 45.0
-COVER_POS = 4.0
-
-
-def cover_pos(wire_pos=None):
-    """the radius within which a connector's ends cover (drop) a long link of B: COVER_POS, and under a tight wiring radius the smaller of the two (N1, critic 2026-11-13); the one place `add_connectors` and the
-    caller that builds the kept list for a `wire_choice` (E325) read it"""
-    return COVER_POS if wire_pos is None else min(COVER_POS, float(wire_pos))
-
-
-def _tan(P, at_end):
-    q = P[-3:] if at_end else P[:3]
-    d = q[-1] - q[0]
-    n = np.linalg.norm(d)
-    return d / n if n > 1e-9 else np.array([0.0, 1.0])
-
-
-def _ang(u, v):
-    return float(np.degrees(np.arccos(np.clip(u @ v, -1.0, 1.0))))
 
 
 def make_pairs(e, ia, ib, k, attach=False, chord=False, fit=None):
@@ -71,8 +52,8 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
     # E325: wire_choice = None (the nearest-piece rule, bit for bit) or ONE (entry piece index or None, exit piece index or None) per pair, the indices into the KEPT pieces (`jwire.kept_ends`: after the long-link
     # cover drop below); needs snap. A head or the zero-parameter twin (`jwire.twin_choice`) fills it; the rest of the snapped read-out (nogeom, guard, dedup, both) is unchanged.
     assert wire_choice is None or (snap and not snap_all and not snap_guard and len(wire_choice) == len(pairs)), "wire_choice needs snap and one entry per pair, and neither snap_all (it wires every piece in reach) nor snap_guard (it drops the choice)"
-    wp = WIRE_POS if wire_pos is None else float(wire_pos)
-    cp_ = cover_pos(wire_pos)                                                   # N1 (critic 2026-11-13): a long link is dropped only when a connector's ends are within the WIRING radius: under a tight radius a connector that is not wired to the pieces must not delete the long link of B either                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
+    wp = JW.WIRE_POS if wire_pos is None else float(wire_pos)          # the reach lives in net/model/jwire.py (one binding: the rule here, the head's gate there)
+    cp_ = JW.cover_pos(wire_pos)                                                   # N1 (critic 2026-11-13): a long link is dropped only when a connector's ends are within the WIRING radius: under a tight radius a connector that is not wired to the pieces must not delete the long link of B either                                                     # E320: the radius (m) of the proximity wiring, default today's 4 m; the tight read-outs of the attached ends use 1.5 / 1.0
     keep, ends = JW.kept_ends(lines, kinds, links, long_mask, pairs, cp_)
     new = {old: j for j, old in enumerate(keep)}
     L2 = [np.asarray(lines[i], float) for i in keep]
@@ -95,10 +76,10 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
                 d_in = d_out = np.inf
                 for i, (le, te, fs, ts) in enumerate(ends):
                     d = np.linalg.norm(le - pa)
-                    if d <= wp and _ang(te, ta) <= WIRE_ANG and d < d_in:
+                    if d <= wp and JW._ang(te, ta) <= JW.WIRE_ANG and d < d_in:
                         w_in, d_in = i, d
                     d = np.linalg.norm(fs - pb)
-                    if d <= wp and _ang(ts, tb) <= WIRE_ANG and d < d_out:
+                    if d <= wp and JW._ang(ts, tb) <= JW.WIRE_ANG and d < d_out:
                         w_out, d_out = i, d
             if snap_both and (w_in is None or w_out is None):
                 continue
@@ -132,10 +113,10 @@ def add_connectors(lines, edges, nodes, kinds, links, long_mask, pairs, snap=Fal
             continue
         w_in = w_out = False
         for i, (le, te, fs, ts) in enumerate(ends):
-            if np.linalg.norm(le - pa) <= wp and _ang(te, ta) <= WIRE_ANG:
+            if np.linalg.norm(le - pa) <= wp and JW._ang(te, ta) <= JW.WIRE_ANG:
                 E2.append((i, m))
                 w_in = True
-            if np.linalg.norm(fs - pb) <= wp and _ang(ts, tb) <= WIRE_ANG:
+            if np.linalg.norm(fs - pb) <= wp and JW._ang(ts, tb) <= JW.WIRE_ANG:
                 E2.append((m, i))
                 w_out = True
         wired += int(w_in and w_out)
@@ -276,11 +257,11 @@ def cmd_score(a):
             gap["kp_out"] += near(fs, e["kp_pos"][k + j])
         wc = None
         if wire == "twin":                                                                                                      # E325 arm t: the zero-parameter twin chooses the pieces; must reproduce the card of record bit for bit
-            wc = JW.twin_choice(JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, cover_pos())[1], pairs, WIRE_POS, WIRE_ANG)
+            wc = JW.twin_choice(JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, JW.cover_pos())[1], pairs, JW.WIRE_POS, JW.WIRE_ANG)
         elif wire == "head":                                                                                                    # E325 arm w: the learned head chooses the pieces (its features never read the GT)
-            keep_, ends_ = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, cover_pos())
+            keep_, ends_ = JW.kept_ends(graph.lines, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, JW.cover_pos())
             attrs_ = JH.piece_attrs(graph.lines, bk["kind"], bk["piece_nodes"], bk["piece_links"], np.asarray(pred["nodes"]["e"], float).reshape(-1), np.asarray(pred["links"]["p"], float).reshape(-1), keep_)
-            wc = JH.wire_choice_head(head, ends_, attrs_, pairs, [(float(e["kp_p"][i]), float(e["kp_p"][k + j])) for i, j in zip(ia, ib)], WIRE_POS)
+            wc = JH.wire_choice_head(head, ends_, attrs_, pairs, [(float(e["kp_p"][i]), float(e["kp_p"][k + j])) for i, j in zip(ia, ib)], JW.WIRE_POS)
         raw, n_c, n_w = add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], np.asarray(pred["links"]["long"], bool), pairs, wire_choice=wc, snap=bool(getattr(a, "snap", False)), snap_all=bool(getattr(a, "snap_all", False)), snap_guard=bool(getattr(a, "snap_guard", False)), snap_dedup=bool(getattr(a, "snap_dedup", False)), snap_nogeom=bool(getattr(a, "snap_nogeom", False)), snap_both=bool(getattr(a, "snap_both", False)), wire_pos=attach_r)
         n_curves += n_c
         n_wired += n_w
