@@ -96,7 +96,7 @@ def camera(ax, token):
     """the front camera of the frame with the GT projected; a text in place of the image when the tile cannot be made (no dataset, no GT store)"""
     ax.axis("off")
     try:
-        for sub in ("tools/viz", "evaluation", "net/prep", "net/model", "net/loss", "training", "training/data", "evaluation/sparse_lanes", ".."):
+        for sub in ("tools/viz", "evaluation", "net/prep", "net/model", "net/loss", "training", "training/data", "evaluation/sparse_lanes", "../.."):
             p = os.path.normpath(os.path.join(ROOT, sub))
             if p not in sys.path:
                 sys.path.insert(0, p)

@@ -1,7 +1,0 @@
-{"schema": 2,
- "overlays": [
-  {}
- ],
- "runs": {
-  "E241.ev2": {"base": "2c33523e2ca04d749d2daa94752416c176c6edf7", "how": "by time (approximate)", "overlay": 0, "snapshot": "09dfc80466"}
- }}

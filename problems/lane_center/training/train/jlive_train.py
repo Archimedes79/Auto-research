@@ -46,6 +46,7 @@ from torch.optim.optimizer import register_optimizer_step_pre_hook
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import jtoken_train as JKT  # noqa: E402
 import lane_live_tok as LLT  # noqa: E402
 import qgraph as QG  # noqa: E402
@@ -102,7 +103,7 @@ def parse_args(argv=None):
 
 
 def _abs(p):
-    return p if os.path.isabs(p) else os.path.join(ROOT, p)
+    return BP.resolve(p)
 
 
 def resolve(a, runs):

@@ -50,8 +50,9 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", ".."):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "../.."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import jtok as JT  # noqa: E402
 import jtok_eval as JV  # noqa: E402
 import jtoken as JK  # noqa: E402
@@ -64,7 +65,7 @@ from pmap import pmap  # noqa: E402
 
 ST = QE.TM.ST                                                               # the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
 RUNS = JV.RUNS
-SCRATCH = os.path.join(ROOT, "temp", "e365")
+SCRATCH = os.path.join(BP.SCRATCH, "e365")
 PLANB = os.path.join(RUNS, "e365_planb")                                    # plain B's scored records of `check-layer1` (planb_s<S>.pkl), read by `score`
 DECODES = ("rec", "argmax")
 LATTICE = 2.0
@@ -85,7 +86,7 @@ MACS_NOTE = "matmul, linear and einsum only; softmax, norms, GELU, the pair-geom
 
 
 def _abs(p):
-    return p if os.path.isabs(p) else os.path.join(ROOT, p)
+    return BP.resolve(p)
 
 
 def _jsonable(x):
@@ -1206,7 +1207,7 @@ def graphs(a, runs=RUNS):
         sys.path.append(os.path.join(ROOT, "tools", "viz"))
         import qgraph_view as QV
         try:
-            scn = {s["name"]: s for s in json.load(open(os.path.join(os.path.expanduser("~/data/nuscenes_full/v1.0-trainval"), "scene.json")))}
+            scn = {s["name"]: s for s in json.load(open(os.path.join(os.path.join(BP.NUSC, "v1.0-trainval"), "scene.json")))}
             scenes = {sid: dict(name=nm, description=scn[nm]["description"], n=len(tk), tokens=tk) for sid, (nm, tk) in QV.val_scenes().items()}
         except FileNotFoundError:
             scenes = {}

@@ -20,7 +20,7 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", ".."):
+for sub in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", "../.."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import map_sim as MS  # noqa: E402
 import frames as FR  # noqa: E402

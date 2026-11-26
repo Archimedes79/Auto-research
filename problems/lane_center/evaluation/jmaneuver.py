@@ -23,8 +23,9 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "tools/viz", ".."):
+for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "tools/viz", "../.."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 BOX, TOL, ANG, NEED, JUNC = 50.0, 1.5, 40.0, 0.9, 8.0
 COS = np.cos(np.radians(ANG))
@@ -157,10 +158,10 @@ def score(a):
     unknown = [v for v in names if v not in ("plain", "oracle", "oracle+fit") and v not in thr]
     assert not unknown, f"unknown variants {unknown} (plain, p<t> such as p0.5, oracle, oracle+fit)"
     frames = QGE.val_frames()
-    dump = pickle.load(open(os.path.join(ROOT, "runs", "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
-    ends = {f["row"]: f for f in pickle.load(open(os.path.join(ROOT, "runs", a.run, "ends_val.pkl"), "rb"))}
+    dump = pickle.load(open(os.path.join(BP.RUNS, "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
+    ends = {f["row"]: f for f in pickle.load(open(os.path.join(BP.RUNS, a.run, "ends_val.pkl"), "rb"))}
     assert [d["row"] for d in dump] == [f.row for f in frames], "the full dump of B is not in the order of the VAL frames"
-    cfg = json.load(open(os.path.join(ROOT, "runs", a.run, "config.json")))
+    cfg = json.load(open(os.path.join(BP.RUNS, a.run, "config.json")))
     assert cfg.get("seed", a.seed) == a.seed, f"--seed {a.seed} does not match the run (seed {cfg.get('seed')}): its keypoints would sit on another seed's graph"
     spec = QR.parse("close:1.5@0.5")
     per = {v: [] for v in names}
@@ -225,7 +226,7 @@ def score(a):
     out = dict(run=a.run, seed=a.seed, tol=TOL, angle=ANG, need=NEED, variants=res)
     if a.rows:
         out["rows"] = rows
-    json.dump(out, open(os.path.join(ROOT, "runs", a.run, "maneuver_val.json"), "w"), indent=1)
+    json.dump(out, open(os.path.join(BP.RUNS, a.run, "maneuver_val.json"), "w"), indent=1)
     for v in names:
         r = res[v]
         print(f"{v:12s} maneuvers realised {r['realised']}/{r['maneuvers']} = {r['recall']:.3f}; per-frame mean {r['frame_recall_mean']:.3f}; frames with none {r['frames_none']}, with all {r['frames_all']} of {r['frames']}; junction precision {r['junction_precision']:.3f}")

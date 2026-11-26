@@ -24,11 +24,13 @@ import re
 import shutil
 import time
 
+from . import where
+
 _KEEP = ("/CAM_FRONT/", "/RADAR_")
 _RECORD = re.compile(r"\{[^{}]*\}")                     # a record of these tables is a flat dict: no braces inside
 BIG_TABLES = ("sample_data", "ego_pose", "sample_annotation")
 CACHE_FORMAT = 1
-CACHE_BASE = osp.join(osp.dirname(osp.dirname(osp.abspath(__file__))), "data", "autogt", "cache")
+CACHE_BASE = osp.join(where.root(), "cache")
 
 
 def _records(path, block=1 << 26):

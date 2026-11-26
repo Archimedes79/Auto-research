@@ -14,10 +14,11 @@ import os
 import pickle
 
 import numpy as np
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-D = f"{os.path.expanduser('~')}/exp_gcar_b123"
-OUT = f"{ROOT}/runs"
+D = BP.B123
+OUT = BP.RUNS
 SPLITS = ("train", "val_clean", "test_clean")
 _C = {}
 

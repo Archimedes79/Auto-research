@@ -41,9 +41,10 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 VERSION = "v1"
-CACHE = os.path.join(ROOT, "runs", "e365_cache")
+CACHE = os.path.join(BP.RUNS, "e365_cache")
 TYPES = ("none", "lane", "fork", "merge", "entry", "exit", "boundary")
 FLAGS = ("stop", "exit", "split", "merge", "start", "end", "win_in", "win_out")                  # = qtargets.FLAGS (asserted in `build`)
 KST = (256, 320, 384, 512)                                                                       # the token budgets of the coverage statistics
@@ -253,7 +254,7 @@ FIELDS = dict(cell="int16", valid="bool", e="float32", e_raw="float32", e_p="flo
 
 def _abs(p):
     """a path relative to the project root (the wrappers run a script from its own folder)"""
-    return p if os.path.isabs(p) else os.path.join(ROOT, p)
+    return BP.resolve(p)
 
 
 def _path(d, name):

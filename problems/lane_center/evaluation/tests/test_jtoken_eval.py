@@ -34,7 +34,7 @@ import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-for sub_ in ("..", "../../training", "../../net/prep", "../../net/model", "../../net/loss", "../../training/data", "../../training/data/prep", "../../training/train"):
+for sub_ in ("../..", "../../training", "../../net/prep", "../../net/model", "../../net/loss", "../../training/data", "../../training/data/prep", "../../training/train"):
     sys.path.insert(0, os.path.normpath(os.path.join(HERE, sub_)))
 import jtok as JT  # noqa: E402
 import jtoken as JK  # noqa: E402

@@ -1,8 +1,0 @@
-{
- "steps": 20,
- "warmup": 5,
- "eval_every": 10,
- "save_every": 10,
- "keep": 1,
- "log_every": 5
-}

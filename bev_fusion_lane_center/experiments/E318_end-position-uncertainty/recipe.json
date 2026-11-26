@@ -1,8 +1,0 @@
-{"schema": 2,
- "overlays": [
-  {"bev_fusion_lane_center/temp/_session_scratch_s292/report/build.py": {"blob": "bf00108ac902478ae7f341ed6023edf6abe7193f", "file": "code/bf00108ac902_build.py"}, "bev_fusion_lane_center/temp/loop23/reach.py": {"blob": "86ff80e638cb9643481658d8cf9f9a33d866ef0e", "file": "code/86ff80e638cb_reach.py"}}
- ],
- "runs": {
-  "E318.u_s0": {"base": "4ee06e530a2e0ae2da25375980bedd56c783d8be", "how": "snapshot parent", "overlay": 0, "snapshot": "34f4697137d5bc522c257cf95fa4212673d19539"},
-  "E318.u_s1": {"base": "7e7e0f6d6224b3db4660b7fcc6395e88a628581d", "how": "snapshot parent", "overlay": 0, "snapshot": "9facdf46120ed53c2f6032698df6d25048e12ca2"}
- }}

@@ -133,6 +133,17 @@ def expand(value: Any, problem: str) -> Any:
     return value
 
 
+def module_path(code_root: str, problem: str) -> str:
+    """PYTHONPATH of a process that runs a problem's code from `code_root` (the checkout or a snapshot): the problem folder, the folders its
+    problem.json lists under "pythonpath" (flat imports of older code), autoresearch/ and the root (GtGenerator)"""
+    pdir = os.path.join(code_root, "problems", problem)
+    try:
+        extra = read_json(os.path.join(pdir, "problem.json")).get("pythonpath", [])
+    except (OSError, ValueError):
+        extra = []
+    return os.pathsep.join([pdir] + [os.path.join(pdir, d) for d in extra] + [os.path.join(code_root, "autoresearch"), code_root])
+
+
 # ------------------------------------------------------------------------------------------------ files
 def read_json(path: str) -> Any:
     with open(path, encoding="utf-8") as f:

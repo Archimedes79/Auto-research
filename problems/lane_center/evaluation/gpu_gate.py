@@ -18,9 +18,10 @@ import os
 import subprocess
 import sys
 import time
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 DEFAULT_MB = 9000
-STATUS = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "temp", "gpu_gate.status"))
+STATUS = os.path.normpath(os.path.join(BP.SCRATCH, "gpu_gate.status"))
 
 
 def used_mb():

@@ -47,11 +47,15 @@ def code_hash(project: str) -> str:
 
 
 def holdout_sets(project: str) -> List[str]:
-    try:
-        with open(os.path.join(project, "problem.json"), encoding="utf-8") as f:
-            return list(json.load(f).get("holdout", []))
-    except (OSError, ValueError):
+    """the holdout splits of a problem; a problem.json that exists but cannot be read closes every split named test"""
+    path = os.path.join(project, "problem.json")
+    if not os.path.exists(path):
         return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            return list(json.load(f).get("holdout", []))
+    except (OSError, ValueError, AttributeError):
+        return ["test"]
 
 
 def holdout_open() -> bool:

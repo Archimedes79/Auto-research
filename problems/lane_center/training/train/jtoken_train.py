@@ -49,6 +49,7 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import jtoken as JK  # noqa: E402
 import loss_jtoken as LJK  # noqa: E402
 import trainer as T  # noqa: E402
@@ -139,7 +140,7 @@ def check_options(args):
 
 
 def _abs(p):
-    return p if os.path.isabs(p) else os.path.join(ROOT, p)
+    return BP.resolve(p)
 
 
 def distill_paths(spec):

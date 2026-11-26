@@ -16,7 +16,7 @@ PROBLEM_KEYS = {
     "name": (str, True), "tag_prefix": (str, True), "python": (str, True), "config": (str, True),
     "steps": (dict, True), "default_steps": (list, True), "score": (dict, True), "evaluate": (dict, True),
     "guards": (list, False), "control_floor": (dict, False), "holdout": (list, False), "protected": (list, False),
-    "data": (str, False), "first_experiment": (int, False), "test_steps": (list, False), "note": (str, False),
+    "data": (str, False), "first_experiment": (int, False), "test_steps": (list, False), "pythonpath": (list, False), "note": (str, False),
 }
 # test_steps: the steps a TEST evaluation of a finished run runs (default ["evaluate"]; a problem that predicts in a step of its own names it too)
 CONFIG_KEYS = ("name", "seed", "out_root")                 # every base config has them: the run's name, its seed and where it writes

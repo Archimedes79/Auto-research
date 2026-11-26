@@ -36,7 +36,7 @@ from Evaluation.contracts import FrameRef, Metric, Prediction, Sample, Source, S
 from lane_task import Grid, LaneConfig, LaneGraph, LaneTask, rasterize  # noqa: E402  (the lane Task, evaluation/lane_task/)
 
 HOME = os.path.expanduser("~")
-B123 = f"{HOME}/exp_gcar_b123"
+B123 = BP.B123
 GRID = Grid(u0=-50.0, v0=-50.0, res=0.5, nu=200, nv=200)
 BOX = (-48.0, 48.0, -48.0, 48.0)
 

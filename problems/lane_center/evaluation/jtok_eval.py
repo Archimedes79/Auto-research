@@ -36,17 +36,18 @@ import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", ".."):
+for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "../.."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import jtok as JT  # noqa: E402
 import lane_tok_data as TD  # noqa: E402
 from lane_tok_data import keep_nodes, sub_table  # noqa: E402,F401 (the data's own table operations; read here by name)
 import qformat  # noqa: E402
 import qgraph_eval as QE  # noqa: E402
 
-RUNS = os.path.join(ROOT, "runs")
+RUNS = BP.RUNS
 CARDS = os.path.join(RUNS, "eval")
-PARTIAL = os.path.join(ROOT, "temp", "e357", "out")                         # a card of a subset of the frames (--max) is no evidence: never in runs/eval/
+PARTIAL = os.path.join(BP.SCRATCH, "e357", "out")                         # a card of a subset of the frames (--max) is no evidence: never in runs/eval/
 ARMS = ("lo", "lo_near", "lo_all", "hi")
 READOUTS = ("sec0", "gtsec")
 REF = {2.0: "e346_l2", 2.5: "e346_l25"}                                     # the stored card of the same code on the lattice (E346 / E356): arm hi with the gtsec read-out must reproduce it

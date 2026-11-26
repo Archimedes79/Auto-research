@@ -1,7 +1,0 @@
-{"schema": 2,
- "overlays": [
-  {}
- ],
- "runs": {
-  "E238.a": {"base": "d0c05d2ae0d5f316bbd5dd155375b70b54c1d9ad", "how": "by time (approximate)", "overlay": 0, "snapshot": "c8a676e500"}
- }}

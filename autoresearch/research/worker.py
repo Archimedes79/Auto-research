@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import signal
 import socket
@@ -19,7 +20,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from research import spec
 from research.launch import SNAPSHOT_PATHS
-from research.paths import ResearchError, expand, interpreter, machine, read_json, record_dir, repo, run_dir, runs_root, state_dir, write_json
+from research.paths import ResearchError, expand, interpreter, machine, module_path, read_json, record_dir, repo, run_dir, runs_root, state_dir, write_json
 from research import gitio
 
 EXIT_STOPPED = 75
@@ -41,9 +42,13 @@ def flocked(path: str, wait: bool = True) -> Iterator[bool]:
         os.close(fd)
 
 
+class Stopped(Exception):
+    """a stop request came while the run waited"""
+
+
 @contextmanager
-def gpu_slot(n_slots: int, beat) -> Iterator[int]:
-    """one of the machine's GPU slots, waited for (the heartbeat goes on while waiting)"""
+def gpu_slot(n_slots: int, beat, stopped=lambda: False) -> Iterator[int]:
+    """one of the machine's GPU slots, waited for (the heartbeat goes on while waiting; a stop request ends the wait: Stopped)"""
     if n_slots < 1:
         raise ResearchError("this machine has no GPU slot (machine.json gpu_slots) and the step needs one")
     while True:
@@ -61,6 +66,8 @@ def gpu_slot(n_slots: int, beat) -> Iterator[int]:
             finally:
                 os.close(fd)
             return
+        if stopped():
+            raise Stopped()
         beat("waiting for a GPU slot")
         time.sleep(5)
 
@@ -104,8 +111,13 @@ class Kill:
             for i, r in enumerate(self.rules):
                 if i in self.done or row.get("step", -1) < r["after_step"] or r["metric"] not in row:
                     continue
+                value = row[r["metric"]]
+                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                    continue                                     # not a number in this row (a nested validation block): the next row may carry it
                 self.done.add(i)
-                v = float(row[r["metric"]])
+                v = float(value)
+                if math.isnan(v):
+                    return f"kill rule: {r['metric']} is not a number at step {row['step']}"
                 if ("above" in r and v > r["above"]) or ("below" in r and v < r["below"]):
                     side = f"above {r['above']}" if "above" in r else f"below {r['below']}"
                     return f"kill rule: {r['metric']} = {v:.4g} at step {row['step']} is {side}"
@@ -149,7 +161,7 @@ class Worker:
         e = dict(os.environ)
         e.update(RESEARCH_REPO=repo(), RESEARCH_PROBLEM=self.problem, RESEARCH_RUN=self.rid, RESEARCH_RUN_DIR=self.out, RESEARCH_RECORD=self.rec,
                  RESEARCH_DATA=self.m["data"], RESEARCH_RUNS=runs_root(self.problem), RESEARCH_COMMIT=self.run["commit"], RESEARCH_CODE=code, RESEARCH_SPLIT=self.split,
-                 PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", self.problem), os.path.join(code, "autoresearch"), code]),
+                 PYTHONPATH=module_path(code, self.problem),
                  PYTHONUNBUFFERED="1")
         if self.test:
             e["RESEARCH_HOLDOUT_RUN"] = self.rid
@@ -159,31 +171,45 @@ class Worker:
 
     def execute(self, name: str, cmd: List[str], code: str, kill: Optional[Kill]) -> Dict[str, Any]:
         log_path = os.path.join(self.out, f"{name}.log")
+        pid_path = os.path.join(self.out, "step.pid")
+        control = os.path.join(self.out, "CONTROL")
         t0 = time.time()
         with open(log_path, "ab") as log:
             log.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {' '.join(cmd)}\n".encode())
             log.flush()
             proc = subprocess.Popen(cmd, cwd=os.path.join(code, "problems", self.problem), env=self.env(code), stdout=log, stderr=subprocess.STDOUT,
                                     stdin=subprocess.DEVNULL, start_new_session=True)
+            with open(pid_path, "w") as f:
+                f.write(str(proc.pid))
             reason, asked = "", 0.0
-            while proc.poll() is None:
-                self.beat(name)
-                if not reason:
-                    reason = kill.fired() if kill else ""
-                    if not reason and self.stop_requested():
-                        reason = "stop requested"
-                if reason and not asked:
-                    write_json(os.path.join(self.out, "CONTROL"), {"cmd": "stop", "by": "research worker", "why": reason})
-                    asked = time.time()
-                if asked and time.time() - asked > 600:          # a step that ignores the stop protocol is ended
+            try:
+                while proc.poll() is None:
+                    self.beat(name)
+                    if not reason:
+                        reason = kill.fired() if kill else ""
+                        if not reason and self.stop_requested():
+                            reason = "stop requested"
+                    if reason and not os.path.exists(control):  # written again while it is missing: a trainer that starts moves an early one aside
+                        write_json(control, {"cmd": "stop", "by": "research worker", "reason": reason})
+                        asked = asked or time.time()
+                    if asked and time.time() - asked > 600:      # a step that ignores the stop protocol is ended
+                        os.killpg(proc.pid, signal.SIGTERM)
+                        time.sleep(30)
+                        if proc.poll() is None:
+                            os.killpg(proc.pid, signal.SIGKILL)
+                    for _ in range(BEAT_S):
+                        if proc.poll() is not None:
+                            break
+                        time.sleep(1)
+            finally:
+                if proc.poll() is None:                          # the worker itself fails: its step must not run on alone
                     os.killpg(proc.pid, signal.SIGTERM)
-                    time.sleep(30)
-                    if proc.poll() is None:
+                    try:
+                        proc.wait(60)
+                    except subprocess.TimeoutExpired:
                         os.killpg(proc.pid, signal.SIGKILL)
-                for _ in range(BEAT_S):
-                    if proc.poll() is not None:
-                        break
-                    time.sleep(1)
+                if os.path.exists(pid_path):
+                    os.remove(pid_path)
         code_ = proc.returncode
         status = "ok" if code_ == 0 and not reason else ("killed" if reason.startswith("kill rule") else "stopped" if reason or code_ == EXIT_STOPPED else "failed")
         return {"status": status, "exit": code_, "seconds": round(time.time() - t0, 1), "log": os.path.basename(log_path), **({"why": reason} if reason else {})}
@@ -202,6 +228,8 @@ class Worker:
                     break
                 if st in ("failed", "killed", "missing"):
                     return f"the needed run {other} is {st}"
+                if self.stop_requested():
+                    return "stopped while it waited for " + other
                 self.beat(f"waiting for {other}")
                 time.sleep(BEAT_S)
         return ""
@@ -241,11 +269,16 @@ class Worker:
         steps = list(p.get("test_steps", ["evaluate"])) if self.test else list(self.run["steps"])
         why = "" if self.test else self.wait_needs(cfg, frozen["arms"][self.run["arm"]].get("needs", {}))
         if why:
-            self.save(status="failed", error=why, ended=time.strftime("%Y-%m-%d %H:%M:%S"))
-            return 1
+            stopped = why.startswith("stopped")
+            self.save(status="stopped" if stopped else "failed", error=why, ended=time.strftime("%Y-%m-%d %H:%M:%S"))
+            return EXIT_STOPPED if stopped else 1
         for name in steps:
             if not self.test and self.run["steps"][name].get("status") == "ok":
                 continue
+            if self.stop_requested():
+                if not self.test:
+                    self.save(status="stopped", ended=time.strftime("%Y-%m-%d %H:%M:%S"))
+                return EXIT_STOPPED
             step = p["steps"][name]
             cmd = self.command(step, code, cfg_path, p)
             kill = Kill(frozen.get("kill", []), os.path.join(self.out, "log.jsonl")) if step["run"] != "evaluate" and not self.test else None
@@ -253,8 +286,11 @@ class Worker:
                 self.run["steps"][name] = {"status": "running", "since": time.strftime("%Y-%m-%d %H:%M:%S")}
                 self.save()
             if step.get("gpus", 0) > 0:
-                with gpu_slot(self.m["gpu_slots"], self.beat) as slot:
-                    res = {**self.execute(name, cmd, code, kill), "gpu_slot": slot}
+                try:
+                    with gpu_slot(self.m["gpu_slots"], self.beat, self.stop_requested) as slot:
+                        res = {**self.execute(name, cmd, code, kill), "gpu_slot": slot}
+                except Stopped:
+                    res = {"status": "stopped", "why": "stop requested while it waited for a GPU slot"}
             else:
                 res = self.execute(name, cmd, code, kill)
             if self.test:

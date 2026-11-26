@@ -1,8 +1,0 @@
-{"schema": 2,
- "overlays": [
-  {}
- ],
- "runs": {
-  "E267.s": {"base": "d204ccbe1272342ee84838955d514f74185b01e3", "how": "snapshot parent", "overlay": 0, "snapshot": "eb7aee0c3cf41f7bc39de19f8a4e263391c8f217"},
-  "E267.sr": {"base": "d204ccbe1272342ee84838955d514f74185b01e3", "how": "snapshot parent", "overlay": 0, "snapshot": "00089f785109c77761ad9fbf91f2324206d8b19f"}
- }}

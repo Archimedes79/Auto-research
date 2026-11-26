@@ -1,9 +1,0 @@
-{
- "id": "t25.R_s0",
- "who": "queue hold",
- "when": "2026-11-25T01:01:15",
- "why": "D57 (the recorded text quoted in --words), applied by the BEV chat on the lane chat's request of 2026-11-25 01:00: E393.dump_p_s1 must take the GPU before R; R is resumed when the lane chat reports the dump done",
- "words": "The lane-centre (Spurmitte) project has first call on the GPU windows, the shared queue and chat time; every other project, bev_fusion included, comes second.",
- "cleared": "2026-11-25T01:18:24",
- "cleared_words": "D145, recorded paraphrase of the owner's order of 2026-11-24: run all experiments in all research chats on their own (no questions back to the owner)"
-}

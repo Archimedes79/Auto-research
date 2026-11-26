@@ -1,3 +1,0 @@
-granted,until,path,decision,note
-2026-11-18T08:36,2026-11-18T10:36,../autoresearch/tools/project.py,D121,"D121 (the owner 2026-11-18): lock takeover under a guard file, csv field limit, makedirs; patch temp/bughunt_records/fix/project_py.diff"
-2026-11-20T23:57,2026-11-21T03:57,project.json,D129,D129: grant_decisions points to the single neutral record

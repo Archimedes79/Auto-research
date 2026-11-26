@@ -44,9 +44,10 @@ from . import lane_tiers as LT
 from . import rig_cameras as RC
 from . import road_graph as RG
 from . import store
+from . import where
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(os.path.dirname(HERE), "data", "autogt", "lane")          # <repository root>/data/autogt/lane
+DATA = os.path.join(where.root(), "lane")          # <data root>/groundtruth/lane (where.py)
 SOURCE_FILES = ("lane_graph.py", "road_graph.py", "lane_lines.py", "lane_gt.py", "lane_tiers.py", "rig_cameras.py")          # l4: the tiers and the camera rig they use
 DEFAULTS = dict(half=50.0, min_len=2.0, step=0.5, inter_frac=0.5, stop_rule="intersection_branch", boundary_layers=("drivable_area",),
                 corner_deg=30.0, corner_base=2.0,

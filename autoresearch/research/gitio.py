@@ -32,8 +32,11 @@ def branch(root: str) -> str:
 
 
 def tag_commit(root: str, tag: str) -> str:
-    """the commit a tag points at, '' when there is no such tag"""
-    return git(root, "rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{commit}}", check=False)
+    """the commit a tag points at, '' when there is no such tag (a failure of git itself is an error, never 'no tag')"""
+    r = subprocess.run(["git", "-C", root, "rev-parse", "-q", "--verify", f"refs/tags/{tag}^{{commit}}"], capture_output=True)
+    if r.returncode not in (0, 1) or (r.returncode == 1 and r.stderr.strip()):
+        raise ResearchError(f"git cannot read {root}: {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
+    return r.stdout.decode().strip() if r.returncode == 0 else ""
 
 
 def _index_env(idx: str) -> Dict[str, str]:

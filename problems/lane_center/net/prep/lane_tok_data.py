@@ -25,10 +25,11 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import lane_gt_data as LD  # noqa: E402
 import qtargets as QT  # noqa: E402
 
-CACHE = os.path.join(ROOT, "runs", "e357_cache")
+CACHE = os.path.join(BP.RUNS, "e357_cache")
 TABLE_VERSION = "t1"                                                        # part of the cache key: bump it BY HAND whenever `frame_table` (or what it reads of qtargets) changes what a table holds
 TABLE = ("pos", "dirv", "cell", "flags", "piece", "sstart", "src", "dst", "long", "scale", "conn")
 

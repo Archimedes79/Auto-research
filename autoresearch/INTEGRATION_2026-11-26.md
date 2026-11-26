@@ -1,6 +1,12 @@
 # Autoresearch: the restructure plan (2026-11-26)
 
-**Status:** step S0 is done (the empty structure `problems/`, `champions/` and the toy moved to `problems/toy/`). Nothing of the two problems is moved, changed or deleted; the open decisions are in section 12.
+**Status (2026-11-27, D154 / D155):** carried out in the branch `v2`. S0 structure; S1 the core `autoresearch/research/` with the toy as its chain
+test, two reviews (architecture, code) and their fixes; S2 the tag `v1` (main plus its uncommitted records); S3 data and runs on D:
+(`D:\Auto-research\data`, `D:\Auto-research\runs`), the code reads them through the machine file; S4 BEV and S5 lane: the champions' code
+moved with `git mv`, their old folders, tools and records left `main` (they are in `v1`). Section 13 says what was measured and deleted. Where
+the sections below plan a worktree per experiment and an adopt that applies a diff, the built system differs: an experiment's code is
+committed default-off before its start, `start` refuses uncommitted code, and `adopt` makes the arm's settings the defaults (the reviews
+showed a diff of a shared checkout picks up other chats' edits).
 
 **The owner's frame (2026-11-26):** no backward compatibility; keep the code of the most successful experiments and build on it, no fresh start; the old decisions and most old experiments are not needed; git is the archive, no old folders are kept; code and data apart (data may go to D:, code does not); run outputs go to `runs/`; a champion must be reproducible through git, not every intermediate result; predictions are stored, and the code in git regenerates a report, its pictures included, from them and the raw data; a decision belongs to its problem; "ground truth", not "truth". Where this page differs from `TARGET_2026-11-26.md` and `P0_PLAN_2026-11-26.md`, this page counts; their sections on other machines and on data shards over ranks stay.
 

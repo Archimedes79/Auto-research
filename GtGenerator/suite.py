@@ -4,12 +4,13 @@ import json
 import os
 import types
 
+from . import where
 from .store import load_keyframe
 from .grid import GridSpec
 from .api import Interface
 from .nuscenes_gt import NuScenesGT
 
-DATA = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "autogt")       # <repository root>/data/autogt
+DATA = where.root()       # <data root>/groundtruth (where.py)
 
 
 _SIGNATURES = {}

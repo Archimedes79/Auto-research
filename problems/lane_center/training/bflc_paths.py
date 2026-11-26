@@ -1,23 +1,50 @@
-"""Paths of the project, derived from where this checkout lives: the repository folder can be renamed or moved, no path is typed anywhere.
+"""Where the lane problem's code, data and runs are. The code is this checkout; data and run outputs are where the machine says (a run of the research
+system gets RESEARCH_DATA / RESEARCH_RUNS from its worker; by hand they come from the machine file, ~/.research/machine.json or RESEARCH_MACHINE).
 
-    import bflc_paths as BP            # flat import like every module (PYTHONPATH comes from tools/env/bflc_env.sh)
-    BP.ROOT     the problem folder (contains project.json, runs/, models/, training/ ...)
-    BP.REPO     its parent (contains autoresearch/ and this problem folder)
-    BP.RUNS     runs/        BP.DATA   data/        BP.REPORTS   reports/
-
-The environment variable BFLC_ROOT (exported by tools/env/_py14.sh) overrides the location of the file.
-Self-test: `tools/env/_py14.sh bflc_paths.py`.
+    import bflc_paths as BP            # flat import like every module of this problem (the entry scripts put training/ on the path)
+    BP.ROOT     the problem folder (problems/lane_center)          BP.REPO     the repository (autoresearch/, GtGenerator/, problems/)
+    BP.RUNS     the problem's run root (old run folders keep their names below it: runs/e292_a_s0 -> RUNS/e292_a_s0)
+    BP.DATA     the problem's data: B123 (the GaussianCaR features and the old graph GT, the former ~/exp_gcar_b123)
+    BP.NUSC     the raw nuScenes folder (the former ~/data/nuscenes_full)        BP.SCRATCH  scratch outputs of diagnostics (below RUNS, never a record)
+    BP.resolve(p)   an absolute path as it is; "runs/x" -> RUNS/x (the form stored in old checkpoints and caches); else relative to ROOT
 """
+import json
 import os
 
-ROOT = os.path.normpath(os.environ.get("BFLC_ROOT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))
-REPO = os.path.dirname(ROOT)
-RUNS = ROOT + "/runs"
-DATA = ROOT + "/data"
-REPORTS = ROOT + "/reports"
+ROOT = os.path.normpath(os.environ.get("BFLC_ROOT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))   # BFLC_ROOT: a test points a moved copy at the problem
+REPO = os.path.dirname(os.path.dirname(ROOT))
+
+
+def _machine():
+    path = os.path.expanduser(os.environ.get("RESEARCH_MACHINE") or "~/.research/machine.json")
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return {}
+
+
+_M = _machine()
+_DATA_ROOT = os.environ.get("RESEARCH_DATA") or _M.get("data") or os.path.join(REPO, "data")
+RUNS = os.environ.get("RESEARCH_RUNS") or os.path.join(_M.get("runs") or os.path.join(REPO, "runs"), "lane_center")
+DATA = os.path.join(_DATA_ROOT, "lane_center")
+B123 = os.path.join(DATA, "b123")
+NUSC = os.path.join(_DATA_ROOT, "nuscenes")
+SCRATCH = os.path.join(RUNS, "_scratch")
+
+
+def resolve(p):
+    """a path of a record or an argument: absolute stays; 'runs/...' is below RUNS; anything else is relative to the problem folder"""
+    p = str(p)
+    if os.path.isabs(p):
+        return p
+    if p == "runs" or p.startswith("runs/"):
+        return os.path.join(RUNS, p[5:]) if len(p) > 4 else RUNS
+    return os.path.join(ROOT, p)
+
 
 if __name__ == "__main__":
-    assert os.path.isfile(ROOT + "/project.json"), f"ROOT is not the problem folder: {ROOT}"
-    assert os.path.isdir(REPO + "/autoresearch"), f"REPO has no autoresearch/: {REPO}"
-    assert os.path.abspath(__file__).startswith(ROOT), "bflc_paths.py is not inside ROOT"
-    print("bflc_paths selftest ok:", ROOT)
+    assert os.path.isfile(os.path.join(ROOT, "problem.json")), f"ROOT is not the problem folder: {ROOT}"
+    assert os.path.isdir(os.path.join(REPO, "autoresearch")), f"REPO has no autoresearch/: {REPO}"
+    assert resolve("runs/e292_a_s0") == os.path.join(RUNS, "e292_a_s0") and resolve("/x/y") == "/x/y" and resolve("data/splits.json") == os.path.join(ROOT, "data", "splits.json")
+    print("bflc_paths ok:", ROOT, RUNS, DATA)

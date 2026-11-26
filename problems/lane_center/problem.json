@@ -1,0 +1,30 @@
+{
+ "name": "lane_center",
+ "tag_prefix": "lane_center",
+ "python": "gcar",
+ "config": "training/configs/base.json",
+ "first_experiment": 396,
+ "steps": {
+  "stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1, "note": "the token head on the frozen lane head B' (jtoken_train, reads the token cache)"},
+  "stage2": {"run": ["{python}", "training/train/lane_train.py", "stage2", "{config}"], "gpus": 1, "note": "the head and B''s node head trained together through the token loss (jlive_train)"},
+  "predict": {"run": ["{python}", "evaluation/lane_predict.py", "{config}"], "gpus": 1, "note": "the live dump of the run's network on the split: B' at batch 4 (its GPU parity), the head at batch 8"},
+  "evaluate": {"run": "evaluate"}
+ },
+ "default_steps": ["predict", "evaluate"],
+ "test_steps": ["predict", "evaluate"],
+ "score": {"metric": "graph.topo_F1", "better": "higher", "band": 0.01},
+ "guards": [
+  {"metric": "graph.junction_F1", "max_drop": 0.01},
+  {"metric": "graph.F1@1.0", "max_drop": 0.01},
+  {"metric": "graph.lanes_found", "max_drop": 0.01},
+  {"metric": "graph.dup_frac", "max_drop": 0.01},
+  {"metric": "graph.vert100_dp", "max_drop": 1.0}
+ ],
+ "control_floor": {"graph.topo_F1": 0.5},
+ "evaluate": {"split": "val", "metrics": ["graph"], "device": "cpu", "anchor_tolerance": 0},
+ "holdout": ["test"],
+ "protected": ["problem.json", "TEST_LOG.md", "PROBLEM.md", "data/splits.json", "evaluation/adapter.py", "evaluation/qgraph_eval.py", "evaluation/sparse_lanes/", "evaluation/lane_task/"],
+ "data": "data/splits.json",
+ "pythonpath": ["evaluation", "evaluation/sparse_lanes", "net/prep", "net/model", "net/loss", "training", "training/train", "tools/viz"],
+ "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
+}

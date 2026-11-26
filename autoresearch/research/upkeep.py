@@ -16,11 +16,11 @@ from typing import Any, Dict, List, Optional
 
 from research import gates
 from research.launch import load_problem
-from research.paths import CORE, RUN_ID, ResearchError, interpreter, problem_dir, read_json, record_dir, repo, runs_root
+from research.paths import RUN_ID, ResearchError, interpreter, module_path, problem_dir, read_json, record_dir, repo, runs_root
 
 
 def _env(problem: str) -> Dict[str, str]:
-    return dict(os.environ, RESEARCH_REPO=repo(), RESEARCH_RUNS=runs_root(problem), PYTHONPATH=os.pathsep.join([problem_dir(problem), CORE, repo()]))
+    return dict(os.environ, RESEARCH_REPO=repo(), RESEARCH_RUNS=runs_root(problem), PYTHONPATH=module_path(repo(), problem))
 
 
 def anchor(problem: str, rid: str, tolerance: Optional[float] = None) -> Dict[str, Any]:
@@ -80,6 +80,8 @@ def kept_runs(problem: str) -> List[str]:
 
 def clean(problem: str, delete: bool = False, decision: str = "") -> Dict[str, Any]:
     root = runs_root(problem)
+    if not os.path.isfile(os.path.join(repo(), "champions", problem, "champions.json")):
+        raise ResearchError(f"champions/{problem}/champions.json is missing: without it nothing is known to be kept, so nothing is listed for deletion")
     keep = set(kept_runs(problem))
     items = []
     for name in sorted(os.listdir(root)) if os.path.isdir(root) else []:

@@ -51,15 +51,16 @@ from scipy.ndimage import maximum_filter  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for _sub in ("..", "net/prep", "net/model", "net/loss", "tools/video", "evaluation"):
+for _sub in ("../..", "net/prep", "net/model", "net/loss", "tools/video", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, _sub))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import qformat as QF  # noqa: E402
 import qraster as QR  # noqa: E402
 import qtargets as QT  # noqa: E402
 
 HOME = os.path.expanduser("~")
-NUSC = os.path.join(HOME, "data", "nuscenes_full")
-EXP = os.path.join(HOME, "exp_gcar_b123")
+NUSC = BP.NUSC
+EXP = BP.B123
 CAMS = ("CAM_FRONT_LEFT", "CAM_FRONT", "CAM_FRONT_RIGHT", "CAM_BACK_LEFT", "CAM_BACK", "CAM_BACK_RIGHT")
 RED, BLUE, GREY = np.array([1.0, 0.2, 0.2]), np.array([0.2, 0.4, 1.0]), np.array([0.6, 0.6, 0.6])
 ALPHA = 0.4                                                           # the error tints

@@ -15,7 +15,8 @@ from typing import Any, Dict, List, Optional, Set
 from research.paths import ResearchError, problem_dir, read_json, repo, state_dir, write_json
 
 DECIDED_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}[^|]*\|\s*(D\d+)\s*:", re.M)
-ROOT_PROTECTED = (".claude/settings.json", ".claude/settings.local.json", "autoresearch/research/hook.py", "autoresearch/research/gates.py", "champions/*")
+ROOT_PROTECTED = (".claude/settings.json", ".claude/settings.local.json", "autoresearch/research/hook.py", "autoresearch/research/gates.py",
+                  "autoresearch/research/paths.py", "autoresearch/research/__init__.py", "champions/*")
 
 
 def decided(problem: Optional[str] = None, root: Optional[str] = None) -> Set[str]:
@@ -150,8 +151,12 @@ def granted(relpath: str) -> Optional[Dict[str, Any]]:
 
 def protected_refusal(relpath: str, root: Optional[str] = None) -> str:
     """'' when an edit of this repository-relative path may go ahead"""
-    if not is_protected(relpath, root) or granted(relpath):
+    if not is_protected(relpath, root):
         return ""
+    g = granted(relpath)
+    problem = relpath.replace("\\", "/").split("/")[1] if relpath.replace("\\", "/").startswith("problems/") else None
+    if g and g.get("decision") in decided(problem if problem and os.path.isdir(os.path.join(root or repo(), "problems", problem)) else None, root):
+        return ""                                                # the grant's decision is decided now, not only when the grant was given
     return (f"{relpath} is protected: an edit needs a grant under a decided decision (`research grant {relpath} --decision D<n> --hours 2 --note ...`); "
             "without one, write the question into the Open table of DECISIONS.md and wait for the owner")
 

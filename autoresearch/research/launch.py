@@ -77,7 +77,7 @@ def new(problem: str, title: str, slug: str) -> str:
         except FileExistsError:
             n += 1
     with open(os.path.join(path, "experiment.md"), "w", encoding="utf-8", newline="\n") as f:
-        f.write(text.replace("E000", f"E{n}").replace("<title>", title))
+        f.write(text.replace("E000", f"E{n}").replace('"<title>"', json.dumps(title)).replace("<title>", title))
     return path
 
 

@@ -26,6 +26,7 @@ from qtargets import check_lattice, lattice  # noqa: E402,F401 (the lattice is a
 from jends import _hermite, _sample
 from qendnet import COS_TURN
 from qlinks import SetBlock
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 D = 64
@@ -128,7 +129,7 @@ def forward_batch(model, b):
 
 def load_model(run, dev, runs=None):
     """-> (the model of runs/<run>/model.pt in eval mode, its args)"""
-    ck = torch.load(os.path.join(runs or os.path.join(ROOT, "runs"), run, "model.pt"), map_location="cpu")
+    ck = torch.load(os.path.join(runs or BP.RUNS, run, "model.pt"), map_location="cpu")
     m = JTokModel(d=ck["args"]["d"])
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), ck["args"]

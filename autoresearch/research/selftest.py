@@ -62,6 +62,14 @@ def parts(tmp: str) -> None:
     assert judge.standard(-0.002, -0.005, -0.0001, 0.01)[0] == "TIE"           # significant but inside the band: a tie
     assert judge.standard(0.05, -0.01, 0.1, 0.01)[0] == "INCONCLUSIVE"
     assert judge.standard(float("nan"), 0.0, 0.1, 0.01)[0] == "INCONCLUSIVE"
+    # lower is better: a variant 0.05 lower than the control is a gain of +0.05; guards in both directions, an undefined number breaks its guard
+    assert judge.gain_interval({"diff": -0.05, "lo": -0.08, "hi": -0.02}, -1.0) == (0.05, 0.02, 0.08)
+    assert judge.standard(*judge.gain_interval({"diff": -0.05, "lo": -0.08, "hi": -0.02}, -1.0), 0.01)[0] == "KEEP"
+    nums = {"m.up": {"control": 0.80, "variant": 0.78, "better": "high"}, "m.down": {"control": 10.0, "variant": 11.5, "better": "low"},
+            "m.nan": {"control": 0.5, "variant": float("nan"), "better": "high"}}
+    assert judge.guards_broken([{"metric": "m.up", "max_drop": 0.01}], nums) and not judge.guards_broken([{"metric": "m.up", "max_drop": 0.05}], nums)
+    assert judge.guards_broken([{"metric": "m.down", "max_drop": 1.0}], nums) and not judge.guards_broken([{"metric": "m.down", "max_drop": 2.0}], nums)
+    assert judge.guards_broken([{"metric": "m.nan", "min": 0.0}], nums)
     # kill rules on a growing log
     log = os.path.join(tmp, "log.jsonl")
     k = worker.Kill([{"metric": "total", "after_step": 20, "above": 0.5}], log)

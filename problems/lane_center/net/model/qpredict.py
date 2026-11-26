@@ -19,6 +19,7 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub in ("net/prep", "net/model", "net/loss", "training/data", "training"):
     sys.path.insert(0, os.path.join(ROOT, sub))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import qgraph as QG  # noqa: E402
 
 
@@ -102,7 +103,7 @@ if __name__ == "__main__":
 def make_pred_fn(run, map_mode="error", device="cuda", keep_maps=True):
     """a callable token -> pred dict (with the dense maps for the pictures) for the VAL frames, from a trained run (`runs/<run>/model.pt`): `qgraph_view.py` takes it as its prediction source"""
     import lane_gt_data as LD
-    m = load_model(os.path.join(ROOT, "runs", run) if not os.path.isabs(run) else run, device)
+    m = load_model(os.path.join(BP.RUNS, run) if not os.path.isabs(run) else run, device)
     ds = LD.QData("val_clean", map_mode=map_mode, pixels=False)
     by_tok = {ds.tokens[int(ds.bd.rows[k])]: i for i, k in enumerate(ds.ks)}
 

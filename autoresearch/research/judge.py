@@ -25,10 +25,18 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from research import gitio, spec
 from research.launch import load_card, load_problem
-from research.paths import ResearchError, experiment_dir, interpreter, read_json, record_dir, rel, repo, runs_root, write_json
+from research.paths import ResearchError, experiment_dir, interpreter, module_path, read_json, record_dir, rel, repo, runs_root, write_json
 from research.worker import ensure_code
 
 VERDICTS = ("KEEP", "CUT", "TIE", "INCONCLUSIVE", "INVALID")
+
+
+def judge_code() -> str:
+    """12 hex of the code that makes a verdict (this file, compute.py, the bootstrap): recorded in every verdict"""
+    import hashlib
+    here = os.path.dirname(os.path.abspath(__file__))
+    files = [os.path.join(here, "judge.py"), os.path.join(here, "compute.py"), os.path.join(os.path.dirname(here), "Evaluation", "stats.py")]
+    return hashlib.sha256(b"".join(open(p, "rb").read() for p in files)).hexdigest()[:12]
 
 
 def _arm_runs(problem: str, card: Dict[str, Any], arm: str) -> Dict[str, str]:
@@ -88,9 +96,34 @@ def standard(gain: float, lo: float, hi: float, e: float) -> Tuple[str, str]:
     return "INCONCLUSIVE", f"gain {gain:+.4f} but its interval [{lo:+.4f}, {hi:+.4f}] includes 0: add a seed"
 
 
+def gain_interval(pooled: Dict[str, float], sign: float) -> Tuple[float, float, float]:
+    """(gain, lo, hi) in the direction of the score: positive = better, also for a score where lower is better"""
+    gain = sign * pooled["diff"]
+    lo, hi = (pooled["lo"], pooled["hi"]) if sign > 0 else (-pooled["hi"], -pooled["lo"])
+    return gain, lo, hi
+
+
+def guards_broken(guards: List[Dict[str, Any]], numbers: Dict[str, Dict[str, Any]]) -> List[str]:
+    """the guards of problem.json the variant breaks (numbers: metric -> control, variant, better); an undefined number breaks its guard"""
+    broken = []
+    for g in guards:
+        gv = numbers[g["metric"]]
+        s_g = 1.0 if gv["better"] == "high" else -1.0
+        if not all(isinstance(gv[k], (int, float)) and math.isfinite(gv[k]) for k in ("control", "variant")):
+            broken.append(f"{g['metric']} is not defined ({gv['control']} / {gv['variant']})")
+            continue
+        if "min" in g and gv["variant"] < g["min"]:
+            broken.append(f"{g['metric']} {gv['variant']:.4f} < {g['min']}")
+        if "max" in g and gv["variant"] > g["max"]:
+            broken.append(f"{g['metric']} {gv['variant']:.4f} > {g['max']}")
+        if "max_drop" in g and s_g * (gv["control"] - gv["variant"]) > g["max_drop"]:
+            broken.append(f"{g['metric']} worse by {abs(gv['variant'] - gv['control']):.4f} > {g['max_drop']}")
+    return broken
+
+
 def _compute(problem: str, code: str, p: Dict[str, Any], query: Dict[str, Any]) -> Dict[str, Any]:
     env = dict(os.environ, RESEARCH_RUNS=runs_root(problem), RESEARCH_REPO=repo(),
-               PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", problem), os.path.join(code, "autoresearch"), code]))
+               PYTHONPATH=module_path(code, problem))
     r = subprocess.run([interpreter(p["python"]), "-m", "research.compute"], cwd=os.path.join(code, "problems", problem), env=env,
                        input=json.dumps(query).encode(), capture_output=True)
     if r.returncode != 0:
@@ -118,7 +151,7 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
     control = card["control"]
     c_runs, c_missing, c_killed = _results(problem, _arm_runs(problem, card, control))
     out: Dict[str, Any] = {"experiment": exp_id, "problem": problem, "tag": tag, "snapshot": commit, "control": control, "score": score, "better": better,
-                           "min_effect": e, "rule": card.get("rule", {}), "seeds": card["seeds"], "arms": {}, "by": "research judge",
+                           "min_effect": e, "rule": card.get("rule", {}), "seeds": card["seeds"], "arms": {}, "by": f"research judge {judge_code()}",
                            "date": time.strftime("%Y-%m-%d %H:%M")}
     incomplete = list(c_missing)
     arms = [a for a in card["arms"] if a != control]
@@ -133,12 +166,16 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
     c_scores = {s: r["result"]["score"]["value"] for s, r in c_runs.items()}
     problems = [f"a kill rule stopped the control: {', '.join(c_killed)}"] if c_killed else []
     if floor is not None:
-        bad = {s: v for s, v in c_scores.items() if sign * (v - floor) < 0}
+        bad = {s: v for s, v in c_scores.items() if not math.isfinite(v) or sign * (v - floor) < 0}
         if bad:
             problems.append(f"the control does not reach the floor {score} {floor} (seed: score {bad})")
     spread = card.get("rule", {}).get("max_seed_spread")
     if spread is not None and len(c_scores) > 1 and max(c_scores.values()) - min(c_scores.values()) > spread:
         problems.append(f"the control's seeds lie {max(c_scores.values()) - min(c_scores.values()):.4f} apart, more than {spread}")
+    foreign = [r["run"] for runs_ in [c_runs] + list(v_runs.values()) for r in runs_.values()
+               if r["run"].startswith(exp_id + ".") and (r["commit"] != commit or r["result"].get("identity", {}).get("commit") != commit)]
+    if foreign:
+        problems.append(f"runs that did not execute the snapshot {commit[:10]}: {foreign}")
     out["control_check"] = {"scores": c_scores, "floor": floor, "max_seed_spread": spread, "problems": problems}
     code = ensure_code(problem, commit)
     guards = p.get("guards", [])
@@ -157,26 +194,12 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
         q = {"score": score, "guards": [g["metric"] for g in guards], "boot": card.get("rule", {}).get("boot", boot),
              "control": {s: c_runs[s]["result"]["evaluation"]["id"] for s in seeds}, "variant": {s: v_runs[a][s]["result"]["evaluation"]["id"] for s in seeds}}
         num = _compute(problem, code, p, q)
-        pooled = num["pooled"]
-        gain = sign * pooled["diff"]
-        lo, hi = (pooled["lo"], pooled["hi"]) if sign > 0 else (-pooled["hi"], -pooled["lo"])
+        gain, lo, hi = gain_interval(num["pooled"], sign)
         verdict, reason = standard(gain, lo, hi, e)
         per_seed = {s: sign * v["diff"] for s, v in num["seeds"].items()}
         if verdict == "KEEP" and any(g <= 0 for g in per_seed.values()):
             verdict, reason = "INCONCLUSIVE", f"{reason}, but the seeds disagree (gain per seed {per_seed}): add a seed"
-        broken = []
-        for g in guards:
-            gv = num["guards"][g["metric"]]
-            s_g = 1.0 if gv["better"] == "high" else -1.0
-            if not all(isinstance(gv[k], (int, float)) and math.isfinite(gv[k]) for k in ("control", "variant")):
-                broken.append(f"{g['metric']} is not defined ({gv['control']} / {gv['variant']})")
-                continue
-            if "min" in g and gv["variant"] < g["min"]:
-                broken.append(f"{g['metric']} {gv['variant']:.4f} < {g['min']}")
-            if "max" in g and gv["variant"] > g["max"]:
-                broken.append(f"{g['metric']} {gv['variant']:.4f} > {g['max']}")
-            if "max_drop" in g and s_g * (gv["control"] - gv["variant"]) > g["max_drop"]:
-                broken.append(f"{g['metric']} drops {abs(gv['variant'] - gv['control']):.4f} > {g['max_drop']}")
+        broken = guards_broken(guards, num["guards"])
         if verdict == "KEEP" and broken:
             verdict, reason = "TIE", f"not adopted: {reason}, but a guard broke: {'; '.join(broken)}"
         arm_out = {"verdict": verdict, "reason": reason, "gain": gain, "interval": [lo, hi], "seeds": seeds, "numbers": num,

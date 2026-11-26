@@ -1,0 +1,24 @@
+{
+ "name": "bev_fusion",
+ "tag_prefix": "bev_fusion",
+ "python": "gcar",
+ "config": "training/configs/base.json",
+ "first_experiment": 27,
+ "steps": {
+  "train": {"run": ["{python}", "training/train.py", "{config}"], "gpus": 1, "note": "trainkit; works in the problem's data folder (net/netpath.SITE)"},
+  "import": {"run": ["{python}", "tools/import_ckpt.py", "{config}"], "note": "a measurement of an existing network: its newest checkpoint copied into the run (config _import)"},
+  "evaluate": {"run": "evaluate", "gpus": 1}
+ },
+ "default_steps": ["train", "evaluate"],
+ "score": {"metric": "board.board7", "better": "higher", "band": 0.02},
+ "guards": [
+  {"metric": "seg.fov/dt+0.00/drivable_area/all/all/iou@0.5", "max_drop": 0.02},
+  {"metric": "det.dt+0.00/mean/all/mAP", "max_drop": 0.02}
+ ],
+ "control_floor": {"board.board7": 0.3},
+ "evaluate": {"split": "val", "frames": "spread:1000:val", "metrics": ["maps", "boxes", "board"], "device": "cuda", "anchor_tolerance": 0.003},
+ "holdout": ["test"],
+ "protected": ["problem.json", "PROBLEM.md", "splits/", "evaluation/metrics.py", "evaluation/bev_task.py", "evaluation/bev_eval.py"],
+ "pythonpath": ["net", "net/prep", "net/model", "net/loss", "training"],
+ "note": "BEV Fusion: camera + radar BEV perception (map layers, objects, motion) on nuScenes; the score board7 = the mean of six map rows and the object mAP; the memory is carried (D70)"
+}

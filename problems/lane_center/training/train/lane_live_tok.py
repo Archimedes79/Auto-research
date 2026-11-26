@@ -81,6 +81,7 @@ import torch.nn as nn
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import jtok as JT  # noqa: E402
 import lane_past_data as LPD  # noqa: E402
 import lane_ptok_data as LP  # noqa: E402
@@ -124,7 +125,7 @@ def check_run_sha(cache_dir, run):
     """the cache directory was made from this very checkpoint: its meta.json `run_sha` (`lane_tokcache`: the first 16 hex digits of the sha256 of the run's model.pt) is that of `run`/model.pt (a path relative to the project folder) -> the sha"""
     with open(os.path.join(cache_dir, "meta.json")) as fh:
         want = json.load(fh)["run_sha"]
-    got = LC._sha(os.path.join(run if os.path.isabs(run) else os.path.join(ROOT, run), "model.pt"))
+    got = LC._sha(os.path.join(BP.resolve(run), "model.pt"))
     assert got == want, f"{run}/model.pt (sha {got}) is not the checkpoint that the cache {cache_dir} was made from (run_sha {want})"
     return got
 
@@ -248,7 +249,7 @@ class LiveSource(nn.Module):
     def __init__(self, run, K=512, train_nodes=True, train_pyr=False):
         super().__init__()
         assert train_nodes or not train_pyr, "train_pyr needs train_nodes (the pyramid's gradient reaches it through the node head)"
-        self.model = run if isinstance(run, nn.Module) else QP.load_model(run if os.path.isabs(run) else os.path.join(ROOT, run), "cpu")
+        self.model = run if isinstance(run, nn.Module) else QP.load_model(BP.resolve(run), "cpu")
         self.K, self.train_pyr = K, bool(train_pyr)
         for p in self.model.parameters():
             p.requires_grad_(False)

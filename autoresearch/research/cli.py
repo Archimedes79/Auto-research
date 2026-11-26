@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from typing import Any, Dict, List
@@ -27,7 +28,7 @@ def _runs(problem: str, target: str) -> List[str]:
 def status(problem: str, target: str = "") -> List[Dict[str, Any]]:
     rows = []
     base = os.path.join(problem_dir(problem), "experiments")
-    exps = [target.split(".")[0]] if target else sorted({d.split("_")[0] for d in os.listdir(base)} if os.path.isdir(base) else [])
+    exps = [target.split(".")[0]] if target else sorted({d.split("_")[0] for d in os.listdir(base) if re.match(r"^E\d+(_|$)", d)} if os.path.isdir(base) else [])
     for exp in exps:
         for rid in _runs(problem, target if target and "." in target else exp):
             try:
@@ -74,6 +75,17 @@ def heartbeat_age(problem: str, rid: str) -> float:
         return float("inf")
 
 
+def step_alive(problem: str, rid: str) -> bool:
+    """does the process group of the run's current step still exist?"""
+    try:
+        with open(os.path.join(run_dir(problem, rid), "step.pid"), encoding="utf-8") as f:
+            pid = int(f.read().strip())
+        os.killpg(pid, 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
 def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     """start the worker again for stopped runs (and failed ones with --failed); finished steps are skipped, a training resumes from its checkpoint"""
     if gates.hold_refusal(problem):
@@ -82,6 +94,8 @@ def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     for rid in _runs(problem, target):
         path = os.path.join(record_dir(problem, rid), "run.json")
         run = read_json(path)
+        if step_alive(problem, rid):
+            raise ResearchError(f"{rid}: a step of it still runs (pid in {os.path.join(run_dir(problem, rid), 'step.pid')}): stop it first")
         orphan = run.get("status") == "running" and heartbeat_age(problem, rid) > STALE_S       # its worker died (a reboot, a killed WSL)
         if run.get("status") in ("stopped", "queued") or orphan or (failed and run.get("status") == "failed"):
             run.update(status="queued", resumed=time.strftime("%Y-%m-%d %H:%M:%S"))      # not a final state any more: the worker takes it from here
