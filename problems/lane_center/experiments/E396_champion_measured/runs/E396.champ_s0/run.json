@@ -1,0 +1,29 @@
+{
+ "run": "E396.champ_s0",
+ "problem": "lane_center",
+ "experiment": "E396",
+ "arm": "champ",
+ "seed": 0,
+ "commit": "2c5a373751e453d2dbff53d09a44879d18625855",
+ "tag": "lane_center/E396",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 117.2,
+   "log": "predict.log",
+   "gpu_slot": 1
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 162.5,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-27 00:51:06",
+ "host": "Desktop-I511600",
+ "started": "2026-11-27 00:51:12",
+ "ended": "2026-11-27 00:55:51"
+}
