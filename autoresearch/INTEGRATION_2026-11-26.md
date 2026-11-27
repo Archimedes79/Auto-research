@@ -294,7 +294,7 @@ About a sixth of the lane code and a quarter of the BEV code moves; the rest sta
 |---|---|
 | lane E396 (kind measure): the champion E372 S4, seeds 0 and 1, `research start` from its snapshot (dump step + evaluation step) | topo F1 0.668172 / 0.681281, junction F1 0.2538 / 0.2481, Q 0.6796 / 0.6808: the numbers of its v1 cards to the last digit; registered as the champion under D120 (`champions/lane_center/`) |
 | lane E397 (compare): keep threshold 0.5 against 0.6, the control reused from E396 (`from`) | TIE: gain -0.0026, paired scene bootstrap [-0.0039, -0.0017], band 0.01; the guard lanes_found breaks (-0.0123); the champion's decode stays |
-| BEV `t21_ctl_s0` through the new evaluation (a diagnostic, no card; warm, ground truth v13, `spread:1000:val`) | board7 0.4631; the older 0.4549 is a cold read on ground truth v8 and not comparable |
+| BEV E27 / E28 (kind measure; the weights imported, the warm evaluation on ground truth v13, `spread:1000:val`) | `t21_ctl` board7 0.4631 / 0.4635 (seed 0 / 1), `t20_base_s0` 0.4569; 0.006 apart, inside the band 0.02; the older 0.4549 / 0.4465 are cold reads on ground truth v8 and not comparable; the champion stays the owner's choice |
 
 **Kept.** Raw nuScenes (`D:\Auto-research\NuScenes`, 121 GB, never deleted). In the data root `D:\Auto-research\data`: `lane_center/b123`
 (30.1 GB: the B' features of train and val, the val rows hold the 833 TEST rows too, graph GT, poses, PCA), `groundtruth/lane/{9ad1d4ce30,

@@ -1,0 +1,47 @@
+{
+ "experiment": "E28",
+ "problem": "bev_fusion",
+ "tag": "bev_fusion/E28",
+ "snapshot": "471a90f6a2d99e2516034df4aed7cd3382c3df50",
+ "kind": "measure",
+ "score": "board.board7",
+ "arms": {
+  "t20": {
+   "verdict": "MEASURED",
+   "seeds": {
+    "0": {
+     "run": "E28.t20_s0",
+     "numbers": {
+      "board.board7": 0.4568691956301663,
+      "seg.fov/dt+0.00/drivable_area/all/all/iou@0.5": 0.8451506896970178,
+      "det.dt+0.00/mean/all/mAP": 0.3453059424014639
+     },
+     "frames": 1000,
+     "cost": {
+      "median_ms": 138.2169239986979,
+      "n": 1000
+     },
+     "result": "problems/bev_fusion/experiments/E028_t20_measured/runs/E28.t20_s0/result.json"
+    }
+   }
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "963af69bdd6d",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-27 03:18",
+ "verdict": "DONE"
+}

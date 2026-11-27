@@ -1,0 +1,29 @@
+{
+ "run": "E28.t20_s0",
+ "problem": "bev_fusion",
+ "experiment": "E28",
+ "arm": "t20",
+ "seed": 0,
+ "commit": "471a90f6a2d99e2516034df4aed7cd3382c3df50",
+ "tag": "bev_fusion/E28",
+ "steps": {
+  "import": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 25.1,
+   "log": "import.log"
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 1100.5,
+   "log": "evaluate.log",
+   "gpu_slot": 0
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-27 02:09:27",
+ "host": "Desktop-I511600",
+ "started": "2026-11-27 02:09:35",
+ "ended": "2026-11-27 02:57:44"
+}

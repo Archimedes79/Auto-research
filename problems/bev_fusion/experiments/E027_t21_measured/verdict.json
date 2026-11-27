@@ -1,0 +1,61 @@
+{
+ "experiment": "E27",
+ "problem": "bev_fusion",
+ "tag": "bev_fusion/E27",
+ "snapshot": "5d45ce8a500c425c38cf2e292063d621e7f99b17",
+ "kind": "measure",
+ "score": "board.board7",
+ "arms": {
+  "t21": {
+   "verdict": "MEASURED",
+   "seeds": {
+    "0": {
+     "run": "E27.t21_s0",
+     "numbers": {
+      "board.board7": 0.46307647374311156,
+      "seg.fov/dt+0.00/drivable_area/all/all/iou@0.5": 0.8498361662483953,
+      "det.dt+0.00/mean/all/mAP": 0.3481036127185029
+     },
+     "frames": 1000,
+     "cost": {
+      "median_ms": 256.28345499990246,
+      "n": 1000
+     },
+     "result": "problems/bev_fusion/experiments/E027_t21_measured/runs/E27.t21_s0/result.json"
+    },
+    "1": {
+     "run": "E27.t21_s1",
+     "numbers": {
+      "board.board7": 0.4634984474960796,
+      "seg.fov/dt+0.00/drivable_area/all/all/iou@0.5": 0.8462464564381887,
+      "det.dt+0.00/mean/all/mAP": 0.346478216036841
+     },
+     "frames": 1000,
+     "cost": {
+      "median_ms": 248.44339599985688,
+      "n": 1000
+     },
+     "result": "problems/bev_fusion/experiments/E027_t21_measured/runs/E27.t21_s1/result.json"
+    }
+   }
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "963af69bdd6d",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-27 03:18",
+ "verdict": "DONE"
+}

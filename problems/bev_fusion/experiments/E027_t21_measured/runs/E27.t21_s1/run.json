@@ -1,0 +1,29 @@
+{
+ "run": "E27.t21_s1",
+ "problem": "bev_fusion",
+ "experiment": "E27",
+ "arm": "t21",
+ "seed": 1,
+ "commit": "5d45ce8a500c425c38cf2e292063d621e7f99b17",
+ "tag": "bev_fusion/E27",
+ "steps": {
+  "import": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 14.0,
+   "log": "import.log"
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 1941.8,
+   "log": "evaluate.log",
+   "gpu_slot": 1
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-27 02:06:43",
+ "host": "Desktop-I511600",
+ "started": "2026-11-27 02:06:48",
+ "ended": "2026-11-27 02:39:24"
+}
