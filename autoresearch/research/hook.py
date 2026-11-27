@@ -4,10 +4,10 @@
                              "hooks": [{"type": "command", "command": "python3 autoresearch/research/hook.py"}]}]}}
 
 Reads the event from stdin; exit 2 with the reason on stderr refuses the edit, exit 0 lets it through. The protected paths and the grants are
-research/gates.py. Every path inside the machine's state folder (the folder of the machine file: grants, holds, GPU slots) is refused: only
-the research commands write there. Any other file outside a research checkout is not this hook's business. When the hook itself fails, an
-edit of a file whose name is one of the gate files is refused, every other edit goes through (a broken hook must not stop all work, nor open
-the gates)."""
+research/gates.py; a path is judged without its NTFS stream name (x::$DATA writes x). Every path inside the machine's state folder (the
+folder of the machine file: grants, holds, GPU slots) is refused: only the research commands write there. Any other file outside a research
+checkout is not this hook's business. When the hook itself fails, it refuses every target that is or may be protected (`fallback`); other
+edits go through (a broken hook must not stop all work, nor open the gates)."""
 from __future__ import annotations
 
 import json
@@ -46,11 +46,28 @@ def to_local(path: str) -> str:
     return path
 
 
+def strip_stream(path: str) -> str:
+    """the file an NTFS stream name writes: everything from a ':' in the last part of the path on is dropped (beyond a drive letter)"""
+    p = path.replace("\\", "/")
+    drive = 2 if len(p) > 1 and p[0].isalpha() and p[1] == ":" else 0
+    head, sep, name = p[drive:].rpartition("/")
+    return p[:drive] + head + sep + name.split(":", 1)[0]
+
+
 def in_state(path: str) -> bool:
     """does `path` lie in the machine's state folder (the folder of the machine file)? Without regard to case"""
     from research.paths import machine_file
     state = os.path.realpath(os.path.dirname(machine_file())).lower()
     return (os.path.realpath(path).lower() + os.sep).startswith(state + os.sep)
+
+
+def resolve(raw: str, event: dict) -> tuple:
+    """(the absolute local path a target names, without a stream name; its research checkout or ''; the path relative to that checkout)"""
+    path = to_local(strip_stream(raw))
+    if not os.path.isabs(path):
+        path = os.path.join(to_local(event.get("cwd") or os.getcwd()), path)
+    root = checkout_of(path)
+    return path, root, os.path.relpath(os.path.abspath(path), root) if root else ""
 
 
 def checkout_of(path: str) -> str:
@@ -69,15 +86,33 @@ def verdict(event: dict) -> str:
     """'' = allow, else the reason of the refusal"""
     from research import gates
     for raw in targets(event):
-        path = to_local(raw)
-        if not os.path.isabs(path):
-            path = os.path.join(to_local(event.get("cwd") or os.getcwd()), path)
+        path, root, rel = resolve(raw, event)
         if in_state(path):
             return f"{raw} lies in the machine's state folder (grants, holds, GPU slots): only the research commands write there (`research grant`)"
-        root = checkout_of(path)
-        reason = gates.protected_refusal(os.path.relpath(os.path.abspath(path), root), root) if root else ""
+        reason = gates.protected_refusal(rel, root) if root else ""
         if reason:
             return reason
+    return ""
+
+
+def fallback(event: dict, error: Exception) -> str:
+    """after a failure of the hook: refuse every target that is or may be protected. gates.py still names the protected paths when it can be
+    imported (the failure lay in a grant or a decision file); a gate name, the state folder and a target that cannot be judged count as
+    protected"""
+    why = f"the gate hook failed ({type(error).__name__}: {error}); an edit it cannot clear is refused until it works"
+    for raw in targets(event):
+        try:
+            if os.path.basename(strip_stream(str(raw))).lower() in GATE_NAMES:
+                return why
+            path, root, rel = resolve(raw, event)
+            if in_state(path):
+                return why
+            if root:
+                from research.gates import is_protected
+                if is_protected(rel, root):
+                    return why
+        except Exception:                                              # noqa: BLE001 - it cannot be judged: closed
+            return why
     return ""
 
 
@@ -87,8 +122,10 @@ def main() -> int:
         event = json.load(sys.stdin)
         reason = verdict(event)
     except Exception as e:                                             # noqa: BLE001 - the hook must answer
-        names = {os.path.basename(str(p).replace("\\", "/")).lower() for p in (targets(event) if isinstance(event, dict) else [])}
-        reason = f"the gate hook failed ({type(e).__name__}: {e}); edits of the gate files are refused until it works" if names & GATE_NAMES else ""
+        try:
+            reason = fallback(event, e) if isinstance(event, dict) else ""
+        except Exception:                                              # noqa: BLE001 - the event names no path that can be read
+            reason = ""
     if reason:
         print(reason, file=sys.stderr)
         return 2

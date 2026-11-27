@@ -3,12 +3,14 @@
 1. the arm's verdict is KEEP (or the adoption is by hand, with a reason);
 2. the arm's settings become the defaults of the base config (its code is committed already: `start` refuses uncommitted code, and a new option
    enters the code default-off);
-3. the anchor test: the arm's runs are evaluated again with the working tree's code, into a fresh folder, and must give the numbers of their
-   records (within problem.json evaluate.anchor_tolerance); unless it passed (a failure, an error, an interrupt), the base config is put back
-   as it was;
+3. the anchor test: the arm's runs (their folders must still exist) are evaluated again with the working tree's code, into a fresh folder,
+   and must give the numbers of their records (within problem.json evaluate.anchor_tolerance);
 4. champions/<problem>/ records the champion (the old one stays as a comparison network); one commit of base config and champion facts.
+Unless it gets through to that commit (a failed anchor test, an error, an interrupt), the base config and the champion files are put back
+as they were.
 
-register: the same facts for a network measured by an experiment of kind `measure` (an imported or re-measured network), without a code change."""
+register: the same facts for a network measured by an experiment of kind `measure` (an imported or re-measured network), without a code change;
+its verdict must be DONE (`research judge --write`) and its run folders must exist."""
 from __future__ import annotations
 
 import json
@@ -19,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from research import gates, gitio, spec
 from research.launch import load_card, load_problem
-from research.paths import ResearchError, experiment_dir, problem_dir, read_json, record_dir, rel, repo, write_json
+from research.paths import ResearchError, experiment_dir, problem_dir, read_json, record_dir, rel, repo, run_dir, runs_root, write_json
 
 
 def champions_dir(problem: str) -> str:
@@ -66,6 +68,44 @@ def _record(problem: str, facts: Dict[str, Any], role: str) -> List[str]:
     return [folder, idx_path]
 
 
+def _run_folders(problem: str, rids: List[str]) -> None:
+    """the seeds' run folders must exist: the facts name their weights, and the anchor test evaluates them"""
+    gone = [r for r in rids if not os.path.isdir(run_dir(problem, r))]
+    if gone:
+        raise ResearchError(f"the run folders of {', '.join(gone)} are gone (in {runs_root(problem)}): their weights cannot be a champion")
+
+
+def _saved(paths: List[str]) -> Dict[str, Optional[bytes]]:
+    """the bytes of these files (None: absent), to put them back"""
+    out: Dict[str, Optional[bytes]] = {}
+    for path in paths:
+        try:
+            with open(path, "rb") as f:
+                out[path] = f.read()
+        except FileNotFoundError:
+            out[path] = None
+    return out
+
+
+def _put_back(saved: Dict[str, Optional[bytes]]) -> None:
+    for path, data in saved.items():
+        if data is not None:
+            with open(path, "wb") as f:
+                f.write(data)
+        elif os.path.exists(path):
+            os.remove(path)
+    for folder in sorted({os.path.dirname(p) for p in saved}, key=len, reverse=True):
+        try:
+            os.rmdir(folder)                                                    # a folder the attempt made, empty again
+        except OSError:
+            pass
+
+
+def _champion_files(problem: str, name: str) -> List[str]:
+    """what _record writes"""
+    return [os.path.join(champions_dir(problem), "champions.json")] + [os.path.join(champions_dir(problem), name, f) for f in ("network.json", "architecture.svg")]
+
+
 def _anchor(problem: str, rids: List[str], p: Dict[str, Any], tolerance: float) -> None:
     from research import upkeep
     for rid in rids:
@@ -88,23 +128,22 @@ def adopt(problem: str, exp_id: str, arm: str, decision: str, by_hand: str = "",
     v = verdict.get("arms", {}).get(arm, {}).get("verdict")
     if v != "KEEP" and not by_hand:
         raise ResearchError(f"the verdict of {exp_id}.{arm} is {v}: only a KEEP is adopted (or by hand, with a reason)")
+    rids = [f"{exp_id}.{arm}_s{s}" for s in card["seeds"]]
+    _run_folders(problem, rids)
     tol = p["evaluate"].get("anchor_tolerance", 0.0) if tolerance is None else tolerance
     cfg_path = os.path.join(problem_dir(problem), p["config"])
-    with open(cfg_path, "rb") as f:
-        before = f.read()
-    passed = False
+    saved, done = _saved([cfg_path] + _champion_files(problem, f"{exp_id}.{arm}")), False
     try:
         write_json(cfg_path, spec.merged(read_json(cfg_path), card["arms"][arm].get("set", {})))  # the code is committed (start checks it): the arm's settings become the defaults
-        _anchor(problem, [f"{exp_id}.{arm}_s{s}" for s in card["seeds"]], p, tol)
-        passed = True
+        _anchor(problem, rids, p, tol)
+        facts = _facts(problem, exp_id, arm, card, decision, f"by hand: {by_hand}" if by_hand else "verdict KEEP")
+        written = _record(problem, facts, "champion")
+        paths_c = sorted({rel(cfg_path)} | {rel(x) for x in written})
+        c = gitio.commit_paths(root, paths_c, f"adopt {exp_id}.{arm} ({problem}) as champion under {decision}\n\n{facts['how']}; settings of {tag} made the defaults, anchor test passed") if commit else ""
+        done = True
     finally:
-        if not passed:                                                          # whatever stopped the anchor test: the working tree as it was
-            with open(cfg_path, "wb") as f:
-                f.write(before)
-    facts = _facts(problem, exp_id, arm, card, decision, f"by hand: {by_hand}" if by_hand else "verdict KEEP")
-    written = _record(problem, facts, "champion")
-    paths_c = sorted({rel(cfg_path)} | {rel(x) for x in written})
-    c = gitio.commit_paths(root, paths_c, f"adopt {exp_id}.{arm} ({problem}) as champion under {decision}\n\n{facts['how']}; settings of {tag} made the defaults, anchor test passed") if commit else ""
+        if not done:                                                            # whatever stopped it before the commit: the working tree as it was
+            _put_back(saved)
     return {"champion": facts["name"], "settings": card["arms"][arm].get("set", {}), "commit": c}
 
 
@@ -121,7 +160,20 @@ def register(problem: str, exp_id: str, arm: str, decision: str, role: str, comm
     card = load_card(problem, exp_id, at=snap)
     if card.get("kind") != "measure":
         raise ResearchError(f"{exp_id} is not a measurement: a compared arm becomes champion through adopt")
-    facts = _facts(problem, exp_id, arm, card, decision, f"registered as {role}")
-    written = _record(problem, facts, role)
-    c = gitio.commit_paths(repo(), [rel(x) for x in written], f"register {exp_id}.{arm} ({problem}) as {role} under {decision}") if commit else ""
+    try:
+        verdict = read_json(os.path.join(experiment_dir(problem, exp_id), "verdict.json"))
+    except (OSError, ValueError):
+        verdict = {}
+    if verdict.get("verdict") != "DONE" or arm not in verdict.get("arms", {}):
+        raise ResearchError(f"{exp_id} has no DONE verdict with the arm {arm}: `research judge {problem} {exp_id} --write` first")
+    _run_folders(problem, [f"{exp_id}.{arm}_s{s}" for s in card["seeds"]])
+    saved, done = _saved(_champion_files(problem, f"{exp_id}.{arm}")), False
+    try:
+        facts = _facts(problem, exp_id, arm, card, decision, f"registered as {role}")
+        written = _record(problem, facts, role)
+        c = gitio.commit_paths(repo(), [rel(x) for x in written], f"register {exp_id}.{arm} ({problem}) as {role} under {decision}") if commit else ""
+        done = True
+    finally:
+        if not done:
+            _put_back(saved)
     return {"name": facts["name"], "role": role, "commit": c}

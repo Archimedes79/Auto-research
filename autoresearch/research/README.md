@@ -16,15 +16,17 @@
         pooled seeds from the stored counts -> guards -> verdict.json; one commit of the records
         |
  adopt (the owner's decision): the arm's settings into the base config (its code is committed, default off, before the start),
-        anchor = the evaluation repeated with the working tree gives the same numbers -> champions/<problem>/ (a failed anchor
-        leaves the base config as it was); register: a measured network (kind measure) as champion or comparison network
+        anchor = the evaluation repeated with the working tree gives the same numbers -> champions/<problem>/, one commit (anything
+        that fails before the commit leaves base config and champions/ as they were); register: a measured network (kind measure,
+        verdict DONE) as champion or comparison network; both need the seeds' run folders
 ```
 
 Upkeep: `tests <problem>` (the problem's own tests, problem.json `tests`, with its interpreter and module path), `anchor <problem> <run>`
 (a finished run evaluated again with the working tree), `compare <problem> <run> <run>` (a diagnostic, never a verdict), `clean <problem>`
-(the run folders nothing needs any more, written to a list file in the run root; `clean <problem> --delete <list> --decision D<n>` deletes the
-runs of that list, each checked again: finished, no live step, no KEEP or INCONCLUSIVE verdict, named by no card's `from` / `needs`, no
-champion or comparison seed), `index` (ledger.csv), `report`. Gates: `hold` / `release`
+(the run folders nothing needs any more, written to a list file in the run root with a hash; the owner confirms the list with a decided row
+that names the hash, then `clean <problem> --delete <list> --decision D<n>` deletes the runs of that list, each checked again: finished, no
+live step, no arm KEEP, INCONCLUSIVE, TIE or MEASURED, named by no card (`from`, `needs`, a `{runs}/<run>` setting), no champion or
+comparison seed), `index` (ledger.csv), `report`. Gates: `hold` / `release`
 (no start of a problem), `grant` (a protected file for some hours under a decided decision). Git: `commit <paths>` (these paths only,
 through a temporary index; paths as git reads them or from the top), `push-check`. `machine` shows or writes the machine file.
 

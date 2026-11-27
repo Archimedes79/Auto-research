@@ -102,6 +102,20 @@ def step_alive(problem: str, rid: str) -> bool:
         return False
 
 
+def needed(other: str, status: Optional[str], stop: bool) -> Optional[str]:
+    """the rule for a run this one needs: None = wait, '' = go on, else why this run ends; a text that starts with 'stopped' ends it as
+    stopped (`resume` takes it again), any other as failed. A stop request comes first; a needed run that was stopped stops this one too"""
+    if status == "ok":
+        return ""
+    if stop:
+        return f"stopped while it waited for {other}"
+    if status == "stopped":
+        return f"stopped: the needed run {other} is stopped (resume it and this one)"
+    if status in ("failed", "killed", "missing"):
+        return f"the needed run {other} is {status}"
+    return None
+
+
 def _number(value: Any) -> bool:
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
@@ -233,8 +247,7 @@ class Worker:
         return {"status": status, "exit": code_, "seconds": round(time.time() - t0, 1), "log": os.path.basename(log_path), **({"why": reason} if reason else {})}
 
     def wait_needs(self, card_needs: Dict[str, str]) -> str:
-        """'' when every run this one needs is finished, else why it cannot go on (a needed run that ended without success: it is resumed
-        first, then this one)"""
+        """'' when every run this one needs is finished, else why it cannot go on (see `needed`)"""
         for key, ref in card_needs.items():
             other = f"{ref}_s{self.run['seed']}"
             path = os.path.join(record_dir(self.problem, other), "run.json")
@@ -243,14 +256,14 @@ class Worker:
                     st = read_json(path).get("status")
                 except (OSError, ValueError):
                     st = "missing"
-                if st == "ok":
-                    break
-                if st in ("failed", "killed", "stopped", "missing"):
-                    return f"the needed run {other} is {st}"
-                if self.stop_requested():
-                    return "stopped while it waited for " + other
-                self.beat(f"waiting for {other}")
-                time.sleep(BEAT_S)
+                why = needed(other, st, self.stop_requested())
+                if why is None:
+                    self.beat(f"waiting for {other}")
+                    time.sleep(BEAT_S)
+                    continue
+                if why:
+                    return why
+                break
         return ""
 
     def main(self) -> int:

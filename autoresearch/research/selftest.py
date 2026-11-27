@@ -4,9 +4,11 @@ this checkout and no machine state is touched).
     python -m research.selftest [--quick]        (from autoresearch/, with the interpreter that has torch; --quick: the parts only, seconds)
 
 The chain: new -> check -> start (snapshot, tag, workers) -> runs from the snapshot -> judge (verdict, ledger, commit) -> adopt (anchor) and the
-refusals: a card changed after its start, an adoption whose anchor test fails (the base config put back), an untrained control (INVALID), a
-kill rule (also on a later row, in a step's own folder), stop and resume, a holdout read (also with the variables of a TEST run but no log
-row), an evaluation by hand, an edit of a protected file or the state folder without and with a grant, and clean (a list, then exactly it)."""
+refusals: a card changed after its start, an adoption whose anchor test or commit fails or whose run folder is gone (base config and
+champions/ put back), an untrained control (INVALID), a kill rule (also on a later row, in a step's own folder), stop and resume, a
+registration without a DONE verdict, a holdout read (also with the variables of a TEST run but no log row), an evaluation by hand, an edit of
+a protected file or the state folder without and with a grant (also with a broken gates.py), and clean (a list, then exactly it under the
+decided row that names its hash)."""
 from __future__ import annotations
 
 import glob
@@ -91,12 +93,16 @@ def parts(tmp: str) -> None:
     with open(log, "w") as f:
         f.write(json.dumps({"step": 1, "total": 0.0}) + "\n" + json.dumps({"step": 2, "total": float("nan")}) + "\n")
     assert "not a number at step 2" in worker.Kill([{"metric": "total", "after_step": 0, "below": -1.0}], log).fired()
+    # a run that another needs: a stop request comes first, a stopped needed run stops this one (resumable), a failed one fails it
+    assert worker.needed("E1.c_s0", "running", False) is None and worker.needed("E1.c_s0", "ok", True) == ""
+    assert worker.needed("E1.c_s0", "failed", True).startswith("stopped") and worker.needed("E1.c_s0", "stopped", False).startswith("stopped")
+    assert worker.needed("E1.c_s0", "failed", False) == "the needed run E1.c_s0 is failed"
     # decisions and the TEST log
     root = os.path.join(tmp, "repo_g")
     os.makedirs(os.path.join(root, "problems", "x"))
-    json.dump(p | {"name": "x"}, open(os.path.join(root, "problems", "x", "problem.json"), "w"))
+    json.dump(p | {"name": "x", "tests": ["hang.py"]}, open(os.path.join(root, "problems", "x", "problem.json"), "w"))
     open(os.path.join(root, "DECISIONS.md"), "w").write("# D\n## Decided\n| date | decision |\n|---|---|\n| 2026-11-27 | D7: ok |\n\n## Open\n| D8 | asked |\n")
-    assert gates.decided("x", root) == {"D7"}
+    assert gates.decided("x", root) == {"D7"} and gates.decided_rows("x", root)["D7"] == "| 2026-11-27 | D7: ok |"
     log_path = os.path.join(root, "problems", "x", "TEST_LOG.md")
     open(log_path, "w").write("# TEST\n## Runs\n| date | run | decision | note |\n|---|---|---|---|\n| 2026-11-27 | E1.a_s0 | D8 | asked |\n| 2026-11-27 | E1.c_s0 | D7 | once |\n")
     assert "not a decided" in gates.test_refusal("x", "E1.a_s0", root)
@@ -110,6 +116,8 @@ def parts(tmp: str) -> None:
     assert gates.is_protected("autoresearch/Evaluation/defaults.py", root) and not gates.is_protected("problems/x/DECISIONS.md", root)
     if os.name != "nt":
         assert hook.to_local("\\\\wsl.localhost\\Ubuntu\\home\\u\\.research\\state\\grants.json") == "/home/u/.research/state/grants.json"
+    assert hook.strip_stream("C:\\x\\TEST_LOG.md::$DATA") == "C:/x/TEST_LOG.md" and hook.strip_stream("a/TEST_LOG.md:s") == "a/TEST_LOG.md"
+    assert hook.strip_stream("C:/x/y.md") == "C:/x/y.md"
     # a step's environment: nothing of the caller's trees, the machine file and its own values; the rest (PATH) kept
     saved = dict(os.environ)
     try:
@@ -117,6 +125,23 @@ def parts(tmp: str) -> None:
         e = child_env(RESEARCH_RUN="E1.a_s0")
         assert not {"BFLC_ROOT", "RESEARCH_EVAL_OUT", "GIT_DIR"} & set(e) and e["RESEARCH_RUN"] == "E1.a_s0" and e["RESEARCH_MACHINE"] == machine_file()
         assert e.get("PATH") == os.environ.get("PATH")
+        # clean: a card names runs by from / needs and by a {runs}/<run> path in its settings
+        from research import upkeep
+        machine_p = os.path.join(tmp, "machine_p", "machine.json")
+        os.makedirs(os.path.dirname(machine_p))
+        json.dump({"data": os.path.join(tmp, "data_p"), "runs": os.path.join(tmp, "runs_p"), "python": {"gcar": sys.executable}, "gpu_slots": 0}, open(machine_p, "w"))
+        os.environ.update(RESEARCH_REPO=root, RESEARCH_MACHINE=machine_p)
+        os.makedirs(os.path.join(root, "problems", "x", "experiments", "E001_a"))
+        write_card(os.path.join(root, "problems", "x", "experiments"), "E001_a",
+                   {"id": "E1", "title": "t", "arms": {"r": {"from": "E2.c"}, "w": {"set": {"init": "{runs}/E3.b_s1"}}}})
+        refs = upkeep.referenced("x")
+        assert "names E3.b_s1" in upkeep.why_kept("x", "E3.b_s1", [], refs) and "names E2.c" in upkeep.why_kept("x", "E2.c_s0", [], refs), refs
+        # research tests: a test past its timeout is killed with everything it started
+        with open(os.path.join(root, "problems", "x", "hang.py"), "w") as f:
+            f.write("import subprocess, time\nopen('child.pid', 'w').write(str(subprocess.Popen(['sleep', '60']).pid))\ntime.sleep(60)\n")
+        t = upkeep.tests("x", timeout=2)
+        child = int(open(os.path.join(root, "problems", "x", "child.pid")).read())
+        assert not t["passed"] and "timed out" in t["tests"][0]["last"] and ended(child), (t, child)
     finally:
         os.environ.clear()
         os.environ.update(saved)
@@ -127,8 +152,22 @@ def parts(tmp: str) -> None:
     r = {"split": "val", "frames": 160, "evaluation": {"gt": "g1", "evaluator": "e1", "metrics": ["seg"]}}
     assert judge.incomparable([{"result": r}, {"result": r}]) == []
     assert any("ground truth" in x for x in judge.incomparable([{"result": r}, {"result": dict(r, evaluation=dict(r["evaluation"], gt="g2"))}]))
-    say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, decisions, the TEST log, protected paths, "
-        "a step's environment")
+    say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, a needed run, decisions, the TEST log, "
+        "protected paths, stream names, a step's environment, the references clean keeps, a test past its timeout")
+
+
+def ended(pid: int, seconds: float = 5.0) -> bool:
+    """has the process ended (gone or a zombie) within some seconds?"""
+    end = time.time() + seconds
+    while time.time() < end:
+        try:
+            with open(f"/proc/{pid}/stat", encoding="utf-8") as f:
+                if f.read().rsplit(")", 1)[-1].split()[0] in ("Z", "X"):
+                    return True
+        except FileNotFoundError:
+            return True
+        time.sleep(0.1)
+    return False
 
 
 # ------------------------------------------------------------------------------------------------ the chain
@@ -281,14 +320,23 @@ def chain(tmp: str) -> None:
     died = research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,))
     os.replace(rec_a0 + ".away", rec_a0)
     assert "anchor test of E1.a_s0 did not run" in died.stderr and open(base_json, encoding="utf-8").read() == before, died.stderr[-2000:]
+    run_a1 = os.path.join(tmp, "runs", "toy", "E1.a_s1")
+    os.replace(run_a1, run_a1 + ".away")                             # a seed's run folder is gone: refused before anything is written
+    assert "run folders of E1.a_s1 are gone" in research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,)).stderr
+    os.replace(run_a1 + ".away", run_a1)
+    branch = subprocess.run(["git", "symbolic-ref", "--short", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip()
+    subprocess.run(["git", "checkout", "-q", "--detach"], cwd=root, check=True)       # the anchor test passes, the commit fails: all put back
+    late = research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,))
+    subprocess.run(["git", "checkout", "-q", branch], cwd=root, check=True)
+    assert "detached" in late.stderr and open(base_json, encoding="utf-8").read() == before and not os.path.exists(os.path.join(root, "champions", "toy")), late.stderr[-2000:]
     ad = json.loads(research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env).stdout)
     champ = json.load(open(os.path.join(root, "champions", "toy", "champions.json")))
     assert ad["champion"] == "E1.a" and champ["champion"] == "E1.a" and ad["commit"]
     assert json.load(open(os.path.join(root, "problems", "toy", "training", "configs", "base.json")))["width"] == 12
     expect = research(["adopt", "toy", "E1", "a", "--decision", "D2"], env, ok=(1,)).stderr
     assert "not a decided decision" in expect
-    say("adopt: a failed anchor test leaves the base config; anchor test passed, champions/toy/ written, the arm's settings in the base config, "
-        "one commit; an undecided decision is refused")
+    say("adopt: a failed anchor test, a missing run folder or a failed commit leave base config and champions/; anchor test passed, "
+        "champions/toy/ written, the arm's settings in the base config, one commit; an undecided decision is refused")
     # E2: an untrained control -> INVALID
     e2 = json.loads(research(["new", "toy", "broken_control", "a control that did not train"], env).stdout)["folder"]
     write_card(root, e2, {"id": "E2", "title": "broken control", "question": "q", "hypothesis": "h", "prediction": 0.1, "control": "c", "seeds": [0],
@@ -326,6 +374,7 @@ def chain(tmp: str) -> None:
     assert wait(root, e4, ["E4.m_s0"]) == {"E4.m_s0": "ok"}
     m4 = json.loads(research(["judge", "toy", "E4"], env).stdout)
     assert m4["arms"]["m"]["verdict"] == "MEASURED" and m4["arms"]["m"]["seeds"]["0"]["numbers"]["seg.iou"] > 0.3, m4
+    assert "no DONE verdict" in research(["register", "toy", "E4", "m", "--decision", "D1", "--role", "comparison"], env, ok=(1,)).stderr
     say("stop (exit 75, status stopped) and resume (the finished steps skipped, the training continued) to the end; a measurement")
     # holdout, an evaluation by hand, TEST without a log row
     hand = sh([sys.executable, "-m", "research.evaluate", "toy", "E1.a_s0"], os.path.join(root, "problems", "toy"), dict(env, PYTHONPATH=os.pathsep.join([os.path.join(root, "problems", "toy"), core])), ok=(1,))
@@ -360,50 +409,79 @@ def chain(tmp: str) -> None:
     os.makedirs(bare)
     toy_p = json.load(open(os.path.join(root, "problems", "toy", "problem.json"), encoding="utf-8"))
     json.dump({k: v for k, v in toy_p.items() if k != "protected"} | {"name": "bare"}, open(os.path.join(bare, "problem.json"), "w"))
-    for path, why in ((os.path.join(os.path.dirname(machine), "state", "grants.json"), "state folder"),
-                      (os.path.join(root, "problems", "toy", "test_log.md"), "is protected"), (os.path.join(bare, "TEST_LOG.md"), "is protected")):
-        r = subprocess.run([sys.executable, hook], input=json.dumps(dict(ev, tool_input={"file_path": path})), capture_output=True, text=True, env=env)
+    grants_json = os.path.join(os.path.dirname(machine), "state", "grants.json")
+    os.makedirs(os.path.dirname(grants_json), exist_ok=True)
+    json.dump([1, "x", {"path": 3}], open(grants_json, "w"))         # a grants file with entries that are no grants: it grants nothing
+    hook_run = lambda path: subprocess.run([sys.executable, hook], input=json.dumps(dict(ev, tool_input={"file_path": path})), capture_output=True,  # noqa: E731
+                                           text=True, env=env)
+    for path, why in ((grants_json, "state folder"), (os.path.join(root, "problems", "toy", "test_log.md"), "is protected"),
+                      (os.path.join(bare, "TEST_LOG.md"), "is protected"), (os.path.join(root, "problems", "toy", "TEST_LOG.md::$DATA"), "is protected"),
+                      (os.path.join(root, "champions", "toy", "champions.json"), "is protected")):
+        r = hook_run(path)
         assert r.returncode == 2 and why in r.stderr, (path, r.returncode, r.stderr)
+    gates_py = os.path.join(core, "research", "gates.py")           # a broken gates.py: what may be protected is refused, the rest goes through
+    keep_gates = open(gates_py, encoding="utf-8").read()
+    open(gates_py, "a", encoding="utf-8").write("\n)(\n")
+    broken, outside = hook_run(os.path.join(root, "champions", "toy", "champions.json")), hook_run(os.path.join(tmp, "outside.txt"))
+    open(gates_py, "w", encoding="utf-8").write(keep_gates)
+    assert broken.returncode == 2 and "gate hook failed" in broken.stderr and outside.returncode == 0, (broken.stderr, outside.stderr)
     research(["grant", "problems/toy/problem.json", "--decision", "D1", "--hours", "1", "--note", "selftest"], env)
     assert subprocess.run([sys.executable, hook], input=json.dumps(ev), capture_output=True, text=True, env=env).returncode == 0
     assert "not a decided" in research(["grant", "problems/toy/TEST_LOG.md", "--decision", "D9", "--note", "x"], env, ok=(1,)).stderr
-    say("hook: a protected file is refused (any case, a TEST log its problem does not list, the state folder), allowed under a grant of a "
-        "decided decision; an undecided grant is refused")
+    say("hook: a protected file is refused (any case, a stream name, a TEST log its problem does not list, the state folder, a grants file of "
+        "no grants, a broken gates.py), allowed under a grant of a decided decision; an undecided grant is refused")
     open(os.path.join(root, e1, "runs", "README.md"), "w").write("not a run\n")
     st = research(["status", "toy"], env).stdout
     assert "E1.a_s0" in st and "E4.m_s0" in st
     tr = json.loads(research(["tests", "toy"], env).stdout)
     assert tr["passed"] and [t["test"] for t in tr["tests"]] == ["tests/test_toy.py --quick"], tr
     say("tests: the problem's own tests with its interpreter and module path")
-    # clean: E2 is judged (INVALID): its runs go on the list; E3 has a KEEP arm, E4's step lives, E5 has no verdict, E1.a is the champion:
-    # they stay; E1's control goes too unless E1 has a KEEP or INCONCLUSIVE arm
+    # clean: E2 is judged (INVALID): its runs go on the list; E3 has a KEEP arm, E5 a MEASURED one, E4's step lives, E1.a is the champion:
+    # they stay; E1's control goes too when E1's arm is CUT (KEEP, INCONCLUSIVE and TIE keep it)
     runs = os.path.join(tmp, "runs", "toy")
-    json.dump({"experiment": "E3", "arms": {"k": {"verdict": "KEEP"}}}, open(os.path.join(root, e3, "verdict.json"), "w"))
-    json.dump({"experiment": "E4", "arms": {"m": {"verdict": "MEASURED"}}}, open(os.path.join(root, e4, "verdict.json"), "w"))
+    for folder, arms in ((e3, {"k": {"verdict": "KEEP"}}), (e4, {"m": {"verdict": "CUT"}}), (e5, {"s": {"verdict": "MEASURED"}})):
+        json.dump({"verdict": "DONE", "arms": arms}, open(os.path.join(root, folder, "verdict.json"), "w"))
     alive = subprocess.Popen(["sleep", "300"], start_new_session=True)
     try:
         open(os.path.join(runs, "E4.m_s0", "step.pid"), "w").write(str(alive.pid))
         listed = json.loads(research(["clean", "toy"], env).stdout)
-        expect = {"E2.a_s0", "E2.c_s0"} | (set() if arm["verdict"] in ("KEEP", "INCONCLUSIVE") else {"E1.c_s0", "E1.c_s1"})
+        expect = {"E2.a_s0", "E2.c_s0"} | ({"E1.c_s0", "E1.c_s1"} if arm["verdict"] == "CUT" else set())
         assert {i["run"] for i in listed["runs"]} == expect and os.path.isfile(listed["list"]), listed
-        assert "step still runs" in listed["kept"]["E4.m_s0"] and "KEEP" in listed["kept"]["E3.k_s0"] and "champion" in listed["kept"]["E1.a_s0"], listed["kept"]
+        kept = listed["kept"]
+        assert "step still runs" in kept["E4.m_s0"] and "KEEP" in kept["E3.k_s0"] and "MEASURED" in kept["E5.s_s0"] and "champion" in kept["E1.a_s0"], kept
     finally:
         alive.kill()
         alive.wait()
     # after the listing: a new card builds on E2.c (it must stay), E4's step ended (deletable now, but not on the list)
     e6 = json.loads(research(["new", "toy", "reuse", "builds on E2.c"], env).stdout)["folder"]
     write_card(root, e6, {"id": "E6", "title": "reuse", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0], "arms": {"r": {"from": "E2.c"}}})
-    assert "needs a decided decision" in research(["clean", "toy", "--delete", listed["list"], "--decision", "D9"], env, ok=(1,)).stderr
+    h = listed["hash"][:12]
+    unbound = research(["clean", "toy", "--delete", listed["list"], "--decision", "D1"], env, ok=(1,)).stderr
+    assert "does not name this list" in unbound and h in unbound, unbound       # a decided decision that does not name the list's hash
+    from research.upkeep import _list_hash                          # a list written by hand, with a non-run id after a deletable run
+    crafted = {"problem": "toy", "made": "by hand", "runs": [{"run": "E2.a_s0", "bytes": 1}, {"run": "../x", "bytes": 0}], "bytes": 1}
+    crafted["hash"] = _list_hash(crafted)
+    crafted_path = os.path.join(tmp, "crafted.json")
+    json.dump(crafted, open(crafted_path, "w"))
+    decisions = os.path.join(root, "DECISIONS.md")
+    owner = "| 2026-11-27 | D1: the selftest's owner says yes |\n"
+    text = open(decisions, encoding="utf-8").read()
+    assert owner in text
+    with open(decisions, "w", encoding="utf-8") as f:
+        f.write(text.replace(owner, owner + f"| 2026-11-27 | D2: delete the runs of clean list {h} |\n"
+                             f"| 2026-11-27 | D3: delete the runs of clean list {crafted['hash'][:12]} |\n"))
+    assert "no runs" in research(["clean", "toy", "--delete", crafted_path, "--decision", "D3"], env, ok=(1,)).stderr
+    assert os.path.isdir(os.path.join(runs, "E2.a_s0")), "a list is checked as a whole before anything is deleted"
     champs = os.path.join(root, "champions", "toy", "champions.json")
     keep_champs = open(champs, encoding="utf-8").read()
     open(champs, "w").write("{")
-    assert "cannot be read" in research(["clean", "toy", "--delete", listed["list"], "--decision", "D1"], env, ok=(1,)).stderr
+    assert "cannot be read" in research(["clean", "toy", "--delete", listed["list"], "--decision", "D2"], env, ok=(1,)).stderr
     open(champs, "w", encoding="utf-8").write(keep_champs)
-    done = json.loads(research(["clean", "toy", "--delete", listed["list"], "--decision", "D1"], env).stdout)
+    done = json.loads(research(["clean", "toy", "--delete", listed["list"], "--decision", "D2"], env).stdout)
     assert set(done["deleted"]) == expect - {"E2.c_s0"} and list(done["kept"]) == ["E2.c_s0"] and "E006" in done["kept"]["E2.c_s0"], done
     assert not os.path.exists(os.path.join(runs, "E2.a_s0")) and os.path.isdir(os.path.join(runs, "E2.c_s0")) and os.path.isdir(os.path.join(runs, "E4.m_s0"))
-    say("clean: a list (a live step, a KEEP experiment, the champion kept), then exactly that list under a decided decision, each run checked "
-        "again; an unreadable champions.json refuses")
+    say("clean: a list (a live step, KEEP and MEASURED experiments, the champion kept), then exactly that list under the decided row that names "
+        "its hash, checked as a whole first and each run again; another decision, a list by hand and an unreadable champions.json refuse")
 
 
 def main(argv) -> int:

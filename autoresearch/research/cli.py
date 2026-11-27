@@ -155,7 +155,7 @@ def build() -> argparse.ArgumentParser:
     s = sub.add_parser("clean", help="list the run folders nothing needs any more into a list file in the run root; --delete <list file> "
                                      "--decision D<n> deletes the runs of that list that are still deletable")
     s.add_argument("problem"), s.add_argument("--delete", default="", metavar="LIST", help="the list file the owner confirmed")
-    s.add_argument("--decision", default="", help="the decided decision that confirms the list")
+    s.add_argument("--decision", default="", help="the decided decision whose row names the list's hash (the owner saw that list)")
     s = sub.add_parser("index", help="write ledger.csv from the records")
     s.add_argument("problem"), s.add_argument("--check", action="store_true", help="exit 1 when ledger.csv is not what the records give")
     s = sub.add_parser("hold", help="no start or resume of a problem until released")

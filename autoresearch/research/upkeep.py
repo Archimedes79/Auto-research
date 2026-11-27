@@ -1,23 +1,28 @@
 """tests, anchor, compare, clean: the upkeep of a problem's code and runs.
 
-tests    the problem's own tests (problem.json "tests"), each with the problem's interpreter and module path from its folder; passed = exit 0
-         and no Traceback in the output (a script can die with exit 0 behind a wrapper); after any change of the problem's code
+tests    the problem's own tests (problem.json "tests"), each with the problem's interpreter and module path from its folder, in a session of
+         its own; passed = exit 0 and no "Traceback (most recent call last)" in the output (a script can die with exit 0 behind a wrapper, so
+         a test that prints an expected traceback fails); past the timeout the test and all it started are killed; after any change of the
+         problem's code
 anchor  a finished run evaluated again with the code of the working tree, into a fresh folder: do its numbers still come out? (the champion's
          check after any change of the problem's code; research/anchor.py does the work with the problem's interpreter)
 compare  two finished runs side by side: the paired scene bootstrap of the score and the guards (a diagnostic, never a verdict)
 clean    the run folders that nothing needs any more (hard rule 5, D154; their records stay in git). `clean <p>` writes the list (run ids,
-         sizes, the time, a hash) into a list file in the problem's run root; the owner confirms that list in a decided decision, and
-         `clean <p> --delete <list file> --decision D<n>` deletes the runs of exactly that list, each checked again just before. A run
-         stays while it is not finished (ok, failed, killed), its step lives, its experiment has no verdict or a KEEP or INCONCLUSIVE arm
-         (an adoption or another seed needs it), a card names its arm in `from` / `needs`, or it is a seed of a champion or comparison
-         network; an unreadable champions.json or network.json, or a card that cannot be read, refuses. Folders that are no run (imported
-         networks, caches, the code snapshots) are never touched."""
+         sizes, the time, a hash) into a list file in the problem's run root; the owner confirms exactly that list with a decided row that
+         names its hash (the first 12 hex), and `clean <p> --delete <list file> --decision D<n>` checks the whole list, then deletes its runs,
+         each checked again just before. A run stays while it is not finished (ok, failed, killed), its step lives, its experiment has no
+         verdict or an arm KEEP, INCONCLUSIVE, TIE or MEASURED (an adoption, a registration or another seed needs it), a card names it (`from`,
+         `needs`, or a `{runs}/<run>` path in its settings), or it is a seed of a champion or comparison network; an unreadable champions.json
+         or network.json, or a card that cannot be read, refuses. Folders that are no run (imported networks, caches, the code snapshots) are
+         never touched."""
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import re
 import shutil
+import signal
 import subprocess
 import time
 from typing import Any, Dict, List, Optional
@@ -41,11 +46,14 @@ def tests(problem: str, only: str = "", timeout: float = 3600) -> Dict[str, Any]
     rows = []
     for t in scripts:
         t0 = time.time()
+        proc = subprocess.Popen([interpreter(p["python"]), *t.split()], cwd=problem_dir(problem), env=_env(problem), stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
         try:
-            r = subprocess.run([interpreter(p["python"]), *t.split()], cwd=problem_dir(problem), env=_env(problem), capture_output=True, timeout=timeout)
-            out, code = (r.stdout + r.stderr).decode("utf-8", "replace"), r.returncode
-        except subprocess.TimeoutExpired:
-            out, code = f"timed out after {timeout:.0f} s", -1
+            out, code = proc.communicate(timeout=timeout)[0].decode("utf-8", "replace"), proc.returncode
+        except subprocess.TimeoutExpired:                            # the test and everything it started (trainers, loaders) end
+            os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
+            out, code = f"timed out after {timeout:.0f} s: its process group was killed", -1
         lines = [ln for ln in out.splitlines() if ln.strip()]
         rows.append({"test": t, "passed": code == 0 and "Traceback (most recent call last)" not in out, "exit": code,
                      "seconds": round(time.time() - t0, 1), "last": lines[-1][:200] if lines else ""})
@@ -107,8 +115,12 @@ def kept_runs(problem: str) -> List[str]:
                             "is listed or deleted") from None
 
 
+RUN_PATH = re.compile(r"\{runs\}/(E\d+\.[a-z][a-z0-9]*_s\d+)")
+
+
 def referenced(problem: str) -> Dict[str, str]:
-    """E<n>.<arm> -> the experiment folder whose card names it in `from` / `needs` (the working cards: a card not yet started counts too)"""
+    """E<n>.<arm> (`from`, `needs`) or a run id (a `{runs}/<run>` path in an arm's settings) -> the experiment folder whose card names it
+    (the working cards: a card not yet started counts too)"""
     base = os.path.join(problem_dir(problem), "experiments")
     refs: Dict[str, str] = {}
     for d in sorted(os.listdir(base)) if os.path.isdir(base) else []:
@@ -122,13 +134,14 @@ def referenced(problem: str) -> Dict[str, str]:
             raise ResearchError(f"{e}: without the card it is unknown which runs it builds on, so nothing is listed or deleted") from None
         arms = card.get("arms") if isinstance(card.get("arms"), dict) else {}
         for arm in (a for a in arms.values() if isinstance(a, dict)):
-            for ref in [arm.get("from")] + list((arm.get("needs") or {}).values()):
+            for ref in [arm.get("from")] + list((arm.get("needs") or {}).values()) + RUN_PATH.findall(json.dumps(arm.get("set", {}))):
                 if isinstance(ref, str):
                     refs[ref] = d
     return refs
 
 
 FINISHED = ("ok", "failed", "killed")
+OPEN = ("KEEP", "INCONCLUSIVE", "TIE", "MEASURED")                     # arms whose runs an adoption (TIE: by hand), a registration or a seed needs
 
 
 def why_kept(problem: str, rid: str, keep: List[str], refs: Dict[str, str]) -> str:
@@ -136,8 +149,9 @@ def why_kept(problem: str, rid: str, keep: List[str], refs: Dict[str, str]) -> s
     exp, arm, _ = parse_run(rid)
     if rid in keep:
         return "a seed of a champion or comparison network"
-    if f"{exp}.{arm}" in refs:
-        return f"the card of {refs[f'{exp}.{arm}']} names {exp}.{arm} (from / needs)"
+    for ref in (rid, f"{exp}.{arm}"):
+        if ref in refs:
+            return f"the card of {refs[ref]} names {ref} (from, needs or a {{runs}} path)"
     try:
         rec = record_dir(problem, rid)
         status = read_json(os.path.join(rec, "run.json")).get("status")
@@ -153,8 +167,8 @@ def why_kept(problem: str, rid: str, keep: List[str], refs: Dict[str, str]) -> s
         return f"{exp} has no verdict"
     except ValueError:
         return f"the verdict.json of {exp} cannot be read"
-    open_arms = sorted(a for a, v in verdict.get("arms", {}).items() if isinstance(v, dict) and v.get("verdict") in ("KEEP", "INCONCLUSIVE"))
-    return f"the verdict of {exp} has a KEEP or INCONCLUSIVE arm ({', '.join(open_arms)}): an adoption or another seed needs its runs" if open_arms else ""
+    open_arms = [f"{a} {v.get('verdict')}" for a, v in sorted(verdict.get("arms", {}).items()) if isinstance(v, dict) and v.get("verdict") in OPEN]
+    return f"the verdict of {exp} has {', '.join(open_arms)}: an adoption, a registration or another seed needs its runs" if open_arms else ""
 
 
 def _list_hash(lst: Dict[str, Any]) -> str:
@@ -162,11 +176,36 @@ def _list_hash(lst: Dict[str, Any]) -> str:
 
 
 def clean(problem: str, delete: str = "", decision: str = "") -> Dict[str, Any]:
-    """without `delete`: list the deletable runs into a list file; with it (the list file's path) and a decided decision: delete them"""
-    if delete and decision not in gates.decided(problem):
-        raise ResearchError(f"deleting run outputs needs a decided decision that confirms the list (got {decision!r})")
+    """without `delete`: list the deletable runs into a list file; with it (the list file's path) and the decided decision that confirms
+    that list: delete them"""
+    lst = _confirmed(problem, delete, decision) if delete else None
     keep, refs = kept_runs(problem), referenced(problem)
-    return _delete(problem, delete, decision, keep, refs) if delete else _list(problem, keep, refs)
+    return _delete(problem, delete, lst, decision, keep, refs) if lst is not None else _list(problem, keep, refs)
+
+
+def confirm_text(lst: Dict[str, Any]) -> str:
+    """a decided row that confirms this list (the hash is what is checked)"""
+    size = sum(i["bytes"] for i in lst["runs"]) / 1e9
+    return f"| <date> | D<n>: delete the runs of clean list {lst['hash'][:12]} ({len(lst['runs'])} runs, {size:.1f} GB) |"
+
+
+def _confirmed(problem: str, list_path: str, decision: str) -> Dict[str, Any]:
+    """the list file, checked as a whole before anything is deleted: written by `clean` and unchanged, every entry a run id, and the decided
+    row of `decision` names its hash (so the owner saw this list, and a list written by hand names no row)"""
+    try:
+        lst = read_json(list_path)
+    except (OSError, ValueError) as e:
+        raise ResearchError(f"the list {list_path}: {e}") from None
+    if not isinstance(lst, dict) or lst.get("problem") != problem or not isinstance(lst.get("runs"), list) or lst.get("hash") != _list_hash(lst):
+        raise ResearchError(f"{list_path} is no list of `research clean {problem}`, or it was changed after the listing")
+    bad = [i for i in lst["runs"] if not isinstance(i, dict) or not RUN_ID.match(str(i.get("run", ""))) or not isinstance(i.get("bytes"), int)]
+    if bad:
+        raise ResearchError(f"{list_path} holds entries that are no runs ({bad[:3]}): nothing is deleted")
+    row = gates.decided_rows(problem).get(decision)
+    if row is None or lst["hash"][:12] not in row.lower():
+        raise ResearchError(f"{decision!r} is {'not a decided decision' if row is None else 'decided, but its row does not name this list'}: the owner "
+                            f"confirms the list with a decided row that holds its hash, e.g. `{confirm_text(lst)}`")
+    return lst
 
 
 def _list(problem: str, keep: List[str], refs: Dict[str, str]) -> Dict[str, Any]:
@@ -184,16 +223,10 @@ def _list(problem: str, keep: List[str], refs: Dict[str, str]) -> Dict[str, Any]
     path = os.path.join(root, f"clean_{time.strftime('%Y%m%d_%H%M%S')}.json") if items else ""
     if path:
         write_json(path, lst)
-    return {"list": path, **lst, "kept": kept}
+    return {"list": path, **lst, "kept": kept, **({"confirm": f"the owner's decided row names the hash: {confirm_text(lst)}"} if path else {})}
 
 
-def _delete(problem: str, list_path: str, decision: str, keep: List[str], refs: Dict[str, str]) -> Dict[str, Any]:
-    try:
-        lst = read_json(list_path)
-    except (OSError, ValueError) as e:
-        raise ResearchError(f"the list {list_path}: {e}") from None
-    if not isinstance(lst, dict) or lst.get("problem") != problem or lst.get("hash") != _list_hash(lst):
-        raise ResearchError(f"{list_path} is no list of `research clean {problem}`, or it was changed after the listing")
+def _delete(problem: str, list_path: str, lst: Dict[str, Any], decision: str, keep: List[str], refs: Dict[str, str]) -> Dict[str, Any]:
     root = runs_root(problem)
     deleted, kept, gone = [], {}, []
     for item in lst["runs"]:

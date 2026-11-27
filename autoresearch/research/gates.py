@@ -17,25 +17,31 @@ from typing import Any, Dict, List, Optional, Set
 
 from research.paths import ResearchError, problem_dir, read_json, repo, state_dir, write_json
 
-DECIDED_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}[^|]*\|\s*(D\d+)\s*:", re.M)
+DECIDED_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}[^|]*\|\s*(D\d+)\s*:.*$", re.M)
 ROOT_PROTECTED = (".claude/settings.json", ".claude/settings.local.json", "autoresearch/research/hook.py", "autoresearch/research/gates.py",
                   "autoresearch/research/paths.py", "autoresearch/research/__init__.py", "autoresearch/Evaluation/defaults.py", "champions/*",
                   "problems/*/TEST_LOG.md")
 
 
-def decided(problem: Optional[str] = None, root: Optional[str] = None) -> Set[str]:
-    """the decided ids of the root file and, with a problem, of the problem's file"""
+def decided_rows(problem: Optional[str] = None, root: Optional[str] = None) -> Dict[str, str]:
+    """decided id -> the text of its row (of both rows when the root file and the problem's file both have it)"""
     root = root or repo()
     files = [os.path.join(root, "DECISIONS.md")] + ([os.path.join(problem_dir(problem, root), "DECISIONS.md")] if problem else [])
-    ids: Set[str] = set()
+    rows: Dict[str, str] = {}
     for path in files:
         try:
             with open(path, encoding="utf-8") as f:
                 text = f.read()
         except OSError:
             continue
-        ids |= set(DECIDED_ROW.findall(text.split("\n## Open", 1)[0]))
-    return ids
+        for m in DECIDED_ROW.finditer(text.split("\n## Open", 1)[0]):
+            rows[m.group(1)] = (rows.get(m.group(1), "") + "\n" + m.group(0)).strip()
+    return rows
+
+
+def decided(problem: Optional[str] = None, root: Optional[str] = None) -> Set[str]:
+    """the decided ids of the root file and, with a problem, of the problem's file"""
+    return set(decided_rows(problem, root))
 
 
 def _cells(line: str) -> List[str]:
@@ -128,10 +134,13 @@ def _grants_file() -> str:
 
 
 def grants() -> List[Dict[str, Any]]:
+    """the grants in force; a grants file that cannot be read, or an entry that is no grant, grants nothing"""
     try:
-        return [g for g in read_json(_grants_file()) if g.get("until", 0) > time.time()]
-    except (OSError, ValueError, TypeError):
+        data = read_json(_grants_file())
+    except (OSError, ValueError):
         return []
+    return [g for g in (data if isinstance(data, list) else []) if isinstance(g, dict) and isinstance(g.get("path"), str)
+            and isinstance(g.get("until"), (int, float)) and g["until"] > time.time()]
 
 
 def grant(relpath: str, decision: str, hours: float, note: str, problem: Optional[str] = None) -> Dict[str, Any]:
