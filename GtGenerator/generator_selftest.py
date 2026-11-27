@@ -77,7 +77,7 @@ def _contract_checks():
 def _front_checks(gt, toks):
     """footprints against the devkit, handedness against the image, centre-line direction, divider width, stored file against live"""
     from scipy.spatial import cKDTree
-    from .store import _flat, load_keyframe, save_keyframe
+    from .store import load_keyframe, write_keyframe
     grid = GridSpec()
     n_dev = n_side = n_dir = n_div = 0
     for tok in toks:
@@ -133,8 +133,7 @@ def _front_checks(gt, toks):
                 n_div += 1
         # 5. the stored file is the live keyframe, layer by layer (float16 for the float layers), the instance map and the meta exactly
         with tempfile.TemporaryDirectory() as d:
-            path = os.path.join(d, "k.npz")
-            save_keyframe(path, _flat(g))
+            assert write_keyframe(d, "k", lambda: g)
             back = load_keyframe(d, "k")
         for k, v in g.items():
             if k == "meta":

@@ -4,9 +4,8 @@ The signature (10 hex chars over the six files grid.py, layers.py, flow.py, nusc
 folder of the stored GT; the version is its human key. A version is: a row in versions.csv (next to this file), a git tag `autogt/vN`
 on the commit that holds that generator, and the key `gt_version` in the index.json of the stored GT. The rule when you edit one of the
 six files: the signature changes, `python -m GtGenerator selftest` fails until versions.csv has a row for the new signature, then commit
-and tag (`git tag -a autogt/v6 -m "..."`), rebuild the GT, tell the others. An old GT is rebuilt from its tag:
-`git worktree add temp/gt_v5 autogt/v5`, then run `build` of the package in that checkout (the old tags have no `generate`; exact
-command and the check that it is the checkout's package that runs: README.md, section Versions).
+and tag (`git tag -a autogt/v6 -m "..."`), rebuild the GT, tell the others. An old GT is rebuilt from its tag, with the writer of that
+checkout (`git worktree add`; the commands and the check that it is the checkout's package that runs: README.md, section Versions and signatures).
 
     GtGenerator.versions.table()          the rows (dicts)
     GtGenerator.versions.version_of(sig)  "v5" or None; GtGenerator.current_version() the GT version of THIS source with the default options

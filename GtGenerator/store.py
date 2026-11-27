@@ -1,6 +1,6 @@
 """Storage of the front GT: the keyframe files (`<signature>/<sample token>.npz`, float16 layers + the meta as a pickled object), the index.json of a store folder (the manifest: what it holds,
 which generator made it, whether it is a release), the resume checks, and the listing of a store folder by file name. No argparse, no devkit: everything that reads or writes a store comes here
-(`pipeline.py` writes with it, `suite.py` / `report.py` / `sets.py` read with it; the hashed `lane_gt.py` uses `names`, `read_index`, `environment` and `detect_version` of it).
+(`pipeline.py` and `report.py` write with it, `suite.py` / `sets.py` read with it; the hashed `lane_gt.py` uses `names`, `read_index`, `environment` and `detect_version` of it).
 """
 import json
 import os
@@ -33,7 +33,7 @@ def front_keys(sig_dir, nonempty=False):
 
 
 def check_arguments(stride=1, res=0.5, ss=4, workers=1, set_name=None, scenes=None):
-    """the arguments of generate / build / report that would otherwise end in a ZeroDivisionError or a silent wrong run -> ValueError with the message"""
+    """the arguments of generate / report that would otherwise end in a ZeroDivisionError or a silent wrong run -> ValueError with the message"""
     if stride < 1:
         raise ValueError(f"stride must be 1 or more, got {stride}")
     if res <= 0 or ss < 2 or ss % 2:
@@ -54,15 +54,8 @@ def read_index(folder):
     return idx if isinstance(idx, dict) else {}
 
 
-def _flat(g):
-    """GT dict -> npz arrays (float16 for float32 layers) + meta as an object array."""
-    arrs = {k: (v.astype(np.float16) if v.dtype == np.float32 else v) for k, v in g.items() if isinstance(v, np.ndarray)}
-    arrs["meta"] = np.array(g["meta"], dtype=object)
-    return arrs
-
-
 def load_keyframe(sig_dir, token):
-    """a keyframe written by `build` -> the GT dict (float32 layers + meta)."""
+    """a stored keyframe -> the GT dict (float32 layers + meta)."""
     out = {}
     with np.load(os.path.join(sig_dir, token + ".npz"), allow_pickle=True) as z:
         for k in z.files:
@@ -71,12 +64,20 @@ def load_keyframe(sig_dir, token):
     return out
 
 
-def save_keyframe(path, flat):
-    """write one keyframe file atomically; the temporary name holds the process id, so two writers on one folder do not trip over each
-    other (".tmp" in the name keeps it out of every listing of stored keyframes)"""
+def write_keyframe(sig_dir, token, make):
+    """THE writer of a keyframe file. A file that is there is kept (an empty one, from a full disk, is no keyframe); otherwise `make()` gives the GT dict, which is written with float16 for the
+    float32 layers and the meta as an object array, atomically: the temporary name holds the process id, so two writers on one folder do not trip over each other (".tmp" in the name keeps it
+    out of every listing of stored keyframes). -> True when this call wrote the file"""
+    path = os.path.join(sig_dir, token + ".npz")
+    if os.path.exists(path) and os.path.getsize(path) > 0:
+        return False
+    g = make()
+    arrs = {k: (v.astype(np.float16) if v.dtype == np.float32 else v) for k, v in g.items() if isinstance(v, np.ndarray)}
+    arrs["meta"] = np.array(g["meta"], dtype=object)
     tmp = f"{path}.{os.getpid()}.tmp.npz"
-    np.savez_compressed(tmp, **flat)
+    np.savez_compressed(tmp, **arrs)
     os.replace(tmp, path)
+    return True
 
 
 def run_manifest(sig_dir, version, dataroot, set_name=None, options=None):
@@ -107,8 +108,8 @@ def canonical_of(signature):
 
 
 def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True, run=None, old_complete=None):
-    """index.json of a cache folder (marks it as a GtGenerator cache for `clean`, records what it holds). `build` writes it with
-    complete=False before the first keyframe (so an interrupted build still says which resolution it holds) and again at the end.
+    """index.json of a cache folder (marks it as a GtGenerator cache for `clean`, records what it holds). `generate` writes it with
+    complete=False before the first keyframe (so an interrupted run still says which resolution it holds) and again at the end.
     run = run_manifest(...) of a finished run adds the manifest keys set, commit, dirty, sets_complete and release (a complete folder
     whose signature is a released GT version, made from a clean tree, holding the set `full`); without it the keys of an earlier run
     on this folder stay. old_complete = the `complete` of the index before this run's provisional write (the provisional index of this very run says False and must not make a finished run incomplete)."""
@@ -162,7 +163,7 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
 
 
 def finish_index(sig_dir, gen, version, names, stride, n_keyframes, options, written, dataroot, set_name=None, old_complete=None):
-    """the index.json at the end of a run (generate, report): written when this run wrote keyframes, when the index has no manifest yet (no commit: a `build` store, an older one) or when a clean tree can stamp
+    """the index.json at the end of a run (generate, report): written when this run wrote keyframes, when the index has no manifest yet (no commit: an older store) or when a clean tree can stamp
     the index of an earlier, dirty run (same signature, same GT); a run that wrote nothing leaves a finished index as it was, whatever stride or sequences it was asked for (it must not turn stride 1 into
     "mixed", drop the release or re-stamp the commit). -> (the index, whether it was written)"""
     from . import versions
@@ -176,23 +177,23 @@ def finish_index(sig_dir, gen, version, names, stride, n_keyframes, options, wri
 
 def check_resume(sig_dir, grid, ss):
     """The folder is named by the generator signature, which contains neither the resolution nor the supersampling: continuing a
-    build of another one would reuse its keyframes silently. The index says what the folder holds. A folder of an interrupted build
-    from before the provisional index has none: one stored keyframe is compared with the grid instead."""
+    store of another one would reuse its keyframes silently -> ValueError. The index says what the folder holds. A folder without one
+    (an interrupted `report`, which writes it at the end): one stored keyframe is compared with the grid instead."""
     idx_path = os.path.join(sig_dir, "index.json")
     if os.path.exists(idx_path):
         with open(idx_path) as f:
             held = json.load(f)
         if abs(held.get("res", grid.res) - grid.res) > 1e-9 or held.get("ss", ss) != ss:
-            raise SystemExit(f"{sig_dir} holds res {held.get('res')} / ss {held.get('ss')} (asked: res {grid.res} / ss {ss}): "
-                             "build into another output folder")
+            raise ValueError(f"{sig_dir} holds res {held.get('res')} / ss {held.get('ss')} (asked: res {grid.res} / ss {ss}): "
+                             "write into another output folder")
         return
     stored = [f for f in os.listdir(sig_dir) if f.endswith(".npz") and ".tmp" not in f] if os.path.isdir(sig_dir) else []
     if stored:
         with np.load(os.path.join(sig_dir, stored[0]), allow_pickle=True) as z:
             shape = tuple(z["drivable_area"].shape) if "drivable_area" in z.files else None
         if shape is not None and shape != (grid.nx, grid.ny):
-            raise SystemExit(f"{sig_dir} has no index.json (an interrupted build) and its keyframes have the cell grid {shape}, not "
-                             f"{(grid.nx, grid.ny)} (res {grid.res}): build into another output folder")
+            raise ValueError(f"{sig_dir} has no index.json (an interrupted run) and its keyframes have the cell grid {shape}, not "
+                             f"{(grid.nx, grid.ny)} (res {grid.res}): write into another output folder")
 
 
 def detect_version(dataroot):

@@ -17,14 +17,14 @@
     key = GtGenerator.generate_lane_gt(root, rig="lane_center")                  # Spurmitte (rig="all": both); key.load(token) / key.lane(token) / key.mask(token, "intersection", 0.5)
 
 Command line (from the repository root): python -m GtGenerator COMMAND ... ; every command is one method of GtGenerator (generate, generate-bev, generate-lane, area-masks, area-mask, key, have, data, sets, versions, audit-lane, check, digest,
-report, view, sheets, masks, lanegraph, video, clean, build, selftest: `python -m GtGenerator --help` has the map)
+report, view, sheets, masks, lanegraph, video, clean, selftest: `python -m GtGenerator --help` has the map)
 Guide for agents: GtGenerator/AGENTS.md; reference: GtGenerator/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): GtGenerator.flow.estimate_flow.
 """
 # Nothing below is imported at `import GtGenerator` (PEP 562): a name or a submodule is imported when it is first asked for (`GtGenerator.generate`, `GtGenerator.versions`, `from GtGenerator import GtKey`),
 # so the package imports without numpy and `import GtGenerator` costs nothing for the tools that only need a name.
 _NAMES = {"flow": ("Config", "FlowGT", "ObjectFlow", "Track", "estimate_flow"), "pipeline": ("generate",), "grid": ("GridSpec",),
-          "suite": ("AutoGT", "GtGenerator", "current_signature", "current_version", "load", "missing", "scene_tokens"),
+          "suite": ("GtGenerator", "current_signature", "current_version", "load", "missing", "scene_tokens"),
           "gt_api": ("GtKey", "generate_bev_gt", "generate_lane_gt", "gt_key", "key_of")}      # one function per system and the key it returns: GtGenerator/gt_api.py
 _OWNER = {name: module for module, names in _NAMES.items() for name in names}
 

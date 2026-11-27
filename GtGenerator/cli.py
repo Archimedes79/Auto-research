@@ -8,7 +8,6 @@ The command line reaches the suite ONLY through the class `GtGenerator` (GtGener
     generate-bev DATAROOT  GtGenerator.generate_bev_gt   BEV Fusion: the front GT + the lane GT of its rig + the packed intersection masks
     generate-lane DATAROOT GtGenerator.generate_lane_gt  the lane GT of one system (--rig lane_center | bev_fusion | all)
     area-masks             GtGenerator.area_masks        only the packed masks of an existing BEV Fusion lane store
-    build                  GtGenerator.build             the low-level writer behind `report` (one full devkit, --out required)
   look at GT
     key SYSTEM             GtGenerator.gt_key            the key of what is stored (exit 1 when incomplete), --json for the dict
     have                   GtGenerator.have              is the front GT of this generator there for these sequences? (exit 1 when not: the check before a training)
@@ -20,7 +19,7 @@ The command line reaches the suite ONLY through the class `GtGenerator` (GtGener
     audit-lane SYSTEM      GtGenerator.audit_lane        the audit of a stored lane GT before its release (exit 1 on a problem)
     check                  GtGenerator.check             consistency checks of the GT of mini        report   GtGenerator.report   the checks over all sequences, one PDF
     digest                 GtGenerator.digest            a digest per frame of mini (two generators that make the same GT give the same file)
-    clean                  GtGenerator.clean             list / move generated pictures, videos, reports and old caches (--delete only for what one command rebuilds)
+    clean                  GtGenerator.clean             list / move generated reports and stale caches (--delete only for reports)
     selftest               GtGenerator.selftest          all tests of the suite (7 - 13 min), or parts with --only
 
 Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; GTGENERATOR_TRACEBACK=1 shows it).
@@ -45,7 +44,7 @@ def _which_scenes(p):
 
 
 def _generator_options(p):
-    """the options of the generator that `generate`, `build` and `report` share"""
+    """the options of the generator that `generate` and `report` share"""
     p.add_argument("--no-flow", dest="use_flow", action="store_false")
     p.add_argument("--no-radar", dest="use_radar", action="store_false")
     p.add_argument("--boxes-at", choices=("camera", "annotation"), default="camera", help="time of the moving boxes: the camera time (default) or the annotation time")
@@ -104,15 +103,6 @@ def _parser():
     am.add_argument("--border-m", dest="borders", type=float, nargs="+", default=[0.0, 0.5])
     am.add_argument("--workers", type=int, default=1, help="processes (34k frames: about 11 min in one)")
     am.add_argument("--force", action="store_true", help="make them again although they are complete")
-    bu = command("build", "build", "the low-level writer of generate (one full devkit, --out required; pipeline.build)")
-    bu.add_argument("--dataroot", default="~/data/nuscenes")
-    bu.add_argument("--version", default="v1.0-mini")
-    bu.add_argument("--out", required=True)
-    bu.add_argument("--scenes", nargs="+")
-    bu.add_argument("--stride", type=int, default=1)
-    bu.add_argument("--res", type=float, default=0.5)
-    bu.add_argument("--workers", type=int, default=1)
-    _generator_options(bu)
     # ---- look at GT
     k = command("key", "gt_key", "the GT key of what is stored for a system: data + code signature of every part; exit 1 when incomplete (gt_api.gt_key)")
     k.add_argument("system", choices=["bev_fusion", "lane_center"])
@@ -183,16 +173,12 @@ def _parser():
     dg.add_argument("out", nargs="?", help="write the digests to this json file")
     dg.add_argument("--compare", nargs=2, metavar=("A", "B"), help="compare two digest files: exit 1 when any frame differs")
     dg.add_argument("--stride", type=int, default=2)
-    cl = command("clean", "clean", "list / move generated videos, pictures, reports and caches; --delete only for what one command rebuilds (clean.clean)")
-    for flag in ("--videos", "--pictures", "--reports"):
-        cl.add_argument(flag, action="store_true")
+    cl = command("clean", "clean", "list / move generated reports and stale caches; --delete only for reports (clean.clean)")
+    cl.add_argument("--reports", action="store_true")
+    cl.add_argument("--stale-caches", metavar="DIR", help="the stores below DIR of other generator versions (never a released one)")
     act = cl.add_mutually_exclusive_group()
     act.add_argument("--move", action="store_true")
     act.add_argument("--delete", action="store_true")
-    cl.add_argument("--all-caches", metavar="DIR")
-    cl.add_argument("--stale-caches", metavar="DIR")
-    cl.add_argument("--include-released", action="store_true", help="also list the released stores: --move only")
-    cl.add_argument("--older-than", type=float, metavar="DAYS")
     st = command("selftest", "selftest", "all tests of the suite (7 - 13 min), or only some of the file-level ones with --only")
     st.add_argument("--only", nargs="+", choices=sorted(SELFTESTS), help="run only these parts (each prints its time): " + ", ".join(sorted(SELFTESTS)))
     p.registry = registry

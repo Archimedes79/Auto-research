@@ -1,11 +1,11 @@
 """One-command GT evaluation of all sequences: python -m GtGenerator report --version v1.0-mini --out REPORT.pdf [--data DIR] [--workers N]
 
-For every keyframe of every sequence the generator runs ONCE; the result is stored in the cache (`DIR/<signature>/<token>.npz`, the
-same format as `build`, existing files are kept), fed to the automatic checks, and - for a few evenly spread sequences - drawn
-as a sample. The report is one PDF: summary of all checks, a table per sequence, optionally the leave-one-radar-out radar test,
-the legend and the sample pictures. The samples are drawn straight into the PDF: no picture file is ever written, so there is
+For every keyframe of every sequence the generator runs ONCE; the result is stored in the cache (`DIR/<signature>/<token>.npz`,
+written by `store.write_keyframe` as by `generate`, existing files are kept), fed to the automatic checks, and - for a few evenly spread
+sequences - drawn as a sample. The report is one PDF: summary of all checks, a table per sequence, optionally the leave-one-radar-out
+radar test, the legend and the sample pictures. The samples are drawn straight into the PDF: no picture file is ever written, so there is
 nothing to clean up afterwards except the report itself and the stored data, both covered by `python -m GtGenerator clean`
-(`--reports`, `--stale-caches`, `--all-caches`).
+(`--reports`, `--stale-caches`).
 
 Big datasets (v1.0-trainval, 850 sequences, 34,149 keyframes):
 - `--light` (automatic for trainval): the memory-light devkit (GtGenerator/light_nusc.py); the sequences are processed in groups of
@@ -30,7 +30,7 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .store import _flat, canonical_of, check_resume, finish_index, save_keyframe  # noqa: E402
+from .store import canonical_of, check_resume, finish_index, write_keyframe  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
 from .pipeline import GROUP_SCENES  # noqa: E402
 from .suite import GtGenerator  # noqa: E402
@@ -83,10 +83,7 @@ def _scene_task(name):
             gk = gen.keyframe(tok)
             ck.feed(name, k, tok, gk, gen.nusc.get("sample", tok)["timestamp"])
             if sig_dir:
-                path = os.path.join(sig_dir, tok + ".npz")
-                if not (os.path.exists(path) and os.path.getsize(path) > 0):
-                    save_keyframe(path, _flat(gk))
-                    written += 1
+                written += write_keyframe(sig_dir, tok, lambda: gk)
             if want_sample and sample is None and k >= mid:
                 sample = (k, gk)
         ck.written = written

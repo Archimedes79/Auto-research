@@ -1,409 +1,87 @@
 # GtGenerator - ground truth for BEV perception from nuScenes
 
-`GtGenerator` is **one class** that outputs the GT files; it is not a collection of tools. Above it lies the **command line** (every command is one method call of the class), below it the **sub-functions** it calls (the
-writer, the generators, the stores, the checks and pictures). The directory and the package are called `GtGenerator` (until 2026-11-10 `autogt/`: D76) and the old name of the class, `AutoGT`, stays as an alias (see **Names** at the end). The class turns the raw nuScenes data (maps, annotations, ego poses, cameras, radar) into training-ready ground truth for **two systems** - BEV Fusion (front camera + five radars, ego frame, grid x 0..60 m,
-y +-26 m) and Spurmitte (six cameras + five radars, lane frame, 100 x 100 m): static BEV layers, objects, a **velocity / flow field in m/s**, coverage masks, the lane graph with tiers and camera visibility,
-packed area masks. It checks, shows and stores the GT and names what you got with a **GT key**. Everything is time-based (seconds), never per frame; nothing in it imports `training/`.
-**Agents: read `AGENTS.md` first** (entry points, run rules, every layer and box field, the rules for using it); this file is the reference.
+One class, `GtGenerator`, turns a raw nuScenes folder into training-ready ground truth per keyframe for two systems: **BEV Fusion** (front camera + five radars, ego frame, grid x 0 .. 60 m, y +-26 m)
+and **Spurmitte** (six cameras + five radars, lane frame, 100 x 100 m). The **front GT** holds static map layers, objects, a velocity / flow field in m/s and coverage masks; the **lane GT** the lane
+graph with relevance tiers and camera visibility; **area masks** are rasterised from the lane GT. Every GT is named by a **GT key**. Everything is in seconds, never per frame; nothing here imports a
+problem's code.
 
-**Current versions (2026-11-27, `GtGenerator.versions`):** front GT v13 (signature `a107e0b4e8`), lane GT l6.1 (code `fe47c62cb5` for rig `lane_center`, `3ec704e8b8` for rig `bev_fusion`): the GT of l6, whose stores it reads (`lane/9ad1d4ce30`, `lane/8a04143278`); l6.1 only moved the store root (`where.py`). Release v15 = front v13 + lane l6.1, the same GT as release v14 = front v13 + lane l6 (D83). On 2026-11-21 all three stores held all 34,149 keyframes (`key ... --set full`: `complete`). Older versions stay in the tables below.
+Agents: [`AGENTS.md`](AGENTS.md) describes every field and the rules for using it. This page: make the GT, name it, extend the generator.
 
-## Use it
-
-From the repository root. In WSL (env `gcar`, nice 15, one thread) every command is `wsl bash GtGenerator/run_nice.sh -m GtGenerator COMMAND ...`; below it is written `python -m GtGenerator`.
-
-```
-python -m GtGenerator generate-bev  ~/data/nuscenes_full --set full                  # BEV Fusion: front GT + lane GT of its rig + packed intersection masks (resumable)
-python -m GtGenerator generate-lane ~/data/nuscenes_full --rig lane_center --set full   # Spurmitte: the lane GT   (--rig bev_fusion | all)
-python -m GtGenerator generate      ~/data/nuscenes_full --set full                  # everything, both systems (the first time 5 - 8 h on one core)
-python -m GtGenerator key bev_fusion --set full                                      # what is stored: the GT key; exit 1 when incomplete (the check before a training)
-python -m GtGenerator have --set full                                                # is the front GT of this generator there for these sequences? (exit 1 when not)
-python -m GtGenerator selftest                                                       # all tests (7 - 13 min)
-```
-The same in Python - **every command is one method of the class `GtGenerator`** (the command line calls nothing else; `GtGenerator/api.py` holds the methods):
+## Minimal example
+From the repository root (WSL, conda env `gcar`); one mini sequence:
 ```python
-from GtGenerator import GtGenerator
-key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")           # make it (a rerun writes only what is missing) and get its key
-key = GtGenerator.gt_key("bev_fusion", set_name="full")                              # only ask what is stored; nothing is generated
-key.complete, str(key), key.id                                                  # complete? one line; 12 characters
-g = key.load(token)                                                             # front GT of a keyframe (the nuScenes sample token): dict of float32 layers [ix, iy] + meta
-lg = key.lane(token)                                                            # the lane graph of the keyframe (rig bev_fusion; for Spurmitte use generate_lane_gt(root, rig="lane_center"))
-m = key.mask(token, "intersection", 0.5)                                        # a packed area mask: (120, 104) uint8, [ix, iy] like the GT maps, border 0.5 m
+from GtGenerator import GtGenerator, scene_tokens
+key = GtGenerator.generate_bev_gt("~/data/nuscenes", scenes=["scene-0061"])   # front GT + lane GT of the rig bev_fusion + masks; a rerun writes only what is missing
+print(key)                                      # data identity | code signature per part | release | complete or not
+token = scene_tokens("scene-0061")[8]
+g = key.load(token)                             # front GT: a dict of float32 layers [ix, iy] + "meta"
+lanes = key.lane(token)                         # the lane graph of the keyframe
+mask = key.mask(token, "intersection", 0.5)     # (120, 104) uint8 in the BEV grid, border 0.5 m
 ```
-`--out ROOT` is the **root of the stores** (default `<data root>/groundtruth`, `where.py`) for every command that makes or looks at stores: the front GT goes to `ROOT/<signature>/`, the lane GT to `ROOT/lane/<signature>/` (exceptions with the same job under another word: `have --data`, `report --data` name the root; `report --out` is the PDF, `build --out` the folder to write). A scene choice is `--set small|full` (the sets of
-`sets/`), `--scenes scene-0061 ...` or `--scenes-file F`, never two of them. Careful: `small` here is the 10 sequences of nuScenes mini (`sets/small.txt`); the BEV problem's own `small` split (`problems/bev_fusion/splits/`) is another list of scenes: pass it with `--scenes-file`, `GtGenerator key bev_fusion --set small` says nothing about it. Exit codes: 0 done, 1 the thing asked about is not there / not complete, 2 wrong arguments (a message, no traceback;
-`GTGENERATOR_TRACEBACK=1` shows it). Methods return plain data (a `GtKey`, or a dict with `ok` and `text`), raise `ValueError` for wrong arguments and print only the progress of long runs (`verbose`).
 
-### The GT key
-`key = GtGenerator.generate_bev_gt(root, set_name="full")` makes everything BEV Fusion needs; `GtGenerator.generate_lane_gt(root, rig="lane_center")` the lane GT of Spurmitte (`rig="all"`: both, a dict). The key names what you got:
-the **data** (the `data_identity` of `datasets/nuscenes/manifest.json`: which raw files), per **part** (front / lane / masks) the code (signature, git commit of `GtGenerator/`, clean or dirty, version, store folder), and the suite release;
-`str(key)` is one line, `key.id` 12 characters over data and all signatures, `key.complete` is never guessed (the manifest of each store, or the json tables of the raw data). Two keys with the same id are the same GT.
-The area masks (`lane_raster.py`): `area_mask(g, kind, border_m)` rasterises the polygons of the lane graph into the BEV grid (a cell is set when its centre is inside, exact: IoU 1.0000 with a point-in-polygon raster
-of the map polygons; a PIL raster at 4x supersampling differs by about 1.6 % of the cells at the edges), `build_mask_cache(store)` packs them for all keyframes (`<lane store>/masks/<kind>_b<border>.npz`, 1.5 KB per frame, stale
-when the rasteriser changes). No signature changes: the front GT stays as it is (v13, `a107e0b4e8`).
+## Commands
+`python -m GtGenerator COMMAND ...` is exactly one method of the class (`api.py`; `COMMAND --help` lists the options). `wsl bash GtGenerator/run_nice.sh -m GtGenerator COMMAND ...` runs it at nice 15
+on one thread.
 
-### Every command is a method of `GtGenerator`
 | command | method | what it does |
 |---|---|---|
-| `generate DATAROOT` | `generate` | the front GT, the lane GT of both systems and the masks; returns the dict of `pipeline.generate` + `keys` |
-| `generate-bev DATAROOT` | `generate_bev_gt` | BEV Fusion: front GT + lane GT of the rig bev_fusion + packed masks (`--border-m 0 0.5`) -> `GtKey` |
-| `generate-lane DATAROOT` | `generate_lane_gt` | the lane GT of one system (`--rig lane_center`, `bev_fusion`, `all`) -> `GtKey` |
-| `area-masks` | `area_masks` | only the packed masks of an existing BEV Fusion lane store (`--force`, `--workers`) |
-| `build` | `build` | the low-level writer behind `report` (one full devkit, `--out` required) |
-| `key SYSTEM` | `gt_key` | the key of what is stored (`bev_fusion` or `lane_center`), exit 1 when incomplete, `--json` |
-| `have` | `have` | is the front GT of this generator stored for these sequences (exit 1 when not) |
-| `data DATAROOT` | `check_data` | are the raw nuScenes files the generators read on disk (exit 1 when not) |
-| `sets`, `versions` | `sets`, `versions` | the scene sets and how much is stored; the GT versions, lane versions, releases (the current one marked) |
-| `area-mask TOKEN` | `area_mask` | one area mask of a keyframe: its number of cells, `--png` draws it |
-| `audit-lane SYSTEM` | `audit_lane` | audit a stored lane GT before its release: every keyframe there, every file loads and holds what the version promises (exit 1 on a problem) |
-| `check`, `digest` | `check`, `digest` | consistency checks of the GT of mini (`--holdout`: leave-one-radar-out radar test); a digest per frame (`--compare A B`: two generators that make the same GT give the same file) |
-| `report` | `report` | the checks over ALL sequences, the GT stored, ONE PDF with samples |
-| `view`, `sheets`, `masks`, `lanegraph`, `video` | the same names | pictures of keyframes (`scene-0061:8` or a sample token), overview sheets, the two coverage masks, the lane graph of a keyframe, a drive through the GT at 12 Hz (H.264) |
-| `clean` | `clean` | list / move generated pictures, videos, reports and old caches (never a released store; `--delete` only for what one command rebuilds) |
-| `selftest [--only cli gt_api generator lane_graph lane_tiers lane_toy clean rig_masks flow]` | `selftest` | the tests (see Tests) |
+| `generate DATAROOT` | `generate` | everything: front GT, lane GT of both systems, masks (`--set full`: trainval, 5 - 8 h on one core for the front part; `--workers N`) |
+| `generate-bev DATAROOT` | `generate_bev_gt` | BEV Fusion: front GT + lane GT of the rig `bev_fusion` + masks -> GT key |
+| `generate-lane DATAROOT` | `generate_lane_gt` | the lane GT (`--rig lane_center`, `bev_fusion` or `all`) -> GT key |
+| `area-masks` | `area_masks` | only the packed masks of an existing BEV Fusion lane store |
+| `key SYSTEM` | `gt_key` | the key of what is stored (`bev_fusion`, `lane_center`); exit 1 when incomplete; `--json` |
+| `have` | `have` | is the front GT of this generator stored for these sequences (the check before a training); exit 1 when not |
+| `data DATAROOT` | `check_data` | are the raw files the generator reads on disk; exit 1 when not |
+| `sets`, `versions` | `sets`, `versions` | the scene sets and how much is stored; GT versions, lane versions, releases |
+| `audit-lane SYSTEM` | `audit_lane` | audit a stored lane GT before its release; exit 1 on a problem |
+| `check`, `digest` | `check`, `digest` | consistency checks of mini (`--holdout`: leave-one-radar-out); a digest per frame, `--compare A B` |
+| `report` | `report` | all checks over all sequences, the GT stored, one PDF with samples |
+| `view`, `sheets`, `video`, `lanegraph`, `masks`, `area-mask TOKEN` | the same names, `area_mask` | pictures of keyframes, a drive at 12 Hz (H.264), the lane graph, the coverage masks, one area mask |
+| `clean [--reports] [--stale-caches DIR]` | `clean` | list (dry run) or `--move` reports and the stores of other generator versions; never a released store; `--delete` only for reports |
+| `selftest [--only PART ...]` | `selftest` | all tests (minutes; needs nuScenes mini), or parts |
 
-### Where the data is
-Raw nuScenes: `~/data/nuscenes_full` and `~/data/nuscenes` (WSL views of `D:/Auto-research/NuScenes`, `datasets/nuscenes/README.md` says what is there). The stores are not in git; their root is `where.py`: `<data root>/groundtruth`
-(the data root is `RESEARCH_DATA`, else `data` of the machine file `~/.research/machine.json`; without either the store root is `<repository>/data/autogt`, the place before 2026-11-27). Below it: `<signature>/<token>.npz` (front; one `index.json` per folder),
-`lane/<lane signature>/<token>.pkl.gz` (+ `masks/`), `cache/`, `reports/`. Moving the root changes no signature and no key id.
-A folder written with another resolution or supersampling is never continued; the folder name is the signature of the generator, so GT of an older generator is never mixed in. `GtKey.as_dict()` holds the absolute `path` of each part (the
-`id` does not). The raw data identity in a key is that of `datasets/nuscenes/manifest.json` at the time of the run, not a hash of the `dataroot` that was given (the root is trusted to be that data): a store whose frames were written
-under different manifests says `data_identity: mixed`, and so does its key. The shared table cache `<store root>/cache/light_*` is replaced by `light_nusc.ensure_cache` with an rmtree and a rename, not atomically: two runs must not make it at once.
+- Sequences: `--set small|full` (`sets/`: the 10 sequences of mini; all 850 of trainval), `--scenes scene-0061 ...` or `--scenes-file F`, never two of them. A problem's own split of the same name is another
+  list: pass it with `--scenes-file`; its key calls it `scenes:<id>`.
+- `--out ROOT` is the root of the stores (`have` and `report` call it `--data`; for `report`, `--out` is the PDF).
+- Exit codes: 0 done, 1 not there or incomplete, 2 wrong arguments (a message; `GTGENERATOR_TRACEBACK=1` shows the traceback). Methods return plain data (a `GtKey`, or a dict with `ok` and `text`) and
+  raise `ValueError` for wrong arguments.
 
-### Tests
-`python -m GtGenerator selftest` (7 - 13 min on one core; `--only` runs one part): a synthetic world with known truth, real keyframes, build and reload; `cli_selftest.py` (every command is one method of `GtGenerator` and one call
-with the right arguments, every `--help`, exit codes, the key line equals the stored key, stores and tables, the command line imports nothing but the class, **the architecture drawing is in step with the code**);
-`gt_api_selftest.py` (exact raster, borders, cache, key id and completeness, the store audit with damaged copies); `generator_selftest.py` (footprints against the devkit's corners, handedness against the front image,
-centre-line direction, divider width, map layers against exact polygons, lane graph invariants on four maps, the lane signature covers what the lane sources import); lane graph and tier tests. The new tests were each
-checked by a mutant (a one-line change in a private copy) that the old tests let through.
+## Where the data is
+- Raw nuScenes: the views `~/data/nuscenes_full` (trainval) and `~/data/nuscenes` (mini), see [`datasets/nuscenes/`](../datasets/nuscenes/README.md). Never written to.
+- Stores, not in git, below `<data root>/groundtruth` (`where.py`: the data root is `RESEARCH_DATA`, else `data` of the machine file, shown by `research machine`; without either `<repository>/data/autogt`):
+  `<signature>/<token>.npz` + `index.json` (front), `lane/<signature>/<token>.pkl.gz` + `masks/` (lane), `cache/` (the tables of the light nuScenes reader), `reports/`.
+- Stores are derived data and can be rebuilt. One writer per folder at a time. A folder written with another resolution or supersampling is never continued.
+- The `index.json` of a front store is its manifest: sequences, stride, `complete`, resolution, `gt_version`, git `commit` and `dirty`, library versions, data identity and `release` (complete, a released
+  version, a clean tree and the set `full`). Report numbers from a release store.
 
-### Editing the suite
-Six front files (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py coverage.py`) and six lane files (`lane_graph.py road_graph.py lane_lines.py lane_tiers.py rig_cameras.py lane_gt.py`) are **hashed into the
-signature**: an edit changes the folder name and the GT key and needs a version (section Versions) and a rebuild of the BEV GT cache; the lane chat has priority over the lane files (D61). Everything else (the class
-interface, the writer, the stores, the tools, the tests) can change without a new GT version. A new module must be in the signature or in `versions.NOT_GENERATOR` (the selftest fails otherwise), a new file in a box of
-`architecture.json` (`python autoresearch/reporter/archdraw.py render GtGenerator/architecture.json`, then `... check ...`), a new command is a new method of `api.py` and a row above.
+## Versions and signatures
+- A **signature** is a hash of the bytes of the files that make a GT, plus the options. It names the store folder, so GT of different code is never mixed. Front: `grid.py layers.py flow.py
+  nuscenes_adapter.py nuscenes_gt.py coverage.py`. Lane (one per rig, with its parameters): `lane_graph.py road_graph.py lane_lines.py lane_tiers.py rig_cameras.py lane_gt.py`. Every other file
+  (interface, writer, stores, tools, tests) changes no GT.
+- A **version** names a signature for people: front `vN` (`versions.csv`, git tag `autogt/vN`), lane `lN` per rig (`lane_versions.csv`, tag `autogt/lane-lN`), a **release** = front + lane as one number
+  (`releases.csv`). Current: front v13 (`a107e0b4e8`), lane l6.1 (stores `9ad1d4ce30` for `lane_center`, `8a04143278` for `bev_fusion`), release v15. `versions` prints the tables.
+- **Same GT, new code:** when new code makes the GT of an older version byte for byte, its row names it in `same_gt_as` and it reads and fills that store. Proof for the front: `digest A.json` in both
+  source trees, `digest --compare A.json B.json`, then the new signature under `same_as` of that store in `front_digests.json`. Lane: checked on stored frames; the digests in `lane_l6_digest.json` pin the
+  current graphs. The self-test enforces the pins.
+- A **GT key** (`gt_api.py`) is the data identity (`data_identity` of `datasets/nuscenes/manifest.json` as recorded by the store, not a hash of the `dataroot` given), the signature, store, version and
+  commit of each part, and the release. Two keys with the same `id` are the same GT. `complete` is never guessed; frames written under two manifests give the identity `mixed`.
+- **An old version** is rebuilt from its tag: `git worktree add temp/gt_v9 autogt/v9`, then in that folder `python -m autogt generate <nuScenes> --out <folder>`. The tags v3 - v5 hold the package in
+  `bev_fusion/autogt` and know only `build` (`PYTHONPATH=bev_fusion python -m autogt build --dataroot <nuScenes> --version v1.0-trainval --out <folder>`); v1 and v2 are `bev_fusion/training/gt_bev.py`.
+  Check first that `import autogt; print(autogt.__file__)` points into the worktree.
+
+## Extending it
+| you add | where | then |
+|---|---|---|
+| a front GT layer | `nuscenes_gt.py` (rasteriser: `layers.py`): new signature | `versions --update` (adds the rows); pin the new digests in `front_digests.json`; name the key in `AGENTS.md` (the self-test checks); commit, tag `autogt/vN` (a newer row needs the older tags); rebuild; tell the owner of the training code |
+| a lane GT field | the six lane files: new lane signature (the lane problem has priority on them, D61) | a row per rig in `lane_versions.csv` (by hand), then `versions --update` (the release row); new pinned digests (`lane_l6_digest.json`); `audit-lane`; rebuild |
+| a derived product (not hashed) | like `lane_raster.py` (reads a store, packs its own cache) | for a mask kind of the key: `gt_api.KINDS`; bump `RASTER_VERSION` when cells change |
+| a dataset | an adapter that builds `Track`, `Ego`, `RadarFrame` for `flow.estimate_flow`, and a generator for the static layers | `flow.py`, `layers.py`, `grid.py`, `coverage.py` need no nuScenes; `store.write_keyframe` / `load_keyframe` keep the files; give the generator its own signature files |
+| a command | a static method in `api.py`, its parser in `cli.py` | a row above; `cli_selftest.py` |
+| a module | not hashed: list it in `versions.NOT_GENERATOR` | put it in a box of `architecture.json`: `python autoresearch/reporter/archdraw.py render GtGenerator/architecture.json` |
 
 ## Architecture
 ![GtGenerator architecture](architecture.svg)
 
-Kept simple on purpose: **one class, one block of code per problem, one output per problem.** Drawn from `architecture.json` (the file map of every box is in `architecture.md`; the tests fail when the drawing and the code differ).
-- **Command line** (`cli.py`) and **class** (`GtGenerator`: `api.py`, `suite.py`): the parser makes one call `GtGenerator.<method>(...)` per command and imports nothing else; the class calls the code of the problem that was asked for.
-- **Three problems, each with its own code and its own output**, the difficult code stays inside it: the *front GT* (BEV layers, boxes, velocity / flow: 6 hashed generator files, `pipeline.py` writes, `store.py` keeps the files and the manifest; output
-  `<sig>/<token>.npz`), the *lane GT* (lane graph, tiers, visibility for the two systems: 6 hashed files that also hold their own writer and store; output `lane/<sig>/<token>.pkl.gz`), the *area masks* (`lane_raster.py`, derived from the lane GT;
-  output `lane/<sig>/masks/*.npz`).
-- **Shared:** the raw nuScenes data with its reader and the scene lists (`light_nusc.py`, `sets.py`), and the **GT key and versions** (`gt_api.py`, `versions.py`): what did I get - the data identity, the code signature and the git commit of each part, its version.
-  A list of sequences comes from outside, as a file (`--scenes-file`; BEV writes its split into one), and a key names it by the id of its content (`scenes:<id>`); `--set small|full` are two shipped lists (the 10 sequences of mini, all 850).
-- **Tools** (`checks`, `report`, `view`, `video`, `clean`, `store_audit`) read the output and change nothing of the GT.
-
-**Versions are derived from git, nobody types them.** The signature is a hash of the bytes of the hashed files (the code that makes the GT); the key records the git commit next to it. The commit cannot be the version: it changes with every edit anywhere (docs, tests, tools) while the GT stays
-the same (five commits, one signature on 2026-11-10), and a commit-derived version would rename and invalidate 34k frames without a content change. `python -m GtGenerator versions` shows the tables; for a new signature `versions --update` derives the rows from git (the next number of the
-running sequence, the date and the text of the last commit that touched the hashed files) and adds them to `versions.csv` / `releases.csv`: review, commit, tag. By hand stay `same_gt_as` (new code that makes the same GT as an old version needs its pinned digests in
-`front_digests.json`; the selftest checks them; the lane l6 is pinned by `lane_l6_digest.json`, which the selftest checks; `lane_l4_digest.json` is the record of the l5 = l4 proof and is no longer run) and the lane versions (`lane_versions.csv` belongs to the lane project). `.gitattributes` pins LF line ends for the hashed files (a Windows checkout with autocrlf would give another signature).
-
-**Why an `index.json` per store folder (the manifest), and what is `store.py`?** A store is a folder of 34,149 keyframe files, and the files cannot say four things about themselves: whether the run that wrote them
-finished and which sequences and stride they cover (`complete`, `scenes`, `stride`: otherwise "complete" needs the nuScenes json tables, i.e. the raw data), with which resolution and supersampling (a resume must refuse to mix them),
-which commit of `GtGenerator/` made them, whether the tree was clean and whether the folder is a release (`commit`, `dirty`, `release`: not reconstructable afterwards), and from which raw data (`data_identity`: the GT key reads it back).
-It is a provenance record, not a cache, and its writing is the most intricate part of the front code (runs that add sequences, a different stride, a provisional index while a run is going); that is why it is kept in one place, `store.py`, next to the writer
-`pipeline.py`. Known seam: the lane store (`.pkl.gz` and its own index code) lives in the hashed `lane_gt.py`, so the two kinds of store are two implementations; they can be joined only with the next lane version.
-
-## Reference: the front GT entry point and the older commands
-**The entry point under it - read nuScenes from a folder, write the GT of every keyframe** (memory-light, resumable, no GPU):
-```python
-import GtGenerator                                   # run from the repository root (or put it on PYTHONPATH)
-r = GtGenerator.generate("~/data/nuscenes_full")     # all of trainval (the front GT alone 5-8 h in one process; lane=True, the default, also makes both lane stores and the area masks); out=None -> <store root>/<signature>/
-r = GtGenerator.generate("~/data/nuscenes", set_name="small")  # the small set (the 10 sequences of mini) for small experiments
-r = GtGenerator.generate("~/data/nuscenes", out="/data/gt", scenes=["scene-0061"], stride=2)    # a mini sequence, every 2nd keyframe, elsewhere
-# -> {"out": folder written, "signature", "gt_version", "version", "scenes", "keyframes": wanted, "written": new files, "release", "lane", "lane_rigs", "masks_error"}; one
-#    <sample token>.npz per keyframe + index.json; the version is found in the folder (pass version= if it holds several); a rerun writes
-#    only what is missing
-g = GtGenerator.load(token)                          # read one back (data="/data/gt" for another folder), no nuScenes needed
-```
-Same from the shell: `python -m GtGenerator generate ~/data/nuscenes_full [--out DIR] [--version V] [--set small|full | --scenes scene-0061 ...] [--stride N] [--workers N]`.
-Parameters of `generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, ss=4, workers=1, verbose=True, set_name=None, lane=True, **options)`:
-`dataroot` the nuScenes folder; `out` where the GT goes (default the place `load` reads); `version` v1.0-mini / v1.0-trainval;
-`scenes` names (default all); `set_name` a scene set instead of `scenes` (below); `stride` every n-th keyframe; `res` / `ss` cell size in
-m / supersampling; `workers` processes; `options` the generator options of `GtGenerator` below (`use_flow`, `use_radar`, `boxes_at`, ...). A
-folder written with another resolution or supersampling is never continued; the folder name is the generator signature, so GT of an
-older generator is never mixed in.
-
-**Two sets, one manifest.** The scene sets are the files `sets/small.txt` (the 10 sequences of nuScenes mini, 404 keyframes, about 25
-minutes: small experiments) and `sets/full.txt` (all 850 sequences of trainval, 34,149 keyframes, 5 - 8 hours: releases); one scene name
-per line, `#` starts a comment. `python -m GtGenerator sets` lists them and how much of each the store of the current generator holds
-(`GtGenerator.sets.status(name)` in code). Small is a part of full and both share the signature folder, so running small first is not wasted.
-The `index.json` of a folder is its manifest: `gt_version` (key of `versions.csv`, only for a released signature), `commit` (short hash of
-HEAD when the last run was made) and `dirty` (anything in `GtGenerator/` differed from it), `set` (the set the last run asked for),
-`sets_complete` (the sets whose every keyframe has a file; a run takes the sets it can check from its own listing, so a deleted keyframe removes `full` and the release), `environment` (versions of numpy, shapely, opencv, matplotlib, nuscenes-devkit: the generator signature hashes our files, not these) and `release`: true when the folder is complete, its signature is a released
-GT version, the tree was clean and `full` is complete. Use a folder with `release: true` for a number you report as a release; a
-folder with `dirty: true` or no `gt_version` is scratch. The network input that a model precomputes from the GT (it needs the
-backbone) is not made here; it is a product of the model code and carries its own version and the `gt_version` it stands on.
-
-**The whole chain.** get the raw data (`../datasets/nuscenes/`: its README says what is on D: and which parts are there; its `tools/` list,
-download, verify and unpack the archives and link the WSL views `~/data/nuscenes*`; downloads only with the user's OK) -> `python -m GtGenerator
-data ~/data/nuscenes_full [--set small|full]` (are all raw files the generator reads on disk: json tables, map expansion, CAM_FRONT, the
-five radars; `sets.check_raw`) -> `generate` (above) -> look: `report` (every check, one PDF), `view`, `sheets`, `video`.
-
-One keyframe at a time in code:
-```python
-from GtGenerator import GtGenerator, load
-gt = GtGenerator("~/data/nuscenes", "v1.0-mini")     # one object (options: use_flow, use_radar, flow_config, boxes_at; keyword-only)
-g = gt.keyframe(sample_token)                   # dict of float32 layers [ix, iy] + meta
-s = gt.training_sample(sample_token)            # {"prev", "cur", "next"} + the ego steps between them
-gt.signature()                                  # cache key: changes with every edit of the generator or its options
-g = load(sample_token)                          # the STORED GT of a keyframe (<store root>/<current_signature()>/), no nuScenes needed
-```
-```
-python -m GtGenerator selftest                                   # all tests (synthetic world + real keyframes + build)
-python -m GtGenerator generate DATAROOT [--out DIR] [--set small|full | --scenes ..] [--stride N] [--workers N]   # THE entry point (above): per-keyframe files DIR/<signature>/
-python -m GtGenerator sets                                       # the scene sets small / full and how much of each is stored; `versions` lists the GT versions
-python -m GtGenerator build --version v1.0-mini --out DIR [--scenes ..] [--workers N] [--res 0.25]   # its low-level writer (one full devkit, --out required)
-python -m GtGenerator check [--holdout]                          # automatic consistency checks (+ leave-one-radar-out radar test)
-python -m GtGenerator view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
-python -m GtGenerator report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (<store root>/<signature>/), run every check, write ONE PDF
-                                                            # (<store root>/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
-python -m GtGenerator clean [--videos] [--pictures] [--reports] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move | --delete: only for pictures, videos, reports]
-                                                            # removes only what GtGenerator generated; dry run by default, --move puts it into <store root>/_to_delete/ (a rename next to the stores)
-python -m GtGenerator video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # driving through the GT at 12 Hz (H.264, read back; any sequence, the light devkit of just that one)
-```
-
-## Layout
-| file | content |
-|---|---|
-| `flow.py` | **the velocity / flow box** (dataset independent, numpy and the cv2 of layers.py): `estimate_flow(tracks, ego, t, radar, config)` - see below |
-| `nuscenes_adapter.py` | devkit records -> `Track` / `Ego` / `RadarFrame` (`NuScenesScene`); the only place that knows nuScenes' radar and annotation format |
-| `nuscenes_gt.py` | `NuScenesGT`: map layers, objects, masks, velocity / flow layers, training samples, generator signature |
-| `layers.py`, `grid.py` | exact supersampled rasteriser (areas, lines, footprints), the old 2D occlusion rule, `GridSpec` |
-| `coverage.py` | **what the front rig observes** (numpy only, calibration + grid): `camera_cells`, `radar_cells`, `hidden_cells` (boxes hide by their height), `object_shares` / `footprint_share` (the share f of an object in the fusion area), `fusion_cells`, `coverage_for` - see "Coverage" below |
-| `lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`, `lane_tiers.py`, `rig_cameras.py` | **the lane GT** (own version, not part of the front generator; numpy + shapely, the nuScenes map and, for the l4 labels, the ego poses and boxes): the lane graph with ids, successors and events, neighbours / lane counts / roads, dividers + road boundary with corners, tiers 1 / 2 / 3 and camera visibility per point (section Lane GT); two rigs, Spurmitte and BEV Fusion (l5); `rig_cameras.py` the six cameras the visibility uses (image size, nominal calibration); `lane_versions.csv` its versions; `lane_graph_view.py` draws it (`python -m GtGenerator lanegraph`), `lane_graph_selftest.py` and `lane_tiers_selftest.py` test it |
-| `gt_api.py`, `lane_raster.py`, `gt_api_selftest.py` | **one function per system and its key** (`generate_bev_gt`, `generate_lane_gt`, `GtKey`, `gt_key`) and the **area masks** of the lane GT in the BEV grid with their packed cache (not hashed: no signature changes); the test generates one mini sequence |
-| `rig_masks.py` | **the two coverage masks**, one per sensor rig, static from the calibration (`rig_cameras.py`): `bev_fusion_mask()` (front camera + 5 radars, the BEV-fusion grid) and `lane_mask()` (6 cameras + 5 radars, the Spurmitte window); not hashed (no label comes from it; until l5 it was part of the lane signature, with `coverage.py` and `grid.py` behind it); `python -m GtGenerator masks out.png` draws both |
-| `versions.py`, `versions.csv` | the GT versions (D29): the table (version key, signature, tag, what changed), `version_of`, the key stamped into `index.json`; `code_state()` (commit + dirty flag of the manifest) |
-| `sets.py`, `sets/small.txt`, `sets/full.txt` | the scene sets (one scene name per line): `names`, `scenes`, `tokens`, `status`, `complete_in`; `generate(set_name=...)`, `python -m GtGenerator sets`; and `check_raw(dataroot, ...)`: are the raw files the generator reads on disk, `python -m GtGenerator data` |
-| `store.py`, `pipeline.py` | **the front GT writer**: `store.py` = the keyframe files, the index.json manifest, the resume checks, `detect_version`, the listing of a store by file name (`names`, no stat per file); `pipeline.py` = `generate` (THE entry point) and `build`; `cli.py` re-exports nothing (the hashed `lane_gt.py` takes `detect_version` from `store`) |
-| `store_audit.py` | **the audit of a stored lane GT** (`python -m GtGenerator audit-lane SYSTEM`, `store_audit.audit_lane`): every keyframe of the version there, every file loads and holds what the version promises (keys, frame, window, per-point arrays, tier / visibility rules, tier_info against the pieces); used before a store is released (l4, l5: 34,149 files, 4 - 8 min); tested in `gt_api_selftest.py` with a damaged copy |
-| `cli_selftest.py`, `generator_selftest.py`, `flow_selftest.py` | tests: every command is one call, exit codes, stores and tables; the generator against the devkit, the map, the image and a file round trip, lane graph invariants |
-| `light_nusc.py` | the memory-light devkit: the tables of just the sequences asked for, cached below `<store root>/cache/` (`ensure_cache`, `light_nuscenes`) |
-| `where.py` | the store root: `<data root>/groundtruth` (data root = `RESEARCH_DATA`, else the machine file's `data`; without either `<repository>/data/autogt`); not hashed |
-| `releases.csv`, `front_digests.json`, `lane_l4_digest.json`, `lane_l6_digest.json`, `__init__.py` | the release table (front + lane as one number), the pinned digests behind `same_gt_as` of the front and of lane l5 (`lane_l4_digest.json`, no longer run: the record of the l5 = l4 proof), the pinned digests of lane l6 (checked by the selftest), and the names of the package |
-| `api.py`, `suite.py` | **the class interface**: `api.py` = the static methods of `GtGenerator`, one per command (`generate`, `generate_bev_gt`, `generate_lane_gt`, `gt_key`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `digest`, `clean`, `selftest` ...); `suite.py` = the class `GtGenerator` (also the object that makes the GT of one keyframe), `load`, `current_signature`, `missing` |
-| `cli.py`, `__main__.py` | **the command line**: the parser and one call `GtGenerator.<method>(**arguments)` per command, nothing else of the suite (a test pins that, and that it re-exports no old name) |
-| `architecture.json`, `architecture.svg`, `architecture.md` | the architecture drawing: the spec, the picture and the file map generated from it by `autoresearch/reporter/archdraw.py`; the tests fail when a box points at nothing or a file is in no box |
-| `run_nice.sh` | runs any module or script at nice 15 with one thread in the gcar env with `import GtGenerator` working: `wsl bash GtGenerator/run_nice.sh -m GtGenerator selftest` |
-| `AGENTS.md` | the short guide for agents; `selftest` fails if it does not name every layer, meta entry and box field |
-| `checks.py`, `view.py`, `video.py`, `report.py`, `clean.py`, `selftest.py` | the tools behind the commands (`video.py` also holds `encode`: H.264 video with a read-back check; mp4v does not play in browsers or the Claude app) |
-
-## What a keyframe contains (ego frame at the front-camera time, x forward 0-60 m, y left +-26 m, 0.5 m or 0.25 m)
-- areas `drivable_area ped_crossing walkway stop_line carpark_area` (coverage fraction, exact 4 x 4 supersampling); lines
-  `lane_divider road_divider` (+ `_dist`, truncated distance in m); `centreline` + `centreline_dir` (a UNIT vector, the mean of the line directions in the cell scaled to length 1; (0, 0) where they cancel out)
-- objects `vehicle pedestrian two_wheeler` (coverage) with `instance` (index into `meta["boxes"]`); only boxes with at least one
-  lidar or radar point, the rest in `ignore`
-- **velocity / flow (m/s)**: `velocity` (world velocity of the covering box in ego axes, radar-corrected), `flow_ego` (apparent
-  velocity of a static world point from the ego motion, -(v + omega x r)), `flow` = sum, `flow_weight` (0 = unknown),
-  `flow_sigma`; per box `vel`, `vel_source`, `vel_flag`, `vel_sigma`, `vel_known` (a box of unknown velocity has `vel` (0, 0), `vel_known` False, `vel_sigma` NaN: check `vel_known`; every cell with `flow_weight` 0 has `flow_sigma` 10 m/s). A displacement over any dt is `flow * dt`
-- masks `camera occluded radar undefined`; `meta` with boxes, ego pose, camera, exact map vectors
-- **box time = camera time** (decided 2026-10-31; Waymo does the same with its `camera_synced_box`): nuScenes annotates a keyframe
-  at the lidar time, the front camera took its image 36 ms earlier (median -35.9 ms, range -42.5 .. -32.6 ms), so a moving box of
-  known velocity is moved by `v * (t_camera - t_annotation)` (constant velocity; size, height and yaw unchanged: median 6 cm,
-  95 % 41 cm, max 88 cm on trainval). Stationary boxes (one world pose) and boxes of unknown velocity do not move. Per box in
-  meta: `center`, `corners`, `world` at the camera time, `world_ann` (the annotation-time world pose), `shift` (ego axes, m),
-  `shift_s` (s); `meta["annotation_timestamp"]`. `GtGenerator(..., boxes_at="annotation")` / `--boxes-at annotation` gives the
-  annotation positions again (nuScenes-style evaluation). The decoder needs a dt only to predict to ANOTHER time (the +-0.5 s
-  keyframes: `meta["dt"]`, `meta["steps"]`); the GT of every frame is at its own camera time
-- rules: stationary GT does not move (stationary objects have ONE world pose and velocity 0; map corrections only per element in
-  world coordinates, never per frame; the mechanism `map_offsets` of v9 was removed in v13, nothing used it)
-
-## Two coverage masks: BEV fusion and Spurmitte (`rig_masks.py`)
-Who uses which: `GtGenerator.rig_masks.mask_for("bev_fusion")` (problem `problems/bev_fusion/`: the front grid, ego frame) and `mask_for("lane_center")` (problem `problems/lane_center/`:
-the 100 x 100 m window, lane frame); any other name is an error. The two arrays differ in shape (120 x 104 against 200 x 200) and frame, so a wrong choice does not fit and fails at once.
-The two projects have different rigs and so different coverage. BEV fusion sees with the front camera and the five radars on the front grid (x forward 0 - 60 m, y +-26 m): the static
-mask covers 63 % of the grid with the camera, 100 % with the radar fans, the fusion area (camera and radar) 63 %; with the boxes that hide cells it is the per-frame mask of the stored
-GT (`camera`, `occluded`, `radar`, layers, `coverage.fusion_cells`). Spurmitte (lane centres on GaussianCaR features) works on a 100 x 100 m window round the ego with six cameras and
-five radars: the six cameras together cover 99 % of that window on the ground plane, the radars 100 %, so no region of the window is unseen by geometry alone; what is unseen there is
-what boxes hide, and the static Spurmitte mask does not know that. Both masks come from the calibration alone (the mean of the 850 logs; the logs differ by at most 0.04 m and 1 - 3 degrees),
-nothing is stored, there is no GT version; the same functions as in `coverage.py`. The static front camera mask equals the per-frame layer of the stored GT with IoU 0.993, the radar 0.9999.
-Lane frame arrays: [ix, iy] with x RIGHT and y forward, cell centres at -50 + (i + 0.5) res.
-
-## Coverage (`coverage.py`, v7; decisions D36 - D38 of the BEV project, `bev_fusion/records/sensor_coverage_2026-11-01.md` in tag `v1`)
-The rig is one front camera and five radars, so the GT says per cell and per object what the rig can observe. **Fusion area** = `camera`
-cells that are not `occluded`, inside the `radar` fan (D37: fusion numbers are reported there); outside it the cell is **don't care** on
-both sides, in training and in evaluation (D38). `coverage_for(g, kind)` gives the area of an output type: map layers, objects and
-velocity on the fusion area, the camera aux head on the camera cells not hidden, the radar aux head on the fan.
-- **Boxes hide with their height** (v7): a box stands on the ground plane z = 0 (the plane of the map layers) and hides the ground behind
-  it with its real volume: the line from the camera to the cell must pass through the box's footprint at a height between 0 and its top
-  (`blocked`, `hidden_cells`). A 0.5 m high box and a camera at 1.6 m cast a shadow of about 10 m behind a box that ends at 24 m; v5 / v6 took every box as an infinitely high wall (16 % of the
-  objects of the stored val frames lost at least half of their share to it). Only boxes with a lidar or radar point hide. `camera` (the ground
-  plane z = 0 projected into the image), `radar` (the fan, 99.9 % of all detections inside) and `undefined` are unchanged.
-- **The footprint share f** (D38 b), per box in the meta as `share_fusion` (and `share_camera`, `share_radar`): the share of the footprint
-  (at least 12 x 12 samples, 0.125 m apart for a car; samples outside the 60 x 52 m grid count as not observed) where the camera sees the
-  object and the radar fan covers. The camera sees a sample when it sees the object above it at the bottom, middle or top of its height
-  (inside the image, not hidden by another box), so a pedestrian above a low car stays visible (also when only the head shows). The
-  first states (D38): care f >= 0.5, partial 0.1 <= f < 0.5, don't care f < 0.1. One rule for ground truth and detections:
-  `shares_in(g, corners, height)` gives a detection its f in the frame of a GT dict (the meta holds `K`, `T_c2e`, `image_size`,
-  `radar_poses` and the hiding boxes); the stored `share_fusion` of a GT box is the same function. `footprint_share(corners, mask, grid)`
-  is the cheaper ground-plane version without a height: with the OLD masks (`hidden_cells(soft=False)`) it reproduces the per-object
-  table of the BEV chat's study (`bev_fusion/records/footprint_share_study_2026-11-01.md` in tag `v1`, 48,724 objects of the val frames).
-- `num_lidar_pts` / `num_radar_pts` per box are the nuScenes counts, stored as information (decided: no per-box radar gate).
-- To share "the camera sees the cell" with a model: `camera_cells(gx, gy, K, T_c2e, size, z=<height of the slice>)`.
-
-## Lane GT (`lane_gt.py`, `lane_graph.py`, `road_graph.py`, `lane_lines.py`, `lane_tiers.py`, `rig_cameras.py`; own version l1 ..., asked for by the lane project, 2026-11-04)
-One window of 100 x 100 m around the ego (rear axle at the front-camera time) in the lane project's frame (x right, y forward; `in_frame(g, "ego")` for x forward, y left), built
-from the nuScenes map only (no image, radar or box). It is NOT part of the front generator: the front GT, its signature and its store are unchanged by it, and the lane GT has its
-own signature, table (`lane_versions.csv`, git tag `autogt/lane-lN`) and store (`<store root>/lane/<lane signature>/<token>.pkl.gz`, `python -m GtGenerator generate-lane`). What a
-graph holds is listed in `AGENTS.md`, section 3b.
-- RIGS (l5, 2026-11-07: BEV Fusion and Spurmitte are different systems, GT for both). The window above is the `lane_center` rig (Spurmitte: frame "lane", the square 100 x 100 m, `vis` from the six cameras;
-  the default, `lane_gt.load(token)`). The `bev_fusion` rig (`rig="bev_fusion"`) is the same graph in the frame of the BEV grid (x forward, y left) cut to its window x 0 .. 60 m, y -26 .. 26 m, with `vis` / `occ`
-  from the front camera only; it has its own store. Same code, same tiers; the table of differences is in `AGENTS.md`, section 3b (l5). `python -m GtGenerator generate` makes both. The `lane_center` output of l5 is the
-  l4 output byte for byte (so the l4 store is its store, `same_gt_as`); `lane_graph_selftest.py` checks the rectangle (`clip_rect`), the table of stores and BEV Fusion graphs against the bigger square cut to the rectangle.
-- PIECES. A lane or connector is a map piece; chains of map pieces are joined while every join is 1 in, 1 out, so an id changes only at a split or a merge. EVENTS at the joins:
-  split, merge, cross (n in, n out), start / end (no predecessor / successor in the map), window (the polyline crosses the border; per keyframe) and STOP: the end of a lane
-  whose successor connector lies inside an intersection (`road_segment.is_intersection`; 80 - 84 % of the connectors do, 0.2 - 1.5 % of the lanes), and its mirror EXIT: the start of
-  a lane whose predecessor connector does. With several successors the stop is for the intersection branches only (`stop_rule`, an open parameter). Pass-through joins are not events.
-  Per piece `segments` gives the index range of its points per map piece with the intersection flag, so a consumer can drop the points of connectors inside intersections and keep
-  the connectors outside (16 - 20 % of the connectors are plain continuations). A part cut by the window at both ends is dropped when shorter than `min_len`; a short part with a
-  natural end stays, so links and events never dangle.
-- ROADS. nuScenes has no road graph (a lane's edge-line tokens match no road block in 0 of 3,662 lanes; in singapore-queenstown and -hollandvillage the road segments are only
-  intersections and the road blocks do not point at a segment), so neighbours, lane counts and roads are derived from the lanes (`road_graph.py` docstring). Check: of the
-  730 lane pairs that share a divider node on nuScenes mini, 723 are found as right neighbours and none as left.
-- LINES. `lane_divider`, `road_divider` and the BOUNDARY (the outline of the union of the drivable-area polygons; nuScenes has no boundary record) cut to the window, with corners.
-- AREAS. The road area (inside the boundary) and the intersection areas (the road segments flagged is_intersection, one id per connected area, matching the nodes of `roads`) as
-  polygons, not dilated: the head draws road and intersection pixels from them.
-- CHECKS (`lane_graph_selftest.py`, in `selftest`): a made-up map (split, merge, stop, join, window cut, frames), the points lie on GtGenerator's own centre-lines (median 0.01 m, 99 % 0.05 m
-  both ways), the junction events rebuild the map's junctions (F1 0.99), the neighbours against the map's divider tokens, corners and chunked outlines, the store (generate, resume,
-  load, another parameter = another folder). Against the lane project's own `bev_fusion_lane_center/training/data/prep/make_graph_gt.py` of tag `v1` (same frame and window) 47 of 107,538 points differ by more than 0.3 m (pieces
-  shorter than 2 m, which this code drops).
-- l6 (prepared 2026-11-10, D78: corrections, better directions, better entry / exit points; made current by D83 on 2026-11-11: merged from the branch `prep/v13-l6`, the stores of both rigs are complete, `lane_center` `9ad1d4ce30` and `bev_fusion` `8a04143278`; the lane store of l6 was checked against l4 on 440 VAL frames): the zero-length segments of the map's arc joints are gone (31 % of the pieces had one);
-  the tiers are decided on a 100 m wide window and carried over to the point, so no window cut (a rig, a smaller square) changes a tier; the directions of the events are unit vectors whatever the pitch / roll of
-  the pose; a split lies at the end of its piece, a merge at the start of its piece (not between the ends of a gap in the map), a stop / exit always names its in and its out, and every natural end of a part is a successor, an event or
-  the window; the `segments` of a part that starts right after a joint no longer list the piece before it; a connector without a lane of its own takes `lane_count` / `lane_index` of the lane before (else after) it; left / right /
-  opposite are symmetric; the area polygons are valid OGC geometry; the lane signature covers `rig_cameras.py` (the six cameras the visibility reads) instead of `rig_masks.py` (the masks, not hashed any more) with `grid.py`
-  and `coverage.py` behind it, and no longer reads `pose_matrix` from a front file; the lane index names the sequences of every run on the folder and `generate` warns when a store grows under other library versions;
-  the fields `tokens` and `roads_along` of a part (both derivable from `segments` / `roads`) are gone. The check of l6 against l5: `lane_gt.generate` of 12 sequences of the four maps for both rigs against the
-  stored l5 frames, field by field (every difference is one of these changes; 970 frames, 12 sequences of the four maps) and 1,052 frames that had a defect in l5, and `lane_l6_digest.json`.
-- COST. About 30 - 40 ms per keyframe on one thread (l6: 40 ms lane_center, 30 ms bev_fusion, measured on 100 frames of 12 sequences with the box loaded; l5: 95 ms / 41 ms in the same conditions); the map graphs are made once per location and process.
-
-## The flow box (`flow.py`): one function, four steps
-`estimate_flow(tracks, ego, t, radar=(), config=Config())` -> `FlowGT` (`objects` = the product: pose at `t`, velocity,
-covariance, source, flag; the dense field is made in `nuscenes_gt.py`: `ego_flow_field(grid, fg.ego)` + the velocity of the box that covers a cell, weight 0 where unknown)
-1. ego velocity and yaw rate at `t` from the poses `t +- 0.09 s`
-2. per track: stationary (all speeds < 0.5 m/s, all positions < 1 m from the median) -> one pose, v = 0; else the least-squares
-   line through the observations within +-1.2 s (slope = velocity, with its covariance)
-3. radar correction: detections inside the box measure the radial component of v; robust Bayesian update (3 sigma gate, capped
-   weight per box)
-4. flags: `radar_conflict` (most detections reject the track velocity), `radar_override` (and they agree among themselves: the
-   speed along the track direction is taken from the radar), `stationary_but_moving`, `short_track`, `unobserved`
-
-## Validation (nuScenes mini, 404 keyframes; `python -m GtGenerator check --holdout`)
-- self-tests: synthetic world with known truth (radar lowers the velocity error, 2 Hz and 4 Hz annotations agree, a wrong direction
-  of travel is found and fixed), rasteriser areas exact, static layers of the next keyframe = the current ones moved by the exact
-  ego motion (IoU 0.988), a road under the ego car in all four map locations, ego flow = the exact pose change per camera frame
-  (3 cm), stationary boxes fixed in the world (0.00 cm over 2394 pairs), build + reload
-- map and objects: 100 % of 879 moving vehicles on the drivable area; the ego car on the road in every frame; centre-line and
-  lane-divider cells on the drivable area (median 100 %); instance layer consistent (5593 of 5593)
-- velocity, leave-one-radar-out (each radar scored on boxes corrected with the other four; 12,557 held-out detections in
-  3,246 box-radar pairs), radial error RMSE / median / within 0.5 m/s: zero velocity 6.47 / 3.64 / 15 %, track only
-  1.45 / 0.215 / 77.8 %, with radar 1.41 / 0.198 / 79.9 %; corrected better in 39.5 % of the pairs, equal 52.4 %, worse 8.2 %
-  (mean RMSE change -0.036 m/s, bootstrap -0.053 .. -0.024, optimistic: pairs of one scene correlate). The annotation velocities
-  agree with the radar to about 0.2 m/s; the radar adds a small gain and the flags (57 overrides, 2 conflicts over all boxes of
-  mini); the remaining RMSE is outlier detections (2.6 % beyond 2 m/s: ghosts, wheels)
-- the radar mask assumption: 99.9 % of all detections lie within +-60 deg of the sensor axis (measured)
-- the box shift v * dt (a one-off script, commit 769aafc: `bev_fusion/temp/checks/radar_box_shift.py`, no longer in the tree; the selftest keeps the sign check against the interpolated annotation; mini, 340 moving observed vehicles >= 5 m/s, 5..45 m ahead; raw radar
-  POSITIONS, which the velocity did not use; points inside the footprint + 1 m per box and radar sweep within +-0.45 s): the
-  moved box keeps its 0.37 - 0.41 points at every offset, the annotation pose falls from 0.38 to 0.19 and the opposite shift to
-  0.07 (|dt| 0.3 .. 0.45 s); at the real 36 ms the three variants are within noise (0.40 / 0.39 / 0.36), the check is of the
-  direction and the size of the operator, not of the last centimetre. No lidar on disk, so no point-cloud check
-- stationary rule of the flow box vs the devkit-speed rule of the old gt_bev: agree on 98.6 % of track-keyframes; the static layers
-  of the new generator are bit-identical to the old ones, objects differ in 3 scenes by a few stationary boxes
-
-## Known limits
-- boxes exist at 2 Hz only; the yaw of a moving box is not extrapolated (a yaw rate is unknown, < 1 deg over 36 ms); a moving box
-  of unknown velocity (short track, 0.6 % of the boxes) stays at the annotation time, up to v * 36 ms away from the camera view;
-  a 12 Hz sweep frame (`keyframe(sd=)`) moves the keyframe's boxes by v * dt over up to +-0.25 s, a first-order extrapolation
-- the offset is measured for the FRONT camera only; the other five cameras have other offsets to the annotation time
-- Boston map lines are 0.3-0.7 m off the paint in places (map / localisation error); no per-element correction exists (v9 had `map_offsets`, unused, removed in v13) and no estimator is built yet
-- 25 % of the boxes stand more than 0.5 m above or below the ego ground plane (hills, overpasses): a ground-plane assumption of
-  the camera lift, not a GT error
-- the occlusion mask is 2D: it also hides about 11 % of boxes that annotators rate as 80-100 % visible (pedestrians behind cars)
-- radar gives only the radial velocity; the tangential part comes from the annotations. Not validated against lidar scene flow
-  (no lidar on disk)
-- `coverage.shares_in` (one rule for the share f of a ground-truth box and of a detection) counts every observed box of the frame as a possible occluder, also the one that the
-  detection IS. The GT shares are not affected (a box does not hide itself). A caller that scores a detection against its matched box passes a frame dict whose
-  `meta["boxes"]` leaves that box out; a fix inside coverage.py would change the front signature, i.e. the key of the BEV GT cache, so it is not made (decided 2026-11-04)
-- the light devkit scanned the three big tables (sample_data 17 s, ego_pose 7 s, sample_annotation 6 s) for every group of 60 sequences, 35 s of the 2606 s of the lane GT run per group.
-  `light_nusc.ensure_cache` now reads them once (92 s, 277 MB in <store root>/cache/light_<version>/, one file per sequence, valid for tables of the same size and time) and a group
-  comes from the cache in 3.7 s; `generate` and `generate-lane` make it for trainval before they start. Checked: the cached tables equal the scanned ones record for record
-
-## Versions (decision D29, 2026-11-01)
-The GT may change, but every state of the generator is a **version** with a key, so that an old GT and the training on it can be
-reconstructed. The signature (a hash of the six generator files + options) names the folder of the stored GT; the version key `vN`
-is its human name. A version is three things: a row in `versions.csv` (key, signature, tag, date, generator, what changed), a git
-tag `autogt/vN` on the commit that holds that generator, and `gt_version` in the `index.json` of the stored GT.
-`python -m GtGenerator versions` lists them; `GtGenerator.current_version()` is the key of this source; `GtGenerator.missing(tokens)` tells before a
-training which keyframes the store lacks.
-
-| key | signature | what it is |
-|---|---|---|
-| v1, v2 | 85f096748f, 962e788566 | the generator before the suite, `training/gt_bev.py` of the commits 7f5cb10 / 7c8f12e; its GT was in the trainer's cache `bev_fusion/data/cache/gt` (tag `v1`) |
-| v3 | 7fe1149566 | the standalone suite, moving boxes at the annotation time |
-| v4 | fefd519974 | boxes at the camera time, first state (superseded after 18 minutes) |
-| v5 | 15efbde2d1 | review fixes; the generator of the t10 runs (GT stored for all of trainval) |
-| v6 | 02a1217742 | generator fixes: ego velocity at the first / last pose of a sequence, instance / velocity / flow_sigma on the same sub-pixels, `ego_half_window` |
-| v7 | b84e8ac9b2 | coverage (D36 - D38): boxes hide by their height (softer `occluded`), `coverage.py`, per box `share_camera` / `share_radar` / `share_fusion` and the nuScenes point counts; `camera`, `radar`, `undefined` unchanged. Never built for trainval (superseded by v8 before it finished) |
-| v8 | c643a7539d | v7 made fast, the same GT (bit-identical on 34 keyframes of four maps): radar files read in parallel, map polygons and centre-line points made once, the box shares in one pass, `keyframe_gt` split into methods (the first trainval store of the coverage GT) |
-| v9 | 6a7aa7864a | v8 made twice as fast, the same GT (211 frames of all ten mini sequences byte for byte equal to v7 / v8): the map's record-in-patch test with the geometry made once, `inside_quad` for four edges at once; it shares the store of v8 (`same_gt_as`) |
-| v13 | a107e0b4e8 | front corrections and cleanup (D78, merged by D83 on 2026-11-11; front part of release v14): box yaw wrapped to [-pi, pi], the `vel_flag` of a stationary box is the flow box's flag, `flow_sigma` finite and 10 m/s exactly where `flow_weight` is 0, `centreline_dir` a unit vector (or 0), the lane_connector bounds from polygons and a shared clip in `blocked` (faster, same output), dead code out (dense flow field, `displace`, the radar cache, `stationary_fix` / `map_offsets`, odd supersampling refused); the first GT with the corrected output; **current**; its store lies on C: |
-
-**Same GT, new code.** A version whose code makes the same GT as an older one byte for byte (faster or tidier code) names it in the column
-`same_gt_as` of `versions.csv` (v9 names v8) and needs no store of its own: `load`, `missing`, `generate` and `have` use the folder of the older
-version, `gt_version` in its manifest is the older key (the key names the GT, the signature the code; the manifest's `generator` names the code that
-wrote it). The proof is `python -m GtGenerator digest A.json` in the source tree of each version (a worktree of the older tag and the new tree) and
-`python -m GtGenerator digest --compare A.json B.json`: a digest per frame, every array byte and meta entry, of every other keyframe of all ten mini sequences and
-a few 12 Hz frames.
-
-**When you edit one of the six files** (`grid.py layers.py flow.py nuscenes_adapter.py nuscenes_gt.py coverage.py`) the signature changes and
-`python -m GtGenerator selftest` fails until `versions.csv` has a row for it: add the row, commit, `git tag -a autogt/v<N> -m "..."`, rebuild
-the GT, tell the others. **To rebuild an old version** (v3, v4, v5): `git worktree add temp/gt_v5 autogt/v5`, then
-`cd temp/gt_v5 && PYTHONPATH=bev_fusion python -m autogt build --dataroot <nuScenes folder> --version v1.0-trainval --out <folder>`
-(`build`, not `generate`: the tags hold the package under `bev_fusion/autogt/` and have the full-devkit writer only, 8+ GB for
-trainval; the tags v3 - v5 predate `generate`; every tag up to v12 / l5 calls the package `autogt`, a tag made after the rename of 2026-11-10 calls it `GtGenerator`).
-A `PYTHONPATH` that does not name the checkout silently imports the live package, so check
-first: `PYTHONPATH=bev_fusion python -c "import autogt; print(autogt.__file__)"` must print a path inside `temp/gt_v5`. Then `<folder>` holds
-`<signature>/` of that version (v5: 15efbde2d1). v1 and v2 are `bev_fusion/training/gt_bev.py` at their tag (`NuScenesGT.keyframe_gt`,
-no `generate`). Tags are pushed with the code (`git push origin autogt/v1 ...`). On 2026-11-21 the tags `autogt/v1` .. `autogt/v12` and `autogt/lane-l1` .. `autogt/lane-l5` exist; the tags of v13, l6 and release v14 named in the tables are not made yet.
-
-## Releases: the suite as one number (`releases.csv`)
-`python -m GtGenerator generate` makes the standard nuScenes GT (the front GT, signature and versions as above) and the lane GT (own signature, `lane_versions.csv`) of the same
-sequences, so the pair carries ONE number: the release. The numbers are one running sequence with the front versions: `v10` = front v9 + lane l3 (2026-11-04), `v11` = front v9 + lane l4 (2026-11-07: tiers and visibility), `v12` = front v9 + lane l5 (2026-11-07: the lane GT for both systems, one store per rig:
-Spurmitte = `lane_center`, BEV Fusion = `bev_fusion`), `v14` = front v13 + lane l6 (2026-11-10; the front version took the number v13 because v10 - v12 were taken by releases), `v15` = front v13 + lane l6.1
-(2026-11-27, current: the GT of v14, only the store root moved), every later change of the front or the lane code is the next number (v16, ...). The front store is not touched by the lane GT (the BEV training and evaluation key their GT cache on the front
-signature), and the manifest of a front store records `suite_release`. `python -m GtGenerator selftest` fails when the pair (front version, lane version) of this source has no row in
-`releases.csv`.
-
-## Adding a dataset
-Write an adapter that builds the inputs of `estimate_flow` (`Track`, `Ego`, `RadarFrame`) and a generator for
-the static layers; `layers.py` and `flow.py` are reusable as they are.
-
-## History
-The generator was `training/gt_bev.py` (+ the first flow version `training/gt_flow.py`) and about twenty one-off scripts in
-`temp/checks/` (projection checks, pitch / time-offset tests, Boston debug, map-alignment per location, viewers, videos); they
-are folded into this suite and removed - git history before the commit "autogt" has them. What they found is in
-`bev_fusion/plan/plan.md` section 9.5 of tag `v1`.
-
-## Using the velocity targets in a loss (note from the t1_r4_soa review, 2026-10-30)
-About 80 % of the supervised object cells are static (velocity 0) and 20 % move: an L1 / MSE over all object cells is minimised by
-predicting zero, and the gradient of a dense motion head at the BEV feature was measured ~18x below the objects group. Balance the
-two groups (weight moving cells, `|velocity| > 1 m/s`, separately from static ones, or use a loss normalised per group), use
-`flow_weight` (0 = unknown) as the mask and `flow_sigma` as an uncertainty (e.g. a Huber / beta-NLL scale), and report speed errors
-split into moving and static cells with the zero predictor next to them. The signal is in the input: the median radar Doppler inside
-a moving box reproduces the GT radial speed (corr 0.989, review notes in `bev_fusion/records/observe_2026-10-30_notes.md` of tag `v1`). A `moving`
-mask is not stored in the GT on purpose (it would change the generator signature and invalidate the caches); derive it from
-`velocity`.
-
-## Names (the rename of 2026-11-10, D76)
-
-The directory and the Python package are `GtGenerator` (before: `autogt/`, `python -m autogt`, `import autogt`). What keeps the old name, on purpose:
-- **file names the tools write** (`autogt_report_*.pdf`, `_to_delete/autogt_*`) and the fallback store root `<repository>/data/autogt` of `where.py`; the stores themselves moved to `<data root>/groundtruth` on 2026-11-27 (D154; a store is found by its signature, so no key changed);
-- **the git tags `autogt/vN` and `autogt/lane-lN`**: a tag is history, and the series goes on (`versions --update` writes `autogt/v<N>`). A tag up to v12 / l5 holds the package as `autogt/`, so an old version is rebuilt with `python -m autogt` inside its worktree (section Versions);
-- **`checks.py`** still says `autogt` in two docstrings: its bytes are the version of the stored checks, so a word there would recompute every stored accumulator (the hashed generator files say GtGenerator since v13 / l6);
-- **`AutoGT`**, the old class name, an alias (the selftest of `rig_masks.py` uses it; old code may import it);
-- the dated records (decisions, histories, results, ledgers, reviews; the review `GtGenerator/REVIEW_2026-11-10.md` is in tag `v1`) say `autogt`, as they were written.
-
-**No alias.** A tracked alias `autogt/__init__.py` (so that the pinned code snapshots of runs made before the rename keep importing `autogt`) existed on 2026-11-10 (commit 345d598d) and was removed the same day (D78): `runs/<name>/code/*.py` of a run made before D76 says `from autogt...` and needs `autogt` to be importable (re-pin the snapshot, or put an alias into the code that runs it); nothing in the repository imports `autogt` any more.
+The command line calls only the class; the class calls the code of the problem asked for; the tools read the output and change nothing of the GT. [`architecture.md`](architecture.md) maps every file to
+its box. The self-test fails when the drawing and the code differ, and when a module is neither hashed nor listed as not shaping the GT. `.gitattributes` pins LF line ends of the hashed files (CRLF
+would give another signature).

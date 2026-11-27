@@ -9,8 +9,8 @@
   moving boxes' speeds close to the devkit's, unknown velocity never a silent zero (weight 0), weights 0 on ignored boxes,
   a 12 Hz sweep frame (sd=) gives a ground-consistent frame, moving boxes at the camera time (centre = annotation + v * dt,
   stationary / unknown-velocity boxes unchanged, boxes_at="annotation" restores the annotations)
-5 the build command writes and reloads a cache that is keyed by the generator signature; `load` / `current_signature` of the
-  top-level API; AGENTS.md names every layer, meta entry and box field of a real keyframe
+5 `generate` writes and reloads a store that is keyed by the generator signature (its light devkit gives the GT of the full one); `load` /
+  `current_signature` of the top-level API; AGENTS.md names every layer, meta entry and box field of a real keyframe
 """
 import json
 import os
@@ -327,17 +327,25 @@ def run(root=None, verbose=True):
     finally:
         suite_mod2.NuScenesGT.signature = real_sig
 
-    # 5 the build command (cache keyed by the signature)
-    from .pipeline import build
-    from .store import load_keyframe
+    # 5 the stored GT: `generate` writes a store keyed by the signature
+    from . import pipeline as pipe_mod                                                  # the writer: its module globals are what the tests below patch
+    from .store import load_keyframe, write_keyframe
     with tempfile.TemporaryDirectory() as d:
-        n = build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, workers=1, res=0.5, verbose=False)
+        n = pipe_mod.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False)["written"]
         sig_dir = os.path.join(d, store_sig)
         files = sorted(os.listdir(sig_dir))
         assert n == len(files) - 1 and "index.json" in files, files
         tok2 = [f for f in files if f.endswith(".npz")][0][:-4]
         g2 = load_keyframe(sig_dir, tok2)
         assert g2["flow"].shape == (2, g.nx, g.ny) and g2["meta"]["sample"]
+        full_dir = os.path.join(d, "full")                                              # the same keyframe from the full devkit, through the one writer
+        os.makedirs(full_dir)
+        assert write_keyframe(full_dir, tok2, lambda: gt.keyframe_gt(tok2, g))
+        assert _same_gt(load_keyframe(full_dir, tok2), g2), "light == full: every layer and every meta entry"
+
+        def never():
+            raise AssertionError("a stored keyframe is not made again")
+        assert not write_keyframe(full_dir, tok2, never)
         from . import current_signature, load as load_stored                          # the two helpers of the top-level API
         assert current_signature() == store_sig and current_signature(boxes_at="annotation") == ann.signature()
         assert np.array_equal(load_stored(tok2, data=d)["flow"], g2["flow"])
@@ -364,10 +372,9 @@ def run(root=None, verbose=True):
             raise AssertionError("load of an unknown keyframe must fail")
         except FileNotFoundError as e:
             assert store_sig in str(e)
-    # 5b generate, the entry point: version found in the folder, groups of sequences with the light devkit give the same GT as the full
-    #    devkit, a rerun writes nothing, a wrong scene or a wrong folder is refused with a message
+    # 5b generate, the entry point: version found in the folder, the loop over groups of sequences, a rerun writes nothing, a wrong scene or a
+    #    wrong folder is refused with a message
     from . import store as store_mod
-    from . import pipeline as pipe_mod                                                  # the writer: its module globals are what the tests below patch
     assert store_mod.detect_version(root) == "v1.0-mini"
     with tempfile.TemporaryDirectory() as d:
         old_group, pipe_mod.GROUP_SCENES = pipe_mod.GROUP_SCENES, 1                      # two groups: the loop over devkit loads is exercised
@@ -386,8 +393,6 @@ def run(root=None, verbose=True):
         held = json.load(open(os.path.join(r["out"], "index.json")))
         assert held["scenes"] == ["scene-0061", "scene-0103"] and held["keyframes"] == 4 and held["complete"] is True, held
         assert held["gt_version"] == r["gt_version"] == current_version(), (held, r)                      # the version key is stamped
-        mine = load_keyframe(r["out"], tok2)                                           # the keyframe `build` wrote above, from the full devkit
-        assert _same_gt(mine, g2), "light == full: every layer and every meta entry"
         for bad, why in ((dict(scenes=["scene-9999"]), "unknown scene"), (dict(version="v1.0-trainval"), "version")):
             try:
                 pipe_mod.generate(root, d, verbose=False, **bad)
@@ -453,7 +458,7 @@ def run(root=None, verbose=True):
         assert manifest({**ok, "sets_complete": ["small"]})["sets_complete"] == ["full", "small"], "sets that were complete stay listed"
         m = manifest({**ok, "sets_complete": ["small"]})
         assert m["release"] is True, m                                                # full came from the earlier run on this folder
-        m = manifest(None)                                                             # a report / build run keeps the manifest keys
+        m = manifest(None)                                                             # a provisional write (no run manifest) keeps the manifest keys
         assert m["release"] is True and m["commit"] == "abc1234" and m["sets_complete"] == ["full", "small"], m
         assert manifest(None, complete=False)["release"] is False, "the provisional index of a running job is no release"
         # review of 2026-11-02: the sets a run could check are taken from ITS list (a deleted keyframe must remove `full`), a set that this
@@ -727,7 +732,7 @@ def run(root=None, verbose=True):
         print(f"GtGenerator selftest ok: signature {gt.signature()}; {len(seen)} locations have a road under the ego car; "
               f"static layers move with the ego (IoU {iou:.3f}); {len(fixed)} stationary instances fixed in the world; "
               f"{len(moving)} moving boxes in scene-0061 kf 8 (median speed difference to the devkit {np.median(diffs):.2f} m/s); "
-              f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; build + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
+              f"ego flow vs exact pose {err * 100:.1f} cm per camera frame; generate + reload of {n} keyframes ok; 1 s video {r['codec']} read back")
         print(lane_graph_msg)
         print(gt_api_msg)
         print(flow_msg)

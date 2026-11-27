@@ -64,13 +64,13 @@ def missing(tokens, data=DATA, **options):
 
 
 def load(token, data=DATA, **options):
-    """the stored GT of one keyframe (written by `python -m GtGenerator report` / `build`) for the current source and options:
+    """the stored GT of one keyframe (written by `python -m GtGenerator generate` / `report`) for the current source and options:
     dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""
     sig_dir = os.path.join(data, current_signature(**options))
     try:
         return load_keyframe(sig_dir, token)
     except FileNotFoundError:
-        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "examples", "lane", "cache")) if os.path.isdir(data) else []
+        have = sorted(d for d in os.listdir(data) if os.path.isdir(os.path.join(data, d)) and d not in ("reports", "lane", "cache")) if os.path.isdir(data) else []
         raise FileNotFoundError(f"no stored GT for keyframe {token} in {sig_dir} (folders in {data}: {have}); generate it with "
                                 "`GtGenerator.generate(<nuScenes folder>)` (shell: `python -m GtGenerator generate`), or the generator source changed "
                                 "since it was stored") from None
@@ -133,7 +133,6 @@ class GtGenerator(NuScenesGT, Interface):
     def training_sample(self, sample_token, grid=None, ss=None):
         return super().training_sample(sample_token, grid or self.grid, ss or self.ss)
 
-    # one function per system and its key (gt_api.py): the class offers them next to the single-keyframe methods
     def scenes(self):
         return [s["name"] for s in self.nusc.scene]
 
@@ -148,4 +147,4 @@ class GtGenerator(NuScenesGT, Interface):
         return out
 
 
-AutoGT = GtGenerator        # the old name of the class: the hashed lane files (rig_masks.py, lane_gt.py) import it (a rename there would change a lane signature)
+AutoGT = GtGenerator        # another name of the class; only the self-test of rig_masks.py imports it (rig_masks.py is in no signature)

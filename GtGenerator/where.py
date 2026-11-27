@@ -17,6 +17,6 @@ def _machine_data():
 
 
 def root():
-    """the folder of the ground-truth stores (front stores by signature, lane/, cache/, examples/, reports/)"""
+    """the folder of the ground-truth stores (front stores by signature, lane/, cache/, reports/)"""
     data = os.environ.get("RESEARCH_DATA") or _machine_data()
     return os.path.join(data, "groundtruth") if data else os.path.join(REPO, "data", "autogt")

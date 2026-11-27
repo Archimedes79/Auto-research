@@ -119,17 +119,6 @@ class Interface:
         r = lane_raster.build_mask_cache(store, borders=tuple(borders), force=force, workers=workers)
         return {**r, "text": f"{r['frames']} frames, {len(r['made'])} file(s) made, {len(r['files']) - len(r['made'])} already complete: {os.path.join(store, 'masks')}"}
 
-    @staticmethod
-    def build(dataroot="~/data/nuscenes", version="v1.0-mini", out=None, scenes=None, stride=1, workers=1, res=0.5, use_flow=True, use_radar=True, boxes_at="camera"):
-        """the low-level writer behind `report` (one full devkit, `out` required; pipeline.build) -> {"written": n}"""
-        from . import pipeline
-        if not out:
-            raise ValueError("build needs out (the folder to write)")
-        try:
-            return {"written": pipeline.build(os.path.expanduser(dataroot), version, os.path.expanduser(out), scenes, stride, workers, res, **_options(use_flow, use_radar, boxes_at))}
-        except SystemExit as e:                                          # a folder of another resolution: build exits with the message, the interface makes it a wrong argument
-            raise ValueError(str(e)) from None
-
     # ------------------------------------------------------------------------------------------------------------ look at GT
     @staticmethod
     def gt_key(*args, **kwargs):
@@ -256,7 +245,7 @@ class Interface:
 
     @staticmethod
     def selftest(only=None):
-        """all tests of the suite (5 - 10 min), or only some parts (`only`: names of SELFTESTS) -> {text}"""
+        """all tests of the suite (7 - 13 min), or only some parts (`only`: names of SELFTESTS) -> {text}"""
         if not only:
             from . import selftest
             selftest.run()
@@ -328,8 +317,7 @@ class Interface:
 
     # ------------------------------------------------------------------------------------------------------------ tidy
     @staticmethod
-    def clean(delete=False, move=False, videos=False, pictures=False, reports=False, stale_caches=None, all_caches=None, older_than=None, include_released=False):
-        """list / move generated videos, pictures, reports and caches; `delete` only for what one command rebuilds (clean.clean)"""
+    def clean(delete=False, move=False, reports=False, stale_caches=None):
+        """list / move generated reports and stale caches; `delete` only for reports (clean.clean)"""
         from . import clean
-        return clean.clean(delete=delete, move=move, videos=videos, pictures=pictures, reports=reports,
-                           stale_caches=stale_caches, all_caches=all_caches, older_than=older_than, include_released=include_released)
+        return clean.clean(delete=delete, move=move, reports=reports, stale_caches=stale_caches)

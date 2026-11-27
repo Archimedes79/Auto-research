@@ -69,7 +69,7 @@ def _mapping_checks():
     # the map of the module doc is the map of the code: every command is ONE method of GtGenerator, named in the doc; no method is without a command, and the command line imports nothing but the class
     from .api import Interface
     from .suite import GtGenerator
-    expected = {"generate": "generate", "generate-bev": "generate_bev_gt", "generate-lane": "generate_lane_gt", "area-masks": "area_masks", "audit-lane": "audit_lane", "build": "build",
+    expected = {"generate": "generate", "generate-bev": "generate_bev_gt", "generate-lane": "generate_lane_gt", "area-masks": "area_masks", "audit-lane": "audit_lane",
                 "key": "gt_key", "have": "have", "data": "check_data", "sets": "sets", "versions": "versions", "area-mask": "area_mask", "view": "view", "sheets": "sheets", "masks": "masks",
                 "lanegraph": "lanegraph", "video": "video", "check": "check", "report": "report", "digest": "digest", "clean": "clean", "selftest": "selftest"}
     cmds = cli.commands()
@@ -137,11 +137,6 @@ def _mapping_checks():
     code, out, err = _run(["selftest", "--only", "clean"])
     assert code == 0 and out.startswith("clean: ok"), (code, out, err[-200:])
     assert _run(["selftest", "--only", "nothing"])[0] == 2
-    # build
-    fn, calls = _recorder(0)
-    with _Patch((pipeline, "build", fn)):
-        assert _run(["build", "--out", "o", "--scenes", "scene-0061", "--workers", "2", "--no-radar"])[0] == 0
-    assert calls == [((os.path.expanduser("~/data/nuscenes"), "v1.0-mini", "o", ["scene-0061"], 1, 2, 0.5), dict(use_flow=True, use_radar=False))], calls
     # key: the key and its exit code; --json
     for complete, code_want in ((True, 0), (False, 1)):
         fn, calls = _recorder(_FakeKey(complete))
@@ -183,8 +178,8 @@ def _mapping_checks():
     assert code == 2 and "not allowed" in err, (code, err)
     fn, calls = _recorder([])
     with _Patch((clean, "clean", fn)):
-        _run(["clean", "--videos", "--reports", "--stale-caches", "d", "--older-than", "5", "--move"])
-    assert calls == [((), dict(delete=False, move=True, videos=True, pictures=False, reports=True, stale_caches="d", all_caches=None, older_than=5.0, include_released=False))], calls
+        _run(["clean", "--reports", "--stale-caches", "d", "--move"])
+    assert calls == [((), dict(delete=False, move=True, reports=True, stale_caches="d"))], calls
     # the picture and video commands
     fn, calls = _recorder(None)
     with _Patch((view, "run", fn)):
@@ -211,7 +206,7 @@ def _error_checks(root):
              (["have", "--set", "small", "--scenes", "x"], "not allowed"), (["generate", root, "--scenes-file", "/nonexistent/file.txt"], "nonexistent"),
              (["lanegraph", "o.png", "scene-0061"], "scene-0061:8"), (["digest"], "--compare"), (["key", "surround"], "invalid choice"),
              (["key", "lane_center", "--dataset", "v1.0-mini", "--dataroot", root, "--scenes", "scene-9999"], "scene-9999"),
-             (["generate", root, "--scenes", "scene-9999"], "scene-9999"), (["build", "--out", "o", "--workers", "0"], "workers"), (["digest", "--compare", "/nonexistent/a.json", "/nonexistent/b.json"], "nonexistent"),
+             (["generate", root, "--scenes", "scene-9999"], "scene-9999"), (["digest", "--compare", "/nonexistent/a.json", "/nonexistent/b.json"], "nonexistent"),
              (["key", "bev_fusion", "--set", "ful"], "no scene set"), (["key", "bev_fusion", "--dataset", "v1.0-bogus"], "unknown nuScenes version"), (["report", "--stride", "0"], "stride"),
              (["report", "--workers", "0"], "workers"), (["check", "--stride", "0"], "stride"), (["audit-lane", "lane_center", "--limit", "0"], "limit"), (["area-mask", "tok", "--border-m", "nan"], "border_m"),
              (["view", "o.png", "scene-9999:1", "--total"], "no such sequence"), (["video", "scene-9999", "o.mp4", "--dataroot", root], "no such sequence")]
@@ -224,15 +219,17 @@ def _error_checks(root):
         o = os.path.join(d, "o.png")
         code, out, err = _run(["view", o, "scene-9999:1", "--total"])
         assert code == 2 and "no such sequence" in err and not os.path.exists(o), (code, err[-300:], os.listdir(d))
-    # a folder of another resolution: `build` (the library call) exits with the message, the command is a wrong argument (exit 2)
+    # a folder of another resolution is never continued: both writers of the command line say it as a wrong argument (exit 2)
     import json
     from .suite import current_signature
     with tempfile.TemporaryDirectory() as d:
         sig = current_signature()
         os.makedirs(os.path.join(d, sig))
-        json.dump({"signature": sig, "res": 0.5, "ss": 4}, open(os.path.join(d, sig, "index.json"), "w"))
-        code, out, err = _run(["build", "--dataroot", root, "--out", d, "--res", "0.25"])
-        assert code == 2 and "holds res 0.5" in err, (code, err)
+        for argv, held in ((["generate", root, "--out", d, "--res", "0.25", "--scenes", "scene-0061"], 0.5),
+                           (["report", "--dataroot", root, "--data", d, "--out", os.path.join(d, "r.pdf"), "--scenes", "scene-0061"], 0.25)):
+            json.dump({"signature": sig, "res": held, "ss": 4}, open(os.path.join(d, sig, "index.json"), "w"))
+            code, out, err = _run(argv)
+            assert code == 2 and f"holds res {held}" in err and os.listdir(os.path.join(d, sig)) == ["index.json"], (argv, code, err)
     os.environ["GTGENERATOR_TRACEBACK"] = "1"
     try:
         try:
@@ -327,7 +324,7 @@ def _store_checks(root):
             raise AssertionError("a part that the key does not list must raise")
         except ValueError:
             pass
-    # a run that writes nothing leaves a finished store alone whatever stride it is asked for (it turned stride 1 into "mixed" and dropped the release); a `build` store has no manifest and gets one
+    # a run that writes nothing leaves a finished store alone whatever stride it is asked for (it turned stride 1 into "mixed" and dropped the release); a store without a manifest gets one
     with tempfile.TemporaryDirectory() as d:
         r = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)
         path = os.path.join(d, r["signature"], "index.json")
@@ -341,11 +338,13 @@ def _store_checks(root):
             res = AG_.generate(root, d, scenes=["scene-0061"], verbose=False)
         assert res["ok"] is False and res["masks_error"] == "OSError: disk full", "a failed mask cache is reported, the GT is not lost"
     with tempfile.TemporaryDirectory() as d:
-        pipeline.build(root, "v1.0-mini", d, scenes=["scene-0061"], stride=20, verbose=False)
-        folder = os.path.join(d, os.listdir(d)[0])
-        assert "commit" not in read_index(folder), "build writes no manifest"
-        again = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)           # was a KeyError: 'commit'
-        assert again["written"] == 0 and "commit" in read_index(folder), "generate gives a build store its manifest"
+        kw = dict(scenes=["scene-0061"], stride=20, verbose=False, lane=False)
+        path = os.path.join(pipeline.generate(root, d, **kw)["out"], "index.json")
+        idx = json.load(open(path))
+        del idx["commit"]
+        json.dump(idx, open(path, "w"))
+        again = pipeline.generate(root, d, **kw)                                                                  # was a KeyError: 'commit'
+        assert again["written"] == 0 and "commit" in read_index(os.path.dirname(path)), "generate gives a store without a manifest its manifest"
     # make_lane_gt is asked not to raise on a failing mask cache (strict=False) by generate: checked on the call
     seen = {}
     from . import gt_api as ga2
@@ -455,7 +454,7 @@ def run(root=None, verbose=True):
     _error_checks(root)
     _store_checks(root)
     _architecture_check()
-    msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables; the architecture drawing is in step with the code"
+    msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables; the architecture drawing is in step with the code"
     if verbose:
         print(msg)
     return msg

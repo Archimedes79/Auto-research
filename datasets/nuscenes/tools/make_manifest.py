@@ -5,13 +5,13 @@
     python3 datasets/nuscenes/tools/make_manifest.py --check          # compares the disk with the committed manifest; exit 1 and the differences when they differ
     python3 datasets/nuscenes/tools/make_manifest.py --selftest       # a fake data root in a temporary folder: determinism, known answers, the check finds changes
 
-Why: the data itself is never in git, so a result must be able to NAME the data it was made from. This manifest is small enough for git (about 25 KB) and pins
+Why: the data itself is never in git, so a result must be able to NAME the data it was made from. This manifest is small enough for git and pins
 the data by what cannot change unnoticed: the S3 ETag and size of every archive that was downloaded (from the download logs; an archive is deleted after it was
 unpacked and compared with the data, the manifest then keeps its entry with `present: false`, the date, and the result of the comparison under `on_disk_check`:
 `--archive-check FILE` merges it), the SHA-256 of the metadata tables
 (`v1.0-trainval/*.json`, the dataset version itself), of the map expansion, of the licence and of the stored file lists, and, per sensor folder, the number of
 files, their bytes and the SHA-256 of the sorted list "path<TAB>size" (so one missing or extra file shows). A result card names the manifest by its SHA-256
-(`sha256sum datasets/nuscenes/manifest.json`); the GT built from this data is named by `GtGenerator/versions.csv` and its `data/autogt/<signature>/index.json`
+(`sha256sum datasets/nuscenes/manifest.json`); the GT built from this data is named by `GtGenerator/versions.csv` and its `<data root>/groundtruth/<signature>/index.json`
 (pointers under "links", not copies). Paths in the manifest are relative to the data root (`D:\\Auto-research\\NuScenes`) or to the repository.
 
 The folder fingerprints read 1.5 million files; from WSL that takes 30 minutes, so `scan_tree.ps1` (PowerShell, native, about a minute) does it when `powershell.exe`
