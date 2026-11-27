@@ -1,0 +1,13 @@
+# Candidates: junction-connectivity (merged 2026-11-10)
+
+Question: which methods predict, from camera/BEV features, which entry lane connects to which exit lane at a junction, and how do they represent and train it? Searches used: 8 of 8. Rows: 8 of 8 (6 new, 2 known). Facts below were read on the abstract or repository page named in the paper/code columns.
+
+| id | title | kind | paper | code | why it matters for the question | known? |
+|---|---|---|---|---|---|---|
+| can22-minimalcycles | Topology Preserving Local Road Network Estimation from Single Onboard Camera Image | paper | https://arxiv.org/abs/2112.10155 | https://github.com/ybarancan/TopologicalLaneGraph | Supervises how lanes join at intersections through minimal cycles of the road graph (a topology target instead of pair links); Bezier centrelines, Polygon-RNN and Transformer variants, nuScenes and Argoverse; repo has training scripts, cycle extraction and checkpoints, no licence shown; single front camera | no |
+| sept25 | SEPT: Standard-Definition Map Enhanced Scene Perception and Topology Reasoning for Autonomous Driving | paper | https://arxiv.org/abs/2505.12246 | - | SD-map prior fused with BEV features (raster plus vector) and an intersection-aware keypoint task for topology on OpenLane-V2; ties to our SD-map attach step; no code on the page | no |
+| gumbel-sinkhorn | Learning Latent Permutations with Gumbel-Sinkhorn Networks | foundation | https://arxiv.org/abs/1802.08665 | - | Sinkhorn relaxation of matching makes an assignment learnable end to end: a candidate block for an entry-to-exit assignment at a junction; in our corpus Sinkhorn appears only via PolyWorld (K145) and SuperGlue | no |
+| unitopo | Unified Modeling of Lane and Lane Topology for Driving Scene Reasoning | paper | https://arxiv.org/abs/2605.08911 | - | Lane topology as a set of connected lanes (predecessors, successors, interconnections) predicted together with lane positions; TOP_ll 30.1 / 31.8 on the two OpenLane-V2 subsets; already in the corpus as TP06 | yes |
+| topologic | TopoLogic: An Interpretable Pipeline for Lane Topology Reasoning on Driving Scenes | paper | https://arxiv.org/abs/2405.14747 | https://github.com/Franpin/TopoLogic | Pair score from lane geometric distance plus lane-query similarity, usable on trained models without retraining; already in the corpus as TP01 / K30 | yes |
+
+Seen and not listed (budget): From Static to Dynamic, a survey of topology-aware perception (https://arxiv.org/abs/2509.23641, not known, broad, little on pairs). Already in the corpus and therefore left out: TopoNet, TopoMLP, TopoMask, LaneGAP, LaneSegNet, STSU, CGNet, TopoFG, RelTopo, TopoGPT, LaneDiffusion, WASABI, CenterLineFormer, LaneGraphNet, SMERF/SMART, TopoSD, RATopo.

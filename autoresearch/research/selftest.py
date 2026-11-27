@@ -201,9 +201,13 @@ def parts(tmp: str) -> None:
     assert worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "0,-1"}) == {} and worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "-1,0"}) == {}
     assert worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "4,7,-1,9"}) == {"CUDA_VISIBLE_DEVICES": "7"}
     scored_by_the_snapshot(tmp, p, card)
+    for tool, said in (("topic_table.py --selftest", "topic_table selftest passed"), ("code_digest.py selftest", "selftest ok")):
+        name, *args = tool.split()
+        r = subprocess.run([sys.executable, os.path.join(CORE, "literature", name), *args], capture_output=True, text=True, timeout=300)
+        assert r.returncode == 0 and said in r.stdout, (tool, r.stdout[-1500:], r.stderr[-1500:])
     say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, a needed run, decisions, the TEST log, "
         "protected paths, stream names, a step's environment, the references clean keeps, experiment numbers, a test past its timeout, a GPU "
-        "slot's device, the snapshot's card")
+        "slot's device, the snapshot's card, the literature tools' own tests")
 
 
 def scored_by_the_snapshot(tmp: str, p: dict, card: dict) -> None:
@@ -295,7 +299,7 @@ with open(os.path.join(sys.argv[1], sys.argv[2]), "w") as f:
 def make_repo(tmp: str) -> str:
     root = os.path.join(tmp, "repo")
     skip = shutil.ignore_patterns("__pycache__", "*.pyc", "temp", "eval_out", "state", "history")
-    for d in ("research", "Evaluation", "trainkit", "templates", "reporter"):
+    for d in ("research", "Evaluation", "trainkit", "templates", "reporter", "literature"):
         shutil.copytree(os.path.join(CORE, d), os.path.join(root, "autoresearch", d), ignore=skip)
     toy = os.path.join(root, "problems", "toy")
     shutil.copytree(os.path.join(REPO, "problems", "toy"), toy, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
@@ -389,6 +393,11 @@ def chain(tmp: str) -> None:
     assert any("not committed" in e and "problems/toy/net/model/net.py" in e for e in dirty), dirty
     assert "not committed" in research(["start", "toy", "E1"], env, ok=(1,)).stderr
     open(net_py, "w", encoding="utf-8").write(keep)
+    reading = os.path.join(root, "problems", "toy", "literature", "topics", "discs")      # a note being written never blocks a run
+    os.makedirs(reading)
+    with open(os.path.join(reading, "overview.md"), "w", encoding="utf-8") as f:
+        f.write("# Overview, half written\n")
+    assert json.loads(research(["check", "toy", "E1"], env).stdout)["errors"] == []
     started = json.loads(research(["start", "toy", "E1"], env).stdout)
     assert sorted(started["started"]) == ["E1.a_s0", "E1.a_s1", "E1.c_s0", "E1.c_s1"] and started["tag"] == "toy/E1", started
     snap = subprocess.run(["git", "rev-parse", "toy/E1^{commit}"], cwd=root, capture_output=True, text=True).stdout.strip()

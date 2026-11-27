@@ -19,5 +19,6 @@ listed in the core's README ("Files a problem writes"); launching, records, verd
   problem.json   ledger.csv (generated)
   dataset/ gt/ net/{prep,model,loss}/ training/ evaluation/ tests/            (as far as the problem needs them)
   experiments/E###_slug/{experiment.md, judge.py?, report/?, verdict.json, runs/<run>/{config,run,result}.json}
+  literature/ (topics/<slug>/, see ../autoresearch/literature/README.md; documents, they never block a run)
   reports/<report>/ (a report's report.json and parts)   temp/ (scratch, not in git)
 ```

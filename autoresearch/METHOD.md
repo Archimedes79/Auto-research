@@ -8,10 +8,10 @@ measures and refuses; the files are the memory; git keeps what ran.
 | phase | what happens | it ends when |
 |---|---|---|
 | Problem | `PROBLEM.md` (goal, chain, metrics, gaps) and `DESIGN.md` (the modules and the rules they obey); changes of `PROBLEM.md` are the owner's | the owner's answer is in `DECISIONS.md` |
-| Research (on a trigger) | scans and deep notes on one topic (`ar-researcher`), a check by a fresh agent, a summary for the planner | the notes are checked |
+| Research (on a trigger) | one topic after `literature/README.md`: scans, one deep note per paper with its code (`ar-researcher`), the generated table, a check by a fresh agent, an overview with links | `literature/topic_table.py <topic> --check` passes |
 | Cards | `research new <p> <slug> "<title>"`, the card (question, hypothesis, prediction, arms as settings of the base config, seeds, rule, kill rule, Design delta); `ar-critic` (cards) challenges it; `research check` | the critic accepts and check is clean |
 | Runs | code behind a default-off setting (`ar-coder`, spec test, `ar-critic` on shared code); `research start` freezes card and code in one snapshot and tag; workers run the steps from it | every run is finished, stopped or killed |
-| Verdict | `research judge --write`: the snapshot's rule on the stored counts, one commit of the records; the conclusion into `experiment.md` | the verdict is committed |
+| Verdict | `research judge --write`: the snapshot's rule on the stored counts, one commit of the records; the conclusion into `experiment.md`; a card that rests on a topic's note: `literature/topic_table.py <topic> --set-result` | the verdict is committed |
 | Close | the planner reads the verdicts and proposes; the owner decides an adoption (`research adopt`, with an anchor test) and the next round; reports are built from the records (`research report`) | `HANDOVER.md` says where things stand |
 
 Several experiments run at once (the machine's GPU slots decide). An arm of a card can reuse stored runs (`from`) or build on one

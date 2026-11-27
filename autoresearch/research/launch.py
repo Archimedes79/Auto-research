@@ -154,10 +154,11 @@ def check(problem: str, exp_id: str) -> Dict[str, Any]:
 
 
 def code_paths(problem: str) -> List[str]:
-    """what a run imports: the core and the data-set services, and the problem's folder without its records"""
+    """what a run imports: the core and the data-set services, and the problem's folder without its records and its literature"""
     root = repo()
     pdir = rel(problem_dir(problem))
-    return [x for x in SNAPSHOT_PATHS if os.path.isdir(os.path.join(root, x))] + [pdir, f":(exclude){pdir}/experiments", f":(exclude){pdir}/ledger.csv"]
+    outside = ("experiments", "ledger.csv", "literature")
+    return [x for x in SNAPSHOT_PATHS if os.path.isdir(os.path.join(root, x))] + [pdir] + [f":(exclude){pdir}/{x}" for x in outside]
 
 
 def uncommitted_code(problem: str) -> List[str]:

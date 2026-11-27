@@ -67,7 +67,7 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 - A run executes its snapshot, never the working tree. A second `start` of the same experiment reuses its tag; more seeds: append them to
   the card's `seeds`, then `start`.
 - Only the worker of a registered run writes records: the evaluation step refuses to run outside a worker. `start` refuses uncommitted code
-  of the problem and the core.
+  of the problem and the core (records and `literature/` are not code).
 - Identity = code, config, weights, ground truth, data. Stored predictions are reused only under the same identity.
 - Arms are compared only when scored alike (split, frames, ground truth by its content signature, evaluator, metrics), else INVALID; records
   that hold no signature are compared by the ground truth's name, with a warning in the verdict.

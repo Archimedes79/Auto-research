@@ -15,6 +15,15 @@
 !/problems/
 !/champions/
 
+# literature: extractions of foreign code are made where they are needed and are not stored (the BEV ones are short own-word notes that the
+# code cites, so they stay); the topic tables are generated
+problems/lane_center/literature/code/*
+!problems/lane_center/literature/code/README.md
+!problems/lane_center/literature/code/_TEMPLATE.md
+**/literature/topics/*/table*.md
+**/literature/topics/*/table*.csv
+**/literature/topics/*/*/skeleton.md
+
 # scratch: never in git, anywhere
 **/temp/**
 **/_to_delete/**

@@ -77,6 +77,10 @@ An entry in `problem.json` `steps`:
   problem's own calls `Evaluation.defaults.guard(split, <problem folder>)`. A dataset that several problems share gets a folder under
   `../datasets/`.
 
+## A literature topic
+The procedure: [`literature/README.md`](literature/README.md). The folder is `../problems/<name>/literature/topics/<slug>/`; nothing to register:
+the researcher agents write there, `python3 literature/topic_table.py <name>/<slug>` makes and checks its table.
+
 ## A new agent role
 - `agents/ar-<name>.md`: a frontmatter (`name`, `description` = when to spawn it, `tools`, optionally `model`) and a short role text without
   machine paths, dates or run ids.

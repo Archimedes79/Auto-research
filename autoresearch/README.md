@@ -10,6 +10,7 @@ no data set. A problem is a folder `../problems/<name>/`.
 | `trainkit/` | the training engine: fit loop, EMA, schedule, AMP, checkpoints with resume, probes, the stop protocol | `trainkit/README.md` |
 | `Evaluation/` | the evaluation engine: Source / Subject / Task, one Runner, stored predictions and additive counts, the paired scene bootstrap, pictures, timing | `Evaluation/README.md`, `Evaluation/EXTENSIONS.md` |
 | `reporter/` | a report from markdown parts and result files, its numbers checked; `archdraw.py` draws a system from a spec | `reporter/README.md` |
+| `literature/` | research on a topic: the procedure, the table of the notes, skeletons of foreign code | `literature/README.md` |
 | `agents/` | the four agent roles and their installer | `agents/README.md` |
 | `templates/` | the experiment card and the other file templates | `templates/README.md` |
 | `EXTENDING.md` | how the system grows: a problem, a metric, a picture, a run step, a report part, ground truth, a role | one page |
@@ -23,5 +24,7 @@ python -m Evaluation.selftest
 python -m trainkit.selftest
 python reporter/reporter.py selftest
 python reporter/archdraw.py --selftest
+python literature/topic_table.py --selftest
+python literature/code_digest.py selftest
 ```
 A problem's own tests: `python3 -m research tests <problem>`.

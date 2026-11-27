@@ -18,7 +18,7 @@ Built from the notes listed below only; regenerate rather than edit by hand. Thi
 |---|---|---|---|---|---|
 
 ## Detail links
-The notes this overview rests on, one line each:
+The generated table of all notes: [table.md](table.md). The notes this overview rests on, one line each:
 - [<id> <short title>](<id>/note.md) - why it is named here
 
 ## Open questions the literature does not answer
