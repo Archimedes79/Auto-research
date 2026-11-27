@@ -64,24 +64,43 @@ def base_config(problem: str, p: Dict[str, Any], root: Optional[str] = None, at:
 TEMPLATE = os.path.join(CORE, "templates", "experiment.md")
 
 
+def _numbers(base: str) -> List[int]:
+    """the experiment numbers the folders of `base` carry"""
+    return [exp_number(m.group(1)) for d in os.listdir(base) for m in [re.match(r"^(E\d+)(_|$)", d)] if m]
+
+
+def _new_folder(base: str, n: int, slug: str) -> str:
+    """the folder E<n>_<slug> made, '' when the number n is not free. The number must be unique, not the folder name, so its claim (a folder
+    .E<n>.claim, which one caller only can make) is held while the folders are looked at and the new one is made"""
+    claim = os.path.join(base, f".E{n}.claim")
+    try:
+        os.mkdir(claim)
+    except FileExistsError:                                      # another caller is taking n (or died doing it: n is skipped)
+        return ""
+    try:
+        if n in _numbers(base):
+            return ""
+        path = os.path.join(base, f"E{n:03d}_{slug}")
+        os.mkdir(path)
+        return path
+    finally:
+        os.rmdir(claim)
+
+
 def new(problem: str, title: str, slug: str) -> str:
-    """the next experiment folder with the card template; -> its path"""
+    """the next experiment folder with the card template; -> its path. Callers in one checkout never get the same number"""
     if not re.match(r"^[a-z0-9][a-z0-9_]*$", slug):
         raise ResearchError(f"slug {slug!r}: lower-case letters, digits and _")
     p = load_problem(problem)
     base = os.path.join(problem_dir(problem), "experiments")
     os.makedirs(base, exist_ok=True)
-    taken = [exp_number(m.group(1)) for d in os.listdir(base) for m in [re.match(r"^(E\d+)(_|$)", d)] if m]
-    n = max(taken + [p.get("first_experiment", 1) - 1]) + 1
+    n = max(_numbers(base) + [p.get("first_experiment", 1) - 1])
     with open(TEMPLATE, encoding="utf-8") as f:
         text = f.read()
-    while True:                                                  # mkdir is atomic: two agents never get the same id
-        path = os.path.join(base, f"E{n:03d}_{slug}")
-        try:
-            os.mkdir(path)
-            break
-        except FileExistsError:
-            n += 1
+    path = ""
+    while not path:
+        n += 1
+        path = _new_folder(base, n, slug)
     with open(os.path.join(path, "experiment.md"), "w", encoding="utf-8", newline="\n") as f:
         f.write(text.replace("E000", f"E{n}").replace('"<title>"', json.dumps(title)).replace("<title>", title))
     return path

@@ -7,8 +7,8 @@ The chain: new -> check -> start (snapshot, tag, workers) -> runs from the snaps
 refusals: a card changed after its start, an adoption whose anchor test or commit fails or whose run folder is gone (base config and
 champions/ put back), an untrained control (INVALID), a kill rule (also on a later row, in a step's own folder), stop and resume, a
 registration without a DONE verdict, a holdout read (also with the variables of a TEST run but no log row), an evaluation by hand, an edit of
-a protected file or the state folder without and with a grant (also with a broken gates.py), and clean (a list, then exactly it under the
-decided row that names its hash)."""
+a protected file or the state folder without and with a grant (also with a broken gates.py), clean (a list, then exactly it under the
+decided row that names its hash), a forged verdict at adoption, a GPU step's device, and push-check against a bare remote."""
 from __future__ import annotations
 
 import glob
@@ -153,6 +153,26 @@ def parts(tmp: str) -> None:
         assert cli._grant_path("problems/x/problem.json") == "problems/x/problem.json" and cli._grant_path("champions") == "champions/"
         assert cli._grant_path(os.path.join(root, "problems", "x", "TEST_LOG.md")) == "problems/x/TEST_LOG.md"
         expect_error(cli._grant_path, "not a path inside", "../elsewhere.md")
+        # research new: the number is not given twice, also when another caller takes it between the look at the folders and the claim
+        from research import launch
+        experiments = os.path.join(root, "problems", "x", "experiments")
+        os.mkdir(os.path.join(experiments, ".E2.claim"))             # another caller holds 2, or died holding it
+        assert launch.new("x", "t", "b").endswith("E003_b")
+        mkdir = os.mkdir
+
+        def another_first(path, *a, **k):
+            if path.endswith(".E4.claim") and not os.path.isdir(os.path.join(experiments, "E004_other")):
+                mkdir(os.path.join(experiments, "E004_other"))
+            if path.endswith("_c"):                                  # the folder is made while its number's claim is held
+                assert os.path.isdir(os.path.join(experiments, f".E{int(os.path.basename(path)[1:4])}.claim")), path
+            return mkdir(path, *a, **k)
+
+        os.mkdir = another_first
+        try:
+            made = launch.new("x", "t", "c")
+        finally:
+            os.mkdir = mkdir
+        assert made.endswith("E005_c") and sorted(os.listdir(experiments)) == [".E2.claim", "E001_a", "E003_b", "E004_other", "E005_c"], (made, os.listdir(experiments))
         # research tests: a test past its timeout is killed with everything it started
         with open(os.path.join(root, "problems", "x", "hang.py"), "w") as f:
             f.write("import subprocess, time\nopen('child.pid', 'w').write(str(subprocess.Popen(['sleep', '60']).pid))\ntime.sleep(60)\n")
@@ -172,8 +192,58 @@ def parts(tmp: str) -> None:
     signed = lambda s: {"run": f"E1.a_{s}", "result": dict(r, evaluation=dict(r["evaluation"], gt_signature=s))}      # noqa: E731
     assert judge.incomparable([signed("s1"), signed("s1")]) == [] and any("signature" in x for x in judge.incomparable([signed("s1"), signed("s2")]))
     assert judge.incomparable([signed("s1"), {"result": r}]) == [] and judge.unsigned([signed("s1"), {"run": "E1.c_s0", "result": r}]) == ["E1.c_s0"]
+    # a GPU slot's device: with several GPUs slot k takes device k modulo their number; with one or none the environment stays as it is
+    two = {"CUDA_VISIBLE_DEVICES": "2,3"}
+    assert [worker.gpu_env(k, two) for k in (0, 1, 2)] == [{"CUDA_VISIBLE_DEVICES": d} for d in ("2", "3", "2")]
+    assert all(worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": one}) == {} for one in ("0", "", "-1"))
+    assert worker.gpu_env(1, {}, lambda: ["0", "1"]) == {"CUDA_VISIBLE_DEVICES": "1", "CUDA_DEVICE_ORDER": "PCI_BUS_ID"}
+    assert worker.gpu_env(1, {}, lambda: ["0"]) == {} and worker.gpu_env(0, {}, lambda: []) == {}
+    assert worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "0,-1"}) == {} and worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "-1,0"}) == {}
+    assert worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "4,7,-1,9"}) == {"CUDA_VISIBLE_DEVICES": "7"}
+    scored_by_the_snapshot(tmp, p, card)
     say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, a needed run, decisions, the TEST log, "
-        "protected paths, stream names, a step's environment, the references clean keeps, a test past its timeout")
+        "protected paths, stream names, a step's environment, the references clean keeps, experiment numbers, a test past its timeout, a GPU "
+        "slot's device, the snapshot's card")
+
+
+def scored_by_the_snapshot(tmp: str, p: dict, card: dict) -> None:
+    """the evaluation step asks `Evaluation` for the frames the snapshot's card names, whatever the card in the checkout says by then"""
+    from research import evaluate
+
+    class Asked(Exception):
+        pass
+
+    class Probe:
+        def __init__(self, project):
+            pass
+
+        def run(self, out, frames, **k):
+            raise Asked(frames)
+
+    for place, split in (("checkout", "val"), ("snapshot", "train")):
+        os.makedirs(os.path.join(tmp, place, "experiments", "E001_a"))
+        write_card(os.path.join(tmp, place, "experiments"), "E001_a", dict(card, split=split))
+    json.dump(p, open(os.path.join(tmp, "snapshot", "problem.json"), "w", encoding="utf-8"))
+    record = os.path.join(tmp, "checkout", "experiments", "E001_a", "runs", "E1.a_s0")
+    os.makedirs(record)
+    saved, here, real = dict(os.environ), os.getcwd(), sys.modules.get("Evaluation")
+    sys.modules["Evaluation"] = type(sys)("Evaluation")
+    sys.modules["Evaluation"].Evaluation = Probe
+    try:
+        os.environ.update(RESEARCH_RECORD=record, RESEARCH_RUN="E1.a_s0", RESEARCH_RUN_DIR=os.path.join(tmp, "snapshot"))
+        os.chdir(os.path.join(tmp, "snapshot"))
+        evaluate.main("toy", "E1.a_s0")
+    except Asked as asked:
+        assert str(asked) == "train", asked
+    else:
+        raise AssertionError("the evaluation step did not ask for frames")
+    finally:
+        os.chdir(here)
+        os.environ.clear()
+        os.environ.update(saved)
+        sys.modules.pop("Evaluation")
+        if real is not None:
+            sys.modules["Evaluation"] = real
 
 
 def ended(pid: int, seconds: float = 5.0) -> bool:
@@ -215,6 +285,13 @@ while time.time() < end:
 '''
 
 
+DEVICE_PROBE = '''"""selftest: a GPU step that writes which devices it was shown into a file of its run folder"""
+import os, sys
+with open(os.path.join(sys.argv[1], sys.argv[2]), "w") as f:
+    f.write(os.environ.get("CUDA_VISIBLE_DEVICES", ""))
+'''
+
+
 def make_repo(tmp: str) -> str:
     root = os.path.join(tmp, "repo")
     skip = shutil.ignore_patterns("__pycache__", "*.pyc", "temp", "eval_out", "state", "history")
@@ -224,9 +301,12 @@ def make_repo(tmp: str) -> str:
     shutil.copytree(os.path.join(REPO, "problems", "toy"), toy, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
     prob = json.load(open(os.path.join(toy, "problem.json"), encoding="utf-8"))
     prob["steps"]["stage"] = {"run": ["{python}", "stage_probe.py", "{run_dir}"], "dir": "stage1", "note": "selftest: a step with its own folder"}
+    for name, gpus in (("one", 1), ("all", 2)):
+        prob["steps"][name] = {"run": ["{python}", "device_probe.py", "{run_dir}", f"{name}.txt"], "gpus": gpus, "note": "selftest: a GPU step"}
     json.dump(prob, open(os.path.join(toy, "problem.json"), "w", encoding="utf-8"), indent=1)
-    with open(os.path.join(toy, "stage_probe.py"), "w", encoding="utf-8") as f:
-        f.write(STAGE_PROBE)
+    for name, text in (("stage_probe.py", STAGE_PROBE), ("device_probe.py", DEVICE_PROBE)):
+        with open(os.path.join(toy, name), "w", encoding="utf-8") as f:
+            f.write(text)
     with open(os.path.join(root, "DECISIONS.md"), "w", encoding="utf-8") as f:
         f.write("# Decisions\n\n## Decided\n| date | decision |\n|---|---|\n| 2026-11-27 | D1: the selftest's owner says yes |\n\n## Open\n| id | question |\n|---|---|\n")
     with open(os.path.join(root, "problems", "toy", "TEST_LOG.md"), "w", encoding="utf-8") as f:
@@ -341,18 +421,28 @@ def chain(tmp: str) -> None:
     by_hand = [] if arm["verdict"] == "KEEP" else ["--by-hand", "the selftest adopts whatever won"]
     base_json = os.path.join(root, "problems", "toy", "training", "configs", "base.json")
     before = open(base_json, encoding="utf-8").read()
+    if arm["verdict"] != "KEEP":                                 # a KEEP written into verdict.json by hand does not come out of the records
+        verdict_json = os.path.join(root, e1, "verdict.json")
+        judged = open(verdict_json, encoding="utf-8").read()
+        forged = json.loads(judged)
+        forged["arms"]["a"]["verdict"] = "KEEP"
+        json.dump(forged, open(verdict_json, "w", encoding="utf-8"))
+        refused = research(["adopt", "toy", "E1", "a", "--decision", "D1"], env, ok=(1,)).stderr
+        assert "does not come out of the records" in refused and open(base_json, encoding="utf-8").read() == before, refused[-2000:]
+        open(verdict_json, "w", encoding="utf-8").write(judged)
+    anyway = ["--by-hand", "the selftest looks at what comes after the verdict"]     # a KEEP would be judged again first
     rec_a0 = os.path.join(root, e1, "runs", "E1.a_s0", "result.json")
     os.replace(rec_a0, rec_a0 + ".away")
-    died = research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,))
+    died = research(["adopt", "toy", "E1", "a", "--decision", "D1", *anyway], env, ok=(1,))
     os.replace(rec_a0 + ".away", rec_a0)
     assert "anchor test of E1.a_s0 did not run" in died.stderr and open(base_json, encoding="utf-8").read() == before, died.stderr[-2000:]
     run_a1 = os.path.join(tmp, "runs", "toy", "E1.a_s1")
     os.replace(run_a1, run_a1 + ".away")                             # a seed's run folder is gone: refused before anything is written
-    assert "run folders of E1.a_s1 are gone" in research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,)).stderr
+    assert "run folders of E1.a_s1 are gone" in research(["adopt", "toy", "E1", "a", "--decision", "D1", *anyway], env, ok=(1,)).stderr
     os.replace(run_a1 + ".away", run_a1)
     branch = subprocess.run(["git", "symbolic-ref", "--short", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip()
     subprocess.run(["git", "checkout", "-q", "--detach"], cwd=root, check=True)       # the anchor test passes, the commit fails: all put back
-    late = research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,))
+    late = research(["adopt", "toy", "E1", "a", "--decision", "D1", *anyway], env, ok=(1,))
     subprocess.run(["git", "checkout", "-q", branch], cwd=root, check=True)
     assert "detached" in late.stderr and open(base_json, encoding="utf-8").read() == before and not os.path.exists(os.path.join(root, "champions", "toy")), late.stderr[-2000:]
     ad = json.loads(research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env).stdout)
@@ -518,7 +608,115 @@ def chain(tmp: str) -> None:
     assert not os.path.exists(os.path.join(runs, "E2.a_s0")) and os.path.isdir(os.path.join(runs, "E2.c_s0")) and os.path.isdir(os.path.join(runs, "E4.m_s0"))
     say("clean: a list (a live step, KEEP and MEASURED experiments, the champion kept), then exactly that list under the decided row that names "
         "its hash, checked as a whole first and each run again; another decision, a list by hand and an unreadable champions.json refuse")
+    # a step of one GPU on a machine that shows two is bound to the device of its slot; a step of two GPUs sees what the machine shows
+    e7 = json.loads(research(["new", "toy", "device", "the device of a slot"], env).stdout)["folder"]
+    write_card(root, e7, {"id": "E7", "title": "device", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0], "arms": {"d": {}},
+                          "steps": ["one", "all"]})
+    research(["start", "toy", "E7"], dict(env, CUDA_VISIBLE_DEVICES="5,6"))
+    assert wait(root, e7, ["E7.d_s0"], seconds=120) == {"E7.d_s0": "ok"}, run_trace(tmp, root, e7, "E7.d_s0")
+    steps = json.load(open(os.path.join(root, e7, "runs", "E7.d_s0", "run.json"), encoding="utf-8"))["steps"]
+    seen = {name: open(os.path.join(runs, "E7.d_s0", f"{name}.txt")).read() for name in ("one", "all")}
+    assert seen == {"one": "5", "all": "5,6"} and steps["one"]["gpu_device"] == "5" and "gpu_device" not in steps["all"], (seen, steps)
+    say("a GPU step on a machine with two devices: one GPU sees the device of its slot, two see all")
+    # a KEEP (the card's rule script says so): a verdict.json whose gain was edited is refused, the verdict as judged is adopted
+    e8 = json.loads(research(["new", "toy", "kept", "a rule that keeps"], env).stdout)["folder"]
+    with open(os.path.join(root, e8, "judge.py"), "w", encoding="utf-8") as f:
+        f.write('print(\'{"verdict": "KEEP", "reason": "the selftest rule keeps"}\')\n')
+    write_card(root, e8, {"id": "E8", "title": "kept", "question": "q", "hypothesis": "h", "prediction": 0.1, "control": "c", "seeds": [0],
+                          "arms": {"c": {"from": "E1.c"}, "a": {"set": {**quick, "steps": 300, "width": 12}}}, "rule": {"script": "judge.py"}})
+    wait(root, e8, json.loads(research(["start", "toy", "E8"], env).stdout)["started"])
+    v8 = json.loads(research(["judge", "toy", "E8", "--write", "--boot", "250"], env).stdout)
+    assert v8["arms"]["a"]["verdict"] == "KEEP" and v8["boot"] == 250, v8
+    verdict_json = os.path.join(root, e8, "verdict.json")
+    judged = open(verdict_json, encoding="utf-8").read()
+    forged = json.loads(judged)
+    forged["arms"]["a"]["gain"] += 0.1
+    json.dump(forged, open(verdict_json, "w", encoding="utf-8"))
+    assert "does not come out of the records" in research(["adopt", "toy", "E8", "a", "--decision", "D1"], env, ok=(1,)).stderr
+    open(verdict_json, "w", encoding="utf-8").write(judged)
+    assert json.loads(research(["adopt", "toy", "E8", "a", "--decision", "D1"], env).stdout)["champion"] == "E8.a"
+    say("adopt: a KEEP is judged again first; an edited verdict.json is refused, the verdict as judged is adopted")
     new_problem(tmp, root, env, quick)
+    push_check(tmp, root, env)
+
+
+def push_check(tmp: str, root: str, env: dict) -> None:
+    """push-check against a bare remote: the branch, the tags the remote lacks (a snapshot is on no branch) and the private patterns"""
+    git = lambda *a: subprocess.run(["git", *a], cwd=root, check=True, capture_output=True, text=True).stdout.strip()     # noqa: E731
+    remote = os.path.join(tmp, "remote.git")
+    subprocess.run(["git", "init", "-q", "--bare", remote], check=True, capture_output=True)
+    git("remote", "add", "origin", remote)
+    git("push", "-q", "-u", "origin", "HEAD")
+    check = lambda *a, ok=(0,): research(["push-check", *a], env, ok=ok)                                                   # noqa: E731
+    clean = json.loads(check().stdout)
+    assert clean["commits"] == [] and "toy/E1" in clean["tags"] and clean["commits_only_in_tags"] > 0 and clean["forbidden"] == [], clean
+    assert "not scanned" in clean["private"], clean
+    with open(os.path.join(root, "side.log"), "w") as f:
+        f.write("a log that only a tag carries\n")
+    sh([sys.executable, "-c", "from research import gitio, paths; gitio.snapshot(paths.repo(), ['side.log'], 'a side commit', 'side/one')"],
+       env["RESEARCH_TMP_CORE"], env)
+    assert "side.log" in check(ok=(1,)).stderr, "a forbidden file that a tag would publish is found"
+    assert json.loads(check("--no-tags").stdout)["tags"] == "not checked (--no-tags)"
+    git("push", "-q", "origin", "refs/tags/side/one")
+    assert "side/one" not in json.loads(check().stdout)["tags"], "what the remote has is not looked at again"
+    other = os.path.join(tmp, "other.git")                          # a second remote that comes first by name and has a tag origin lacks
+    subprocess.run(["git", "init", "-q", "--bare", other], check=True, capture_output=True)
+    git("remote", "add", "aaa", other)
+    git("tag", "only/other", "HEAD")
+    git("push", "-q", "aaa", "refs/tags/only/other")
+    assert "only/other" in json.loads(check("--upstream", git("rev-parse", "@{upstream}")).stdout)["tags"]       # origin is asked
+    git("tag", "-d", "only/other")
+
+    def put(name: str, data: bytes) -> None:
+        with open(os.path.join(root, name), "wb") as f:
+            f.write(data)
+
+    def only_a_tag(tag: str, name: str, text: str, *how: str) -> None:
+        """a commit without parents that holds one file, on no branch, carried by `tag`"""
+        put(name, text.encode())
+        tree = subprocess.run(["git", "mktree"], cwd=root, input=f"100644 blob {git('hash-object', '-w', name)}\t{name}\n", check=True,
+                              capture_output=True, text=True).stdout.strip()
+        git("tag", *how, tag, git("commit-tree", tree, "-m", "a commit of its own"))
+        os.remove(os.path.join(root, name))
+
+    put(".private_patterns", "# names that stay here\nzzsecret[0-9]+ => someone\n^kunde_[a-z]+\t=> a customer\n".encode("utf-16"))
+    branch = git("symbolic-ref", "--short", "HEAD")
+    for name, data in (("note.md", b"ask zzsecret42 about it\n"), ("zzsecret7.md", b"nothing\n"), ("zzsecret5.log", b"a log\n"),
+                       ("wide.md", "wide zzsecret9\n".encode("utf-16"))):
+        put(name, data)
+        research(["commit", name, "-m", f"add a file ({len(data)})"], env)
+    put("agreed.md", b"agreed\n")
+    research(["commit", "agreed.md", "-m", "add\n\nkunde_acme agreed"], env)         # a line of the message, not its first
+    git("checkout", "-q", "-b", "side")                             # a merge with a line that neither parent holds
+    put("side.md", b"side\n")
+    git("add", "side.md")
+    git("commit", "-qm", "side")
+    git("checkout", "-q", branch)
+    git("merge", "-q", "--no-ff", "--no-commit", "side")
+    put("resolved.md", b"resolved by zzsecret11\n")
+    git("add", "resolved.md")
+    git("commit", "-qm", "a merge")
+    only_a_tag("alone/orphan", "orphan.md", "orphan zzsecret12\n")
+    only_a_tag("zzsecret13", "plain.md", "plain\n", "-a", "-m", "tag\nkunde_beta asked")
+    git("add", "-f", ".private_patterns")
+    git("commit", "-qm", "the pattern file by force")
+    found = check(ok=(1,)).stderr
+    for expected in ("note.md: private pattern of line 2", "a file name: private pattern of line 2", "wide.md: private pattern of line 2",
+                     "resolved.md: private pattern of line 2", "orphan.md: private pattern of line 2", "message: private pattern of line 3",
+                     "a new tag's name: private pattern of line 2", "private pattern of line 3", "(a name that matches a private pattern) (",
+                     ".private_patterns ("):
+        assert expected in found, (expected, found)
+    assert any(line.strip().startswith("tag ") and line.endswith("line 3") for line in found.splitlines()), found
+    assert "zzsecret" not in found and "kunde_" not in found, found
+    git("remote", "set-url", "origin", os.path.join(tmp, "no_such_zzsecret1.git"))
+    lost = check(ok=(1,)).stderr
+    assert "zzsecret" not in lost and "private pattern" in lost, lost
+    os.remove(os.path.join(root, ".private_patterns"))
+    lost = check(ok=(1,)).stderr
+    assert "cannot be compared with the remote" in lost, lost
+    assert "warning: private patterns not scanned" in research(["push-check", "--no-tags"], env, ok=(0, 1)).stderr
+    say("push-check: unpushed commits (merges and commits without parents too) and the commits only unpushed tags carry, forbidden files, private "
+        "patterns in files, names, messages and tags without repeating a match, the remote asked, a remote that cannot be asked refuses")
 
 
 def new_problem(tmp: str, root: str, env: dict, quick: dict) -> None:

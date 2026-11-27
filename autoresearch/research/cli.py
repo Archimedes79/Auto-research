@@ -192,8 +192,9 @@ def build() -> argparse.ArgumentParser:
     s.add_argument("--gpu-slots", type=int, default=2)
     s = sub.add_parser("commit", help="commit the working-tree state of these paths only (what other chats edit or stage stays out)")
     s.add_argument("paths", nargs="+"), s.add_argument("-m", "--message", required=True)
-    s = sub.add_parser("push-check", help="the commits not yet pushed and what in them never belongs into git (exit 1 when something does)")
+    s = sub.add_parser("push-check", help="the commits and tags not yet pushed and what in them never belongs into git (exit 1 when something does)")
     s.add_argument("--upstream", default="@{upstream}")
+    s.add_argument("--no-tags", action="store_true", help="the branch only: the tags are not compared with the remote")
     s = sub.add_parser("worker", help="(internal) run the steps of one run")
     s.add_argument("problem"), s.add_argument("run"), s.add_argument("--test", action="store_true")
     return ap
@@ -254,9 +255,12 @@ def run(a: argparse.Namespace) -> Any:
         return {"commit": c or "nothing changed"}
     if v == "push-check":
         from research import gitio
-        res = gitio.push_problems(gitio.git(os.getcwd(), "rev-parse", "--show-toplevel"), a.upstream)
-        if res["forbidden"]:
-            raise ResearchError("never into git:\n  " + "\n  ".join(res["forbidden"]))
+        res = gitio.push_problems(gitio.git(os.getcwd(), "rev-parse", "--show-toplevel"), a.upstream, tags=not a.no_tags)
+        if isinstance(res["private"], str):                      # a check that did not look must say so where it is seen
+            print(f"warning: private patterns {res['private']}", file=sys.stderr)
+        found = res["forbidden"] + (res["private"] if isinstance(res["private"], list) else [])
+        if found:
+            raise ResearchError("never into git:\n  " + "\n  ".join(found))
         return res
     if v == "index":
         if a.check:

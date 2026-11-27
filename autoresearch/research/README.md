@@ -18,9 +18,10 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
  judge: card + problem.json read FROM THE TAG -> every run ok? -> control valid? -> arms scored alike? -> paired scene bootstrap over
         the pooled seeds from the stored counts -> guards -> verdict.json; one commit of the records   (the standard rule: judge.py)
         |
- adopt (the owner's decision): the arm's settings become the defaults of the base config (its code is committed, default off, before the
-        start) -> anchor: the evaluation repeated with the working tree gives the same numbers -> champions/<problem>/, one commit
-        (a failure before the commit leaves base config and champions/ as they were)
+ adopt (the owner's decision): a KEEP must come out again, judged once more from the records (minutes; not by hand) -> the arm's settings
+        become the defaults of the base config (its code is committed, default off, before the start) -> anchor: the evaluation repeated with
+        the working tree gives the same numbers -> champions/<problem>/, one commit (a failure before the commit leaves base config and
+        champions/ as they were)
  register (the owner's decision): a measured network (kind measure, verdict DONE) as champion or comparison network
         (adopt and register need the seeds' run folders)
 ```
@@ -36,7 +37,8 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 | `report <p> <folder> [--strict]` | a report built again from the records and the stored predictions, into the run root (`../reporter/README.md`) |
 | `hold <p> "<why>"`, `release <p>` | no start or resume of a problem until released |
 | `grant <path> --decision D<n> --note "..." [--hours h]` | a protected file or folder (path ending in `/`) may be edited for some hours |
-| `commit <paths> -m "..."`, `push-check` | commit these paths only, through a temporary index (paths as git reads them or from the top); what the unpushed commits add that never belongs into git |
+| `commit <paths> -m "..."` | commit these paths only, through a temporary index (paths as git reads them or from the top) |
+| `push-check [--no-tags]` | what a push would publish that never belongs into git, in the unpushed commits and in the commits only the tags carry that the remote lacks (it asks the remote; `--no-tags`: the branch only): forbidden files, and matches of the regular expressions in `.private_patterns` at the top (one a line, not in git; searched in authors, messages, file names, added lines, new tags and the branch name; a match is never printed). Without that file it warns that it did not look; other binary files than UTF-16 text are listed as not scanned |
 | `machine [init]` | show or write the machine file |
 
 ## Files a problem writes
@@ -60,7 +62,8 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 | `champions/<problem>/` | `adopt`, `register` | champion and comparison networks (`../../champions/README.md`) |
 
 ## Rules the code enforces
-- The rule is what the tag holds: the judge reads card and `problem.json` from the snapshot; later edits do not count.
+- The rule is what the tag holds: the evaluation step and the judge read card and `problem.json` from the snapshot; later edits do not count.
+- Callers of `new` in one checkout get different experiment numbers; two clones can still pick the same one.
 - A run executes its snapshot, never the working tree. A second `start` of the same experiment reuses its tag; more seeds: append them to
   the card's `seeds`, then `start`.
 - Only the worker of a registered run writes records: the evaluation step refuses to run outside a worker. `start` refuses uncommitted code
@@ -78,5 +81,7 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 {"data": "<data root>", "runs": "<runs root>", "python": {"gcar": "<interpreter>"}, "gpu_slots": 2}
 ```
 `research machine init ...` writes it; `RESEARCH_MACHINE` names another file (the tests use a throw-away one). Slots, holds and grants live
-next to it (`state/`); only the research commands write there. A step, the computation of a verdict and an anchor test get the caller's
+next to it (`state/`); only the research commands write there. With several GPUs, a step of one GPU sees the device of its slot (slot k:
+device k modulo their number, from the caller's `CUDA_VISIBLE_DEVICES`, else `nvidia-smi`; callers that show different devices can still
+meet on one). A step, the computation of a verdict and an anchor test get the caller's
 environment without the variables that could point them at another tree (`paths.child_env`), then their own.

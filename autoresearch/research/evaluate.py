@@ -9,9 +9,19 @@ import json
 import os
 import sys
 import time
+from typing import Any, Dict
 
 from research import gates, spec
 from research.paths import ResearchError, read_json, write_json
+
+
+def snapshot_card(project: str, rec: str) -> Dict[str, Any]:
+    """the card of the run's experiment as the snapshot holds it: `project` is the problem folder of the unpacked snapshot, `rec` the run's record
+    folder in the checkout. An edit of the card in the checkout while the run goes on changes nothing about what is scored"""
+    experiment = os.path.basename(os.path.dirname(os.path.dirname(os.path.abspath(rec))))
+    path = os.path.join(project, "experiments", experiment, "experiment.md")
+    with open(path, encoding="utf-8") as f:
+        return spec.parse_card(f.read(), path)
 
 
 def main(problem: str, rid: str, test: bool = False) -> int:
@@ -19,7 +29,7 @@ def main(problem: str, rid: str, test: bool = False) -> int:
     if not rec or os.environ.get("RESEARCH_RUN") != rid or not out:
         raise ResearchError("the evaluation step writes records and runs only inside a worker; by hand use `python -m Evaluation`")
     p = read_json(os.path.join(project, "problem.json"))
-    card = spec.parse_card(open(os.path.join(rec, "..", "..", "experiment.md"), encoding="utf-8").read())
+    card = snapshot_card(project, rec)
     if test:
         why = gates.test_refusal(problem, rid)                  # read again here, where the holdout is opened
         if why or os.environ.get("RESEARCH_HOLDOUT_RUN") != rid:

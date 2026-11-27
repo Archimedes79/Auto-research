@@ -1,6 +1,6 @@
 """adopt: a winning arm becomes the problem's champion, on the owner's decided decision.
 
-1. the arm's verdict is KEEP (or the adoption is by hand, with a reason);
+1. the arm's verdict is KEEP and comes out again when judged once more from the records (or the adoption is by hand, with a reason);
 2. the arm's settings become the defaults of the base config (its code is committed already: `start` refuses uncommitted code, and a new option
    enters the code default-off);
 3. the anchor test: the arm's runs (their folders must still exist) are evaluated again with the working tree's code, into a fresh folder,
@@ -118,6 +118,21 @@ def _anchor(problem: str, rids: List[str], p: Dict[str, Any], tolerance: float) 
             raise ResearchError(f"the anchor test of {rid} failed with the adopted settings: {json.dumps(res['differ'], default=str)[:1500]}")
 
 
+def _judged_again(problem: str, exp_id: str, arm: str, stored: Dict[str, Any]) -> None:
+    """verdict.json is a file like any other: before a KEEP is acted on, the verdict is computed again from the snapshot's rule and the records,
+    and the arm's verdict and gain must come out as verdict.json says"""
+    from research import judge
+    drawn = stored.get("boot")                                  # the bootstrap draws the verdict was written with
+    now = judge.judge(problem, exp_id, **({"boot": drawn} if isinstance(drawn, int) and drawn >= 200 else {}))
+    was, new = (v.get("arms", {}).get(arm, {}) for v in (stored, now))
+    gains = (was.get("gain"), new.get("gain"))
+    same_gain = gains == (None, None) or (all(isinstance(g, (int, float)) for g in gains) and abs(gains[0] - gains[1]) <= 1e-9)
+    if now["verdict"] != "DONE" or was.get("verdict") != new.get("verdict") or not same_gain:
+        raise ResearchError(f"the verdict.json of {exp_id} does not come out of the records: it says {arm} {was.get('verdict')} (gain {gains[0]}), "
+                            f"judged again: {new.get('verdict') or now['verdict']} (gain {gains[1]}). Write it again with "
+                            f"`research judge {problem} {exp_id} --write`")
+
+
 def adopt(problem: str, exp_id: str, arm: str, decision: str, by_hand: str = "", tolerance: Optional[float] = None, commit: bool = True) -> Dict[str, Any]:
     if decision not in gates.decided(problem):
         raise ResearchError(f"{decision} is not a decided decision of {problem}: adopting a champion is the owner's decision")
@@ -134,6 +149,8 @@ def adopt(problem: str, exp_id: str, arm: str, decision: str, by_hand: str = "",
         raise ResearchError(f"the verdict of {exp_id}.{arm} is {v}: only a KEEP is adopted (or by hand, with a reason)")
     rids = [f"{exp_id}.{arm}_s{s}" for s in card["seeds"]]
     _run_folders(problem, rids)
+    if not by_hand:                                              # an adoption by hand rests on its reason, not on the verdict
+        _judged_again(problem, exp_id, arm, verdict)
     tol = p["evaluate"].get("anchor_tolerance", 0.0) if tolerance is None else tolerance
     cfg_path = os.path.join(problem_dir(problem), p["config"])
     saved, done = _saved([cfg_path] + _champion_files(problem, f"{exp_id}.{arm}")), False

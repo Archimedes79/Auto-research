@@ -5,10 +5,11 @@ from __future__ import annotations
 
 import io
 import os
+import re
 import subprocess
 import tarfile
 import tempfile
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Pattern, Sequence, Tuple
 
 from research.paths import ResearchError
 
@@ -103,18 +104,167 @@ FORBIDDEN = (".pt", ".pth", ".ckpt", ".npy", ".npz", ".pkl", ".h5", ".zip", ".ta
 MAX_BYTES = 1_000_000
 
 
-def push_problems(root: str, upstream: str = "@{upstream}") -> Dict[str, List[str]]:
-    """what the commits not yet on the upstream add that never belongs into git: data, weights, pictures, logs, files over 1 MB, a temp/ folder"""
+PRIVATE_FILE = ".private_patterns"                                    # at the top of the checkout, never in git
+Patterns = List[Tuple[int, Pattern[str]]]                            # (line of PRIVATE_FILE, the pattern)
+
+
+def _text(raw: bytes) -> str:
+    """bytes as text: UTF-16 with its mark, else UTF-8, else the Windows code page (PowerShell writes all three)"""
+    if raw[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        return raw.decode("utf-16", "replace")
+    try:
+        return raw.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return raw.decode("cp1252", "replace")
+
+
+def _bytes(root: str, *args: str) -> bytes:
+    """what git prints, as it is"""
+    r = subprocess.run(["git", "-C", root, *args], capture_output=True)
+    if r.returncode != 0:
+        raise ResearchError(f"git {' '.join(args[:3])}: {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
+    return r.stdout
+
+
+def private_patterns(root: str) -> Optional[Patterns]:
+    """the lines of PRIVATE_FILE as regular expressions (`^` and `$` mean a line's ends; what follows `=>` and lines that start with # are left
+    out), from the top of the checkout, else of the main checkout of a worktree; None when there is no such file"""
+    common = os.path.join(root, git(root, "rev-parse", "--git-common-dir"))
+    places = [os.path.join(d, PRIVATE_FILE) for d in (root, os.path.dirname(os.path.abspath(common)))]
+    path = next((p for p in places if os.path.isfile(p)), "")
+    if not path:
+        return None
+    with open(path, "rb") as f:
+        lines = _text(f.read()).splitlines()
+    out = []
+    for n, line in enumerate(lines, 1):
+        text = re.split(r"\s+=>(?:\s|$)", line)[0].strip()
+        if text and not text.startswith("#"):
+            try:
+                out.append((n, re.compile(text, re.MULTILINE)))
+            except re.error:
+                raise ResearchError(f"{PRIVATE_FILE} line {n} is not a regular expression") from None
+    return out
+
+
+def _shown(name: str, patterns: Optional[Patterns]) -> str:
+    """a name as it may be printed: withheld when a private pattern matches it"""
+    return "(a name that matches a private pattern)" if any(p.search(name) for _, p in patterns or []) else name
+
+
+def _hits(text: str, where: str, patterns: Patterns) -> List[str]:
+    """a line per pattern that matches `text`; the text is never repeated, and `where` must hold no name that was not passed through `_shown`"""
+    return [f"{where}: private pattern of line {n}" for n, p in patterns if p.search(text)]
+
+
+def _private_hits(root: str, commit: str, parents: int, patterns: Patterns) -> Tuple[List[str], List[str]]:
+    """(where a commit's author, committer, message, file names or added lines match a private pattern, the files that could not be read as
+    text). A merge is read by what it holds that no parent holds"""
+    c = commit[:10]
+    found = _hits(_text(_bytes(root, "log", "-1", "--format=%an%n%ae%n%cn%n%ce%n%B", commit)), f"{c} author, committer or message", patterns)
+    columns = max(parents, 1)
+    diff = _bytes(root, "-c", "core.quotepath=false", "diff-tree", "--no-commit-id", "-r", "--root", "-p", "--unified=0", "--no-renames",
+                  *(["-c"] if parents > 1 else ["--diff-filter=AM"]), commit)
+    unread: List[str] = []
+    path, hunk = "", False
+    for raw in diff.split(b"\n"):
+        if raw.startswith((b"diff --git ", b"diff --combined ", b"diff --cc ")):
+            head = raw.decode("utf-8", "replace")
+            path, hunk = head.split(" b/", 1)[-1] if head.startswith("diff --git ") else head.split(" ", 2)[-1], False
+            found += _hits(path, f"{c} a file name", patterns)
+        elif raw.startswith(b"@@"):
+            hunk = True
+        elif hunk and raw[:columns] == b"+" * columns:
+            found += _hits(_text(raw[columns:].rstrip(b"\r")), f"{c} {_shown(path, patterns)}", patterns)
+        elif raw.startswith(b"Binary files "):                   # a UTF-16 text is binary to git
+            blob = _bytes(root, "cat-file", "blob", f"{commit}:{path}")
+            if blob[:2] in (b"\xff\xfe", b"\xfe\xff"):
+                found += _hits("\n".join(_text(blob).splitlines()), f"{c} {_shown(path, patterns)}", patterns)
+            else:
+                unread.append(f"{c} {_shown(path, patterns)}: binary, not scanned for private patterns")
+    return found, unread
+
+
+def unpushed_tags(root: str, remote: str) -> List[str]:
+    """the tags (refs/tags/<name>) the remote does not have as they are here; refused when the remote cannot be asked"""
+    try:
+        r = subprocess.run(["git", "-C", root, "ls-remote", "--tags", remote], capture_output=True, timeout=60,
+                           env=dict(os.environ, GIT_TERMINAL_PROMPT="0"))
+        why = "" if r.returncode == 0 else r.stderr.decode("utf-8", "replace").strip()[:300]
+    except subprocess.TimeoutExpired:
+        why = "no answer in 60 s"
+    if why:
+        raise ResearchError(f"the tags cannot be compared with the remote {remote!r} ({why}), so what they carry is not checked; "
+                            "`push-check --no-tags` checks the branch only")
+    there = {tuple(line.split("\t", 1)) for line in r.stdout.decode("utf-8", "replace").splitlines() if "\t" in line}
+    here = git(root, "for-each-ref", "--format=%(objectname)%09%(refname)", "refs/tags").splitlines()
+    return [line.split("\t", 1)[1] for line in here if tuple(line.split("\t", 1)) not in there]
+
+
+def _remote_of(root: str, upstream: str) -> str:
+    """the remote a push goes to: the upstream's, else the branch's, else origin, else the first"""
+    remotes = git(root, "remote").split()
+    if not remotes:
+        raise ResearchError("there is no remote to compare the tags with; `push-check --no-tags` checks the branch only")
+    name = git(root, "rev-parse", "--abbrev-ref", upstream, check=False)
+    own = git(root, "config", f"branch.{git(root, 'symbolic-ref', '-q', '--short', 'HEAD', check=False)}.remote", check=False)
+    for found in [r for r in remotes if name.startswith(r + "/")] + [own, "origin"]:
+        if found in remotes:
+            return found
+    return remotes[0]
+
+
+def push_problems(root: str, upstream: str = "@{upstream}", tags: bool = True) -> Dict[str, Any]:
+    """what a push would publish that never belongs into git: looked at are the commits not yet on the upstream and, for the tags the remote does
+    not have, the commits only they carry (a run's snapshot is on no branch). Found: data, weights, pictures, logs, files over 1 MB, a temp/
+    folder, the pattern file itself ("forbidden"), and matches of the private patterns, also in the new tags' names and messages and the branch
+    name ("private"). No name that matches a pattern is printed"""
+    patterns = private_patterns(root)
     commits = [c for c in git(root, "rev-list", f"{upstream}..HEAD").splitlines() if c]
+    new_tags: List[str] = []
+    tagged: List[str] = []
+    if tags:
+        remote = _remote_of(root, upstream)
+        try:
+            new_tags = unpushed_tags(root, remote)
+        except ResearchError as e:
+            if _shown(str(e), patterns) == str(e):
+                raise
+            raise ResearchError("the tags cannot be compared with the remote, so what they carry is not checked (the reason is withheld: it matches "
+                                "a private pattern); `push-check --no-tags` checks the branch only") from None
+        if new_tags:
+            known = git(root, "for-each-ref", "--format=%(refname)", f"refs/remotes/{remote}", "refs/tags").splitlines()
+            revs = new_tags + [f"^{k}" for k in [git(root, "rev-parse", upstream)] + known if k not in new_tags]
+            tagged = [c for c in git(root, "rev-list", "--stdin", data="\n".join(revs).encode()).splitlines() if c and c not in commits]
     bad: List[str] = []
-    for c in commits:
-        for line in git(root, "diff-tree", "--no-commit-id", "-r", "--diff-filter=AM", "-z", "--name-only", c).split("\0"):
-            if not line:
+    private: List[str] = []
+    unread: List[str] = []
+    for c in commits + tagged:
+        parents = len(git(root, "rev-list", "--parents", "-n", "1", c).split()) - 1
+        which = ["-c"] if parents > 1 else ["--diff-filter=AM"]
+        for line in git(root, "diff-tree", "--no-commit-id", "-r", "--root", *which, "-z", "--name-only", c).split("\0"):
+            size = git(root, "cat-file", "-s", f"{c}:{line}", check=False) if line else ""
+            if not size:                                              # no file there (a merge may remove one)
                 continue
-            size = int(git(root, "cat-file", "-s", f"{c}:{line}") or 0)
-            if line.lower().endswith(FORBIDDEN) or size > MAX_BYTES or "/temp/" in f"/{line}" or line.startswith("temp/"):
-                bad.append(f"{c[:10]} {line} ({size} bytes)")
-    return {"commits": [git(root, "log", "-1", "--format=%h %s", c) for c in commits], "forbidden": sorted(set(bad))}
+            if (line.lower().endswith(FORBIDDEN) or int(size) > MAX_BYTES or "/temp/" in f"/{line}" or line.startswith("temp/")
+                    or os.path.basename(line) == PRIVATE_FILE):
+                bad.append(f"{c[:10]} {_shown(line, patterns)} ({size} bytes)")
+        if patterns is not None:
+            found, skipped = _private_hits(root, c, parents, patterns)
+            private += found
+            unread += skipped
+    if patterns is not None:
+        private += _hits(git(root, "symbolic-ref", "-q", "--short", "HEAD", check=False), "the branch name", patterns)
+        for t in new_tags:
+            name = t[len("refs/tags/"):]
+            private += _hits(name, "a new tag's name", patterns)
+            private += _hits(_text(_bytes(root, "for-each-ref", "--format=%(taggername)%0a%(taggeremail)%0a%(contents)", t)),
+                             f"tag {_shown(name, patterns)}", patterns)
+    return {"commits": [_shown(git(root, "log", "-1", "--format=%h %s", c), patterns) for c in commits],
+            "tags": [_shown(t[len("refs/tags/"):], patterns) for t in new_tags] if tags else "not checked (--no-tags)",
+            "commits_only_in_tags": len(tagged), "forbidden": sorted(set(bad)),
+            "private": sorted(set(private)) if patterns is not None else f"not scanned: no {PRIVATE_FILE} at the top of the checkout",
+            **({"warnings": sorted(set(unread))} if unread else {})}
 
 
 def show(root: str, commit: str, path: str) -> str:

@@ -187,8 +187,8 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
     control = card["control"]
     c_runs, c_missing, c_killed = _results(problem, _arm_runs(problem, card, control))
     out: Dict[str, Any] = {"experiment": exp_id, "problem": problem, "tag": tag, "snapshot": commit, "control": control, "score": score, "better": better,
-                           "min_effect": e, "rule": card.get("rule", {}), "seeds": card["seeds"], "arms": {}, "by": "research judge",
-                           "judge_code": judge_code(), "date": time.strftime("%Y-%m-%d %H:%M")}
+                           "min_effect": e, "rule": card.get("rule", {}), "boot": card.get("rule", {}).get("boot", boot), "seeds": card["seeds"],
+                           "arms": {}, "by": "research judge", "judge_code": judge_code(), "date": time.strftime("%Y-%m-%d %H:%M")}
     incomplete = list(c_missing)
     arms = [a for a in card["arms"] if a != control]
     v_runs, v_killed = {}, {}

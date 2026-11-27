@@ -1,7 +1,8 @@
 """The worker of one run: its steps in order, from the run's snapshot, never from the working tree.
 
 The code is the snapshot commit unpacked once per commit into <runs>/<problem>/_code/<commit>/. A step is a command of problem.json (its words
-may name {python} {config} {run_dir} {data} {runs} {seed}) or the core's evaluation step. A GPU step waits for one of the machine's GPU slots.
+may name {python} {config} {run_dir} {data} {runs} {seed}) or the core's evaluation step. A GPU step waits for one of the machine's GPU slots;
+on a machine with several GPUs a step of one GPU sees the device of its slot (`gpu_env`).
 Exit 0 = done; 75 = stopped (trainkit's stop protocol; `research resume` continues); anything else = failed. A kill rule of the card that fires
 stops the training and marks the run killed; a step's log.jsonl and CONTROL lie in its folder (problem.json step "dir", default the run
 folder). run.json (in the records) changes at step boundaries only; the heartbeat lies in the run folder."""
@@ -17,7 +18,7 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Any, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional
 
 from research import spec
 from research.launch import SNAPSHOT_PATHS
@@ -72,6 +73,31 @@ def gpu_slot(n_slots: int, beat, stopped=lambda: False) -> Iterator[int]:
             raise Stopped()
         beat("waiting for a GPU slot")
         time.sleep(5)
+
+
+def listed_gpus() -> List[str]:
+    """the GPU numbers nvidia-smi lists, [] when it cannot be asked"""
+    try:
+        r = subprocess.run(["nvidia-smi", "--query-gpu=index", "--format=csv,noheader"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    return [x for x in r.stdout.split() if x.isdigit()] if r.returncode == 0 else []
+
+
+def gpu_env(slot: int, env: Dict[str, str], listed: Callable[[], List[str]] = listed_gpus) -> Dict[str, str]:
+    """what binds a step to the GPU of its slot on a machine with several: the devices are those the caller's environment shows
+    (CUDA_VISIBLE_DEVICES), else those nvidia-smi lists, and slot k takes device k modulo their number. With one device, or none, nothing is
+    set: the step sees what it saw"""
+    shown = env.get("CUDA_VISIBLE_DEVICES")
+    devices = listed() if shown is None else [d.strip() for d in shown.split(",") if d.strip()]
+    end = next((i for i, d in enumerate(devices) if d.startswith("-")), len(devices))
+    devices = devices[:end]                                              # CUDA ends the list at a negative number: what follows stays hidden
+    if len(devices) < 2:
+        return {}
+    out = {"CUDA_VISIBLE_DEVICES": devices[slot % len(devices)]}
+    if shown is None:
+        out["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"                          # nvidia-smi counts in this order
+    return out
 
 
 def ensure_code(problem: str, commit: str) -> str:
@@ -200,8 +226,8 @@ class Worker:
             e["RESEARCH_HOLDOUT_RUN"] = self.rid
         return e
 
-    def execute(self, name: str, cmd: List[str], code: str, kill: Optional[Kill], where: str) -> Dict[str, Any]:
-        """one step; `where` is its folder (CONTROL goes there)"""
+    def execute(self, name: str, cmd: List[str], code: str, kill: Optional[Kill], where: str, device: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+        """one step; `where` is its folder (CONTROL goes there), `device` the environment that binds it to its GPU"""
         log_path = os.path.join(self.out, f"{name}.log")
         pid_path = os.path.join(self.out, "step.pid")
         control = os.path.join(where, "CONTROL")
@@ -209,8 +235,8 @@ class Worker:
         with open(log_path, "ab") as log:
             log.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {' '.join(cmd)}\n".encode())
             log.flush()
-            proc = subprocess.Popen(cmd, cwd=os.path.join(code, "problems", self.problem), env=self.env(code), stdout=log, stderr=subprocess.STDOUT,
-                                    stdin=subprocess.DEVNULL, start_new_session=True)
+            proc = subprocess.Popen(cmd, cwd=os.path.join(code, "problems", self.problem), env={**self.env(code), **(device or {})}, stdout=log,
+                                    stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
             with open(pid_path, "w") as f:
                 f.write(str(proc.pid))
             reason, asked = "", 0.0
@@ -328,7 +354,10 @@ class Worker:
             if step.get("gpus", 0) > 0:
                 try:
                     with gpu_slot(self.m["gpu_slots"], self.beat, self.stop_requested) as slot:
-                        res = {**self.execute(name, cmd, code, kill, where), "gpu_slot": slot}
+                        device = gpu_env(slot, dict(os.environ)) if step["gpus"] == 1 else {}       # a step of several GPUs sees them all
+                        res = {**self.execute(name, cmd, code, kill, where, device), "gpu_slot": slot}
+                        if device:
+                            res["gpu_device"] = device["CUDA_VISIBLE_DEVICES"]
                 except Stopped:
                     res = {"status": "stopped", "why": "stop requested while it waited for a GPU slot"}
             else:
