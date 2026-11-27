@@ -160,8 +160,8 @@ python -m GtGenerator check [--holdout]                          # automatic con
 python -m GtGenerator view OUT_DIR [scene:keyframe ...] [--total]   # sample pictures (4th panel: motion relative to the static world; --total = total flow); `sheets OUT_DIR` stacks the ten defaults
 python -m GtGenerator report [--version v1.0-mini] [--holdout] [--samples N]   # ALL sequences in one pass: store the GT (<store root>/<signature>/), run every check, write ONE PDF
                                                             # (<store root>/reports/): summary, table per sequence, legend, samples drawn straight into the PDF (no picture files)
-python -m GtGenerator clean [--videos] [--pictures] [--reports] [--old-outputs] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move | --delete: only for pictures, videos, reports]
-                                                            # removes only what GtGenerator generated; dry run by default, --move puts it into _to_delete/
+python -m GtGenerator clean [--videos] [--pictures] [--reports] [--stale-caches DIR | --all-caches DIR] [--include-released] [--older-than DAYS] [--move | --delete: only for pictures, videos, reports]
+                                                            # removes only what GtGenerator generated; dry run by default, --move puts it into <store root>/_to_delete/ (a rename next to the stores)
 python -m GtGenerator video SCENE OUT.mp4 [seconds] [--version v1.0-trainval]   # driving through the GT at 12 Hz (H.264, read back; any sequence, the light devkit of just that one)
 ```
 

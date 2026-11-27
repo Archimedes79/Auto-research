@@ -1,16 +1,16 @@
-"""Cleanup of what GtGenerator generates (videos, pictures, old outputs, caches of outdated generator versions):
+"""Cleanup of what GtGenerator generates (videos, pictures, reports, caches of outdated generator versions):
 
-  python -m GtGenerator clean --videos --pictures --reports --old-outputs --stale-caches DIR | --all-caches DIR [--older-than DAYS] [--move | --delete]
+  python -m GtGenerator clean --videos --pictures --reports --stale-caches DIR | --all-caches DIR [--older-than DAYS] [--move | --delete]
 
 Without --move / --delete it only lists what it would remove and the size (dry run). --move puts the items into
-_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace). --delete removes only what one command rebuilds
-(videos, pictures, reports); stored GT (caches) and the old outputs are only moved: a store is deleted only after the catalog lists it and the
+<store root>/_to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace; next to the stores, so a move is a rename on
+their disk, never a copy across disks). --delete removes only what one command rebuilds
+(videos, pictures, reports); stored GT (caches) is only moved: a store is deleted only after the catalog lists it and the
 owner confirmed the list (autoresearch/METHOD.md, hard rule 5; D154).
 - videos / pictures: *.mp4 / *.gif and *.png in <store root>/examples (they are reproducible: `python -m GtGenerator video / view / sheets`)
 - reports: autogt_report_*.pdf in <store root>/reports (what `python -m GtGenerator report` writes by default; the report is self-contained,
   its sample pictures are drawn straight into the PDF and never exist as files; other PDFs there are not touched)
 (everything GtGenerator generates lives under the store root, where.py: <data root>/groundtruth, outside the code package GtGenerator/ and outside git)
-- old-outputs: _to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
 - stale-caches DIR: the cache folders `DIR/<signature>` of `python -m GtGenerator generate` / `build` / `report` whose signature is not a
   current one (the default options or `--boxes-at annotation`; every edit of the generator changes the signature); all-caches DIR: every
   cache folder in DIR, the current one included. A folder is a cache only if its index.json is a record of GtGenerator (a dict whose
@@ -27,8 +27,6 @@ import os
 import shutil
 import time
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-BASE = os.path.dirname(HERE)                                   # the repository root
 RUNNING_S = 3600                                               # a folder with a provisional index that changed within this long may have a build running
 
 
@@ -74,10 +72,10 @@ def _size(p):
         return sum(pool.map(os.path.getsize, files, chunksize=256))
 
 
-def collect(videos=False, pictures=False, reports=False, old_outputs=False, stale_caches=None, all_caches=None, older_than=None,
-            base=BASE, current_signature=None, include_released=False, store_root=None):
+def collect(videos=False, pictures=False, reports=False, stale_caches=None, all_caches=None, older_than=None,
+            current_signature=None, include_released=False, store_root=None):
     """list of (path, bytes, category) the cleanup would remove; category "released-cache" only with include_released. `store_root`: where the
-    examples and reports are (default where.root()); `base`: the folder of _to_delete/"""
+    examples, the reports and _to_delete/ are (default where.root())"""
     from . import where
     store_root = store_root or where.root()
     released = _protected()
@@ -92,9 +90,6 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
     if reports and os.path.isdir(rep):
         items += [(os.path.join(rep, f), "reports") for f in sorted(os.listdir(rep))
                   if f.startswith("autogt_report_") and f.lower().endswith(".pdf")]
-    old = os.path.join(base, "_to_delete", "autogt_old_outputs")
-    if old_outputs and os.path.isdir(old):
-        items.append((old, "old-outputs"))
 
     def cache_items(root, keep, category):
         for d in sorted(os.listdir(root)):
@@ -125,8 +120,10 @@ def collect(videos=False, pictures=False, reports=False, old_outputs=False, stal
     return [(p, _size(p), c) for p, c in once]
 
 
-def clean(delete=False, move=False, base=BASE, verbose=True, **kw):
-    items = collect(base=base, **kw)
+def clean(delete=False, move=False, verbose=True, store_root=None, **kw):
+    from . import where
+    store_root = store_root or where.root()
+    items = collect(store_root=store_root, **kw)
     total = sum(s for _, s, _ in items)
     say = print if verbose else (lambda *a, **k: None)
     for p, s, c in items:
@@ -134,18 +131,18 @@ def clean(delete=False, move=False, base=BASE, verbose=True, **kw):
     say(f"{len(items)} items, {total / 1e6:.1f} MB" + ("" if (delete or move) else "  (dry run: add --move or --delete)"))
     if delete and any(c == "released-cache" for _, _, c in items):
         raise ValueError("a released GT store (versions.csv, lane_versions.csv, index.json release) is never deleted, a rebuild takes hours: use --move")
-    if delete and any(c in ("cache", "stale-cache", "old-outputs") for _, _, c in items):
-        raise ValueError("stored GT and old outputs are only moved (--move): a store is deleted only after the catalog lists it and the owner confirmed the list (hard rule 5, D154); "
+    if delete and any(c in ("cache", "stale-cache") for _, _, c in items):
+        raise ValueError("stored GT is only moved (--move): a store is deleted only after the catalog lists it and the owner confirmed the list (hard rule 5, D154); "
                          "--delete is for videos, pictures and reports")
     if move:
-        dest = os.path.join(base, "_to_delete", f"autogt_cleanup_{datetime.date.today().isoformat()}")
+        dest = os.path.join(store_root, "_to_delete", f"autogt_cleanup_{datetime.date.today().isoformat()}")      # next to the stores: a rename, no copy
         os.makedirs(dest, exist_ok=True)
         for p, _, _ in items:
             target = os.path.join(dest, os.path.basename(p))
             shutil.move(p, target if not os.path.exists(target) else target + f"_{int(time.time())}")
         with open(os.path.join(dest, "README.md"), "a", encoding="utf-8") as f:
             f.write(f"# GtGenerator cleanup {datetime.date.today().isoformat()}\n\nMoved here by `python -m GtGenerator clean --move` "
-                    "(videos, pictures, reports, old outputs, caches of other generator versions). To restore, move a folder back; to free "
+                    "(videos, pictures, reports, caches of other generator versions). To restore, move a folder back; to free "
                     "the space, delete this folder once nothing needs it.\n\n" + "".join(f"- {os.path.basename(p)} ({c})\n" for p, _, c in items))
         say("moved to", dest)
     elif delete:
@@ -171,17 +168,19 @@ def _data_root(path):
 
 def selftest():
     import tempfile
-    with tempfile.TemporaryDirectory() as b, _data_root(b):                                # examples and reports are read below where.root()
-        ex = os.path.join(b, "groundtruth", "examples")
+    from . import where
+    with tempfile.TemporaryDirectory() as b, _data_root(b):                                # examples, reports, stores and _to_delete/ lie below where.root()
+        root = os.path.join(b, "groundtruth")
+        assert where.root() == root, where.root()
+        ex = os.path.join(root, "examples")
         os.makedirs(ex)
-        os.makedirs(os.path.join(b, "_to_delete", "autogt_old_outputs"))
         for f in ("a.mp4", "b.png", "make_videos.sh"):
             open(os.path.join(ex, f), "wb").write(b"x" * 100)
-        rep = os.path.join(b, "groundtruth", "reports")
+        rep = os.path.join(root, "reports")
         os.makedirs(rep)
         for f, n in (("autogt_report_v1.0-mini_2026-11-01.pdf", 100), ("autogt_quality_overview.pdf", 100), ("notes.txt", 1)):
             open(os.path.join(rep, f), "wb").write(b"x" * n)
-        cache = os.path.join(b, "cache")
+        cache = os.path.join(root, "fronts")
         from .versions import table
         rel = table()[-1]["signature"]                                                     # a released version: kept unless asked
         for sig in ("old1", "cur", rel):
@@ -191,45 +190,43 @@ def selftest():
         json.dump(["not", "GtGenerator"], open(os.path.join(cache, "foreign", "index.json"), "w"))        # a list,
         os.makedirs(os.path.join(cache, "wrong"))
         json.dump({"signature": "other"}, open(os.path.join(cache, "wrong", "index.json"), "w"))     # another folder's signature
-        got = collect(videos=True, base=b)
+        got = collect(videos=True)
         assert [os.path.basename(p) for p, _, _ in got] == ["a.mp4"], got                  # the script is never listed
-        assert [os.path.basename(p) for p, _, _ in collect(reports=True, base=b)] == ["autogt_report_v1.0-mini_2026-11-01.pdf"]   # reports only
-        assert sorted(os.path.basename(p) for p, _, _ in collect(all_caches=cache, base=b)) == ["cur", "old1"]
-        got = collect(stale_caches=cache, base=b, current_signature="cur")
+        assert [os.path.basename(p) for p, _, _ in collect(reports=True)] == ["autogt_report_v1.0-mini_2026-11-01.pdf"]   # reports only
+        assert sorted(os.path.basename(p) for p, _, _ in collect(all_caches=cache)) == ["cur", "old1"]
+        got = collect(stale_caches=cache, current_signature="cur")
         assert [os.path.basename(p) for p, _, _ in got] == ["old1"], got                   # the current cache stays, a released one too
-        got = collect(stale_caches=cache, base=b, current_signature="cur", include_released=True)
+        got = collect(stale_caches=cache, current_signature="cur", include_released=True)
         assert sorted((os.path.basename(p), c) for p, _, c in got) == sorted([("old1", "stale-cache"), (rel, "released-cache")]), got
         try:
-            clean(verbose=False, delete=True, base=b, stale_caches=cache, current_signature="cur", include_released=True)
+            clean(verbose=False, delete=True, stale_caches=cache, current_signature="cur", include_released=True)
             raise AssertionError("a released version must not be deleted")
         except ValueError:
             assert os.path.isdir(os.path.join(cache, rel)) and os.path.isdir(os.path.join(cache, "old1"))
-        clean(verbose=False, move=True, base=b, videos=True, pictures=True, stale_caches=cache, current_signature="cur")
+        clean(verbose=False, move=True, videos=True, pictures=True, stale_caches=cache, current_signature="cur")
         assert not os.path.exists(os.path.join(ex, "a.mp4")) and os.path.exists(os.path.join(ex, "make_videos.sh"))
         assert os.path.exists(os.path.join(cache, "cur")) and not os.path.exists(os.path.join(cache, "old1")) and os.path.isdir(os.path.join(cache, rel))
-        moved = os.path.join(b, "_to_delete", f"autogt_cleanup_{datetime.date.today().isoformat()}")
+        moved = os.path.join(root, "_to_delete", f"autogt_cleanup_{datetime.date.today().isoformat()}")      # a move stays below the store root (a rename on its disk)
         assert sorted(os.listdir(moved)) == ["README.md", "a.mp4", "b.png", "old1"], os.listdir(moved)
+        assert sorted(os.listdir(b)) == ["groundtruth"], ("nothing is moved out of the store root", os.listdir(b))
         # --older-than: the age of the item decides (the direction matters: older, not newer)
         aged = os.path.join(rep, "autogt_report_aged.pdf")
         open(aged, "wb").write(b"x" * 100)
         os.utime(aged, (time.time() - 10 * 86400, time.time() - 10 * 86400))
-        assert [os.path.basename(p) for p, _, _ in collect(reports=True, base=b, older_than=5)] == ["autogt_report_aged.pdf"], "only the report older than 5 days"
-        assert len(collect(reports=True, base=b, older_than=30)) == 0 and len(collect(reports=True, base=b)) == 2
-        clean(verbose=False, delete=True, base=b, reports=True)
+        assert [os.path.basename(p) for p, _, _ in collect(reports=True, older_than=5)] == ["autogt_report_aged.pdf"], "only the report older than 5 days"
+        assert len(collect(reports=True, older_than=30)) == 0 and len(collect(reports=True)) == 2
+        clean(verbose=False, delete=True, reports=True)
         assert (sorted(os.listdir(rep)) == ["autogt_quality_overview.pdf", "notes.txt"]), os.listdir(rep)
-        # stored GT and old outputs are only moved
-        for kw in (dict(old_outputs=True), dict(all_caches=cache, current_signature="cur")):
-            try:
-                clean(verbose=False, delete=True, base=b, **kw)
-                raise AssertionError(f"{kw} must not be deleted")
-            except ValueError as e:
-                assert "--move" in str(e), e
-        assert os.path.isdir(os.path.join(b, "_to_delete", "autogt_old_outputs")) and os.path.isdir(os.path.join(cache, "cur"))
-        clean(verbose=False, move=True, base=b, old_outputs=True)
-        assert not os.path.exists(os.path.join(b, "_to_delete", "autogt_old_outputs"))
+        # stored GT is only moved
+        try:
+            clean(verbose=False, delete=True, all_caches=cache, current_signature="cur")
+            raise AssertionError("a store must not be deleted")
+        except ValueError as e:
+            assert "--move" in str(e), e
+        assert os.path.isdir(os.path.join(cache, "cur"))
         # a store of a release is left alone by what its index says (the lane stores have no row of their own for the folder), a link to another disk is never listed,
         # a provisional index written a minute ago is a build that may still run, a draft is offered
-        lanes = os.path.join(b, "lane")
+        lanes = os.path.join(root, "lane")
         for sig, idx in (("rel_by_index", {"signature": "rel_by_index", "release": True, "complete": True}), ("draft", {"signature": "draft", "release": False, "complete": True}),
                          ("building", {"signature": "building", "complete": False})):
             os.makedirs(os.path.join(lanes, sig))
@@ -238,12 +235,12 @@ def selftest():
         os.makedirs(os.path.join(b, "elsewhere", "linkedsig"))                                  # a link NAMED like the signature in its index: only the link check keeps it out
         json.dump({"signature": "linkedsig", "release": False, "complete": True}, open(os.path.join(b, "elsewhere", "linkedsig", "index.json"), "w"))
         os.symlink(os.path.join(b, "elsewhere", "linkedsig"), os.path.join(lanes, "linkedsig"))
-        both = collect(all_caches=lanes, stale_caches=lanes, base=b, current_signature="none")
+        both = collect(all_caches=lanes, stale_caches=lanes, current_signature="none")
         assert [os.path.basename(p) for p, _, _ in both] == ["draft"], ("a folder named by two options is listed once, a link is never listed", both)
-        assert [os.path.basename(p) for p, _, _ in collect(all_caches=lanes, base=b)] == ["draft"], collect(all_caches=lanes, base=b)
-        assert sorted((os.path.basename(p), c) for p, _, c in collect(all_caches=lanes, base=b, include_released=True)) == [("draft", "cache"), ("rel_by_index", "released-cache")]
+        assert [os.path.basename(p) for p, _, _ in collect(all_caches=lanes)] == ["draft"], collect(all_caches=lanes)
+        assert sorted((os.path.basename(p), c) for p, _, c in collect(all_caches=lanes, include_released=True)) == [("draft", "cache"), ("rel_by_index", "released-cache")]
         try:
-            clean(verbose=False, delete=True, base=b, all_caches=lanes, include_released=True)
+            clean(verbose=False, delete=True, all_caches=lanes, include_released=True)
             raise AssertionError("a released store is never deleted")
         except ValueError:
             assert os.path.isdir(os.path.join(lanes, "rel_by_index"))

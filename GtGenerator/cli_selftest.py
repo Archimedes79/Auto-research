@@ -184,7 +184,7 @@ def _mapping_checks():
     fn, calls = _recorder([])
     with _Patch((clean, "clean", fn)):
         _run(["clean", "--videos", "--reports", "--stale-caches", "d", "--older-than", "5", "--move"])
-    assert calls == [((), dict(delete=False, move=True, videos=True, pictures=False, reports=True, old_outputs=False, stale_caches="d", all_caches=None, older_than=5.0, include_released=False))], calls
+    assert calls == [((), dict(delete=False, move=True, videos=True, pictures=False, reports=True, stale_caches="d", all_caches=None, older_than=5.0, include_released=False))], calls
     # the picture and video commands
     fn, calls = _recorder(None)
     with _Patch((view, "run", fn)):

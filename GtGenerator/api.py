@@ -328,8 +328,8 @@ class Interface:
 
     # ------------------------------------------------------------------------------------------------------------ tidy
     @staticmethod
-    def clean(delete=False, move=False, videos=False, pictures=False, reports=False, old_outputs=False, stale_caches=None, all_caches=None, older_than=None, include_released=False):
-        """list / move generated videos, pictures, reports, old outputs and caches; `delete` only for what one command rebuilds (clean.clean)"""
+    def clean(delete=False, move=False, videos=False, pictures=False, reports=False, stale_caches=None, all_caches=None, older_than=None, include_released=False):
+        """list / move generated videos, pictures, reports and caches; `delete` only for what one command rebuilds (clean.clean)"""
         from . import clean
-        return clean.clean(delete=delete, move=move, videos=videos, pictures=pictures, reports=reports, old_outputs=old_outputs,
+        return clean.clean(delete=delete, move=move, videos=videos, pictures=pictures, reports=reports,
                            stale_caches=stale_caches, all_caches=all_caches, older_than=older_than, include_released=include_released)

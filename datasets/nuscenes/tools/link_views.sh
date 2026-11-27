@@ -17,10 +17,15 @@ INFOS="nuscenes_infos_train.pkl nuscenes_infos_val.pkl nuscenes_infos_train_crn.
 view() {  # view <view folder> <raw folder> <WSL path>
   local v="$1" r="$2" w="$3" e
   [ -d "$r" ] || { echo "the raw folder $r does not exist: set NUSC_ROOT (datasets/nuscenes/README.md)"; exit 1; }
+  [ -L "$v" ] && { echo "ABORT: the view $v is itself a link: a view is a real folder of links"; exit 1; }
   [ $check = 1 ] || mkdir -p "$v"
   for e in $(cd "$r" && ls -A); do
+    case " $INFOS " in *" $e "*) continue ;; esac      # the info files are real files of the view, never replaced by a link
     [ -L "$v/$e" ] && [ "$(readlink "$v/$e")" = "$r/$e" ] && continue
-    if [ $check = 1 ]; then echo "missing link $v/$e -> $r/$e"; bad=1; else ln -sfn "$r/$e" "$v/$e"; fi
+    if [ -e "$v/$e" ] && [ ! -L "$v/$e" ]; then echo "a real entry $v/$e is in the way of the link to $r/$e: left as it is"; bad=1; continue; fi
+    if [ $check = 1 ]; then echo "missing link $v/$e -> $r/$e"; bad=1; continue; fi
+    [ -L "$v/$e" ] && rm "$v/$e"                        # a wrong link: the link alone goes (rm on a link never touches its target)
+    ln -s "$r/$e" "$v/$e"
   done
   for e in $INFOS; do
     [ -f "$v/$e" ] || { echo "missing $v/$e (a CRN info file; how it is made: tag v1, bev_fusion_lane_center/data/README.md)"; bad=1; }

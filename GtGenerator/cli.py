@@ -183,8 +183,8 @@ def _parser():
     dg.add_argument("out", nargs="?", help="write the digests to this json file")
     dg.add_argument("--compare", nargs=2, metavar=("A", "B"), help="compare two digest files: exit 1 when any frame differs")
     dg.add_argument("--stride", type=int, default=2)
-    cl = command("clean", "clean", "list / move generated videos, pictures, reports, old outputs and caches; --delete only for what one command rebuilds (clean.clean)")
-    for flag in ("--videos", "--pictures", "--reports", "--old-outputs"):
+    cl = command("clean", "clean", "list / move generated videos, pictures, reports and caches; --delete only for what one command rebuilds (clean.clean)")
+    for flag in ("--videos", "--pictures", "--reports"):
         cl.add_argument(flag, action="store_true")
     act = cl.add_mutually_exclusive_group()
     act.add_argument("--move", action="store_true")
