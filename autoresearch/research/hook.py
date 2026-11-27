@@ -6,19 +6,23 @@
 Reads the event from stdin; exit 2 with the reason on stderr refuses the edit, exit 0 lets it through. The protected paths and the grants are
 research/gates.py; a path is judged without its NTFS stream name (x::$DATA writes x). Every path inside the machine's state folder (the
 folder of the machine file: grants, holds, GPU slots) is refused: only the research commands write there. Any other file outside a research
-checkout is not this hook's business. When the hook itself fails, it refuses every target that is or may be protected (`fallback`); other
-edits go through (a broken hook must not stop all work, nor open the gates)."""
+checkout is not this hook's business. When the hook itself fails (a gate module that cannot be imported, a broken grants file), it judges by
+a static list without research/ (`fallback`): the gate files, champions/, every problem's problem.json and TEST_LOG.md, the settings and the
+default state folder are refused, everything else goes through (a broken hook must not stop all work, nor open the gates)."""
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-GATE_NAMES = {"problem.json", "test_log.md", "settings.json", "settings.local.json", "hook.py", "gates.py", "paths.py", "defaults.py", "grants.json",
-              "holds.json"}
-TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
+STATIC_PROTECTED = (".claude/settings.json", ".claude/settings.local.json", "autoresearch/research/hook.py", "autoresearch/research/gates.py",
+                    "autoresearch/research/paths.py", "autoresearch/research/__init__.py", "autoresearch/evaluation/defaults.py", "champions/*",
+                    "problems/*/test_log.md", "problems/*/problem.json")     # gates.ROOT_PROTECTED and more, lower case, for a broken gate module
+DEFAULT_STATE = os.path.expanduser("~/.research")
+TOOLS ={"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
 MCP_WRITERS = ("write_file", "edit_block", "move_file", "write_pdf")             # file tools of MCP servers (mcp__<server>__<tool>)
 PATH_KEYS = ("file_path", "notebook_path", "path", "source", "destination", "outputPath")
 
@@ -54,11 +58,15 @@ def strip_stream(path: str) -> str:
     return p[:drive] + head + sep + name.split(":", 1)[0]
 
 
-def in_state(path: str) -> bool:
-    """does `path` lie in the machine's state folder (the folder of the machine file)? Without regard to case"""
+def inside(path: str, folder: str) -> bool:
+    """does `path` lie in `folder`? Without regard to case"""
+    return (os.path.realpath(path).lower() + os.sep).startswith(os.path.realpath(folder).lower() + os.sep)
+
+
+def state_folder() -> str:
+    """the machine's state folder: the folder of the machine file"""
     from research.paths import machine_file
-    state = os.path.realpath(os.path.dirname(machine_file())).lower()
-    return (os.path.realpath(path).lower() + os.sep).startswith(state + os.sep)
+    return os.path.dirname(machine_file())
 
 
 def resolve(raw: str, event: dict) -> tuple:
@@ -87,7 +95,7 @@ def verdict(event: dict) -> str:
     from research import gates
     for raw in targets(event):
         path, root, rel = resolve(raw, event)
-        if in_state(path):
+        if inside(path, state_folder()):
             return f"{raw} lies in the machine's state folder (grants, holds, GPU slots): only the research commands write there (`research grant`)"
         reason = gates.protected_refusal(rel, root) if root else ""
         if reason:
@@ -96,23 +104,13 @@ def verdict(event: dict) -> str:
 
 
 def fallback(event: dict, error: Exception) -> str:
-    """after a failure of the hook: refuse every target that is or may be protected. gates.py still names the protected paths when it can be
-    imported (the failure lay in a grant or a decision file); a gate name, the state folder and a target that cannot be judged count as
-    protected"""
-    why = f"the gate hook failed ({type(error).__name__}: {error}); an edit it cannot clear is refused until it works"
+    """after a failure of the hook: the static list, no import of research/ (a gate module may be what broke); everything else goes through"""
     for raw in targets(event):
-        try:
-            if os.path.basename(strip_stream(str(raw))).lower() in GATE_NAMES:
-                return why
-            path, root, rel = resolve(raw, event)
-            if in_state(path):
-                return why
-            if root:
-                from research.gates import is_protected
-                if is_protected(rel, root):
-                    return why
-        except Exception:                                              # noqa: BLE001 - it cannot be judged: closed
-            return why
+        path, root, rel = resolve(str(raw), event)
+        rel = rel.replace("\\", "/").lower()
+        if inside(path, DEFAULT_STATE) or (root and any(fnmatch.fnmatchcase(rel, pat) for pat in STATIC_PROTECTED)):
+            return (f"the gate hook failed ({type(error).__name__}: {error}); while it is broken {raw} is refused, as no grant can be checked. "
+                    "A broken gate module is repaired through git (`git checkout -- <file>`)")
     return ""
 
 

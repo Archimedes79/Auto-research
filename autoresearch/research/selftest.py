@@ -118,6 +118,7 @@ def parts(tmp: str) -> None:
         assert hook.to_local("\\\\wsl.localhost\\Ubuntu\\home\\u\\.research\\state\\grants.json") == "/home/u/.research/state/grants.json"
     assert hook.strip_stream("C:\\x\\TEST_LOG.md::$DATA") == "C:/x/TEST_LOG.md" and hook.strip_stream("a/TEST_LOG.md:s") == "a/TEST_LOG.md"
     assert hook.strip_stream("C:/x/y.md") == "C:/x/y.md"
+    assert {pat.lower() for pat in gates.ROOT_PROTECTED} <= set(hook.STATIC_PROTECTED), "the hook's static list (a broken gate module) covers the root list"
     # a step's environment: nothing of the caller's trees, the machine file and its own values; the rest (PATH) kept
     saved = dict(os.environ)
     try:
@@ -419,17 +420,20 @@ def chain(tmp: str) -> None:
                       (os.path.join(root, "champions", "toy", "champions.json"), "is protected")):
         r = hook_run(path)
         assert r.returncode == 2 and why in r.stderr, (path, r.returncode, r.stderr)
-    gates_py = os.path.join(core, "research", "gates.py")           # a broken gates.py: what may be protected is refused, the rest goes through
-    keep_gates = open(gates_py, encoding="utf-8").read()
-    open(gates_py, "a", encoding="utf-8").write("\n)(\n")
-    broken, outside = hook_run(os.path.join(root, "champions", "toy", "champions.json")), hook_run(os.path.join(tmp, "outside.txt"))
-    open(gates_py, "w", encoding="utf-8").write(keep_gates)
-    assert broken.returncode == 2 and "gate hook failed" in broken.stderr and outside.returncode == 0, (broken.stderr, outside.stderr)
+    for module, cases in (("gates.py", ((test_log, 2), (net_py, 0))), ("paths.py", ((os.path.join(tmp, "outside.txt"), 0), (test_log, 2)))):
+        mod = os.path.join(core, "research", module)                # a broken gate module: the static list decides, the rest goes through
+        keep_mod = open(mod, encoding="utf-8").read()
+        open(mod, "a", encoding="utf-8").write("\n)(\n")
+        got = [(path, want, hook_run(path)) for path, want in cases]
+        open(mod, "w", encoding="utf-8").write(keep_mod)
+        for path, want, r in got:
+            assert r.returncode == want and (want == 0 or "git checkout" in r.stderr), (module, path, r.returncode, r.stderr)
     research(["grant", "problems/toy/problem.json", "--decision", "D1", "--hours", "1", "--note", "selftest"], env)
     assert subprocess.run([sys.executable, hook], input=json.dumps(ev), capture_output=True, text=True, env=env).returncode == 0
     assert "not a decided" in research(["grant", "problems/toy/TEST_LOG.md", "--decision", "D9", "--note", "x"], env, ok=(1,)).stderr
     say("hook: a protected file is refused (any case, a stream name, a TEST log its problem does not list, the state folder, a grants file of "
-        "no grants, a broken gates.py), allowed under a grant of a decided decision; an undecided grant is refused")
+        "no grants), allowed under a grant of a decided decision; an undecided grant is refused; with a broken gates.py or paths.py a static "
+        "list decides (TEST_LOG.md refused, a source file and a file outside allowed)")
     open(os.path.join(root, e1, "runs", "README.md"), "w").write("not a run\n")
     st = research(["status", "toy"], env).stdout
     assert "E1.a_s0" in st and "E4.m_s0" in st
@@ -441,6 +445,8 @@ def chain(tmp: str) -> None:
     runs = os.path.join(tmp, "runs", "toy")
     for folder, arms in ((e3, {"k": {"verdict": "KEEP"}}), (e4, {"m": {"verdict": "CUT"}}), (e5, {"s": {"verdict": "MEASURED"}})):
         json.dump({"verdict": "DONE", "arms": arms}, open(os.path.join(root, folder, "verdict.json"), "w"))
+    reg = research(["register", "toy", "E5", "s", "--decision", "D1", "--role", "comparison"], env, ok=(1,)).stderr     # E5 has no result.json
+    assert "refused: E5.s_s0: its records cannot be read" in reg, reg
     alive = subprocess.Popen(["sleep", "300"], start_new_session=True)
     try:
         open(os.path.join(runs, "E4.m_s0", "step.pid"), "w").write(str(alive.pid))

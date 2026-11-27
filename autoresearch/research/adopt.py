@@ -33,12 +33,15 @@ def _facts(problem: str, exp_id: str, arm: str, card: Dict[str, Any], decision: 
     for s in card["seeds"]:
         rid = f"{exp_id}.{arm}_s{s}"
         rec = record_dir(problem, rid)
-        run, res = read_json(os.path.join(rec, "run.json")), read_json(os.path.join(rec, "result.json"))
-        ident = res["identity"]
-        seeds[str(s)] = {"run": rid, "config": read_json(os.path.join(rec, "config.json")), "weights": {"run_dir": f"{{runs}}/{rid}",
-                         "checkpoint": ident.get("checkpoint"), "sha256_16": ident.get("checkpoint_hash") or ident.get("sha1")},     # bev names it sha1
-                         "split": res["split"], "frames": res["frames"], "scenes": res["scenes"], "numbers": res["numbers"],
-                         "per_scene": res["per_scene"], "cost": res.get("cost"), "identity": res["identity"], "commit": run["commit"]}
+        try:
+            run, res, cfg = (read_json(os.path.join(rec, f)) for f in ("run.json", "result.json", "config.json"))
+            ident = res["identity"]
+            seeds[str(s)] = {"run": rid, "config": cfg, "weights": {"run_dir": f"{{runs}}/{rid}", "checkpoint": ident.get("checkpoint"),
+                                                                    "sha256_16": ident.get("checkpoint_hash") or ident.get("sha1")},     # bev names it sha1
+                             "split": res["split"], "frames": res["frames"], "scenes": res["scenes"], "numbers": res["numbers"],
+                             "per_scene": res["per_scene"], "cost": res.get("cost"), "identity": ident, "commit": run["commit"]}
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
+            raise ResearchError(f"{rid}: its records cannot be read ({type(e).__name__}: {e}); only a finished, evaluated run becomes a champion") from None
     prefix = load_problem(problem)["tag_prefix"]
     return {"name": f"{exp_id}.{arm}", "problem": problem, "experiment": exp_id, "arm": arm, "tag": f"{prefix}/{exp_id}",
             "decision": decision, "how": how, "date": time.strftime("%Y-%m-%d %H:%M"), "seeds": seeds}
