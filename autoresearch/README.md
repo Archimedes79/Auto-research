@@ -12,6 +12,7 @@ no data set. A problem is a folder `../problems/<name>/`.
 | `reporter/` | a report from markdown parts and result files, its numbers checked; `archdraw.py` draws a system from a spec | `reporter/README.md` |
 | `literature/` | research on a topic: the procedure, the table of the notes, skeletons of foreign code | `literature/README.md` |
 | `agents/` | the four agent roles and their installer | `agents/README.md` |
+| `env/` | the python environment `gcar` as a conda export, and how a new machine builds it | `env/README.md` |
 | `templates/` | the experiment card and the other file templates | `templates/README.md` |
 | `EXTENDING.md` | how the system grows: a problem, a metric, a picture, a run step, a report part, ground truth, a role | one page |
 | `INTEGRATION_2026-11-26.md` | the restructure of D154 - D156: its state, what was measured, kept and deleted | - |
