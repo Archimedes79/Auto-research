@@ -11,7 +11,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
         v
  Evaluation (api.py)  -- the front door: scores and reads -------------------------------.
    run  score  check  show_numbers  split_numbers  find_worst  compare  get_cost  report   |  scores through
-   make_card  draw_frame  list  list_sets  |  tap  time  probe (passed to the Runner)      v
+   draw_frame  list  list_sets  |  tap  time  probe (passed to the Runner)                 v
         |  calls the layer below                                                    engine EvalSuite: Quantitative.run(results=...)
         v                                                                             -> RunStore  <net>/eval/suite/quant/<e-id>
  Runner (netrunner.py, or the class a project names)  -- the only class that executes the network   (additive counts per frame: small)
@@ -23,7 +23,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
 
  project adapter  <project>/evaluation/evaluation.json -> bev_eval.py     (both classes call it; the core imports no torch / nuScenes)
    required: name out network sets identity source subject task
-   optional: free_source + free_subject (together) reference card time probe resolve release inputs evaluator_now MEMORY_TAP COMPARE_IGNORE
+   optional: free_source + free_subject (together) reference time probe resolve release inputs evaluator_now MEMORY_TAP COMPARE_IGNORE
    BEV: bev_adapter, bev_free (the network without labels), bev_sets (the sets = the training's splits/)
 ```
 A caller (a person, a script, the command line) talks to the Evaluation only. The Runner is the layer below: the only class that runs a network (D72: it reads no ground truth and computes no loss) and stores what
@@ -42,7 +42,7 @@ from Evaluation import Evaluation
 ev = Evaluation()                                                   # the project is AR_PROJECT (a problem folder); Evaluation(runner=...) injects another Runner
 ev.check("t23_C_s1", "small.val")                                   # a run folder, or its name in the runs root; the dry run: what would run, what is stored, the problems
 r = ev.run("t23_C_s1", "small.val", gt_key="v8")                    # the Runner predicts what is not stored yet (warm, D70), then the Evaluation scores it: a dict with the id
-ev.show_numbers(r["id"]);  ev.split_numbers(r["id"], "scene");  ev.find_worst(r["id"], "seg", n=5);  ev.get_cost(r["id"]);  ev.report(r["id"]);  ev.make_card(r["id"])
+ev.show_numbers(r["id"]);  ev.split_numbers(r["id"], "scene");  ev.find_worst(r["id"], "seg", n=5);  ev.get_cost(r["id"]);  ev.report(r["id"])
 ev.compare(control_id, r["id"])                                     # b - a, paired bootstrap; one network per process: the control was run in another one, compare by ids
 ev.tap(r["results"], "scene-0061/12", "fused")                      # an intermediate result stored with the predictions (asked for with run(..., taps=("fused",)))
 ```
@@ -53,8 +53,8 @@ ev.tap(r["results"], "scene-0061/12", "fused")                      # an interme
 | `score(results, frames, gt_key, metrics)` | score stored predictions against the ground truth; no network |
 | `show_numbers(id, match)`, `split_numbers(id, axis)`, `find_worst(id, match, n)` | the numbers (with `warnings`: devices, the memory's health, evaluator code changed since), the numbers per scene or frame, where they come from |
 | `compare(a, b)` | paired bootstrap, b - a (a = the control); refused on another source, task or GT; `n_scenes` and `warnings`: frames in only one of the two, fewer than 30 scenes (the interval is too narrow then), other evaluator code |
-| `get_cost(id)`, `report(id)`, `make_card(id, out)` | ms per frame, the html page, the metric card in the project's contract WRITTEN as a file (default `<net>/eval/card_<e-id>.json`, or `out`; -> `{path, card}`; nothing in `research` reads it: a verdict comes from the evaluation step of a run); refused when the checkpoint or the evaluator code changed since, or the predictions are gone: score again |
-| `draw_frame(id, frame, view)` | one picture (the network runs on that frame with its scene's history; refused like `make_card`) |
+| `get_cost(id)`, `report(id)` | ms per frame, the html page |
+| `draw_frame(id, frame, view)` | one picture (the network runs on that frame with its scene's history); refused when the predictions are gone or the network changed since (checkpoint, config or code): score again |
 | `list_sets()`, `list(network)` | the sets a project defines, what is stored for a network (predictions and evaluations) |
 | `tap(results, frame, name)`, `time(network)`, `probe(network)` | passed to the Runner: which taps a stored frame has or the file, shape and dtype of one; ms per module on an idle GPU; the module probe |
 
@@ -79,7 +79,7 @@ Every Evaluation method is a command (`python -m Evaluation <method>` or `Evalua
 | the dry run | `python -m Evaluation check t23_C_s1 small.val` |
 | run and score | `python -m Evaluation run t23_C_s1 small.val --gt-key v8 [--metrics maps,boxes,fusion] [--taps fused] [--device cpu]` |
 | score stored predictions | `python -m Evaluation score t23_C_s1@r3f9a2c1d4b0 small.val --gt-key v8` |
-| read | `show-numbers ID [--match M]`, `split-numbers ID [--axis scene]`, `find-worst ID`, `compare A B`, `get-cost ID`, `report ID`, `make-card ID [--out FILE]`, `draw-frame ID FRAME` |
+| read | `show-numbers ID [--match M]`, `split-numbers ID [--axis scene]`, `find-worst ID`, `compare A B`, `get-cost ID`, `report ID`, `draw-frame ID FRAME` |
 | what exists | `list-sets`, `Evaluation.list NETWORK`, `tap RESULTS FRAME [--name N]`, `methods` |
 | the network | `time NETWORK`, `Evaluation.probe NETWORK` (the Runner's, passed through) |
 | every command | `--json` (nothing else on stdout), `--project`, `--adapter`; exit 0 ok, 1 `check` found problems, 2 any error (`EVALUATION_TRACEBACK=1` shows the traceback) |

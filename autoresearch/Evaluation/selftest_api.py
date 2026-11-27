@@ -126,10 +126,6 @@ def reference(src, ref):
     return np.roll(truth, STATE.shift, axis=1) if STATE.shift else truth          # a "new ground truth": the disc moved
 
 
-def card(info, store, quant, rs):
-    return {"name": info["id"], "metrics": quant.table(store)}
-
-
 RUNNER = {"cls": None}
 
 
@@ -444,7 +440,7 @@ def check_run():
             _raises(EvaluationError, "being written by pid", ev.score, allr["results"], "val", None, ("maps",))
         assert ev.score(allr["results"], "val", None, ("maps",))["id"].endswith(eid)
     # an adapter without the label-free pair: the Runner reads the labelled source and subject (more data than it needs, the same numbers)
-    plain_ad = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, METRICS=ME.METRICS, reference=reference, card=card)
+    plain_ad = SimpleNamespace(**{f: getattr(ME, f) for f in ADAPTER_FUNCTIONS}, METRICS=ME.METRICS, reference=reference)
     fb = toy_eval(plain_ad).run("runs/thr0.45", "val", progress=0)
     _same(toy_eval(plain_ad).show_numbers(fb["id"])["numbers"], _engine("runs/thr0.45", Frames.parse("val")), "the fallback path")
     # the adapter: free_source and free_subject go together
@@ -514,14 +510,6 @@ def check_reading(ev, net, allr, low):
     assert set(ev.find_worst(allr["id"], n=2)) == {"scenes", "frames", "flags"}
     assert ev.get_cost(allr["id"])["predict"]["n"] == 18 and ev.get_cost(allr["id"])["devices"] == ["cuda"]
     assert os.path.isfile(ev.report(allr["id"]))
-    # the card is a FILE a decision can read: default next to the network's eval folder, or where `out` says (a file, or a folder), atomic; the dict is returned with its path
-    m = ev.make_card(allr["id"])
-    eid = allr["id"].partition("@")[2]
-    assert m["card"]["name"] == allr["id"] and m["path"] == os.path.join(out(net), f"card_{eid}.json") and json.load(open(m["path"])) == json.loads(json.dumps(m["card"], default=str))
-    to_file = ev.make_card(allr["id"], out=os.path.join(STATE.root, "cards", "mine.json"))
-    to_dir = ev.make_card(allr["id"], out=os.path.join(STATE.root, "cards"))
-    assert os.path.isfile(to_file["path"]) and to_dir["path"] == os.path.join(STATE.root, "cards", f"card_{eid}.json") and os.path.isfile(to_dir["path"])
-    assert not [f for f in os.listdir(os.path.join(STATE.root, "cards")) if ".tmp" in f], "atomic: no half-written file stays"
     rows = ev.list(net)
     assert {r["kind"] for r in rows} == {"predictions", "evaluation"} and allr["id"] in {r["id"] for r in rows} and allr["results"] in {r["id"] for r in rows}
     assert all(r["megabytes"] >= 0 for r in rows if r["kind"] == "predictions")
@@ -532,9 +520,8 @@ def check_reading(ev, net, allr, low):
     pic = ev.draw_frame(allr["id"], "demo-1/4")
     assert os.path.isfile(pic["images"]["overview"]) and "iou.iou" in pic["scores"]
     gone = os.path.join(out(net), "results", allr["results"].partition("@")[2], "manifest.json")
-    os.rename(gone, gone + ".away")                                                     # the predictions are gone (a clean-up keeps the manifest, a person may not): a card or a picture cannot be certified
+    os.rename(gone, gone + ".away")                                                     # the predictions are gone (a clean-up keeps the manifest, a person may not): a picture cannot be certified
     try:
-        _raises(EvaluationError, "are gone", ev.make_card, allr["id"])
         _raises(EvaluationError, "are gone", ev.draw_frame, allr["id"], "demo-1/4")
     finally:
         os.rename(gone + ".away", gone)

@@ -3,7 +3,7 @@ suitecli.py).
 
     ev = Evaluation()                                              # the project is AR_PROJECT (default); its adapter says what a network and its data are (below)
     r = ev.run("runs/t23_C_s1", "large.val", gt_key="v8")         # predict (the network runs once on what is missing), then score: a dict with the id and what was done
-    ev.show_numbers(r["id"]);  ev.split_numbers(r["id"], "scene");  ev.find_worst(r["id"], "seg", n=5);  ev.get_cost(r["id"]);  ev.report(r["id"]);  ev.make_card(r["id"])
+    ev.show_numbers(r["id"]);  ev.split_numbers(r["id"], "scene");  ev.find_worst(r["id"], "seg", n=5);  ev.get_cost(r["id"]);  ev.report(r["id"])
     ev.compare(a_id, b_id)                                         # paired bootstrap, b - a (a = the control);   ev.draw_frame(r["id"], "scene-0061/12")
     ev.check("runs/t23_C_s1", "large.val")                         # the dry run: what `run` would do, with its problems; the data and the checkpoint are opened, no frame runs
 
@@ -28,7 +28,7 @@ The adapter (a module of the project, named in `<project>/evaluation/evaluation.
     name(network) -> str, out(network) -> folder, network(name) -> path, sets() -> {set: scenes}, identity(network) -> dict   (cheap: no model is loaded)
     source(network, of, workers, control) -> Source,  subject(network, source, device) -> Subject,  task(network, metrics) -> Task
   optional: resolve(text) -> network path (a run name, a relative path), release(source), reference(source, ref) -> the ground truth of a frame without loading the inputs,
-  inputs(source) -> what the source was fed, COMPARE_IGNORE, card(...), time(network, n), probe(network, frames, device); free_source(network, of, workers, control) and
+  inputs(source) -> what the source was fed, COMPARE_IGNORE, time(network, n), probe(network, frames, device); free_source(network, of, workers, control) and
   free_subject(network, source, device): a Source without ground truth and a Subject that only predicts, which the Runner uses (else it uses source / subject; the two go together);
   MEMORY_TAP = the name of a tap whose mean is the fill of the network's memory (the health check of the Runner).
 What a source's `describe()` must give: `gt_signature` and `evaluator_hash` (the hash of the files that shape the numbers); without either the Evaluation refuses (a hash that cannot be computed is not "unchanged").
@@ -47,7 +47,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from . import defaults
 from .contracts import FrameRef, Source
 from .suite import EvalSuite
-from .results import Locked, ResultSet, digest, write_atomic, writer_lock
+from .results import Locked, ResultSet, digest, writer_lock
 from .sampling import Sampler
 
 CARRY = "carry"                                                               # the memory is always carried along a scene (D70)
@@ -512,29 +512,12 @@ class Evaluation(Helpers):
         _, store, q = self._open(id)
         return q.report(store, render=0)
 
-    def make_card(self, id: str, out: str = "") -> Dict[str, Any]:
-        """the metric card in the project's contract (the adapter's `card`), WRITTEN as a file (nothing in `research` reads it: a verdict comes from the evaluation step of a run):
-        `out` = the file (a folder: the file `card_<e-id>.json` in it), default `<the network's eval folder>/card_<e-id>.json`, atomic. -> {"path", "card"}. Refused when the
-        checkpoint changed since the predictions"""
-        if not hasattr(self.ad, "card"):
-            raise EvaluationError("this project's adapter defines no card")
-        info, store, q = self._open(id)
-        rs = self._predictions(info)
-        self._same_network(info, rs)
-        card = self.ad.card(info, store, q, rs)
-        fname = f"card_{str(id).partition('@')[2]}.json"
-        path = os.path.abspath(out) if out else os.path.join(self.ad.out(info["network"]), fname)
-        if os.path.isdir(path):
-            path = os.path.join(path, fname)
-        write_atomic(path, json.dumps(card, indent=1, default=str).encode("utf-8"))
-        return {"path": path, "card": card}
-
     def _same_network(self, info: Dict[str, Any], rs: Optional[ResultSet]) -> None:
         if rs is None:
             raise EvaluationError(f"the predictions {info['results']} of {info['id']} are gone: whether {info['network']} is still the network that was evaluated cannot be told; score it again (`run`)")
         if self.net_identity(info["network"]) != rs.manifest["identity"]["network"]:
             raise EvaluationError(f"{info['network']} is not the network of these predictions any more (another checkpoint, config or code): "
-                                  "what it would draw or certify is not what was evaluated")
+                                  "what it would draw is not what was evaluated")
 
     # ---------------------------------------------------------------------------------------- a picture
     def draw_frame(self, id: str, frame: str, view: str = "overview", device: str = "cpu", workers: int = 0) -> Dict[str, Any]:
