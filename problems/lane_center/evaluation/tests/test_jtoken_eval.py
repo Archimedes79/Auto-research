@@ -1,7 +1,7 @@
 """Tests of `jtoken_eval.py` (E365 S1 read-out and checks); CPU only (the GPU is hidden), 2 threads. Hand frames need no data; the tests marked (cache) read the first VAL frames of the predicted-node cache of B' seed 0 under
 runs/e365_cache (built by the lane chat) and are skipped with a message when it is not there.
 
-    wsl bash tools/env/_py14.sh test_jtoken_eval.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
+    python evaluation/tests/test_jtoken_eval.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
 
 decode_variant (the defaults = the record decode, thresholds and the none gate by hand, monotone), decode_perclass (E375 link_thr_long: None = one threshold, each class threshold moves only its class, the class = the token chord; textual
 mutants), sweep (the per-class grid, the only one: 36 cells, counts monotone per class, one row = a direct scoring), keep_rule (a node is kept at p_none 0.49 and not at 0.50, e = 1 - p_none, the links of a dropped node go), decode_fork (rec keeps both branches of a fork, argmax one; the none slot wins when the branches are weak),
@@ -21,6 +21,8 @@ command on 3 frames, delivered = the decode's long links (keep 0.6 and 0.2), nev
 p_none at the threshold, a winner below the floor refused above the record keep, mutants; cache: keep 0.5 = the stored argmax card, keep 0.6 = a direct scoring, self-pairs with --ref-run at the rec / argmax / argmax kt0.6 decodes),
 live (E372 dump / score / sweep / anatomy --live, --ref-cache, live-diff, `check_b`: a stub source with the cache's tokens gives the cache's records and read-outs; a joint run's own tokens, frame pairing, B' identity refusals; see its docstring),
 rounds_run (E392, cache: a rounds head run dumps as the champion run at the zero start and times with its parameters, rebuilt from its args; a msg none run dumps as the champion run and times the champion's 127131 parameters).
+Since the v2 restructure the smoke run e365_smoke_build is gone: the plumbing tests take the checkpoint of the kept stage-1 head e373_cb_s0 (`SMOKE`); plain B's cache did
+not move: "another cache of the same seed" is B' seed 1's cache under the name of seed 0's (`_other_cache_run`).
 """
 import contextlib
 import json
@@ -41,11 +43,12 @@ import jtoken as JK  # noqa: E402
 import jtoken_train as JKT  # noqa: E402
 import jtoken_eval as E  # noqa: E402
 import lane_ptok_data as LP  # noqa: E402
-from test_jtok import must_fail  # noqa: E402
+sys.path.insert(0, os.path.normpath(os.path.join(HERE, "../../net/tests")))
+from merged_source import must_fail  # noqa: E402
 
 torch.set_num_threads(2)
-CACHE_OK = any(os.path.exists(os.path.join(E.ROOT, "runs", "e365_cache", d, "val", "manifest.json")) for d in (os.listdir(os.path.join(E.ROOT, "runs", "e365_cache")) if os.path.isdir(os.path.join(E.ROOT, "runs", "e365_cache")) else []))
-SMOKE = os.path.join(E.ROOT, "runs", "e365_smoke_build", "model.pt")          # a head of the smoke run (random-ish weights): only for plumbing
+CACHE_OK = any(os.path.exists(os.path.join(E.LC.CACHE, d, "val", "manifest.json")) for d in (os.listdir(E.LC.CACHE) if os.path.isdir(E.LC.CACHE) else []))
+SMOKE = os.path.join(E.RUNS, "e373_cb_s0", "model.pt")          # a head checkpoint (the champion's stage-1 head on B' seed 0) only for plumbing: its args, and its state where the weights do not matter
 
 
 @contextlib.contextmanager
@@ -447,7 +450,7 @@ def test_timing():
     if not CACHE_OK or not os.path.exists(SMOKE):
         print("timing: SKIPPED (no cache or no smoke model)")
         return
-    b_run = os.path.join(E.ROOT, "runs", "e292_a_s0")
+    b_run = os.path.join(E.RUNS, "e292_a_s0")
     if not os.path.exists(os.path.join(b_run, "model.pt")):
         print("timing: SKIPPED (no B' run)")
         return
@@ -457,7 +460,7 @@ def test_timing():
         torch.save(torch.load(SMOKE, map_location="cpu", weights_only=False), os.path.join(runs, "h", "model.pt"))
         K = E.open_cache("val", 0).K
         t_args = ["timing", "--run", "h", "--cpu", "--frames", "2", "--repeats", "1"]
-        E.timing(E.parse_args(t_args + ["--b-run", os.path.relpath(b_run, E.ROOT)]), runs)
+        E.timing(E.parse_args(t_args + ["--b-run", "runs/e292_a_s0"]), runs)
         E.timing(E.parse_args(t_args), runs)
         files = sorted(glob.glob(os.path.join(runs, "h", "token_timing_cpu_*.json")))
         assert len(files) == 2, files                                          # a second call never skips because a file exists
@@ -720,6 +723,15 @@ def _floor_run(runs, name="h", seed=0, **args):
     torch.save(ck, os.path.join(runs, name, "model.pt"))
 
 
+def _other_cache_run(runs, tmp, name="p"):
+    """a floor run of seed 0 on another cache of the same frames: its cache root holds B' seed 1's cache under the name of seed 0's (other tokens; plain B's cache, which this
+    part read before v2, did not move)"""
+    root = os.path.join(tmp, "other_cache")
+    os.makedirs(root)
+    os.symlink(os.path.dirname(LP.cache_dir("val", 1, "e292_a")), os.path.join(root, os.path.basename(os.path.dirname(LP.cache_dir("val", 0, "e292_a")))))
+    _floor_run(runs, name, 0, cache=root)
+
+
 def test_ref_run():
     """score --ref-run (E376): `same_tokens` refuses other frames, cells or valid tokens; on 3 cache frames of the untrained head with planted p_none: the run itself as reference at a variant cell (which differs from the record)
     gives its own numbers, diff 0 and the interval [0, 0]; a reference with no node delivers nothing, so the diff is the card's own number (record decode: both cards); the card _vs_<run> sits beside the card without it, neither
@@ -780,7 +792,7 @@ def test_ref_run():
             assert all(c["info"]["ref_run"]["topo_F1"] == 0.0 and abs(c["info"]["paired_vs_ref_run"]["topo_F1"]["diff"] - c["metrics"]["topo_F1"]) < 1e-12 for c in cards.values())
             must_fail(E.score, E.parse_args(base + var + ["--ref-run", "g1"]), runs, out)                       # a run of another cache seed
             must_fail(E.score, E.parse_args(base + var + ["--ref-run-cell", "0.1,0.2,0.5,on"]), runs, out)      # a reference cell without a reference run
-            _floor_run(runs, "p", 0, ident="e273_p")                                                           # p: seed 0 on plain B's cache: the same frames, other tokens (its own dump passes read_dump)
+            _other_cache_run(runs, tmp)                                                                         # p: seed 0 on another cache: the same frames, other tokens (its own dump passes read_dump)
             E.dump(E.parse_args(["dump", "--run", "p", "--seed", "0", "--cpu", "--max", "3"]), runs)
             try:
                 E.score(E.parse_args(base + var + ["--ref-run", "p"]), runs, out)
@@ -898,7 +910,7 @@ def test_ensemble():
         must_fail(E.ensemble, E.parse_args(args[:2] + ["h,g1"] + args[3:]), runs)                                         # another cache seed
         must_fail(E.ensemble, E.parse_args(args[:2] + ["h"] + args[3:]), runs)                                            # one run
         must_fail(E.ensemble, E.parse_args(args + ["--ref-run-cell", "0.3,0.2,0.6,off"]), runs)                          # a reference cell without a reference run
-        _floor_run(runs, "p", 0, ident="e273_p")                                                                         # p: seed 0 on plain B's cache: the same frames, another opened cache
+        _other_cache_run(runs, tmp)                                                                                       # p: seed 0 on another cache: the same frames, another opened cache
         E.dump(E.parse_args(["dump", "--run", "p", "--seed", "0", "--cpu", "--max", "3"]), runs)
         try:
             E.ensemble(E.parse_args(args[:2] + ["h,p"] + args[3:]), runs)
@@ -1203,7 +1215,7 @@ def test_live():
         refused_with(E.score, why, E.parse_args(bad))                                                        # refused before anything is read
     for bad, why in ((["--bs", "4"], "give --live"), (["--live", "--bs", "0"], "a batch of at least 1"), (["--live", "--drop", "0.17"], "no --drop")):
         refused_with(E.dump, why, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu"] + bad))
-    base_pt = os.path.join(E.ROOT, "runs", "e292_a_s0", "model.pt")
+    base_pt = os.path.join(E.RUNS, "e292_a_s0", "model.pt")
     if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(E.planb_path(0)) or not os.path.exists(base_pt):
         print("live: the hand part ok, the cache part SKIPPED (no cache, smoke model, stored plain B or runs/e292_a_s0)")
         return

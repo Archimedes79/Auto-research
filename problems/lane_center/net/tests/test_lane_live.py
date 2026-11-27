@@ -1,10 +1,10 @@
 """Tests of the live token producer of the S4 joint fine-tune (`training/train/lane_live_tok.py`, E372).
 
-    wsl bash tools/env/_py14.sh test_lane_live.py            # the selftest (a toy `QGraph` on the CPU: node targets by hand, the live selection against `select_tokens`, the graph and its gradient at the chosen cells, the labels and the values of tokens_np by hand, the gate,
+    python net/tests/test_lane_live.py            # the selftest (a toy `QGraph` on the CPU: node targets by hand, the live selection against `select_tokens`, the graph and its gradient at the chosen cells, the labels and the values of tokens_np by hand, the gate,
                                                              # the PMAX overflow, the token drop, the loader and its guards, `compare_frame` / `_vs_cache`, the freezing, tokens + labelled = forward, the head reads only its inputs, the gradient check of the card),
                                                              # `check` + `fixture` + `grad` on real frames (the node targets against QData and the cache's checkpoint; the label step on the cached tokens exactly the cache at bs 4 and 8; the gradient check with the real B'
                                                              # and the champion head), then the hand mutants (about 15 minutes)
-    wsl bash tools/env/_py14.sh test_lane_live.py selftests  # the selftest and the real-data commands only
+    python net/tests/test_lane_live.py selftests  # the selftest and the real-data commands only
 
 A mutant = one textual change of the source (the wrong frame or table, a guard removed, the float16 rounding of tok or its gradient, a graph cut in the gather, e and e_raw swapped, a field of tokens_np taken from another, the labels of another K, the node targets
 transposed, the pyramid in train mode, the node head frozen, a label made from tokens that carry the graph, the pair gate ignored or of the wrong direction, the overflow not named, the token drop ignored, a fixture that compares nothing, ...); the mutated copy runs
@@ -39,7 +39,8 @@ ORDER_ASSERT = "assert [int(r) for r in fr[\"rows\"]] == [int(r) for r in rows] 
 MUTANTS = [
     ("the item of frame i is frame i + 1", "o = self.td[i]", "o = self.td[(i + 1) % len(self.rows)]"),
     ("every frame of a batch gets the table of the first", "table=[o[\"table\"] for o in b]", "table=[b[0][\"table\"] for o in b]"),
-    ("the TEST guard is removed", "LPD.check_rows(split, self.rows, expect=None)", "pass"),
+    ("the TEST guard is removed", "check_rows(split, self.rows)  ", "pass  "),
+    ("the TEST guard ignores the order of VAL", "assert [int(r) for r in rows] == sv, \"the rows of the VAL cache", "assert sorted(int(r) for r in rows) == sorted(sv), \"the rows of the VAL cache"),
     ("LiveData skips the order check", CHECK_ORDER, "pass"),
     ("the order check ignores the rows", ORDER_ASSERT, "assert list(fr[\"tokens\"]) == list(tokens)"),
     ("the order check ignores the tokens", ORDER_ASSERT, "assert [int(r) for r in fr[\"rows\"]] == [int(r) for r in rows]"),
@@ -115,8 +116,8 @@ def run_selftest():
 
 def run_real():
     """the real-data commands: the node targets against QData and the cache's checkpoint (VAL and TRAIN, 20 frames each), the fixture on 8 frames of both seeds at bs 4 and of one seed at bs 8 (exit code 0 = the label step on the cached tokens is exactly the cache at any
-    batch size) and the gradient check of the card on 2 real frames with the champion head (the head's loss reaches every node-head parameter of the real B', none of the frozen stages, the pyramid is unchanged by a step)"""
-    for args in (["check", "--split", "val", "--n", "20"], ["check", "--split", "train", "--n", "20"], ["fixture", "--n", "8", "--seeds", "0", "1"], ["fixture", "--n", "8", "--seeds", "1", "--bs", "8"], ["grad", "--n", "2", "--head", "e365_s1_s0"]):
+    batch size) and the gradient check of the card on 2 real frames with the champion's stage-1 head e373_cb_s0 (the head's loss reaches every node-head parameter of the real B', none of the frozen stages, the pyramid is unchanged by a step)"""
+    for args in (["check", "--split", "val", "--n", "20"], ["check", "--split", "train", "--n", "20"], ["fixture", "--n", "8", "--seeds", "0", "1"], ["fixture", "--n", "8", "--seeds", "1", "--bs", "8"], ["grad", "--n", "2", "--head", "e373_cb_s0"]):
         r = subprocess.run([sys.executable, "-c", LAUNCH, os.path.join(DATA, MOD)] + args, capture_output=True, text=True, env=ENV)
         assert r.returncode == 0, f"{MOD} {' '.join(args)} failed:\n{r.stdout[-1500:]}{r.stderr[-1500:]}"
         print(f"{' '.join(args)}: {r.stdout.strip().splitlines()[-1]}", flush=True)

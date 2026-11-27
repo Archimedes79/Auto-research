@@ -1,8 +1,8 @@
 """Tests of the S4 joint trainer (`train/jlive_train.py`, E372) on the CPU: a toy `QGraph` as B' (a run folder with its model.pt, as `lane_live_tok`'s selftest builds it), a small `JTokenHead` past the key-weight switch as the champion, frames whose GT tables are
 made of the toy's own tokens, K 64; no cache, no GPU.
 
-    wsl bash tools/env/_py14.sh test_jlive_train.py            # the selftest, the real-data check (the E365 cache; skipped with the reason when it is missing), then the hand mutants of jlive_train.py ONE AT A TIME (a shared box): each must make the selftest fail
-    wsl bash tools/env/_py14.sh test_jlive_train.py selftests  # the selftest and the real-data check only
+    python net/tests/test_jlive_train.py            # the selftest, the real-data check (the E365 cache; skipped with the reason when it is missing), then the hand mutants of jlive_train.py ONE AT A TIME (a shared box): each must make the selftest fail
+    python net/tests/test_jlive_train.py selftests  # the selftest and the real-data check only
 
 The rules by hand (the kill rules on records, AdamW's step against torch's, the shares on a known case); one step by hand in each arm (the loss as defined); 2-step runs through `train` in each arm (what moves and what does not, the per-group clip between two spy hooks,
 the logged numbers, the frames, model.pt read back, the export check); every kill; a step skipped by LabelOverflow = the run without it; the resume bit for bit and flagged, the roll-back flagged, every recipe key refused at a resume.
@@ -22,6 +22,9 @@ from torch.optim.optimizer import register_optimizer_step_pre_hook  # noqa: E402
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import bflc_paths as BP  # noqa: E402
+
+os.makedirs(BP.SCRATCH, exist_ok=True)                                                       # the temporary folders of the test live below the problem's scratch
 TRAIN = os.path.join(ROOT, "training", "train", "jlive_train.py")
 ENV = dict(os.environ, BFLC_ROOT=ROOT, OMP_NUM_THREADS="2", MKL_NUM_THREADS="2", CUDA_VISIBLE_DEVICES="")      # a shared box: 2 threads, one child at a time, no GPU
 SOFT = ["mnms", 1.75, 0.1]
@@ -833,7 +836,7 @@ def selftest(train_path=TRAIN):
     T = load(train_path, "jlive_train_under_test")
     rules(T)
     T.K = KT                                                                                # the toy's tokens per frame (the real K is checked in `rules`)
-    with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, "temp")) as tmp:
+    with tempfile.TemporaryDirectory(dir=BP.SCRATCH) as tmp:
         w = world(tmp)
         steps_by_hand(T, w, tmp)
         rounds_head(T, w, tmp)
@@ -860,7 +863,7 @@ def real_check(train_path=TRAIN):
 def run_mutants():
     import test_lane_live as TLL                                                            # its launcher: numpy / torch imported with the project paths behind site-packages (the 319 paths cost 50 s)
     left = []
-    with tempfile.TemporaryDirectory(dir=os.path.join(ROOT, "temp")) as tmp:
+    with tempfile.TemporaryDirectory(dir=BP.SCRATCH) as tmp:
         src = open(TRAIN, encoding="utf-8").read()
         for k, (name, a, b) in enumerate(MUTANTS):
             if src.count(a) != 1:

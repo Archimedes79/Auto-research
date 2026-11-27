@@ -1,10 +1,10 @@
-"""Pictures and videos of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels on the
+"""Pictures of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels on the
 same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of `net/model/qformat.py` (the contract) and the
 lane GT of the frame (`GtGenerator.lane_gt`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
 dict through `pred_fn(token)`.
 
     python qgraph_view.py frame <token | scene-0221:12> --out DIR [--pred oracle|degraded] [--no-cams]
-    python qgraph_view.py scene <VAL scene id | scene name> --out DIR [--video] [--pred ...] [--frames N] [--every K]
+    python qgraph_view.py scene <VAL scene id | scene name> --out DIR [--pred ...] [--frames N] [--every K]     (the mp4 of a scene left with tools/video, tag v1)
     python qgraph_view.py list                    the VAL scenes (id as in `grid_view.py --scene`, name, location, frames, description)
     python qgraph_view.py --selftest              a synthetic frame (needs no stored GT; imports the scorer)
 
@@ -25,7 +25,7 @@ Minimal example (python):
     import qgraph_view as QV
     g = QV.load_gt(token); pred = QV.make_pred(g, "degraded", token)              # or the network's dict
     QV.render_frame(token, pred, "frame.png", cams=True)                          # returns the RGB array too
-    QV.render_scene("scene-0221", "out_dir", pred_fn=lambda t: QV.make_pred(QV.load_gt(t), "oracle", t), video=True)
+    QV.render_scene("scene-0221", "out_dir", pred_fn=lambda t: QV.make_pred(QV.load_gt(t), "oracle", t))
 Cameras come from the CRN infos of the VAL frames (calibration, ego pose per camera); other tokens get grey tiles. CPU only, about 3 s per frame.
 """
 import os
@@ -51,14 +51,13 @@ from scipy.ndimage import maximum_filter  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for _sub in ("../..", "net/prep", "net/model", "net/loss", "tools/video", "evaluation"):
+for _sub in ("../..", "net/prep", "net/model", "net/loss", "evaluation"):
     sys.path.insert(0, os.path.join(ROOT, _sub))
 import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import qformat as QF  # noqa: E402
 import qraster as QR  # noqa: E402
 import qtargets as QT  # noqa: E402
 
-HOME = os.path.expanduser("~")
 NUSC = BP.NUSC
 EXP = BP.B123
 CAMS = ("CAM_FRONT_LEFT", "CAM_FRONT", "CAM_FRONT_RIGHT", "CAM_BACK_LEFT", "CAM_BACK", "CAM_BACK_RIGHT")
@@ -627,8 +626,8 @@ def render_frame(token, pred, out_png, cams=True, g=None, note="", log=print):
     return arr
 
 
-def render_scene(scene, out_dir, pred_fn=None, kind="oracle", video=False, frames=None, every=1, cams=True, fps=2, log=print):
-    """the keyframes of a VAL scene in time order -> PNGs in out_dir (and an mp4); `pred_fn(token)` gives the prediction (default: `make_pred(load_gt(token), kind, token)`); `kind` also labels the files"""
+def render_scene(scene, out_dir, pred_fn=None, kind="oracle", frames=None, every=1, cams=True, log=print):
+    """the keyframes of a VAL scene in time order -> PNGs in out_dir; `pred_fn(token)` gives the prediction (default: `make_pred(load_gt(token), kind, token)`); `kind` also labels the files"""
     _, name, toks = resolve_scene(scene)
     toks = toks[::every][:frames]
     pred_fn = pred_fn or (lambda t: make_pred(load_gt(t), kind, t))
@@ -638,10 +637,6 @@ def render_scene(scene, out_dir, pred_fn=None, kind="oracle", video=False, frame
         p = os.path.join(out_dir, f"{name}_{kind}_f{i:02d}_{t[:8]}.png")
         arrs.append(render_frame(t, pred_fn(t), p, cams=cams, g=g, log=log))
         log(f"{p}")
-    if video and arrs:
-        import make_video as MV
-        mp4 = MV.frames_to_video(arrs, os.path.join(out_dir, f"{name}_{kind}.mp4"), fps=fps)
-        log(f"video {mp4}")
     return arrs
 
 
@@ -756,10 +751,8 @@ def main():
         p.add_argument("--pred", default="oracle", choices=("oracle", "degraded"))
         p.add_argument("--no-cams", action="store_true")
         if name == "scene":
-            p.add_argument("--video", action="store_true")
             p.add_argument("--frames", type=int, default=None)
             p.add_argument("--every", type=int, default=1)
-            p.add_argument("--fps", type=int, default=2)
     sub.add_parser("list")
     a = ap.parse_args()
     if a.selftest:
@@ -769,7 +762,7 @@ def main():
         render_frame(tok, make_pred(load_gt(tok), a.pred, tok), os.path.join(a.out, f"{tok[:8]}_{a.pred}.png"), cams=not a.no_cams)
         print("written", os.path.join(a.out, f"{tok[:8]}_{a.pred}.png"))
     elif a.cmd == "scene":
-        render_scene(a.what, a.out, kind=a.pred, video=a.video, frames=a.frames, every=a.every, cams=not a.no_cams, fps=a.fps)
+        render_scene(a.what, a.out, kind=a.pred, frames=a.frames, every=a.every, cams=not a.no_cams)
     elif a.cmd == "list":
         with open(os.path.join(NUSC, "v1.0-trainval", "scene.json")) as f:
             desc = {s["name"]: s for s in json.load(f)}

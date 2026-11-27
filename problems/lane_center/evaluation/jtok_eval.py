@@ -1,9 +1,8 @@
-"""Controls, read-out and scoring of E357 (the GT nodes as tokens, one pair head for every edge; `net/model/jtok.py`). The delivered graph of every arm = the GT nodes of the lattice + the arm's links.
+"""Controls, read-out and scoring of E357 (the GT nodes as tokens, one pair head for every edge; the pair geometry of `net/model/jtok.py`). The delivered graph of every arm = the GT nodes of the lattice + the arm's links.
+The writer, the link tables and the cards are what `jtoken_eval.py` reads of it (`make_card`, `write_json`, `suffix`, `keep_nodes`, RUNS, CARDS); E357's own head and its `dump` / `score` are in the tag v1.
 
-    wsl bash tools/env/_py14.sh jtok_eval.py ctl --lattice 2.5 [--max N] [--drop 0.17 --drop-seed 0]      # CPU: the arms lo, lo_near, lo_all, hi -> runs/eval/e357_<arm>_<readout>/val.json (never overwritten)
-    wsl bash tools/env/_py14.sh jtok_eval.py ctl --lattice 2.0 --check [--max N --ref CARD]              # the kill check: arm hi (GT-section read-out) against runs/eval/e346_l2/val.json to 1e-6 -> PASS / FAIL, writes nothing
-    wsl bash tools/env/_py14.sh jtok_eval.py dump --run R --seed S [--drop 0.17 --drop-seed 0] [--cpu]  # the head on the 873 VAL frames -> runs/R/tok_val[_drop..].pkl (qformat dicts; links = allowed pairs with p >= 0.05)
-    wsl bash tools/env/_py14.sh jtok_eval.py score --run R --seed S --thr 0.5 [--drop 0.17 --drop-seed 0] # CPU -> runs/R/tok_card_thr0.5[_drop..]_<readout>.json
+    python jtok_eval.py ctl --lattice 2.5 [--max N] [--drop 0.17 --drop-seed 0]      # CPU: the arms lo, lo_near, lo_all, hi -> runs/eval/e357_<arm>_<readout>/val.json (never overwritten)
+    python jtok_eval.py ctl --lattice 2.0 --check [--max N --ref CARD]              # the kill check: arm hi (GT-section read-out) against runs/eval/e346_l2/val.json to 1e-6 -> PASS / FAIL, writes nothing
 
 Arms (controls on the same nodes, no learning; handle scales 1/3):
   lo        every node ONE link to the nearest node ahead: within 45 degrees of its heading, at most 8 m away, heading difference at most 60 degrees
@@ -21,13 +20,12 @@ table; the scorer's 'nodes' block is not reported) and the LINK TABLES (the same
   false positive of short = a predicted link with chord <= 8 m that is no GT link; by chord (below 8, 8 - 20, above 20 m) the same with the chord of the pair. `link_junction_P / _R / _F1` is the second gate metric of the card.
   `_gate_out` = share of the GT links of the group outside the allowed gate (the head cannot deliver them); `scale_err_a / _b` = mean |predicted - fitted handle scale| over the true-positive long links with a fit.
 Degraded nodes (`--drop`): a share of the nodes of every VAL frame is removed at random (`keep_nodes`: seeded by the frame's token, the same removal for the head and the rules) before anything reads them; the GT links of such
-a frame are the GT links contracted over the removed nodes (`sub_table`). Tests: net/tests/test_jtok.py
+a frame are the GT links contracted over the removed nodes (`sub_table`). Tests: the parts `jtoken_eval.py` reads, through evaluation/tests/test_jtoken_eval.py (net/tests/test_jtok.py is in the tag v1)
 """
 import argparse
 import json
 import math
 import os
-import pickle
 import subprocess
 import sys
 import time
@@ -55,7 +53,6 @@ CHECK = ("topo_F1", "lanes_found", "F1@1.0", "junction_F1")
 CLASSES = ("short", "lane_long", "junction")
 CHORDS = (("c0_8", -1.0, JT.SHORT), ("c8_20", JT.SHORT, 20.0), ("c20", 20.0, float("inf")))      # lo < chord <= hi (m)
 SEC_VOID = ("pieces_per_gt_piece", "id_switches_per_100m")                  # the scorer's section numbers: meaningless when every node carries section 0
-KEEP_P = 0.05                                                               # links below this probability are not written into a dump
 HEAD = ("topo_F1", "junction_F1", "lanes_found", "F1@1.0", "dup_frac", "vert100", "link_junction_P", "link_junction_R", "link_junction_F1", "link_lane_long_F1", "link_short_F1")
 
 
@@ -120,32 +117,10 @@ def gt_prediction(t):
     return edge_prediction(t, t["src"], t["dst"], a=s[:, 0], b=s[:, 1])
 
 
-def pair_prediction(t, p, scale, keep=KEEP_P):
-    """the head's output of one frame -> prediction: p (N, N) = sigmoid(logit) x allowed, scale (N, N, 2); links = the pairs with p >= keep, the predicted handle scales for chords above 8 m and 1/3 below"""
-    M = len(t["pos"])
-    src, dst = np.nonzero(p[:M, :M] >= keep)
-    lg = np.linalg.norm(t["pos"][src] - t["pos"][dst], axis=1) > JT.SHORT
-    return edge_prediction(t, src, dst, p[src, dst], np.where(lg, scale[src, dst, 0], 1 / 3), np.where(lg, scale[src, dst, 1], 1 / 3))
-
-
 def with_readout(pred, readout):
     """sec0: every node in section 0 (no GT piece id reaches the read-out); gtsec: the prediction as written"""
     assert readout in READOUTS, readout
     return pred if readout == "gtsec" else dict(pred, nodes=dict(pred["nodes"], section=np.zeros(len(pred["nodes"]["pos"]), int)))
-
-
-class Degraded(torch.utils.data.Dataset):
-    """the frames of a `TokData` with a share of the nodes removed before anything reads them"""
-
-    def __init__(self, ds, drop, seed):
-        self.ds, self.drop, self.seed = ds, drop, seed
-
-    def __len__(self):
-        return len(self.ds)
-
-    def __getitem__(self, i):
-        o = self.ds[i]
-        return dict(o, **sub_table(o, keep_nodes(o["token"], len(o["pos"]), self.drop, self.seed)))
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ link tables
@@ -334,74 +309,16 @@ def ctl(a):
     return int(bool(kill))
 
 
-def dump(a, runs=RUNS):
-    assert a.cpu or torch.cuda.is_available(), "no GPU: the read-outs of a card are dumped on the GPU; --cpu only for tests"
-    dev = "cpu" if a.cpu else "cuda"
-    if dev == "cuda":                                                         # D100: a dump next to two trainings crashed one of them
-        import gpu_gate
-        gpu_gate.wait_for_room(who=f"jtok_eval dump {a.run}")
-    m, args = JT.load_model(a.run, dev, runs)
-    assert args["seed"] == a.seed, f"--seed {a.seed} does not match the run (seed {args['seed']})"
-    ds = TD.TokData("val", args["lattice"])
-    data = Degraded(ds, a.drop, a.drop_seed) if a.drop > 0 else ds
-    n = min(a.max or len(ds), len(ds))
-    dl = torch.utils.data.DataLoader(torch.utils.data.Subset(data, range(n)), batch_size=8, shuffle=False, num_workers=0 if a.cpu else 2, collate_fn=TD.collate)
-    preds = []
-    with torch.no_grad():
-        for b in dl:
-            out = JT.forward_batch(m, b)
-            p = (out["logit"].float().sigmoid() * out["allowed"]).cpu().numpy()
-            sc = out["scale"].float().cpu().numpy()
-            preds += [dict(pair_prediction(t, p[i], sc[i]), token=b["token"][i], row=int(b["row"][i])) for i, t in enumerate(b["table"])]
-    path = os.path.join(runs, a.run, f"tok_val{suffix(args['lattice'], a.drop, a.drop_seed)}{f'_n{n}' if n < len(ds) else ''}.pkl")      # a partial dump never takes the name the score reads
-    with open(path, "wb") as fh:
-        pickle.dump(preds, fh)
-    print(f"written {os.path.relpath(path, ROOT)}: {len(preds)} frames, {sum(len(p['links']['src']) for p in preds) / max(len(preds), 1):.0f} links with p >= {KEEP_P} per frame, device {dev}")
-    return path
-
-
-def score(a, runs=RUNS):
-    ck = torch.load(os.path.join(runs, a.run, "model.pt"), map_location="cpu")
-    args = ck["args"]
-    assert args["seed"] == a.seed, f"--seed {a.seed} does not match the run (seed {args['seed']})"
-    sfx = suffix(args["lattice"], a.drop, a.drop_seed)
-    with open(os.path.join(runs, a.run, f"tok_val{sfx}.pkl"), "rb") as fh:
-        preds = pickle.load(fh)
-    frames, table = val_tables(args["lattice"], a.drop, a.drop_seed)
-    assert len(preds) == len(frames) == 873 and [p["token"] for p in preds] == [f.token for f in frames], f"the dump holds {len(preds)} frames: the score needs the 873 VAL frames in order"
-    res = score_arms(frames, lambda f: (table(f.k), {"p": preds[f.k]}), args["lattice"], a.thr)["p"]
-    lane_long = int(res["sec0"]["link_lane_long_n_gt"])                       # the junction table's false positives are ALL false long links: 'false long links against junction links' only when no GT long lane link exists
-    for r in READOUTS:
-        name = f"tok_card_thr{a.thr:g}{sfx}_{r}"
-        write_json(os.path.join(runs, a.run, name + ".json"), make_card(f"{a.run}_{name}", len(frames), res[r], r, run=a.run, seed=a.seed, lattice=args["lattice"], thr=a.thr, drop=a.drop, drop_seed=a.drop_seed,
-                                                                         steps=ck.get("steps"), head_params_m=sum(v.numel() for k, v in ck["state"].items() if k.startswith("tok.")) / 1e6, lane_long_gt=lane_long))
-        show(f"{a.run} thr {a.thr:g} {r}", res[r])
-    if lane_long:
-        print(f"WARNING: {lane_long} GT long LANE links (lane_long_gt in the cards): the junction-link precision also counts false long links that belong to them")
-    return res
-
-
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name_ in ("ctl", "dump", "score"):
-        s = sub.add_parser(name_)
-        s.add_argument("--drop", type=float, default=0.0, help="share of the nodes of every frame removed at random before anything reads them (the degraded-node read-out: 0.17)")
-        s.add_argument("--drop-seed", type=int, default=0)
-        if name_ == "ctl":
-            s.add_argument("--lattice", type=float, default=2.5)
-            s.add_argument("--max", type=int, default=0, help="every ceil(873 / N)-th frame; such cards go to temp/e357/out/, never to runs/eval/")
-            s.add_argument("--check", action="store_true", help="only the kill check of arm hi against the stored card of the lattice (PASS / FAIL, exit 0 / 1)")
-            s.add_argument("--ref", default=None, help="--check: another reference card (with --max: the card of the same frame stride)")
-        else:
-            s.add_argument("--run", required=True)
-            s.add_argument("--seed", type=int, required=True)
-        if name_ == "dump":
-            s.add_argument("--cpu", action="store_true", help="tests only: dump on the CPU")
-            s.add_argument("--max", type=int, default=0, help="only the first N frames (a test of the pipeline; the score needs all 873)")
-        if name_ == "score":
-            s.add_argument("--thr", type=float, default=0.5)
+    s = sub.add_parser("ctl")
+    s.add_argument("--drop", type=float, default=0.0, help="share of the nodes of every frame removed at random before anything reads them (the degraded-node read-out: 0.17)")
+    s.add_argument("--drop-seed", type=int, default=0)
+    s.add_argument("--lattice", type=float, default=2.5)
+    s.add_argument("--max", type=int, default=0, help="every ceil(873 / N)-th frame; such cards go to the problem's scratch, never to runs/eval/")
+    s.add_argument("--check", action="store_true", help="only the kill check of arm hi against the stored card of the lattice (PASS / FAIL, exit 0 / 1)")
+    s.add_argument("--ref", default=None, help="--check: another reference card (with --max: the card of the same frame stride)")
     a_ = ap.parse_args()
     torch.set_num_threads(2)
-    r_ = {"ctl": ctl, "dump": dump, "score": score}[a_.cmd](a_)
-    sys.exit(r_ if isinstance(r_, int) else 0)
+    sys.exit(ctl(a_))

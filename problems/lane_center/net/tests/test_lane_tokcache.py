@@ -1,7 +1,7 @@
 """Tests of the predicted-node cache (`net/prep/lane_tokcache.py`), its loader (`net/prep/lane_ptok_data.py`, E395: also its geom option) and the GT geometry file of E395 (`net/prep/lane_gtgeom_data.py`).
 
-    wsl bash tools/env/_py14.sh test_lane_tokcache.py            # the selftests of the three modules, then the hand mutants of the label, selection, comparison, loader and GT geometry code: every mutant must make the selftest of its module FAIL
-    wsl bash tools/env/_py14.sh test_lane_tokcache.py selftests  # the selftests only (about 1 minute)
+    python net/tests/test_lane_tokcache.py            # the selftests of the three modules, then the hand mutants of the label, selection, comparison, loader and GT geometry code: every mutant must make the selftest of its module FAIL
+    python net/tests/test_lane_tokcache.py selftests  # the selftests only (about 1 minute)
 
 A mutant = one textual change of the source (a wrong assignment, a swapped link direction, the contraction removed, a padding token that becomes a node, ...); the mutated copy runs in a temporary folder with BFLC_ROOT
 pointing at this project, four at a time.

@@ -3,8 +3,8 @@ One picture per frame: the front camera with the GT lane graph projected (GtGene
 panel per system: its delivered graph against the lane GT (GT grey with travel arrows, own lane = a pale band, delivered points green <= 1 m / orange <= 2 m / red
 beyond, GT not covered within 2 m blue). CPU only. The frames are chosen OUTSIDE this tool by a written rule (`--spec`), never by eye.
 
-    wsl bash tools/env/_py14.sh tools/viz/qual_frames.py --frames F.pkl --spec S.json --systems "B=plain lane head B,champ=token champion" --out DIR [--table T.json]
-    wsl bash tools/env/_py14.sh tools/viz/qual_frames.py --selftest
+    python tools/viz/qual_frames.py --frames F.pkl --spec S.json --systems "B=plain lane head B,champ=token champion" --out DIR [--table T.json]
+    python tools/viz/qual_frames.py --selftest
 
 --frames: a pickle {"frames": [rec, ...], "scenes": {scene: {"name", "description"}}} with, per VAL frame k, rec = {"scene", "token", "row",
           "gt": [{"pts": (n, 2) metres, "tier": (n,) int (1 = own lane)}], "sys": {key: {"lines": [(m, 2) ...], "man_ok": int, "man_n": int}}}

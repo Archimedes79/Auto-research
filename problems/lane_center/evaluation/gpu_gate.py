@@ -1,18 +1,18 @@
 """A wait before a GPU evaluation step: do not start a dump / score next to two trainings (D100). Best effort, no numeric effect.
 
 On 2026-11-14 the pair-head dump of E341.p_s1 ran next to two trainings (GPU 11.6 of 12.3 GB, host load 12) and `E317.g_s0` failed at step 2929 with `CUDA error: unknown error`
-(resumed from its checkpoint by `tools/env/_pyr.sh`). The launcher's memory limit (< 11 GB) gates the start of a TRAINING only; the evaluation steps of the chains (`jends_eval.py dump`; the maps scoring step `jmaps_eval.py score` was removed on 2026-11-21) start whenever their chain gets there. `wait_for_room()` is called at the start of that command when the process would use the GPU: it waits while the
+(resumed from its checkpoint by the old retry wrapper). The launcher's memory limit (< 11 GB) gates the start of a TRAINING only; the evaluation steps of the chains (dumps) start whenever their chain gets there. `wait_for_room()` is called at the start of that command when the process would use the GPU: it waits while the
 GPU memory in use (device wide, every process, read by `nvidia-smi` as the launcher's own gate does: no CUDA context is created by the waiting process) is NOT below `max_used_mb`, polls
 every `poll_s` seconds and goes on after `timeout_s` (a chain never dead-locks; the line it prints says so). An unreadable `nvidia-smi` is "go on, loudly" (an evaluation step is not
 held up by a broken tool). nvidia-smi reads the physical GPU 0 whatever CUDA_VISIBLE_DEVICES says (one GPU on this box; with an empty mask the call sites are never reached).
 Limits, stated: a dump started at 8.9 GB can still reach 12 GB (the footprint of a dump or a score is not measured), so the gate protects only when a gap of about one training exists;
-several waiters that see the same drop start together (the dumps are serialised by the chains' flock, the maps scores are not). Waiting lines go to stdout AND to `temp/gpu_gate.status`
-(`_pyr.sh` shows the output of a step only at its end, so a waiting chain would look hung).
+several waiters that see the same drop start together (the dumps are serialised by the chains' flock, the maps scores are not). Waiting lines go to stdout AND to `<runs>/lane_center/_scratch/gpu_gate.status`
+(a launcher that shows the output of a step only at its end would make a waiting chain look hung).
 
     wait_for_room(max_used_mb=9000, poll_s=60, timeout_s=4 * 3600, who="")  -> seconds waited (about 0 when there is room, no GPU reading, or the gate is off)
 
 Environment: `GPU_GATE_MB` overrides `max_used_mb` (0 = off; a value that is not a number is ignored), `GPU_GATE_TIMEOUT_S` the timeout.
-Self-test (CPU only, no GPU is touched): wsl bash tools/env/_py14.sh gpu_gate.py selftest; tests: evaluation/tests/test_gpu_gate.py
+Self-test (CPU only, no GPU is touched): python evaluation/gpu_gate.py selftest (its hand mutants, evaluation/tests/test_gpu_gate.py, are in the tag v1)
 """
 import os
 import subprocess

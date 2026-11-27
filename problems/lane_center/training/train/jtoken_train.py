@@ -1,6 +1,6 @@
-"""Trainer of the E365 token head on the predicted-node cache of the frozen lane head B' (stage S1 of the token champion); start it through `autoresearch/tools/run.py`.
+"""Trainer of the E365 token head on the predicted-node cache of the frozen lane head B' (stage S1 of the token champion); a run starts it through the research worker (`training/train/lane_train.py stage1`).
 
-    wsl bash tools/env/_pyr.sh jtoken_train.py --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--cache <cache root>] [--K 384] [--distill-from runs/A,runs/B [--distill-weight 1.0]] [--smoke]
+    python training/train/jtoken_train.py --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--cache <cache root>] [--K 384] [--distill-from runs/A,runs/B [--distill-weight 1.0]] [--smoke]
 
 The model is `net/model/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `jtoken.jtoken_loss`. Batches come from `net/prep/lane_ptok_data.loader("train", seed, bs, workers, ident=, K=,
 cache=)` (imported only when the loop starts): `--cache` = the cache ROOT (default `runs/e365_cache`), `--ident` = the frozen head whose tokens are cached (`e292_a` = B', `e273_p` = plain B), `--K` only when the root

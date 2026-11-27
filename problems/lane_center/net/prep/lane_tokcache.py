@@ -1,12 +1,12 @@
 """D113 / E365 predicted-node cache: the tokens of a FROZEN lane head B (a `QGraph` run: B' = `runs/e292_a_s<S>` with the Matrix-NMS layer, plain B = `runs/e273_p_s<S>`) on every frame of TRAIN and VAL, with the GT labels
 of every token (spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`). Derived data, not in git; this tool, its selftest and the manifests are.
 
-    wsl bash tools/env/_pyr.sh lane_tokcache.py build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
-    wsl bash tools/env/_py14.sh lane_tokcache.py fixture --cache <dir> --dump runs/kept/e292/predfull_e292_a_s0.pkl [--prefix]         # the cache against B's stored dump, bit for bit (VAL)
-    wsl bash tools/env/_py14.sh lane_tokcache.py report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
-    wsl bash tools/env/_py14.sh lane_tokcache.py summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
-    wsl bash tools/env/_py14.sh lane_tokcache.py same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field
-    wsl bash tools/env/_py14.sh lane_tokcache.py selftest
+    python net/prep/lane_tokcache.py build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
+    python net/prep/lane_tokcache.py fixture --cache <dir> --dump runs/kept/e292/predfull_e292_a_s0.pkl [--prefix]         # the cache against B's stored dump, bit for bit (VAL)
+    python net/prep/lane_tokcache.py report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
+    python net/prep/lane_tokcache.py summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
+    python net/prep/lane_tokcache.py same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field
+    python net/prep/lane_tokcache.py selftest
     c = TokCache(dir); f = c[i]                                                                                                   # one frame as numpy arrays; `lane_ptok_data.py` is the loader
 
 Frames: the order of `lane_tok_data.TokData(split, res=2.0)` (TRAIN = the rows of `QData('train')` with a stored lane GT, VAL = exactly the 873 rows of data/splits.json['val'], asserted there); the GT table of a frame is the E357 table

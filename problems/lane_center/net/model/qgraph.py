@@ -8,7 +8,7 @@ Stages: pyr (`pyramid.PyramidHead`), nodes (`qnodes.NodeHead`), links (`qlinks.L
 assign (`qassign.MapEncoder` + `qassign.Assigner`). The forward path is made of soft steps; the index choices (active nodes, long-link endpoints) are named in `qlinks`; the thresholds of the
 output step (e > 0.5, link > 0.5, argmax of the section membership) are in `evaluation/qgraph_eval.py`.
 The losses of every stage are in net/loss/loss_qgraph.py; terms are logged separately (`info`).
-Run the self-test (from the problem folder): wsl bash tools/env/_py14.sh net/model/qgraph.py
+Run the self-test (from the problem folder): python net/model/qgraph.py
 """
 
 import torch

@@ -6,11 +6,11 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
 
 | folder | what |
 |---|---|
-| `net/prep/` | data: the token cache (`lane_tokcache.py`), the token loaders (`lane_ptok_data.py`, `lane_tok_data.py`), features and graph ground truth (`frames.py`, `lane_gt_data.py`), targets |
-| `net/model/` | the network: the token head (`jtoken.py`, `jtok.py`), B' (`qgraph.py` and its parts), the soft read-out pieces |
+| `net/prep/` | data: the token cache (`lane_tokcache.py`), the token loaders (`lane_ptok_data.py`, `lane_tok_data.py`), the GT geometry of the E395 position head (`lane_gtgeom_data.py`, default off), features and graph ground truth (`frames.py`, `lane_gt_data.py`), targets |
+| `net/model/` | the network: the token head (`jtoken.py`; the pair geometry `jtok.py`), B' (`qgraph.py` and its parts), the soft read-out pieces |
 | `net/loss/` | the token loss (`loss_jtoken.py`) and the losses of B' |
 | `training/` | `train/jtoken_train.py` (stage 1), `train/jlive_train.py` (stage 2), `train/lane_live_tok.py` (B' live in the loop), `train/lane_train.py` (the two stages from a run's config), `trainer.py`, `bflc_paths.py` (where code, data and runs are), `configs/base.json`, the drawing `architecture.*` |
-| `evaluation/` | `lane_predict.py` (the step `predict`: the live dump), `adapter.py` (the evaluation step: decode and score through `autoresearch/Evaluation`), `jtoken_eval.py` (dumps, decodes, diagnostics), `qgraph_eval.py` + `sparse_lanes/` + `lane_task/` (the scorer and its metrics) |
+| `evaluation/` | `lane_predict.py` (the step `predict`: the live dump), `adapter.py` (the evaluation step: decode and score through `autoresearch/Evaluation`), `jtoken_eval.py` (dumps, decodes, diagnostics), `jtiming.py` (the timing protocol of its `timing`), `qgraph_eval.py` + `sparse_lanes/` + `lane_task/` (the scorer and its metrics) |
 | `tools/viz/` | pictures of graphs over BEV and camera (`qual_frames.py`, `qgraph_view.py`) |
 | `experiments/` | from E396 on, one folder per experiment (`research new lane_center <slug> "<title>"`) |
 | `literature/` | the research notes of the problem |
@@ -31,8 +31,9 @@ python -m research new lane_center <slug> "<title>"   # a card: arms are setting
 python -m research start lane_center E<n>             # steps predict + evaluate by default; a training card names "steps": ["stage1", "stage2", "predict", "evaluate"]
 python -m research judge lane_center E<n> --write
 ```
-Tests: `python net/tests/test_jtoken.py`, `test_lane_tokcache.py`, `test_lane_live.py`, `test_jlive_train.py`, `python evaluation/tests/test_jtoken_eval.py`
+Tests: `python evaluation/sparse_lanes/selftest.py`, `python net/tests/test_jtoken.py`, `test_lane_tokcache.py`, `test_lane_live.py`, `test_jlive_train.py`, `python evaluation/tests/test_jtoken_eval.py`, `python evaluation/jtiming.py`
 (from this folder, the module path of `problem.json` "pythonpath" on `PYTHONPATH`).
 
-What is not here: the code of the earlier chain (loops 8 - 18, E324 s, the junction and route heads, the old reports and their builders) and
+What is not here: the code of the earlier chain (loops 8 - 18, E324 s, the junction and route heads, E357's pair head, E368's past-frame data,
+the old lane suite, the old reports and their builders) and
 of the stages before B' (its weights are kept, its training code of E271 / E273 is lost since 2026-11-10): all of it is in the tag `v1`.

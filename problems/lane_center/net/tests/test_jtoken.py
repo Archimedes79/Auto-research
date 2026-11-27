@@ -1,6 +1,6 @@
 """E365 tests of the token head on predicted nodes (`jtoken.py`, `train/jtoken_train.py`); CPU only (the GPU is hidden), 2 threads, SYNTHETIC batches that follow the batch dict of the card (2a): no cache needed.
 
-    wsl bash tools/env/_py14.sh net/tests/test_jtoken.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
+    python net/tests/test_jtoken.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
 
 likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT successors (one of them with `ylong` against the token
 chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over
@@ -23,6 +23,7 @@ noise (E381 card v2 `--noise-pos` / `--noise-e`: `add_noise` on valid tokens onl
 E395 (the position head and its curve loss): pos_head (off = the champion's recorded numbers, no posh / dpos; on: zero start, the other parameters as without it, no GT key in the forward, gradients reach posh and the trunk and never pos / dirv; mutants),
 curve_loss (Catmull-Rom by hand and against a basis-matrix numpy form; the node loss and the curve loss by hand, the chord rule, a frame of left-out links adds nothing; numpy reference on random batches + gradcheck; mutants), pos_loss_weights (curve_w =
 node_w = 0 is the call without them; known counts on the geometry toy; info keys; refusals), dump_dpos (`jtoken_eval.batch_dump`), pos_head_trainer (--pos-head / --curve-w / --node-w: refusals, smoke runs, recipe, loader geom, stage 2 refuses).
+Since the v2 restructure (the rest is in the tag v1): the real teachers are E373 alone (the run e367_b25_s0 is gone); the read-outs without noise are jtoken_eval.py and lane_predict.py (jthresh.py, E388, did not move).
 """
 import copy
 import json
@@ -39,6 +40,7 @@ import torch  # noqa: E402
 HERE = os.path.dirname(os.path.abspath(__file__))
 for sub_ in ("../model", "../prep", "../loss", "../../training", "../../training/data", "../../training/data/prep", "../../training/train", "../../evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(HERE, sub_)))
+import bflc_paths as BP  # noqa: E402
 import jtok as JT  # noqa: E402
 import jtoken as JK  # noqa: E402
 import loss_jtoken as LJK  # noqa: E402
@@ -49,10 +51,10 @@ for _n, _v in vars(LJK).items():
     if _n not in vars(JK):
         setattr(JK, _n, _v)
 import jtoken_train as JKT  # noqa: E402
-from test_jtok import must_fail  # noqa: E402
+from merged_source import must_fail  # noqa: E402
 
 torch.set_num_threads(2)
-SCRATCH = os.path.join(JT.ROOT, "temp", "e365")
+SCRATCH = os.path.join(BP.SCRATCH, "e365")
 os.makedirs(SCRATCH, exist_ok=True)
 lse = lambda *v: math.log(sum(math.exp(x) for x in v))  # noqa: E731
 
@@ -990,16 +992,16 @@ def _check_first_batch(mod, runs, td):
     return fb
 
 
-REAL_TEACHERS = ("runs/e373_cb_s0", "runs/e367_b25_s0")                                                             # the teachers of E379 arm d, cache seed 0
+REAL_TEACHERS = ("runs/e373_cb_s0",)                                                                                # the kept teacher of E379 arm d, cache seed 0 (module docstring)
 
 
 def _real_teachers():
     """the card's teachers through `load_teachers` on the first 3 frames of their VAL dumps (the cache of B' seed 0): the step counter is the checkpoint's (> SWITCH) and does not move in a forward, the p_none of the valid
     tokens = the dump's to 1e-3 (as `jtoken_eval.concentration`) -> a note"""
     import pickle
-    paths = [os.path.join(JKT.ROOT, p) for p in REAL_TEACHERS]
+    paths = [BP.resolve(p) for p in REAL_TEACHERS]
     if not all(os.path.exists(os.path.join(p, f)) for p in paths for f in ("model.pt", "token_val.pkl")) or _cache_batch(1) is None:
-        return "real teachers SKIPPED (the E373 / E367 runs or the VAL cache of B' seed 0 are not there)"
+        return "real teachers SKIPPED (the E373 run or the VAL cache of B' seed 0 is not there)"
     import lane_ptok_data as LP
     ds = LP.PTokData("val", 0, "e292_a", None, 0.0)
     heads = JKT.load_teachers(dict(distill_from=",".join(REAL_TEACHERS), seed=0, ident="e292_a", K=None), "cpu")
@@ -1025,9 +1027,9 @@ def _real_twin():
     import hashlib
     import re
     import lane_ptok_data as LP
-    e373 = os.path.join(JKT.ROOT, REAL_TEACHERS[0])
-    if not all(os.path.exists(os.path.join(JKT.ROOT, p, "model.pt")) for p in REAL_TEACHERS) or not os.path.exists(os.path.join(LP.cache_dir("train", 0, "e292_a"), "meta.json")):
-        return "twin SKIPPED (the E373 / E367 runs or the TRAIN cache of B' seed 0 are not there)"
+    e373 = BP.resolve(REAL_TEACHERS[0])
+    if not all(os.path.exists(os.path.join(BP.resolve(p), "model.pt")) for p in REAL_TEACHERS) or not os.path.exists(os.path.join(LP.cache_dir("train", 0, "e292_a"), "meta.json")):
+        return "twin SKIPPED (the E373 run or the TRAIN cache of B' seed 0 is not there)"
     ea = torch.load(os.path.join(e373, "model.pt"), map_location="cpu", weights_only=False)["args"]
     built, real_bh = [], JKT.build_head
 
@@ -1251,8 +1253,8 @@ def test_noise():
     assert steps == list(range(11)) + list(range(10, 20)), steps                # the 12th loss call is step 10's (the clean first-batch loss is one more call): killed there, resumed from the checkpoint of step 10
     assert all(torch.equal(v, ck["noisy"]["state"][k]) for k, v in ck_k["state"].items()), "the killed and resumed noisy run is not the uninterrupted one bit for bit"
     # (4) the read-outs take no noise
-    for f in ("jtoken_eval.py", "jthresh.py"):
-        assert "noise" not in open(os.path.join(JT.ROOT, "evaluation", f), encoding="utf-8").read(), f
+    for f in ("jtoken_eval.py", "lane_predict.py"):
+        assert "noise" not in open(os.path.join(BP.ROOT, "evaluation", f), encoding="utf-8").read(), f
     print(f"noise: add_noise on valid tokens only, e / e_raw one draw, labels the same objects, the global stream untouched, keyed on (seed, step), logged statistics = the draw's (large batch {st[0]:.4f} m / {st[1]:.4f} "
           f"against {0.2 * math.sqrt(math.pi / 2):.4f} / {0.5 * math.sqrt(2 / math.pi):.4f}); mutants ({', '.join(mutants)}) fail; trainer: noise 0 = the champion's 20 smoke steps bit for bit, noise moves the losses (finite), in the args and "
           f"the log, another noise at a resume refused; kill / resume: draws at steps {steps[0]}..{steps[10]} then {steps[11]}..{steps[-1]}, the final weights = the uninterrupted run's bit for bit; no noise in the read-outs: ok")
@@ -2356,9 +2358,8 @@ def _check_pos_mean(mod):
 
 def test_pos_mean():
     """E395 addendum A1: the log row of a position-loss run holds `pos_mean` (the mean of the trained loss over the last 100 calls) and `pos_n`; the numbers by hand on 130 calls (windows of 1, 50, 100 and 100 calls), the curve run reads `curve`, the node run `node`, a run without a
-    position loss has neither key, the loss is unchanged; mutants (an unbounded window, the wrong loss, pos_n the cap, the last call instead of the mean) fail; the two smoke runs hold the keys in their log rows"""
-    import jcr_eval as JC
-    assert JC.WINDOW == JKT.LOG_WINDOW == 100, "the kill reader's window and the trainer's are the same number"
+    position loss has neither key, the loss is unchanged; mutants (an unbounded window, the wrong loss, pos_n the cap, the last call instead of the mean) fail; the two smoke runs hold the keys in their log rows.
+    The check that the kill reader `jcr_eval.WINDOW` equals the trainer's window is gone with jcr_eval.py (E395's analysis script, in the tag v1 only)"""
     _check_pos_mean(JKT)
     muts = {"the window is not bounded": [("pwin = collections.deque(maxlen=LOG_WINDOW)", "pwin = collections.deque()")],
             "a curve run reads the node loss": [('float(info["curve" if curve_w else "node"])', 'float(info["node"])')],

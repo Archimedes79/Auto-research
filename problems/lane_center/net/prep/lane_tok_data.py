@@ -1,16 +1,16 @@
-"""E357 data: the 39 frozen BEV channels of a frame + its GT node table on a lattice (the tokens of `net/model/jtok.py`) and the GT links, padded and masked.
+"""E357 data: the 39 frozen BEV channels of a frame + its GT node table on a lattice (the tokens of E357's pair head; today read by the token cache and the live tokens) and the GT links, padded and masked.
 
     ds, dl = loader("train" | "val", res=2.5, bs=8, workers=4)
-    wsl bash tools/env/_py14.sh lane_tok_data.py build-cache --split train --lattice 2.5 [--max N] [--threads 2]      # the cache of the node tables (one process; frames already there are skipped)
+    python net/prep/lane_tok_data.py build-cache --split train --lattice 2.5 [--max N] [--threads 2]      # the cache of the node tables (one process; frames already there are skipped)
 
 Frames: TRAIN = the train rows of `lane_gt_data.QData` with a stored lane GT; VAL = exactly the rows of data/splits.json['val'] in that order (asserted: 873, none missing; the val feature files also hold the TEST rows, never read).
 The features and the token of a row are read here as QData reads them (its item path builds 2 m targets with sizes bound at import and must not run on another lattice).
 Table of a frame (`frame_table`, numpy; float64 so that a read-out of the GT links is the oracle's to the last bit): pos, dirv (M, 2), cell (M, 2), flags (M, 8), piece (M,), sstart (M,) of `qtargets.node_table` on the lattice;
 links src, dst (L,), long (L,) (chord > 8 m), scale (L, 2) the fitted handle scales of the long links (NaN for short ones, `qtargets.fit_long_scales`, about 0.1 s per frame: the reason for the cache), conn (L,) = more than half
-of the lane GT points on the link's path are connector points (the link classes of E346: junction link = long and conn). flags / piece / sstart / cell / conn are for the read-out and the tables only: `jtok.forward_batch` never reads them.
+of the lane GT points on the link's path are connector points (the link classes of E346: junction link = long and conn). flags / piece / sstart / cell / conn are for the read-out and the tables only: no model input reads them.
 Cache: runs/e357_cache/l<lattice>_<lane GT signature>_<TABLE_VERSION>/<split>/<token>.npz (derived data; the version is bumped by hand when the table code changes; a file is written whole and renamed; a table missing in the cache is computed and stored by whoever asks, also a loader worker).
 Batch (`collate`): x (B, 39, 200, 200), token, row, pos / dirv (B, N, 2) float32 and valid (B, N) with N = the most nodes of a frame of the batch, y (B, N, N) = 1 where i -> j is a GT link, ys (B, N, N, 2) the fitted scales
-of the long GT links (NaN elsewhere), table = the per-frame tables. Tests: net/tests/test_jtok.py
+of the long GT links (NaN elsewhere), table = the per-frame tables. Tests: through net/tests/test_lane_tokcache.py and test_lane_live.py (net/tests/test_jtok.py is in the tag v1)
 """
 import argparse
 import json

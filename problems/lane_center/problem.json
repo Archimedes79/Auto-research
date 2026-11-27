@@ -5,8 +5,8 @@
  "config": "training/configs/base.json",
  "first_experiment": 396,
  "steps": {
-  "stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1, "note": "the token head on the frozen lane head B' (jtoken_train, reads the token cache)"},
-  "stage2": {"run": ["{python}", "training/train/lane_train.py", "stage2", "{config}"], "gpus": 1, "note": "the head and B''s node head trained together through the token loss (jlive_train)"},
+  "stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1, "dir": "stage1", "note": "the token head on the frozen lane head B' (jtoken_train, reads the token cache)"},
+  "stage2": {"run": ["{python}", "training/train/lane_train.py", "stage2", "{config}"], "gpus": 1, "dir": "stage2", "note": "the head and B''s node head trained together through the token loss (jlive_train)"},
   "predict": {"run": ["{python}", "evaluation/lane_predict.py", "{config}"], "gpus": 1, "note": "the live dump of the run's network on the split: B' at batch 4 (its GPU parity), the head at batch 8"},
   "evaluate": {"run": "evaluate"}
  },
@@ -26,5 +26,7 @@
  "protected": ["problem.json", "TEST_LOG.md", "PROBLEM.md", "data/splits.json", "evaluation/adapter.py", "evaluation/qgraph_eval.py", "evaluation/sparse_lanes/", "evaluation/lane_task/"],
  "data": "data/splits.json",
  "pythonpath": ["evaluation", "evaluation/sparse_lanes", "net/prep", "net/model", "net/loss", "training", "training/train", "tools/viz"],
+ "tests": ["evaluation/sparse_lanes/selftest.py", "evaluation/jtiming.py", "net/tests/merged_source.py","net/tests/test_jtoken.py", "net/tests/test_lane_tokcache.py", "net/tests/test_lane_live.py",
+           "net/tests/test_jlive_train.py", "evaluation/tests/test_jtoken_eval.py"],
  "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
 }

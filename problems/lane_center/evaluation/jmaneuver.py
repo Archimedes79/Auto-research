@@ -1,31 +1,21 @@
-"""Maneuver coverage of a delivered lane graph (E310): the number that asks what the planner needs and what the pictures show, next to the identity-strict pair numbers (`jpair_pr.py`) and the pooled topology scores (`qends_eval.py score`).
+"""Maneuver coverage of a delivered lane graph (E310): the number that asks what the planner needs and what the pictures show; `jtoken_eval.py graphs` writes it per frame.
 
-    wsl bash tools/env/_py14.sh jmaneuver.py score --run e308_t_s0 --seed 0 [--variants plain p0.5 p0.1 oracle oracle+fit] [--rows] [--chord] [--max N]     CPU, VAL 873, from runs/<run>/ends_val.pkl (`jends_eval.py dump`) and B's full dump of the seed
-                                                                                                                                      -> runs/<run>/maneuver_val.json
-    wsl bash tools/env/_py14.sh jmaneuver.py selftest
+    mans = maneuvers(lane_gt, qends.cluster); n_ok, n, hit, near, real = frame_counts(raw, mans, ref_tree)
+    python jmaneuver.py                    # the selftest (the E310 command `score` on the junction pair head's dumps is in the tag v1)
 
 A GT MANEUVER is one entry -> exit connection of a junction: the connector runs of the lane GT grouped by their entry / exit cluster (`qends.cluster`, as `qends.end_table`), the longest run per (entry, exit). It is REALISED in a delivered graph when at least 90 % of the
 points of its GT run (the GT points, spacing 0.5 m, inside the 100 m box; at least 3 points) have a delivered polyline point within 1.5 m whose direction differs by at most 40 degrees: 'is the lane drawn there, in that direction', no pairing and no tolerance at the ends. The junction PRECISION is the share of the
-delivered points within 8 m of a GT connector run that lie within 1.5 m of a GT lane point.
-Variants of the delivered graph (all on B's graph + the hard close-node step of the E275 spec): `plain` (no connectors), `p<t>` (written `p0.5`, shell-safe; `p0.5s`: with snapped connector ends, E311; `p0.1a`: connectors from the ATTACHED ends of an E320 dump (att_pos / att_dir), proximity wiring, no snap; `p0.1an`: the same ends with one nearest piece wired per end and the curve kept (the primary read-out of E320, `--attach --snap --snap-nogeom`); `p>=0.5` is accepted when quoted: the connectors of the run's pair logits at probability t, with the run's handle scales when its dump has them, `--chord`: always the chord tangent), `oracle` (a perfect pair classifier on the
-run's keypoints (every `valid` one, like the `p<t>` variants): logit +20 for a candidate whose two keypoints are matched, strict one-to-one, to the two ends of a GT pair, -20 for every other; chord-tangent curves), `oracle+fit` (the same with the handle scales fitted to the GT connector, `qjunction.fit_pair_scales`; a pair whose fit is NaN, a GT chord under 1 m, keeps the chord curve). An oracle is a
-sanity check of where the loss is, not a bound of the system. With `--rows` the json also carries one row per GT maneuver (ends found by a keypoint with p >= 0.5 within 4 m / 30 degrees, length, turn, range, realised per variant) for the decompositions of the E310 card. The maneuver denominator (826 frames, 10991 maneuvers on VAL) is smaller than the 11083 GT pairs of the pair numbers: the box and the 3-point rule drop 0.8 %. `--max N`: the first N frames only (a smoke test of the pipeline).
+delivered points within 8 m of a GT connector run that lie within 1.5 m of a GT lane point. The maneuver denominator (826 frames, 10991 maneuvers on VAL) is smaller than the 11083 GT pairs of the
+junction pair numbers: the box and the 3-point rule drop 0.8 %.
 """
-import argparse
-import json
 import os
-import pickle
-import re
 import sys
-import time
 
 import numpy as np
 from scipy.spatial import cKDTree
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "tools/viz", "../.."):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
+sys.path.insert(0, os.path.normpath(os.path.join(ROOT, "net/prep")))           # qends (the selftest)
 
 BOX, TOL, ANG, NEED, JUNC = 50.0, 1.5, 40.0, 0.9, 8.0
 COS = np.cos(np.radians(ANG))
@@ -131,115 +121,6 @@ def frame_counts(raw, mans, ref_tree):
     return int(sum(real)), len(mans), hit, len(near), real
 
 
-def parse_variants(names):
-    """(snapped, attached, attached_n, attached_r, thr) of the variant names: p<t> connectors of the run's pair logits at probability t | p<t>s snapped ends (E311) | p<t>a attached ends, proximity wiring (E320) | p<t>an attached ends + one nearest piece per end, the curve kept (the E320 primary read-out) |
-    p<t>ar<r> attached ends, wiring radius r m; `thr` maps every p-variant to its threshold (plain / oracle / oracle+fit are not in it), snapped / attached / attached_n are sets of names, attached_r maps a name to its radius"""
-    parsed = {v: re.fullmatch(r"p(\d+(?:\.\d+)?)(s|an|a|ar(\d+(?:\.\d+)?))?", v) for v in names}
-    snapped = {v for v, m in parsed.items() if m and m.group(2) == "s"}
-    attached_n = {v for v, m in parsed.items() if m and m.group(2) == "an"}
-    attached_r = {v: float(m.group(3)) for v, m in parsed.items() if m and m.group(3)}
-    attached = {v for v, m in parsed.items() if m and m.group(2) in ("a", "an")} | set(attached_r)
-    thr = {v: float(m.group(1)) for v, m in parsed.items() if m}
-    return snapped, attached, attached_n, attached_r, thr
-
-
-def score(a):
-    import jgt as J
-    import jrule_control as JR
-    import qends as QE
-    import qends_eval as QEV
-    import qgraph_eval as QGE
-    import qgraph_readout as QR
-    import qgraph_view as QV
-    import qjunction as QJ
-    names = a.variants
-    names = [("p" + v[3:]) if v.startswith("p>=") else v for v in names]                      # p>=0.5 (quoted) = p0.5
-    snapped, attached, attached_n, attached_r, thr = parse_variants(names)                                       # p<t> | p<t>s snapped | p<t>a attached, proximity wiring | p<t>an attached + one nearest piece per end (the E320 primary read-out) | p<t>ar<r> attached + wiring radius r m
-    unknown = [v for v in names if v not in ("plain", "oracle", "oracle+fit") and v not in thr]
-    assert not unknown, f"unknown variants {unknown} (plain, p<t> such as p0.5, oracle, oracle+fit)"
-    frames = QGE.val_frames()
-    dump = pickle.load(open(os.path.join(BP.RUNS, "kept", "e276", f"predfull_e273_p_s{a.seed}.pkl"), "rb"))
-    ends = {f["row"]: f for f in pickle.load(open(os.path.join(BP.RUNS, a.run, "ends_val.pkl"), "rb"))}
-    assert [d["row"] for d in dump] == [f.row for f in frames], "the full dump of B is not in the order of the VAL frames"
-    cfg = json.load(open(os.path.join(BP.RUNS, a.run, "config.json")))
-    assert cfg.get("seed", a.seed) == a.seed, f"--seed {a.seed} does not match the run (seed {cfg.get('seed')}): its keypoints would sit on another seed's graph"
-    spec = QR.parse("close:1.5@0.5")
-    per = {v: [] for v in names}
-    rows = []
-    t0 = time.time()
-    for b, (f, d) in enumerate(zip(frames, dump)):
-        if a.max and b >= a.max:
-            break
-        g = QV.load_gt(f.token)
-        mans = maneuvers(g, QE.cluster)
-        if not mans:
-            continue
-        jg = J.junction_gt(g)
-        e = ends[f.row]
-        pred = QR.apply(dict(nodes=dict(pos=d["pos"], dirv=d["dirv"], e=d["e"], flags=d["flags"], section=d["section"], s=d.get("s")),
-                             links=dict(src=d["link_src"], dst=d["link_dst"], p=d["link_p"], long=d["link_long"], a=d["link_a"], b=d["link_b"])), spec)
-        graph, bk = QGE.readout(pred, 0.5, 0.5)
-        long_mask = np.asarray(pred["links"]["long"], bool)
-        K = e["logit"].shape[0]
-        ve = e["valid"][0] & (e["kp_p"][:K] >= 0.5)
-        vx = e["valid"][1] & (e["kp_p"][K:] >= 0.5)
-        logit_or = np.full_like(e["logit"], -20.0)
-        scales_or = {}
-        if jg is not None and any(v.startswith("oracle") for v in names):
-            ma, mb = JR._match(e["kp_pos"][:K], e["kp_dir"][:K], e["valid"][0], jg["ent"]), JR._match(e["kp_pos"][K:], e["kp_dir"][K:], e["valid"][1], jg["ext"])
-            sc_all = QJ.fit_pair_scales(jg)
-            for ip, pr in enumerate(jg["pairs"]):
-                i, j = int(ma[int(pr[0])]), int(mb[int(pr[1])])
-                if i >= 0 and j >= 0 and e["allowed"][i, j]:
-                    logit_or[i, j] = 20.0
-                    if np.isfinite(sc_all[ip]).all():
-                        scales_or[(i, j)] = tuple(float(x) for x in sc_all[ip])
-        ref_tree = f.ref().tree
-        base = len(rows)
-        for v in names:
-            if v == "plain":
-                raw = QGE.to_raw(graph)
-            else:
-                lg, th = (logit_or, 0.5) if v.startswith("oracle") else (e["logit"], thr[v])
-                p = 1.0 / (1.0 + np.exp(-lg)) * e["allowed"]
-                ia, ib = np.nonzero(p >= th)
-                prs = QEV.make_pairs(e, ia, ib, K, attach=v in attached, chord=a.chord or v == "oracle", fit=scales_or if v == "oracle+fit" else None)
-                raw, _, _ = QEV.add_connectors(graph.lines, graph.edges, graph.nodes, bk["kind"], bk["piece_links"], long_mask, prs, snap=v in snapped or v in attached_n, snap_nogeom=v in attached_n, wire_pos=attached_r.get(v))
-            n_ok, n, hit, n_near, real = frame_counts(raw, mans, ref_tree)
-            per[v].append((n_ok, n, hit, n_near))
-            if a.rows:
-                if v == names[0]:
-                    kp, kd = e["kp_pos"], e["kp_dir"]
-                    for m in mans:
-                        ang = float(np.degrees(np.arctan2(m[3][0][0] * m[3][-1][1] - m[3][0][1] * m[3][-1][0], (m[3][0] * m[3][-1]).sum())))
-                        rows.append(dict(token=f.token, length=float(np.linalg.norm(m[2][-1] - m[2][0])), turn=ang, range=float(np.linalg.norm(m[2][0])),
-                                         found_e=_near(kp[:K], kd[:K], ve, m[2][0], m[3][0]), found_x=_near(kp[K:], kd[K:], vx, m[2][-1], m[3][-1]), real={}))
-                for i_, r_ in enumerate(real):
-                    rows[base + i_]["real"][v] = bool(r_)
-        if (b + 1) % 100 == 0:
-            print(f"  {b + 1}/{len(frames)}  {time.time() - t0:.0f} s", flush=True)
-    res = {}
-    for v in names:
-        x = np.array(per[v])
-        res[v] = dict(maneuvers=int(x[:, 1].sum()), realised=int(x[:, 0].sum()), recall=float(x[:, 0].sum() / x[:, 1].sum()), frame_recall_mean=float(np.mean(x[:, 0] / x[:, 1])),
-                      frames_none=int((x[:, 0] == 0).sum()), frames_all=int((x[:, 0] == x[:, 1]).sum()), junction_precision=float(x[:, 2].sum() / max(1, x[:, 3].sum())), frames=len(x))
-    out = dict(run=a.run, seed=a.seed, tol=TOL, angle=ANG, need=NEED, variants=res)
-    if a.rows:
-        out["rows"] = rows
-    json.dump(out, open(os.path.join(BP.RUNS, a.run, "maneuver_val.json"), "w"), indent=1)
-    for v in names:
-        r = res[v]
-        print(f"{v:12s} maneuvers realised {r['realised']}/{r['maneuvers']} = {r['recall']:.3f}; per-frame mean {r['frame_recall_mean']:.3f}; frames with none {r['frames_none']}, with all {r['frames_all']} of {r['frames']}; junction precision {r['junction_precision']:.3f}")
-
-
-def _near(kpos, kdir, valid, pt, tn):
-    """a keypoint of the kind within 4 m and 30 degrees of a GT end (not one-to-one: 'is an end found there')"""
-    if not valid.any():
-        return False
-    d = np.linalg.norm(kpos[valid] - pt, axis=1)
-    return bool(((d <= 4.0) & ((kdir[valid] * tn).sum(1) >= np.cos(np.radians(30)))).any())
-
-
 def selftest():
     # a GT run: a quarter circle of radius 15 m (a left turn) from (0, -15) heading +y to (-15, 0) heading -x
     th = np.linspace(0, np.pi / 2, 60)
@@ -293,22 +174,8 @@ def selftest():
     g2 = dict(pieces=[dict(pts=short, segments=[dict(kind="connector", i0=0, i1=len(short) - 1)]), dict(pts=long_, segments=[dict(kind="connector", i0=0, i1=len(long_) - 1)])])
     m2 = maneuvers(g2, QE.cluster)
     assert len(m2) <= 2 and max(len(m[2]) for m in m2) == 101, [len(m[2]) for m in m2]
-    sn, at, an, ar, th = parse_variants(["plain", "p0.5", "p0.1", "p0.1s", "p0.1a", "p0.1an", "p0.1ar1.5", "p0.2ar1.0", "oracle", "oracle+fit", "p0.1x"])        # N5 (critic 2026-11-13): the variant names of the read-outs reach the right settings
-    assert th == {"p0.5": 0.5, "p0.1": 0.1, "p0.1s": 0.1, "p0.1a": 0.1, "p0.1an": 0.1, "p0.1ar1.5": 0.1, "p0.2ar1.0": 0.2}, th
-    assert sn == {"p0.1s"} and at == {"p0.1a", "p0.1an", "p0.1ar1.5", "p0.2ar1.0"} and an == {"p0.1an"} and ar == {"p0.1ar1.5": 1.5, "p0.2ar1.0": 1.0}, (sn, at, an, ar)
     print("jmaneuver selftest ok")
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser()
-    sub = ap.add_subparsers(dest="cmd")
-    s = sub.add_parser("score")
-    s.add_argument("--run", required=True)
-    s.add_argument("--seed", type=int, required=True)
-    s.add_argument("--variants", nargs="+", default=["plain", "p0.5", "p0.1", "oracle", "oracle+fit"])
-    s.add_argument("--rows", action="store_true")
-    s.add_argument("--chord", action="store_true", help="the chord tangent for the p<t> variants even when the dump has learned handle scales (the control)")
-    s.add_argument("--max", type=int, default=0, help="only the first N frames (a smoke test of the pipeline)")
-    sub.add_parser("selftest")
-    a = ap.parse_args()
-    selftest() if a.cmd == "selftest" else score(a)
+    selftest()

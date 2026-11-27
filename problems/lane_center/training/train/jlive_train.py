@@ -1,6 +1,6 @@
-"""Trainer of E372 (stage S4 of the token champion, D113): the JOINT fine-tune of the champion token head with B' in the loop (`training/train/lane_live_tok.LiveSource`: B''s tokens and the labels made live in every step). Start it through `autoresearch/tools/run.py`.
+"""Trainer of E372 (stage S4 of the token champion, D113): the JOINT fine-tune of the champion token head with B' in the loop (`training/train/lane_live_tok.LiveSource`: B''s tokens and the labels made live in every step). A run starts it through the research worker (`training/train/lane_train.py stage2`).
 
-    wsl bash tools/env/_pyr.sh jlive_train.py --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--none-weight W] [--pos-loss sum|max] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
+    python training/train/jlive_train.py --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--none-weight W] [--pos-loss sum|max] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
 
 Arms (card section 0): z = `--train-nodes 0` (B' frozen, the head's loss only), s4 = `--train-nodes 1` (B''s node head trains on the head's loss + b_weight x its own node loss `lane_live_tok.b_loss`), b = `--train-nodes 1 --live-inputs 0` (the same trainer, the head cuts its inputs:
 B''s node head trains on its own loss only). `--seed` = B''s seed (the default `--b-run` runs/e292_a_s<S>, the frame order of the E365 cache; the head run must be of the same seed), `--head-seed` = the data order (default: the head run's).

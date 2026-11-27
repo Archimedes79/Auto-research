@@ -13,7 +13,7 @@ What it adds to a plain loop (each of these was missing in a run that was lost):
   * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of optimizer steps made
   * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
-  * the run-directory contract of `autoresearch/Training` (`python -m Training status / plot / stop RUN`, `health` / `watch RUN`): `config.json` ({"steps": N, ...}), `log.jsonl` (one row per
+  * the run-directory contract of the research worker (`research stop` writes CONTROL; `autoresearch/trainkit/control.py` is the contract): `config.json` ({"steps": N, ...}), `log.jsonl` (one row per
     logged step: step, t, total, lr, grad_norm, s_per_step, gpu_gb, the scalars of the loss's info dict, and with `probe=True` the keys grad.<module> / upd.<module> / t_data / t_step; an eval
     row {"step", "val": {...}}), `train.log` (the text output, also `log.txt`), a stop request: the file CONTROL = {"cmd": "stop"} is looked at before every step, then the trainer saves a
     checkpoint, writes STOPPED and exits with code 75 (never 0, so no `.done` and nobody evaluates a half-trained model); the files of an earlier stop are moved aside at the start;
@@ -33,7 +33,7 @@ import torch
 import probe as PR  # noqa: E402  (training/probe.py: gradient and update size per module, copied from the BEV system)
 
 RUNS = BP.RUNS
-EXIT_STOPPED = 75                       # a stopped run exits with this code and never with 0 (`.done` means "finished correctly"; autoresearch/tools/run.py knows the code)
+EXIT_STOPPED = 75                       # a stopped run exits with this code and never with 0 (`.done` means "finished correctly"; = trainkit.control.EXIT_STOPPED, which the research worker knows)
 
 
 class Run:
@@ -67,7 +67,7 @@ class Run:
             print(f"WARNING: log.jsonl row not written ({e})", flush=True)
 
     def stop_requested(self):
-        """the reason (a string) when the file CONTROL says {"cmd": "stop"}, else None (same reading as autoresearch/Training/control.py)"""
+        """the reason (a string) when the file CONTROL says {"cmd": "stop"}, else None (same reading as trainkit.control.stop_requested)"""
         try:
             with open(self.path("CONTROL"), encoding="utf-8") as fh:
                 d = json.load(fh)

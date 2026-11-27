@@ -7,7 +7,7 @@ normalisation (D152 follow-up: moved here from the reference chain, which reads 
     norm_stats()           (mean, std) of the feature channels
     Frames(split, ks)      "train" | "val_clean" | "test_clean": part, rows, ks, mean, std and gt (the GT graphs of the part, read on first use)
 
-Self-test (real cached files, no features): wsl bash tools/env/_py14.sh net/prep/frames.py
+Self-test (real cached files, no features): python net/prep/frames.py
 """
 import json
 import os

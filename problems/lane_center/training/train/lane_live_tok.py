@@ -8,12 +8,12 @@ Derived data: none (nothing is cached here); the code, its selftest and the fixt
     out = src(b["x"], b["table"], b["token"], b["row"])                                # out["batch"]: the batch of `lane_ptok_data` (head input + labels); out["no"]: B''s node-stage outputs WITH the graph
     loss_h, info_h = jtoken.jtoken_loss(head(out["batch"]), out["batch"])              # the head's loss (the head must not cut its inputs: PLAN)
     loss_b, info_b = b_loss(out["no"], b["targets"])                                   # B''s own node loss (its E273 / E292 form, `qgraph.node_loss`)
-    wsl bash tools/env/_py14.sh lane_live_tok.py check   [--split val] [--seed 0] [--n 20]                           # the guards, the frame order and the checkpoint of the cache, node_targets against the maps of `lane_gt_data.QData`, bit for bit
-    wsl bash tools/env/_py14.sh lane_live_tok.py fixture [--split val] [--n 40] [--seeds 0 1] [--gpu] [--bs 4] [--out FILE]   # the live batch against the cache (`PTokData`), field by field; --gpu: must be bit for bit (exit 1 otherwise): the rule below
-    wsl bash tools/env/_py14.sh lane_live_tok.py grad    [--split val] [--seed 0] [--n 2] [--head e365_s1_s0]          # the card's gradient check on real frames with the real B' (CPU): the head's loss reaches every node-head tensor and no frozen stage; the gradient norms
-    wsl bash tools/env/_py14.sh lane_live_tok.py selftest                                                            # no cache, no GPU (a toy `QGraph`); tests: net/tests/test_lane_live.py (the hand mutants)
+    python training/train/lane_live_tok.py check   [--split val] [--seed 0] [--n 20]                           # the guards, the frame order and the checkpoint of the cache, node_targets against the maps of `lane_gt_data.QData`, bit for bit
+    python training/train/lane_live_tok.py fixture [--split val] [--n 40] [--seeds 0 1] [--gpu] [--bs 4] [--out FILE]   # the live batch against the cache (`PTokData`), field by field; --gpu: must be bit for bit (exit 1 otherwise): the rule below
+    python training/train/lane_live_tok.py grad    [--split val] [--seed 0] [--n 2] [--head e373_cb_s0]          # the card's gradient check on real frames with the real B' (CPU): the head's loss reaches every node-head tensor and no frozen stage; the gradient norms
+    python training/train/lane_live_tok.py selftest                                                            # no cache, no GPU (a toy `QGraph`); tests: net/tests/test_lane_live.py (the hand mutants)
 
-Frames: TRAIN / VAL as the cache (`lane_tok_data.TokData(split, res=2.0)`); TEST guard: VAL is exactly `data/splits.json['val']` (`lane_past_data.check_rows`; the feature files also hold the TEST rows, never read).
+Frames: TRAIN / VAL as the cache (`lane_tok_data.TokData(split, res=2.0)`); TEST guard: VAL is exactly `data/splits.json['val']` (`check_rows`; the feature files also hold the TEST rows, never read).
 LiveData item: x (39, 200, 200) f16 (normalised as QData / TokData), token, row, table (the E357 GT table of the frame on the 2 m lattice); NO `QData` item (it fits the long-link scales per frame: too slow). `collate` adds `targets`: the dense maps of B''s own node
 loss, `node_targets(table)` = `qtargets.grid_targets` on the table: exists (50, 50), flags (8, 50, 50), offset / dirv (2, 50, 50), sstart, uout, uin (50, 50); the tier / vis / ztier maps of the E276 switches are not made (B' was trained without them: `NODE_CFG`).
 LiveSource.forward(x, tables, token, row, token_drop=0.0, seed=0, gate=True) -> dict(no, batch) = `tokens(x)` -> (no, tk) (pyramid + node stage + live tokens: device work, asynchronous on a GPU) followed by `labelled(tk, tables, token, row, token_drop, seed, gate)` -> batch
@@ -32,7 +32,7 @@ inf = a token assigned to a GT node in one path only (a near-threshold token). T
 135, uout / uin 2.0e-2: 590, s 2.4e-2: 700): it is not CPU float noise, and it is the size of float32 against TF32-rounded convolutions (emulated on the CPU: pos 1.5e-3 m, e_raw 2.8e-3, s 1.8e-2), so the reading 'the cache was made with the GPU's default convolution rounding' is LIKELY, NOT PROVEN.
 The tok gap (1.56e-2 = 2^-6, two float16 ulps for |tok| in [8, 16): the cached tok is float16, max |tok| 14.5 on these frames) is a rounding quantum and does not discriminate that reading from any other noise. `fixture --gpu` is the decisive check, by the rule below.
 
-GPU FIXTURE ACCEPTANCE (the rule of the parity check, written before its first GPU run; the check is a DIAGNOSTIC: the lane chat runs it under run.py --no-card, it feeds no verdict):
+GPU FIXTURE ACCEPTANCE (the rule of the parity check, written before its first GPU run; the check is a DIAGNOSTIC: it feeds no verdict):
   PASS        on the first --n frames in batches of --bs 4 (as the cache build; n a multiple of 4), for EVERY seed given, in BOTH parts (`labels` = the label step on the cached tokens, `live` = the whole path): the K cells are the same ORDERED list on every frame and every field of
               `compare_frame` is exactly zero (floats 0.0, integer / boolean entries 0, the label counts equal). Exit code 0, json `ok` true.
   FAIL = BUG  any difference in the `labels` part (no model is involved: it must be exact on every machine and every bs); exactly one field differs and the others are exact (a field mix-up); different cells with identical e (a tie rule); `live` differs while the CPU `labels` part passes
@@ -83,7 +83,6 @@ for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation")
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import jtok as JT  # noqa: E402
-import lane_past_data as LPD  # noqa: E402
 import lane_ptok_data as LP  # noqa: E402
 import lane_tokcache as LC  # noqa: E402
 import qgraph as QG  # noqa: E402
@@ -114,6 +113,15 @@ def b_loss(no, targets):
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ frames
+def check_rows(split, rows):
+    """the TEST guard: the rows of VAL are exactly `data/splits.json['val']`, those of TRAIN are distinct (the feature files also hold the TEST rows)"""
+    assert len(set(rows)) == len(rows), "a row twice in the cache"
+    if split == "val":
+        with open(os.path.join(ROOT, "data", "splits.json")) as fh:
+            sv = [int(r) for r in json.load(fh)["val"]]
+        assert [int(r) for r in rows] == sv, "the rows of the VAL cache are not data/splits.json['val'] (the feature files also hold TEST rows)"
+
+
 def check_order(cache_dir, rows, tokens):
     """the frames (rows, tokens) are those of the cache directory's frames.json, in its order"""
     with open(os.path.join(cache_dir, "frames.json")) as fh:
@@ -141,7 +149,7 @@ class LiveData(torch.utils.data.Dataset):
             td = LT.TokData(split, res=2.0, feats=True)
         self.td, self.split, self.seed = td, split, int(seed)
         self.rows, self.tokens = td.rows, td.tokens
-        LPD.check_rows(split, self.rows, expect=None)                       # the TEST guard: VAL = data/splits.json['val'] exactly
+        check_rows(split, self.rows)                                        # the TEST guard: VAL = data/splits.json['val'] exactly
         if cache_dir or not injected:
             check_order(cache_dir or LP.cache_dir(split, seed, ident), self.rows, self.tokens)
 
@@ -437,7 +445,7 @@ def gradient_check(src, head, b):
 
 
 def grad(split="val", seed=0, n=2, head=None, ident="e292_a", log=print):
-    """`gradient_check` on the first n real frames: the real B' of `seed` on the CPU, the head = a fresh `JTokenHead` or the run `runs/<head>` (the champion `e365_s1_s0`). It reports the head's share of the GRADIENT norm on the node head at step 0 on a few frames: a
+    """`gradient_check` on the first n real frames: the real B' of `seed` on the CPU, the head = a fresh `JTokenHead` or the run `runs/<head>` (the champion's stage-1 head `e373_cb_s0`). It reports the head's share of the GRADIENT norm on the node head at step 0 on a few frames: a
     guide to the size of the head's pull, not the card's secondary number (the share of the parameter UPDATE norm: Adam rescales every parameter's step, so the two differ)"""
     import jtoken as JK
     import loss_jtoken as LJK  # noqa: E402
@@ -842,7 +850,7 @@ if __name__ == "__main__":
     s.add_argument("--split", default="val", choices=("val", "train"))
     s.add_argument("--seed", type=int, default=0)
     s.add_argument("--n", type=int, default=2)
-    s.add_argument("--head", default=None, help="a head run under runs/ (e.g. e365_s1_s0, the S1 champion of seed 0); default a fresh head")
+    s.add_argument("--head", default=None, help="a head run under runs/ (e.g. e373_cb_s0, the champion's stage-1 head of seed 0); default a fresh head")
     sub.add_parser("selftest")
     a = ap.parse_args()
     torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "2")))                                      # a shared box: 2 threads unless told otherwise
