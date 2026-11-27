@@ -19,4 +19,9 @@
 ```
 
 ## Conclusion
-(after research judge)
+TIE (`verdict.json`, research judge, the standard rule of the card, band 0.01): keep threshold 0.5 against the champion's 0.6, VAL 873 frames,
+22 scenes, two seeds pooled: topo F1 0.6721 against 0.6748, gain -0.0026, paired scene bootstrap [-0.0039, -0.0017] (seed 0 -0.0034,
+seed 1 -0.0019). The interval excludes 0 but lies inside the band: no change worth taking. The guard lanes_found breaks (-0.0123 > 0.01);
+junction F1 rises (0.2509 -> 0.2649) and vert100_dp falls (23.96 -> 22.88). Prediction -0.008: sign right, size too large. The champion's
+decode stays. First comparison judged by the research system: the control reused E396's runs (`from`), the judge checked comparability,
+the seeds, the guards and the 22-scene warning.
