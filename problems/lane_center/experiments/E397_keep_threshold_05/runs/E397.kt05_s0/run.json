@@ -1,0 +1,29 @@
+{
+ "run": "E397.kt05_s0",
+ "problem": "lane_center",
+ "experiment": "E397",
+ "arm": "kt05",
+ "seed": 0,
+ "commit": "301c41575d48e0f5346f804f9cb5f51f2ec79c3a",
+ "tag": "lane_center/E397",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 133.3,
+   "log": "predict.log",
+   "gpu_slot": 1
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 160.2,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-27 00:53:53",
+ "host": "Desktop-I511600",
+ "started": "2026-11-27 00:54:01",
+ "ended": "2026-11-27 00:58:54"
+}

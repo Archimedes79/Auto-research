@@ -1,5 +1,5 @@
 experiment,run,arm,seed,status,score_metric,score,verdict,reason,commit,started,ended
 E396,E396.champ_s0,champ,0,ok,graph.topo_F1,0.668172,MEASURED,,2c5a373751e4,2026-11-27 00:51:12,2026-11-27 00:55:51
 E396,E396.champ_s1,champ,1,ok,graph.topo_F1,0.681281,MEASURED,,2c5a373751e4,2026-11-27 00:51:12,2026-11-27 00:55:51
-E397,E397.kt05_s0,kt05,0,running,,,,,301c41575d48,2026-11-27 00:54:01,
-E397,E397.kt05_s1,kt05,1,running,,,,,301c41575d48,2026-11-27 00:54:01,
+E397,E397.kt05_s0,kt05,0,ok,graph.topo_F1,0.664815,TIE,"gain -0.0026 lies inside the band 0.01 (interval [-0.0039, -0.0017])",301c41575d48,2026-11-27 00:54:01,2026-11-27 00:58:54
+E397,E397.kt05_s1,kt05,1,ok,graph.topo_F1,0.679334,TIE,"gain -0.0026 lies inside the band 0.01 (interval [-0.0039, -0.0017])",301c41575d48,2026-11-27 00:54:01,2026-11-27 00:58:53

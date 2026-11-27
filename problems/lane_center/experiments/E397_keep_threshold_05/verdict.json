@@ -1,0 +1,103 @@
+{
+ "experiment": "E397",
+ "problem": "lane_center",
+ "tag": "lane_center/E397",
+ "snapshot": "301c41575d48e0f5346f804f9cb5f51f2ec79c3a",
+ "control": "champ",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "kt05": {
+   "verdict": "TIE",
+   "reason": "gain -0.0026 lies inside the band 0.01 (interval [-0.0039, -0.0017])",
+   "gain": -0.002641429129478845,
+   "interval": [
+    -0.003912243681586944,
+    -0.0016603803312444767
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.6747575051232815,
+     "variant": 0.6721160759938026,
+     "diff": -0.002641429129478845,
+     "lo": -0.003912243681586944,
+     "hi": -0.0016603803312444767,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.668172321247442,
+      "variant": 0.6648154064306978,
+      "diff": -0.003356914816744161,
+      "lo": -0.0048558762051127665,
+      "hi": -0.0020975656149591435
+     },
+     "1": {
+      "control": 0.6812810912549837,
+      "variant": 0.6793340433569311,
+      "diff": -0.0019470478980525563,
+      "lo": -0.0033582826641420814,
+      "hi": -0.0008261124142552062
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.2509537409577019,
+      "variant": 0.2649271760889073,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8467391074067518,
+      "variant": 0.8451310550190871,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7222955145118733,
+      "variant": 0.7100312713769178,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.06369088407850881,
+      "variant": 0.06160863558415448,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 23.964357736707864,
+      "variant": 22.884131929664484,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": -0.008,
+   "prediction_hit": true,
+   "guards_broken": [
+    "graph.lanes_found worse by 0.0123 > 0.01"
+   ]
+  }
+ },
+ "by": "research judge e9bd34585dce",
+ "date": "2026-11-27 01:01",
+ "control_check": {
+  "scores": {
+   "0": 0.668172321247442,
+   "1": 0.6812810912549837
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}
