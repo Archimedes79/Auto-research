@@ -205,6 +205,13 @@ def same_rule(frozen: Dict[str, Any], current: Dict[str, Any]) -> bool:
         list(current.get("seeds", []))[:len(frozen.get("seeds", []))] == list(frozen.get("seeds", []))
 
 
+def key_numbers(problem: Dict[str, Any], numbers: Dict[str, Any]) -> Dict[str, Any]:
+    """the score and guard numbers of a result (a verdict or a champion's facts copies these; every number stays in the run's result.json,
+    which is in git: a copy of all of them made a record of one BEV measurement pass 1 MB)"""
+    keys = [problem["score"]["metric"]] + [g["metric"] for g in problem.get("guards", [])] + list(problem.get("control_floor", {}))
+    return {k: numbers[k] for k in dict.fromkeys(keys) if k in numbers}
+
+
 def compose(base: Dict[str, Any], card: Dict[str, Any], arm: str, seed: int, rid: str) -> Dict[str, Any]:
     """the config of one run: the base config, the arm's settings, the seed and the run's place ({runs}: the machine's run root of the problem).
     `needs` become the folder of the named run of the same seed"""

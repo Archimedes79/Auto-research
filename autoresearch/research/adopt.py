@@ -38,7 +38,8 @@ def _facts(problem: str, exp_id: str, arm: str, card: Dict[str, Any], decision: 
             ident = res["identity"]
             seeds[str(s)] = {"run": rid, "config": cfg, "weights": {"run_dir": f"{{runs}}/{rid}", "checkpoint": ident.get("checkpoint"),
                                                                     "sha256_16": ident.get("checkpoint_hash") or ident.get("sha1")},     # bev names it sha1
-                             "split": res["split"], "frames": res["frames"], "scenes": res["scenes"], "numbers": res["numbers"],
+                             "split": res["split"], "frames": res["frames"], "scenes": res["scenes"],
+                             "numbers": spec.key_numbers(load_problem(problem), res["numbers"]), "result": rel(os.path.join(rec, "result.json")),
                              "per_scene": res["per_scene"], "cost": res.get("cost"), "identity": ident, "commit": run["commit"]}
         except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
             raise ResearchError(f"{rid}: its records cannot be read ({type(e).__name__}: {e}); only a finished, evaluated run becomes a champion") from None

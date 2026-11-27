@@ -244,7 +244,7 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
 
 
 def measure(problem: str, card: Dict[str, Any], p: Dict[str, Any], tag: str, commit: str) -> Dict[str, Any]:
-    """a measurement: the numbers of every arm and seed, no comparison and no verdict"""
+    """a measurement: the score and guard numbers of every arm and seed (every number: the run's result.json, named), no comparison"""
     out: Dict[str, Any] = {"experiment": card["id"], "problem": problem, "tag": tag, "snapshot": commit, "kind": "measure", "score": p["score"]["metric"],
                            "arms": {}, "by": "research judge", "judge_code": judge_code(), "date": time.strftime("%Y-%m-%d %H:%M")}
     missing: List[str] = []
@@ -252,8 +252,10 @@ def measure(problem: str, card: Dict[str, Any], p: Dict[str, Any], tag: str, com
         got, miss, killed = _results(problem, _arm_runs(problem, card, a))
         miss += killed
         missing += miss
-        out["arms"][a] = {"verdict": "MEASURED", "seeds": {s: {"run": r["run"], "numbers": r["result"]["numbers"], "frames": r["result"]["frames"],
-                                                               "cost": r["result"].get("cost")} for s, r in got.items()}}
+        out["arms"][a] = {"verdict": "MEASURED", "seeds": {s: {"run": r["run"], "numbers": spec.key_numbers(p, r["result"]["numbers"]),
+                                                               "frames": r["result"]["frames"], "cost": r["result"].get("cost"),
+                                                               "result": rel(os.path.join(record_dir(problem, r["run"]), "result.json"))}
+                                                           for s, r in got.items()}}
     return {**out, "verdict": "INCOMPLETE", "missing": missing} if missing else {**out, "verdict": "DONE"}
 
 
