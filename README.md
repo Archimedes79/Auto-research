@@ -24,7 +24,8 @@ distribution). The system before the restructure of 2026-11-27, with its experim
 
 ## A fresh checkout
 `git clone` gives the code and the text records. A machine needs:
-- WSL2 Ubuntu (or Linux) with the conda environment `gcar` (torch 2.8), and the data ([`datasets/nuscenes/`](datasets/nuscenes/README.md));
+- WSL2 Ubuntu (or Linux) with the conda environment `gcar` (torch 2.8; its recipe: [`autoresearch/env/`](autoresearch/env/README.md)), and the
+  data ([`datasets/nuscenes/`](datasets/nuscenes/README.md));
 - a git identity in the checkout the research system commits in (`git config user.name` / `user.email`, readable by WSL's git);
 - a machine file, from `autoresearch/`:
   `python3 -m research machine init --data <dir> --runs <dir> --python gcar=<interpreter> --gpu-slots 2`;
