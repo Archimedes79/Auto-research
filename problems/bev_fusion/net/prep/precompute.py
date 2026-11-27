@@ -6,8 +6,7 @@ steps, compensated radar points and the frozen image features come from the data
     batch = pre(batch [, keys])             # adds the maps below (default all), (B, 1, X, Y) in [0, 1], each in the batch's frame
                                             # (mirrored for flipped samples); a key already present is kept
 
-On its own (no network): `python runner/bev_runner.py check | precompute <config.json> ...` (the runner builds the network input of chosen
-frames through this step with the dataset; the data loaders are not part of this file, which belongs to the network's bundle).
+The data loaders are not part of this file, which belongs to the network's bundle.
 
 The network asks only for what its memories read (no extra work on the training and timing paths); the training (D36 loss masks)
 and the evaluation (D36 / D37 scoring masks) call the step themselves.

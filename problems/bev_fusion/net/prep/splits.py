@@ -1,12 +1,12 @@
 """The scene lists of the training splits (`../splits/<name>.json`) and what a run records of them. Standard library only.
 
     python net/prep/splits.py resolve                  stdin: a config (json) -> stdout: the config with the lists of its "split" filled in
-                                                       (`Training check` / `run` call it: project.json "training" -> "resolve")
+                                                       (training/build_image_cache.py calls resolve(); the research core does not: base.json carries its lists)
     python net/prep/splits.py names NAME               the scene names of a split, one per line (train, then val)
-    python net/prep/splits.py manifest RUN_DIR [--card records/runs/<id>/run.json]
+    python net/prep/splits.py manifest RUN_DIR [--card RUN_JSON]
                                                        writes RUN_DIR/manifest.json: the split, GT, code and card of a run, read from the files it wrote
     python net/prep/splits.py split-json RUN_DIR OUT_DIR
-                                                       writes OUT_DIR/split.json (the scene lists of the run, nulls and a note when it wrote no config.json; `package.py` puts it into results/<id>/)
+                                                       writes OUT_DIR/split.json (the scene lists of the run, nulls and a note when it wrote no config.json)
 
 A config says `"split": "large"` instead of carrying 500 scene names. `resolve` replaces the key by `train_scenes` / `val_scenes` (and the comment key `_split`, which
 `train.read_config` ignores), so the config the trainer reads, and copies into `runs/<id>/config.json`, holds the exact lists: the run is pinned to them, not to the file.
@@ -103,8 +103,8 @@ def _run_files(run_dir):
 
 
 def manifest(run_dir, card=None, splits_dir=SPLITS):
-    """the minimal manifest of a run, from the files it wrote: config.json (the resolved config, so the lists), gt.json, code/SNAPSHOT.txt (commit and tag of the
-    snapshot run_ar.sh made); `card` = the run's record (records/runs/<id>/run.json) adds hypothesis / prediction / rule, else null"""
+    """the minimal manifest of a run, from the files it wrote: config.json (the resolved config, so the lists), gt.json, code/SNAPSHOT.txt (commit and tag of a v1
+    run's code snapshot); `card` = the run's record (its run.json) adds hypothesis / prediction / rule, else null"""
     cfg, gt = _run_files(run_dir)
     train, val = cfg.get("train_scenes") or [], cfg.get("val_scenes") or []
     try:
@@ -148,7 +148,7 @@ def main(argv=None):
     p.add_argument("split")
     p = sub.add_parser("manifest", help="write RUN_DIR/manifest.json")
     p.add_argument("run_dir")
-    p.add_argument("--card", help="the run's record (records/runs/<id>/run.json): adds hypothesis / prediction / rule")
+    p.add_argument("--card", help="the run's record (its run.json): adds hypothesis / prediction / rule")
     p = sub.add_parser("split-json", help="write OUT_DIR/split.json")
     p.add_argument("run_dir")
     p.add_argument("out_dir")

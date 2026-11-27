@@ -27,7 +27,7 @@ Usage:  python training/train.py <config.json>   (fields of TrainConfig; unknown
 Self-test (nuScenes mini, CPU, needs data/cache/cam_feats_mini): python training/train.py
 The project-independent part (EMA, schedule, optimiser groups and step, AMP, checkpoints and resume, the stop protocol, the log files) is the engine
 `autoresearch/trainkit` (D48); this file is the BEV side of it (model, loss, data, clips, ego-motion gaps, consistency terms, probes) and keeps the old names
-(`train.EMA`, `train.lr_factor`, ...) importable for the tests, `evaluation/` and `runner/`.
+(`train.EMA`, `train.lr_factor`, ...) importable for the tests and `evaluation/`.
 """
 import os as _os
 import sys as _sys
@@ -62,7 +62,7 @@ from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
 from trainkit.optim import clip_groups, lr_group_params  # noqa: E402
 from trainkit.util import check_engine as engine_line, detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
-# engine names that are also read as train.X (startable.py, ab_timing.py, evaluation/, runner/ and the tests); anything else of the engine is imported from trainkit
+# engine names that are also read as train.X (evaluation/ and the tests); anything else of the engine is imported from trainkit
 from trainkit.amp import amp_context  # noqa: E402,F401
 from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume  # noqa: E402,F401
 from trainkit.ema import EMA  # noqa: E402,F401
@@ -190,7 +190,7 @@ def build(cfg):
 
 
 def student_findings(cfg, mcfg):
-    """what model.camera_student, the anchor and the image jitter need of the config, as messages (build raises them, startable.py lists them): the student replaces cached outputs of the current frame
+    """what model.camera_student, the anchor and the image jitter need of the config, as messages (build raises them): the student replaces cached outputs of the current frame
     (student_frames 'all': of every frame of the window), so a feature cache and the key-frame image folder (lane_images); the anchor needs a student that trains, and a schedule that makes sense"""
     out = []
     if mcfg.camera_student and not cfg.feature_cache:
@@ -481,7 +481,7 @@ def _stop_requested(run_dir):
 def record_gt(out_dir, datasets):
     """runs/<name>/gt.json = {"gt_signature": ...}: the identity of the GT the run trains and validates on (FrontRadarDataset.gt_signature:
     grid res, supersampling, GtGenerator source + flags). A pinned code snapshot does not pin the GT (GtGenerator is read live), so this file is
-    what `evaluation/bev_suite.py compare` checks. A resume on another GT keeps the earlier signatures and warns. -> the signature(s)"""
+    the record of it (net/prep/splits.py manifest reads it). A resume on another GT keeps the earlier signatures and warns. -> the signature(s)"""
     sigs = sorted({d.gt_signature() for d in datasets if hasattr(d, "gt_signature")})
     if not sigs:
         return None
@@ -847,7 +847,7 @@ def _selftest():
         finally:
             globals()["evaluate"] = real_eval
         assert val_logged(edir, 2), "the evaluation the crash cut is made up on the resume"
-        # 3b stop request (autoresearch/Training): CONTROL / STOPPED of an earlier stop are moved aside at the start (no clocks compared); a
+        # 3b stop request (trainkit.control; the research worker writes CONTROL): CONTROL / STOPPED of an earlier stop are moved aside at the start (no clocks compared); a
         # request that arrives while training stops the run at a step boundary with a checkpoint, a STOPPED marker and exit code 75 (not 0:
         # no `.done`); the run resumes from that checkpoint; the log rows carry the time `t`
         stop_cfg = dataclasses.replace(cfg, name="stoprun", steps=1, save_every=0, eval_every=0)

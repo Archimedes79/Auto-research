@@ -14,13 +14,15 @@ the owner's decisions: `DECISIONS.md`; where things stand: `HANDOVER.md`. Champi
 | `evaluation/` | `bev_eval.py` (the adapter of `autoresearch/Evaluation`), `bev_adapter.py` (source, subject, the chain), `bev_task.py` (metrics, views, the score board7), `metrics.py`, views and the extra metric families |
 | `tools/import_ckpt.py` | the step `import`: a measurement of an existing network takes its checkpoint |
 | `splits/` | the scene lists (small, large, xl) |
-| `tests/` | layer tests, the trainkit equivalence, the end-to-end chain |
+| `tests/` | layer tests, the net layering, the splits, the evaluation adapter contract, the trainkit equivalence, the end-to-end chain; `support/` their helpers (synthetic world and batch, equivalence tool) |
 
 ## Data and runs (not in git; where the machine file says)
 The code works in `<data root>/bev_fusion/` (`net/netpath.SITE`): its configs name `data/cache/gt` (the ground-truth cache of GtGenerator v13),
-`data/cache/cam_feats` and `cam_feats_bevfusion` (camera features), `data/cache/radar`, `data/cache/img_front`, `models/pretrained/`
+`data/cache/cam_feats` and `cam_feats_bevfusion` (camera features), `data/cache/radar`, `data/cache/img_front`, `data/cache/annotation_pts.npz` (radar point
+counts of the boxes, the radar classes of the `cov` rows), `models/pretrained/`
 (DualBEV, needed at every model build; BEVFusion camera-only-seg, only to rebuild its cache) and `runs/` (a link to `<runs root>/bev_fusion`,
 where the champion's runs `t20_base_s0`, `t21_ctl_s0`, `t21_ctl_s1` keep their names). Raw nuScenes: `~/data/nuscenes_full`.
+The site's GT cache is GT v13 (signature a107e0b4e8); the `gt` field of `splits/*.json` (v8) is historical, the version their caches were checked against.
 
 ## Use
 ```

@@ -1,7 +1,7 @@
 """Junction-free scoring rows (D66, card t26): the lane-divider and road-divider IoU with the map's intersection polygons left out.
 
 The map has no divider labels inside the polygons it flags as intersection, the network draws the paint it sees there, and the metric counts it as false (D66: 50 % of the false
-cells lie inside intersections, 1.5 % of the label cells do). `bev_suite.py ... --junction-free` scores the two divider layers a second time next to the unchanged headline rows:
+cells lie inside intersections, 1.5 % of the label cells do). A BEVTask with `junction` set (no entry point sets it now) scores the two divider layers a second time next to the unchanged headline rows:
 the intersection cells leave the prediction, the GT and the scored cells alike BEFORE the tolerance dilation (the "both" variant of records/intersection_iou_result.txt, which
 this reproduces). Two masks, from the GtGenerator area masks (`key.mask(token, "intersection", border_m)`, packed cache of the lane store of the rig `bev_fusion`):
     fovj    the polygons as they are (border 0)       -> flat rows `seg_fovj/seg/dt+0.00/lane_divider/all/all/iou@0.5` ...
@@ -57,5 +57,5 @@ class JunctionMasks:
 
     def describe(self):
         """the mask id the rows were made with: the lane store, the rasteriser version, the data the cache was made from (per border), the borders. It is part of the Source's description
-        (bev_suite.make_suite), so the store's identity rule refuses a resume, and `compare` refuses two stores, whose masks differ"""
+        (BEVSource.junction_mask), so the store's identity rule refuses a resume, and `compare` refuses two stores, whose masks differ"""
         return {"lane_store": os.path.basename(os.path.normpath(self.store)), "raster": RASTER, "borders_m": dict(MASKS), "cache_data": {n: i["data"] for n, i in self.info.items()}}

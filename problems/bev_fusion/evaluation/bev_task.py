@@ -68,13 +68,13 @@ class BevSegMetric(Metric):
     HEAD = {"drivable_iou": "fov/dt+0.00/drivable_area/all/all/iou@0", "walkway_iou": "fov/dt+0.00/walkway/all/all/iou@0",
             "lane_divider_iou": "fov/dt+0.00/lane_divider/all/all/iou@0.5", "lane_divider_f1": "fov/dt+0.00/lane_divider:zc/all/all/f1@0.5",
             "vehicle_iou": "obj/dt+0.00/vehicle/all/all/iou@0"}
-    # the paired bootstrap of `bev_suite.py compare` (D48): the headline plus the rows the t20 card and the weak-spot table name; HEAD and score() stay as they were
+    # the paired bootstrap of `Evaluation.compare` (D48): the headline plus the rows the t20 card and the weak-spot table name; HEAD and score() stay as they were
     headline = tuple(HEAD.values()) + ("fov/dt+0.00/lane_divider/all/all/iou@1", "fov/dt+0.00/carpark_area/all/all/iou@0",
                                        "fov/dt+0.00/ped_crossing/all/all/iou@0", "fov/dt+0.00/road_divider/all/all/iou@1")
     better = {}                                                          # higher is better, but for the distance-field error (direction)
 
     def __init__(self, grid, spec, junction=None):
-        self.grid, self.spec, self.junction = grid, spec, junction       # junction: bev_junction.JunctionMasks = also the junction-free divider rows (`--junction-free`), None = not
+        self.grid, self.spec, self.junction = grid, spec, junction       # junction: bev_junction.JunctionMasks = also the junction-free divider rows, None = not
         if junction is not None:
             self.headline = type(self).headline + bev_junction.HEADLINE
 
@@ -285,7 +285,7 @@ class BEVTask(Task):
         if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
             from evaluation.bev_curves import BevCurveMetric
             ms.append(BevCurveMetric(self.spec, self.groups))
-        if getattr(self, "fusion", False):                                    # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers; the entry points (evaluate.py, bev_suite eval / compare, bev_eval.task) switch it on by default since D31, a Task built by hand does not
+        if getattr(self, "fusion", False):                                    # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers; bev_eval.task switches it on by default (D31), a Task built by hand does not
             from evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
             ms += [BevFusionDetMetric(self.groups, "detf"), BevFusionDetMetric(self.groups, "detfp", include_partial=True), BevCoverageMetric(self.groups, self._pts())]
         if getattr(self, "velocity", False):                                  # field / box-centre velocity per cell set (bev_velocity.py), off by default
@@ -294,7 +294,7 @@ class BEVTask(Task):
         ms.append(BevLossMetric())
         return ms
 
-    junction = None          # a bev_junction.JunctionMasks = also the junction-free divider rows (`--junction-free`, D66); set by bev_suite.make_suite / _task_only, None = not
+    junction = None          # a bev_junction.JunctionMasks = also the junction-free divider rows (D66); None = not (bev_eval._task_only sets None; no entry point sets it now)
 
     _PTS = []
 

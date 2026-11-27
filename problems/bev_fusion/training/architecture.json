@@ -1,6 +1,6 @@
 {
  "title": "bev_fusion: camera + radar BEV system in five layers",
- "subtitle": "Built 2026-11-01 as a five-layer design, updated 2026-11-21 (student image encoder, recursive one-frame / one-scan input, fusion-area masks). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, tests/test_slots.py) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.",
+ "subtitle": "Built 2026-11-01 as a five-layer design, updated 2026-11-21 (student image encoder, recursive one-frame / one-scan input, fusion-area masks). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, model.check_config) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.",
  "root": "..",
  "colw": 190,
  "kinds": {
@@ -234,10 +234,9 @@
    "code": [
     "net/model/temporal_fusion.py::TemporalFusion",
     "net/model/temporal_fusion.py::recentre",
-    "net/model/splat.py::splat_window",
-    "net/model/fallbacks.py::EgoWarpGRU"
+    "net/model/splat.py::splat_window"
    ],
-   "note": "the same block for both branches (TemporalFusion takes channels and grid); camera: window (default) or one buffered frame, pair / recurrent (cam_buffer, t21, D91), + world memory; radar: none by default (its 0.5 s history is in the points), the radar memory with the Doppler static gate (rad_temporal 'window_memory') and the per-frame recursion (radar_per_frame, t25) are options, not trained successfully so far; contract: (BEV now, past BEVs with their ego steps, state, step since the last call, coverage) -> (BEV, state); the re-centre is a whole-cell roll, the gradient passes; finding (tests/test_slots.py): with no past radar frames the window part and the velocity head of the radar block get no gradient, so the radar memory needs its own static gate (the measured Doppler) or past radar BEVs"
+   "note": "the same block for both branches (TemporalFusion takes channels and grid); camera: window (default) or one buffered frame, pair / recurrent (cam_buffer, t21, D91), + world memory; radar: none by default (its 0.5 s history is in the points), the radar memory with the Doppler static gate (rad_temporal 'window_memory') and the per-frame recursion (radar_per_frame, t25) are options, not trained successfully so far; contract: (BEV now, past BEVs with their ego steps, state, step since the last call, coverage) -> (BEV, state); the re-centre is a whole-cell roll, the gradient passes; finding (v1's slot test): with no past radar frames the window part and the velocity head of the radar block get no gradient, so the radar memory needs its own static gate (the measured Doppler) or past radar BEVs"
   },
   {
    "id": "fusion",
@@ -255,17 +254,16 @@
   },
   {
    "id": "backbone",
-   "label": "BEV backbone + neck\nResNet + FPN | SECOND | CMX",
+   "label": "BEV backbone + neck\nResNet + FPN | SECOND",
    "kind": "learned",
    "col": 6,
    "row": 0,
    "h": 2,
    "code": [
     "net/model/bev_trunk.py::BEVTrunk",
-    "net/model/blocks_new.py::SecondTrunk",
-    "net/model/fallbacks.py::CMXTrunk"
+    "net/model/blocks_new.py::SecondTrunk"
    ],
-   "note": "contract: (B, C_fuse, X, Y) -> features S (B, C, X, Y), the optional 1x1 head reduction included; CMX replaces fusion and backbone together (a kind of this slot that takes both branch BEVs)"
+   "note": "contract: (B, C_fuse, X, Y) -> features S (B, C, X, Y), the optional 1x1 head reduction included"
   },
   {
    "id": "motion",
@@ -355,10 +353,10 @@
    "row": 2,
    "code": [
     "evaluation/bev_adapter.py::predictions",
-    "evaluation/board.py",
-    "evaluation/evaluate.py"
+    "evaluation/bev_eval.py",
+    "evaluation/bev_task.py::Board7Metric"
    ],
-   "note": "the numbers, pictures, videos and timing of a run come through one front door, evaluation/evaluate.py RUN [--quant] [--qual] [--videos] [--time] [--all], which calls bev_suite.py; the 1 m centre-line head is scored as the layer centreline"
+   "note": "the numbers, pictures and timing of a run come through `Evaluation` (its adapter evaluation/bev_eval.py; the research step evaluate); the score board7 is Board7Metric (the six map rows and the object mAP); the 1 m centre-line head is scored as the layer centreline"
   },
   {
    "id": "gt",
@@ -367,7 +365,7 @@
    "col": 1,
    "row": 4,
    "code": [
-    "../GtGenerator/",
+    "../../GtGenerator/",
     "net/prep/gt_cache_build.py",
     "training/gt_scenes.py"
    ],
@@ -375,15 +373,14 @@
   },
   {
    "id": "data",
-   "label": "Datasets, caches\nclips, mirror, scratch",
+   "label": "Datasets, caches\nclips, mirror",
    "kind": "train",
    "col": 2,
    "row": 4,
    "code": [
     "net/prep/feature_cache.py::CachedFrontRadarDataset",
     "net/prep/batches.py::ClipDataset",
-    "net/prep/augment.py::flip_batch",
-    "training/scratch.py"
+    "net/prep/augment.py::flip_batch"
    ]
   },
   {
@@ -396,14 +393,13 @@
    "code": [
     "training/build_image_cache.py",
     "training/train.py::train",
-    "../autoresearch/trainkit/",
+    "../../autoresearch/trainkit/",
     "training/freeze.py",
     "training/probe.py",
-    "training/debug.py",
     "net/model/model.py::check_config",
     "net/prep/feature_cache.py::CachedBEVFusionModel"
    ],
-   "note": "ModelConfig picks one kind per slot from the builder tables of model.py (LIFTS, COLLAPSES, TEMPORALS, RADARS, FUSIONS, BACKBONES); check_config refuses every unknown kind and unfitting combination in one place; since D48 train() builds model, loss and data and hands them to the project-independent loop autoresearch/trainkit (checkpoints with resume, EMA, clipping, the stop request), the probes of probe.py are its hooks"
+   "note": "ModelConfig picks one kind per slot from the builder tables of model.py (LIFTS, COLLAPSES, TEMPORALS, RADARS, FUSIONS, TRUNKS); check_config refuses every unknown kind and unfitting combination in one place; since D48 train() builds model, loss and data and hands them to the project-independent loop autoresearch/trainkit (checkpoints with resume, EMA, clipping, the stop request), the probes of probe.py are its hooks"
   },
   {
    "id": "loss",
@@ -430,7 +426,7 @@
    "code": [
     "net/model/lane_branch.py::LaneBranch"
    ],
-   "note": "reads the lane image, K, T, ida and the DualBEV depth of the current frame; its BEV is added to the camera BEV after the temporal block; mirrored on its own; off for new from-scratch base runs (D65, training/configs/t20_base_nol4.json); since t20 it also works on the dual camera features (it reads the first source's depth, K and crop and adds to the merged camera BEV): at 20 m a stride-16 image pixel is 0.57 m wide (more than a 0.5 m cell), a stride-4 pixel 0.14 m"
+   "note": "reads the lane image, K, T, ida and the DualBEV depth of the current frame; its BEV is added to the camera BEV after the temporal block; mirrored on its own; off for new from-scratch base runs (D65; its config t20_base_nol4.json is in the tag v1); since t20 it also works on the dual camera features (it reads the first source's depth, K and crop and adds to the merged camera BEV): at 20 m a stride-16 image pixel is 0.57 m wide (more than a 0.5 m cell), a stride-4 pixel 0.14 m"
   },
   {
    "id": "soft",
@@ -507,7 +503,7 @@
     "net/prep/splits.py",
     "splits/"
    ],
-   "note": "scene names only (small 60 / 10, large 428 / 82, xl 700 / 82), each with the GtGenerator version its caches were checked against; a config says \"split\": \"large\", Training check / run resolves it into train_scenes / val_scenes (the run's config.json holds the exact lists); net/prep/splits.py also writes runs/<id>/manifest.json (split, GT, code commit, card) and the results/<id>/split.json of a result package; gt_scenes.py turns the lists into the GT a run needs"
+   "note": "scene names only (small 60 / 10, large 428 / 82, xl 700 / 82), each with the GtGenerator version its caches were checked against; the base config carries the lists of large inline (the run's config.json holds the exact lists); net/prep/splits.py resolves a \"split\" name into the lists (build_image_cache.py), names the split of a run (manifest.json, split.json) and is the evaluation's set table; gt_scenes.py turns the lists into the GT a run needs"
   }
  ],
  "edges": [
@@ -768,12 +764,6 @@
   }
  ],
  "not_drawn": {
-  "training/train_motion_block.py": "t12 experiment trainer of the motion block on a frozen, trained base model (the block itself is in the chain since t15, box Motion block M); not the main training",
-  "training/startable.py": "tool: static checks, smoke config and start lines of a training config; no GPU, not part of the network",
-  "training/ab_timing.py": "tool: in-process A/B step timer (two speed settings in one process, blocks A B | B A, paired interval); not part of the network",
-  "net/model/launch_saving.py": "speed variants of the forward (D53 / D54: fused splat, one shared mover, sync-free forms, host copies), same arithmetic as the plain code and off by default; drawn as the plain boxes",
-  "training/distill_student.py": "t22 stage A trainer of the student encoder (offline, against the cached teacher outputs); not part of the network",
-  "net/prep/gt_bev.py": "compatibility shim that re-exports GtGenerator",
-  "training/legacy": "S1 single-sensor pipeline and the t4 DualBEV front; nothing in model / train / evaluation imports it"
+  "net/model/launch_saving.py": "speed variants of the forward (D53 / D54: fused splat, one shared mover, sync-free forms, host copies), same arithmetic as the plain code and off by default; drawn as the plain boxes"
  }
 }

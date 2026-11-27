@@ -3,7 +3,7 @@
 <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker></defs>
 <rect width="1948" height="780" fill="#ffffff"/>
 <text x="24" y="30" font-size="19" font-weight="700" fill="#0f172a">bev_fusion: camera + radar BEV system in five layers</text>
-<text x="24" y="50" font-size="12" fill="#475569">Built 2026-11-01 as a five-layer design, updated 2026-11-21 (student image encoder, recursive one-frame / one-scan input, fusion-area masks). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, tests/test_slots.py) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.</text>
+<text x="24" y="50" font-size="12" fill="#475569">Built 2026-11-01 as a five-layer design, updated 2026-11-21 (student image encoder, recursive one-frame / one-scan input, fusion-area masks). Left of the input interface nothing learns; between the two interfaces every slot is a swappable block chosen in ModelConfig (one builder table per slot, model.check_config) with no rule step; right of the output interface only the selection of boxes and line cells for the metrics, and later the planner.</text>
 <text x="24" y="67" font-size="12" font-weight="600" fill="#b91c1c">main path (bold): 17 stages = 11 learned, 2 fixed-differentiable, 4 frozen, 0 rule steps</text>
 <text x="119.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">Sensors</text>
 <text x="309.0" y="98" font-size="12" font-weight="700" text-anchor="middle" fill="#334155">1 Precompute (own step)</text>
@@ -115,7 +115,7 @@
 <text x="689.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">| pillars | off</text>
 <text x="689.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">radar_bev.py::RadarBEV </text>
 </g>
-<g><title>temporal: net/model/temporal_fusion.py::TemporalFusion; net/model/temporal_fusion.py::recentre; net/model/splat.py::splat_window; net/model/fallbacks.py::EgoWarpGRU</title><rect x="804" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>temporal: net/model/temporal_fusion.py::TemporalFusion; net/model/temporal_fusion.py::recentre; net/model/splat.py::splat_window</title><rect x="804" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="879.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Temporal fusion</text>
 <text x="879.0" y="156.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">per branch: camera,</text>
 <text x="879.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">radar</text>
@@ -126,10 +126,10 @@
 <text x="1069.0" y="213.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">concat | gate</text>
 <text x="1069.0" y="227.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">fusion.py::ConcatFusion</text>
 </g>
-<g><title>backbone: net/model/bev_trunk.py::BEVTrunk; net/model/blocks_new.py::SecondTrunk; net/model/fallbacks.py::CMXTrunk</title><rect x="1184" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>backbone: net/model/bev_trunk.py::BEVTrunk; net/model/blocks_new.py::SecondTrunk</title><rect x="1184" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="1259.0" y="191.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEV backbone + neck</text>
 <text x="1259.0" y="206.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResNet + FPN |</text>
-<text x="1259.0" y="221.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SECOND | CMX</text>
+<text x="1259.0" y="221.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SECOND</text>
 <text x="1259.0" y="235.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::BEVTrunk </text>
 </g>
 <g><title>motion: net/model/timed_head.py::TimeMover; net/model/splat.py::splat_bev</title><rect x="1374" y="327.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
@@ -170,26 +170,25 @@
 <text x="1829.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">threshold</text>
 <text x="1829.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">extract.py::boxes_from_</text>
 </g>
-<g><title>consumers: evaluation/bev_adapter.py::predictions; evaluation/board.py; evaluation/evaluate.py</title><rect x="1754" y="327.0" width="150" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
+<g><title>consumers: evaluation/bev_adapter.py::predictions; evaluation/bev_eval.py; evaluation/bev_task.py::Board7Metric</title><rect x="1754" y="327.0" width="150" height="62" rx="7" fill="#dcfce7" stroke="#16a34a" stroke-width="1.4"/>
 <text x="1829.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Boxes, lines</text>
 <text x="1829.0" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">metrics, prototype</text>
 <text x="1829.0" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_adapter.py::predict</text>
 </g>
-<g><title>gt: ../GtGenerator/; net/prep/gt_cache_build.py; training/gt_scenes.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>gt: ../../GtGenerator/; net/prep/gt_cache_build.py; training/gt_scenes.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="309.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ground truth</text>
 <text x="309.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">GtGenerator, cached</text>
 <text x="309.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">GtGenerator/ +2</text>
 </g>
-<g><title>data: net/prep/feature_cache.py::CachedFrontRadarDataset; net/prep/batches.py::ClipDataset; net/prep/augment.py::flip_batch; training/scratch.py</title><rect x="424" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
-<text x="499.0" y="541.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Datasets, caches</text>
-<text x="499.0" y="556.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clips, mirror,</text>
-<text x="499.0" y="571.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">scratch</text>
-<text x="499.0" y="585.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Cache</text>
+<g><title>data: net/prep/feature_cache.py::CachedFrontRadarDataset; net/prep/batches.py::ClipDataset; net/prep/augment.py::flip_batch</title><rect x="424" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<text x="499.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Datasets, caches</text>
+<text x="499.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clips, mirror</text>
+<text x="499.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Cache</text>
 </g>
-<g><title>trainer: training/build_image_cache.py; training/train.py::train; ../autoresearch/trainkit/; training/freeze.py; training/probe.py; training/debug.py; net/model/model.py::check_config; net/prep/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>trainer: training/build_image_cache.py; training/train.py::train; ../../autoresearch/trainkit/; training/freeze.py; training/probe.py; net/model/model.py::check_config; net/prep/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="974.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer + trainkit</text>
 <text x="974.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">slot tables, check_config</text>
-<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">build_image_cache.py +7</text>
+<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">build_image_cache.py +6</text>
 </g>
 <g><title>loss: net/loss/object_loss.py; net/loss/radar_loss.py; net/loss/motion_loss.py; net/prep/targets.py; net/loss/losses.py::BEVLoss; net/loss/loss_extras.py</title><rect x="1374" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="1449.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Loss</text>

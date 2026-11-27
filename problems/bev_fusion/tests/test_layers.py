@@ -3,11 +3,12 @@
   STEP A, the table changes no number: every old layout (centrelines x dense_objects x stationary) gives the same channel list as the OLD layer_spec
      body (a reference copy below), the OLD map_terms body (a reference copy) gives the same terms and groups as the table-driven one on a synthetic batch
      (to 1e-9, and through BEVLoss.terms_at for the main, camera-aux and radar-aux heads), build_layer_targets reads the same GT layers, and a model with
-     the option off has exactly the state_dict keys and shapes of before (golden hashes made from the code of commit 479100d, the tiny test_slots config).
+     the option off has exactly the state_dict keys and shapes of before (golden hashes made from the code of commit 479100d, the tiny config of v1's test_slots.py).
   STEP B, centreline_1m (off by default): the pooling has a known answer on a hand-made 4 x 4 example (mask max-pool, direction = the mask-weighted mean,
      truncated distance min-pool); the truncated distance equals scipy's exact transform; the pooled targets of a synthetic frame; the loss is finite, an
      oracle prediction costs ~0 and a reversed direction does not; through the tiny model the output 'sem_1m' has the shape (B, 4, X / 2, Y / 2), the loss is
-     finite, and a gradient reaches every new parameter and the trunk; a model / loss disagreement on the flag is refused.
+     finite, and a gradient reaches every new parameter and the trunk; a model / loss disagreement on the flag is refused. check_config refuses an odd grid
+     for the 1 m row, and the slot kinds of v1's fallbacks.py (lift 's', temporal 'ego_gru', fusion 'cmx'; removed in v2) with a message, not an ImportError.
 Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_layers.py   (PYTHONPATH = the repository root for GtGenerator)
 """
 import hashlib
@@ -20,7 +21,7 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests/support", "tests", "training", "net/prep", "net/model", "net/loss"):
+for sub in ("tests/support", "training", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import layers as LY  # noqa: E402
 import losses as L  # noqa: E402
@@ -28,7 +29,7 @@ import synthetic_world as sw  # noqa: E402
 from feature_cache import CachedBEVFusionModel  # noqa: E402
 from lift_pd import Grid  # noqa: E402
 from model import ModelConfig, check_config  # noqa: E402
-from test_slots import batch_for  # noqa: E402
+from synthetic_batch import batch_for  # noqa: E402
 
 torch.set_num_threads(2)
 fails = []
@@ -324,7 +325,7 @@ try:
     ref = np.stack([np.minimum(distance_transform_edt(1 - mm[b, 0]) * LY.GT_RES, LY.DIST_MAX) for b in range(2)])[:, None]
     check(np.abs(LY.truncated_distance(torch.from_numpy(mm)).numpy() - ref).max() < 1e-5, "truncated distance = scipy's exact transform (random masks, 2 m cap)")
 except ImportError:
-    print("  skip scipy is not installed: the exact-transform comparison")
+    print("SKIP the exact-transform comparison: scipy is not installed")
 
 # the targets of a synthetic frame
 cfg1 = L.LossConfig(centreline_1m=True)
@@ -376,7 +377,7 @@ for kw in ({}, {"aux_heads": False, "dense_objects": False, "object_direction": 
           f"same seed, option on / off ({kw or 'default'}): all {len(sa)} shared tensors equal in value, key order and shape, the 1 m head's keys come last")
 on.train()
 with torch.no_grad():
-    for q in on.parameters():                                       # zero-start layers cut the gradient at init by design (as test_slots does)
+    for q in on.parameters():                                       # zero-start layers cut the gradient at init by design (as v1's test_slots did)
         if q.requires_grad and q.abs().max() == 0:
             q.normal_(0, 1e-2)
 batch = batch_for(on.cfg)
@@ -422,6 +423,12 @@ try:
     check(False, "check_config refuses an odd grid for centreline_1m")
 except ValueError:
     check(True, "check_config refuses an odd grid for centreline_1m")
+for kw in ({"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"}):
+    try:
+        check_config(ModelConfig(**dict(TINY, **kw)))
+        check(False, f"check_config refuses the removed slot kind {kw}")
+    except ValueError as e:
+        check("removed in v2" in str(e), f"check_config refuses the removed slot kind {kw} with a message: {str(e)[:70]}")
 
 print("test_layers " + ("FAILED: " + "; ".join(fails) if fails else "passed"))
 sys.exit(1 if fails else 0)

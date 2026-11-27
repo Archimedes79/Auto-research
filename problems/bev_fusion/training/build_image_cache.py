@@ -17,7 +17,7 @@ import splits
 
 
 def load_config(path):
-    """the TrainConfig of a config file as the trainer reads it: a "split" is replaced by its scene lists (net/prep/splits.py, what `Training check` does), so the builders
+    """the TrainConfig of a config file as the trainer reads it: a "split" is replaced by its scene lists (net/prep/splits.py resolve), so the builders
     cover the scenes of the run, not the whole official split"""
     import train as T
     return T.TrainConfig(**{k: v for k, v in splits.resolve(json.load(open(path))).items() if not k.startswith("_")})

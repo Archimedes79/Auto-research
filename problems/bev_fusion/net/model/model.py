@@ -3,10 +3,10 @@
     front camera frames (current + K-1 past, 12 Hz)            radar detections of all sweeps of the last 0.5 s
         |  pre-trained DualBEV image heads (frozen)                  |  already at the camera time (exact poses +
         |  -> depth distribution + context per pixel group           |     radial Doppler motion; nuscenes_dataset.py)
-        |  lift (PD / P / S) per frame -> 1x1 reduce                  |  radar block (raster + properties + 2 convs)
+        |  lift (PD / P) per frame -> 1x1 reduce                      |  radar block (raster + properties + 2 convs)
         |  camera temporal fusion (window of original frames         |  radar temporal fusion (optional)
-        |     + world-aligned memory / ego-warp GRU / none)          |
-        +---------------------------- fusion (concat / gate / CMX) --+
+        |     + world-aligned memory / none)                         |
+        +---------------------------------- fusion (concat / gate) --+
                                          |
                            BEV trunk (ResNet pyramid + FPN)
                                          |
@@ -20,10 +20,9 @@ interface (per dt the maps and object maps; with dense_outputs the dense boxes a
 Every block is chosen in ModelConfig; each option is either the plan's design or its paper fallback:
   lift          "pd"  lift PD, pull with depth weight (DualBEV / FastBEV++ / FB-BEV) - default
                 "p"   pull without depth (Simple-BEV, Fast-BEV) - control
-                "s"   forward splat (LSS / BEVPoolV2) - net/model/fallbacks.py LiftS
   cam_temporal  "window_memory"  net/model/temporal_fusion.py TemporalFusion (window of original frames + world memory)
-                "ego_gru"        FIERY-style ego warp + ConvGRU - net/model/fallbacks.py EgoWarpGRU (control arm A)
                 "none"           current frame only
+                (the paper fallbacks of v1, lift "s", temporal "ego_gru" and fusion "cmx" of fallbacks.py, were removed in v2: tag v1)
   cam_buffer    "window" (default) the batch holds the window of n_cam frames, all lifted on every call; a static world memory is the only
                 state | "pair" the window is ONE frame (t-1): the batch holds 2 frames, or in stream mode ONE frame and the previous raw
                 camera BEV comes from state["buf"] | "recurrent" the temporal block's own output of the previous frame is the buffer
@@ -36,10 +35,9 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 entering as a residual that starts as the identity (radar features + rad_mix(block output), rad_mix zero-initialised)
   camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, net/model/student_encoder.py): a small trained image encoder replaces, for the current frame, the DualBEV
                 depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached outputs, or with student_frames "all" (t26) come from the student too
-  rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory", "ego_gru"
+  rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory"
                 (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
-  fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify), "cmx" (GaussianCaR's
-                4-stage fuser + decoder, net/model/fallbacks.py CMXTrunk: replaces fusion AND backbone)
+  fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify)
   heads         semantic (channels = losses.layer_spec, made from the layer table layers.py; centreline_1m adds the 1 m branch sem_1m) and
                 objects (CenterPoint, S5a), both decoded at any dt by
                 net/model/timed_head.py (the shared TimeMover moves S to dt); the output is the prediction layout of losses.BEVLoss;
@@ -78,11 +76,7 @@ from timed_head import TimedHead, TimeMover
 from cameras import CAMERAS, CameraSource  # noqa: F401
 
 Z_LEVELS = (-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)        # a slice at the road plane (oracle-lift gate fix)
-
-
-def _fallbacks():
-    import fallbacks
-    return fallbacks
+REMOVED_KINDS = {("lift", "s"), ("cam_temporal", "ego_gru"), ("rad_temporal", "ego_gru"), ("fusion", "cmx")}   # v1's paper fallbacks (fallbacks.py): gone in v2
 
 
 @dataclass
@@ -99,7 +93,7 @@ class ModelConfig:
     radar_per_frame: bool = False      # t25: the radar branch runs per camera frame inside the recurrent unroll: each frame's own radar set (batch["radar_seq"],
                                        # nuscenes_dataset radar_per_frame; the dataset follows this switch, train.make_datasets) goes through the radar block and
                                        # rad_temporal with the previous fused radar BEV as its past, like the camera; needs cam_buffer 'recurrent' and rad_temporal
-                                       # 'window_memory' (the GRU would count its own past twice). The memory enters as a residual that starts as the identity:
+                                       # 'window_memory'. The memory enters as a residual that starts as the identity:
                                        # fused = radar features + rad_mix(block output), rad_mix a zero-initialised 1 x 1 conv (new keys rad_mix.*), so a fresh block
                                        # does not scramble the radar input of the pretrained fusion; the write mask is made per frame from that frame's sweep.
                                        # Know: the radar side loss reads the newest frame's features only, the motion block reads batch["radar"] (= the newest set)
@@ -169,7 +163,7 @@ class ModelConfig:
     z_levels: tuple = Z_LEVELS
     grid_kwargs: dict = field(default_factory=dict)
     dense_outputs: bool = False        # output interface: per dt the dense box output and the soft line map (extract.py); off by default
-                                       # (no loss and no evaluation reads them yet, stored ms stay comparable), only tests/test_slots.py switches it on
+                                       # (no loss and no evaluation reads them yet, stored ms stay comparable)
 
 
 # ------------------------------------------------------------------ the network slots: one builder table each (kind -> block)
@@ -196,10 +190,6 @@ def _second_trunk(cfg, p_drop):
     return trunk, trunk.out_channels
 
 
-def _cmx_trunk(cfg, p_drop):                                          # CMX: its own pyramid + decoder, replaces fusion AND backbone
-    return _fallbacks().CMXTrunk(cfg.c_cam, cfg.c_rad, embed=cfg.c_fuse, c_out=128, p_drop=p_drop), 128
-
-
 def source_lift(src, cfg, grid):
     """the lift of one source: its depth bins and its cell convention (frustum cells for the BEVFusion family)"""
     if src.features == "bevfusion":
@@ -208,19 +198,16 @@ def source_lift(src, cfg, grid):
 
 
 LIFTS = {"pd": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=True, oversample=cfg.oversample, depth_centres=depths, **kw),
-         "p": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=False, oversample=cfg.oversample, depth_centres=depths, **kw),
-         "s": lambda grid, depths, cfg, **kw: _fallbacks().LiftS(grid, depth_centres())}
+         "p": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=False, oversample=cfg.oversample, depth_centres=depths, **kw)}
 COLLAPSES = {"zconv": _zconv, "zsum": ZSumReduce}                     # height collapse of the lifted volume
 TEMPORALS = {"window_memory": lambda c, grid: TemporalFusion(c, c, grid),     # temporal slot, the same table for camera and radar
-             "ego_gru": lambda c, grid: _fallbacks().EgoWarpGRU(c, c, grid),
              "none": lambda c, grid: None}
 RADARS = {"raster": lambda grid, c: RadarBEV(grid, c), "off": lambda grid, c: RadarBEV(grid, c),
           "pillars": lambda grid, c: RadarPillars(grid, c),
           "delta_slots": lambda grid, c: RadarEncoder(grid, C=c)}      # radar_encoder.py: delta-coded slot raster, pass-through start, side loss
 CAM_BUFFERS = ("window", "pair", "recurrent")                          # what the camera temporal block gets from the past (forward: _camera_buffered)
-FUSIONS = {"concat": ConcatFusion, "gate": GateFusion, "cmx": None}  # cmx: the backbone takes both branch BEVs
+FUSIONS = {"concat": ConcatFusion, "gate": GateFusion}
 TRUNKS = {"dualbev": _dualbev_trunk, "second": _second_trunk}
-BACKBONES = dict(TRUNKS, cmx=_cmx_trunk)
 
 
 def _student(backbone):
@@ -247,31 +234,30 @@ def _build_student(cfg):
 
 def check_config(cfg):
     """every unknown kind and every combination of slot kinds that does not fit, in one place (one ValueError naming all)"""
-    errs = [f"{name}={val!r}: one of {sorted(table)}" for name, val, table in
+    errs = [f"{name}={val!r}: one of {sorted(table)}" + (" (removed in v2 with fallbacks.py; tag v1)" if (name, val) in REMOVED_KINDS else "")
+            for name, val, table in
             (("camera_features", cfg.camera_features, CAMERAS), ("lift", cfg.lift, LIFTS), ("cam_collapse", cfg.cam_collapse, COLLAPSES),
              ("cam_temporal", cfg.cam_temporal, TEMPORALS), ("cam_buffer", cfg.cam_buffer, CAM_BUFFERS), ("rad_temporal", cfg.rad_temporal, TEMPORALS),
              ("radar_kind", cfg.radar_kind, RADARS), ("fusion", cfg.fusion, FUSIONS), ("trunk_kind", cfg.trunk_kind, TRUNKS))
             if val not in table]
-    if len(CAMERAS.get(cfg.camera_features, ())) > 1 and (cfg.lift == "s" or cfg.cam_adapter):
-        errs.append(f"camera_features={cfg.camera_features!r} (several feature sources) is not supported with lift 's' or cam_adapter")
-    if cfg.camera_features == "bevfusion" and cfg.lift == "s":
-        errs.append("camera_features='bevfusion' is not supported with lift 's'")
-    if cfg.lane_branch and (cfg.camera_features not in CAMERAS or CAMERAS[cfg.camera_features][0].features != "dualbev" or cfg.lift == "s"):
+    if len(CAMERAS.get(cfg.camera_features, ())) > 1 and cfg.cam_adapter:
+        errs.append(f"camera_features={cfg.camera_features!r} (several feature sources) is not supported with cam_adapter")
+    if cfg.lane_branch and (cfg.camera_features not in CAMERAS or CAMERAS[cfg.camera_features][0].features != "dualbev"):
         errs.append("lane_branch reads the depth, the calibration and the crop of the FIRST feature source (the lane image is the DualBEV one): it needs "
-                    "camera_features 'dualbev' or 'dual' and lift 'pd' / 'p'")
+                    "camera_features 'dualbev' or 'dual'")
     if cfg.cam_buffer != "window" and cfg.cam_temporal != "window_memory":
         errs.append(f"cam_buffer={cfg.cam_buffer!r} buffers a frame for the window-memory block: it needs cam_temporal 'window_memory' (is {cfg.cam_temporal!r})")
     if cfg.radar_kind == "delta_slots" and cfg.c_rad < n_channels():
         errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
     if cfg.rad_static_gate and (cfg.rad_temporal == "none" or cfg.radar_kind == "off"):
-        errs.append("rad_static_gate gates the write of the radar memory: it needs rad_temporal 'window_memory' / 'ego_gru' and a radar")
+        errs.append("rad_static_gate gates the write of the radar memory: it needs rad_temporal 'window_memory' and a radar")
     if cfg.rad_static_vr <= 0:
         errs.append(f"rad_static_vr must be positive (m/s), is {cfg.rad_static_vr}")
     if not isinstance(cfg.radar_per_frame, bool):                     # a config value null / 0 / "false" must not silently switch the radar branch
         errs.append(f"radar_per_frame must be true or false, is {cfg.radar_per_frame!r}")
     elif cfg.radar_per_frame and (cfg.cam_buffer != "recurrent" or cfg.rad_temporal != "window_memory" or cfg.radar_kind == "off"):
         errs.append("radar_per_frame steps the radar block next to the recurrent camera unroll: it needs cam_buffer 'recurrent', rad_temporal "
-                    "'window_memory' (the ego_gru would take its own past in twice) and a radar")
+                    "'window_memory' and a radar")
     if cfg.lane_branch and cfg.camera_off:                            # the branch reads the current image: a "camera off" arm would still see it
         errs.append("lane_branch reads the camera image: it cannot be combined with camera_off")
     if not isinstance(cfg.lane_use_depth, bool):                      # t24: a config value null / 0 / "false" must not silently pick a lift
@@ -283,7 +269,7 @@ def check_config(cfg):
             errs.append(f"camera_student={cfg.camera_student!r}: one of {sorted(STUDENTS)}")
         if cfg.camera_features != "dual":
             errs.append("camera_student replaces the cached outputs of BOTH feature sources (DualBEV and BEVFusion) of the current frame: it needs camera_features 'dual'")
-        # lift 's' and cam_adapter need no rule of their own: 'dual' (several feature sources) refuses both above
+        # cam_adapter needs no rule of its own: 'dual' (several feature sources) refuses it above
         if cfg.camera_off:
             errs.append("camera_student reads the camera image: it cannot be combined with camera_off")
         if not cfg.student_trainable and not cfg.student_init:
@@ -352,10 +338,10 @@ class BEVFusionModel(nn.Module):
         self.radar = RADARS[cfg.radar_kind](self.grid, cfg.c_rad)
         self.rad_temporal = TEMPORALS[cfg.rad_temporal](cfg.c_rad, self.grid)
         self._rad_mask = "radar_static" if cfg.rad_static_gate else "radar_hits"        # the write mask of the radar memory (precompute.MAPS)
-        # fusion + backbone slots (CMX is its own four-stage pyramid + decoder: it replaces both)
+        # fusion + backbone slots
         p_drop = 0.0 if (cfg.camera_off or cfg.radar_kind == "off") else cfg.p_drop
-        self.fusion = None if cfg.fusion == "cmx" else FUSIONS[cfg.fusion](cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
-        self.trunk, c = BACKBONES["cmx" if cfg.fusion == "cmx" else cfg.trunk_kind](cfg, p_drop)
+        self.fusion = FUSIONS[cfg.fusion](cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
+        self.trunk, c = TRUNKS[cfg.trunk_kind](cfg, p_drop)
         if hasattr(self.trunk, "head"):
             del self.trunk.head                                      # the heads below decode the trunk features
         self.head_reduce = None
@@ -685,7 +671,7 @@ class BEVFusionModel(nn.Module):
                                                                                            # rad_static_gate: where it measured the static world);
                                                                                            # no radar points: no mask = everywhere
             rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
-        S = self.trunk.features(cam, rad) if self.fusion is None else self.trunk.features(self.fusion(cam, rad))
+        S = self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:
             S = self.head_reduce(S)
         v, w = batch["v"].to(S), batch["omega"].to(S)
@@ -750,7 +736,7 @@ def _selftest():
     from losses import BEVLoss, sample_targets
     from nuscenes_dataset import FrontRadarDataset, collate
     torch.manual_seed(0)
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))        # the bev_fusion folder
+    os.chdir(netpath.SITE)                                                   # the site folder: the default weights are named relative to it (models/pretrained)
     assert BEVFusionModel(ModelConfig(pretrained="")).fusion.p_drop == 0.2
     for off in (dict(camera_off=True), dict(radar_kind="off")):    # one sensor off: no modality dropout (it would blank the sample)
         assert BEVFusionModel(ModelConfig(pretrained="", **off)).fusion.p_drop == 0.0, off
@@ -830,7 +816,6 @@ def _selftest():
     del m, r, cast, Lr
     # every swappable block (shapes only: no checkpoint, no gradient)
     swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
-             {"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"},
              {"radar_kind": "pillars"}, {"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
              {"camera_off": True}, {"cam_adapter": True}, {"cam_collapse": "zsum"}, {"cam_buffer": "recurrent"}]
     tried = []

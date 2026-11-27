@@ -1,7 +1,7 @@
 """Module probe: what does every module of the chain output, does it respond to its input, is it related to the GT? One run, a few val frames,
 CPU or GPU (no checkpoint is changed, the network runs through the same `train.forward_loss` as the evaluation, cold memory per frame).
 
-    python evaluation/bev_modules.py RUN [--frames 3] [--device cpu] [--split val] [--threads 2] [--out DIR]     (also: bev_suite.py RUN modules ...)
+    python evaluation/bev_modules.py RUN [--frames 3] [--device cpu] [--split val] [--threads 2] [--out DIR]     (also: `Evaluation.probe(RUN)`)
     python evaluation/bev_modules.py --selftest                                                                    (synthetic, no run needed)
 
 Writes OUT (default RUN/eval/modules/):

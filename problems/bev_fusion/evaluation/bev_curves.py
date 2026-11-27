@@ -14,8 +14,8 @@ most negatives below p = 0.005, and equal-width bins in p lumped them into one b
 `--selftest` compares with the exact curves of sorted scores (within 0.004). A NaN probability counts as p = 0 (the IoU path does the same, NaN > 0.5 is false).
 Cells: maps on the camera cells (`fov`), objects and velocity on the camera cells without ignored boxes (`obj_fov`), the same masks as the IoU.
 Flat names: `curve/dt+0.00/<layer>/{ap, roc_auc, f1_max, thr_f1, prevalence, ece, brier, n_pos, n}`, `curve/dt+0.00/velocity/{obj, moving}/{epe, rmse, r2, bias, n}`.
-Switched on with `bev_suite.py RUN --curves eval ...` (off by default: the standard card and its golden numbers stay unchanged); the evaluation of a run with
---curves goes into its own store (`eval_curves_n<N>`), so an evaluation made without them is never silently reused.
+Switched on by the metric `curves` of an Evaluation (`Evaluation.run(net, frames, metrics=("maps", "boxes", "curves"))`; off by default); the metrics are part of the
+evaluation id, so an evaluation made without them is never silently reused.
     python evaluation/bev_curves.py --selftest"""
 from __future__ import annotations
 

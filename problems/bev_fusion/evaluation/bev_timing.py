@@ -1,7 +1,7 @@
 """Milliseconds per module: where does the time of one frame go? Batch 1, the cached chain, the dts (-0.5, 0, +0.5) of `benchmark()`; and for training the
 forward / backward share of one micro-batch.
 
-    python evaluation/bev_timing.py RUN [--n 30] [--warmup 5] [--device cuda] [--out FILE] [--ckpt-dir DIR] [--force]     (also: bev_suite.py RUN timing ...)
+    python evaluation/bev_timing.py RUN [--n 30] [--warmup 5] [--device cuda] [--out FILE] [--ckpt-dir DIR] [--force]     (also: `Evaluation.time(RUN)`)
     python evaluation/bev_timing.py --selftest                                                                           (toy modules with known sleeps, CPU)
 
 How: a forward pre-hook and a forward hook on every direct child module of the model (`bev_modules.chain_modules`: lift AND lift2 of a dual camera, lane, ...; the
@@ -10,18 +10,18 @@ attributed EXCLUSIVELY (its time is taken off the caller), a module called sever
 (the sum of its calls). The sum of the modules is printed next to the unsynchronised total and the difference is `unattributed_ms`: host-side work outside every
 module (precompute, rasterising the radar, decoding) plus the synchronisation overhead (every sync stalls the queue: the sum of a small-kernel chain is a
 little ABOVE its fused time on the GPU, while the host work makes the total larger): read the split as shares, not as an exact budget.
-A job that is merely QUEUED (a run.py launcher waiting for its GPU slot) is not seen, and when a slot frees it starts under a running timing: time through a GPU
-slot (as `temp/t16/eval_chain.sh` does) or look at the schedule first.
 This is the fp32 path of `BEVSubject.benchmark()` with a cold memory (no state carried in) and without the ego correction; a run trained with cfg.amp != off or
 a warm-memory deployment is not what is timed here (a warning says so). Training: the loss of a micro-batch (forward) and its backward, median of 8 with min / max.
 
 IDLE GPU ONLY. The GPU utilisation (max of 3 samples), the memory in use, the other GPU processes (`nvidia-smi` lists the holders of a CUDA context under WSL2, this process not counted, and `ps` is read too: a python
-process running a trainer / evaluation / probe script on the GPU counts, a run.py launcher waiting for a slot does not), the load average are stored with the numbers (`idle`) and a busy GPU is refused - before the model is loaded AND again before
+process running a GPU step of a research run, a run's worker (also one that waits for its GPU slot: its step would start under the timing) or a GPU tool of this
+problem counts, see `holds_gpu`), the load average are stored with the numbers (`idle`) and a busy GPU is refused - before the model is loaded AND again before
 the timed loop - unless --force (the result is then marked not idle and must not be quoted). Result: RUN/eval/timing_modules.json (default).
-`bev_suite.py RUN time` gives the headline latency of the whole chain (eval/latency.json); this is its split by module."""
+`Evaluation.get_cost` gives the headline latency of the whole chain (ms per frame as the network ran); this is its split by module."""
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -38,9 +38,26 @@ sys.path[:0] = [ROOT, os.path.join(ROOT, "..", ".."), os.path.join(ROOT, "..", "
 from evaluation.bev_modules import chain_modules, wrap_method  # noqa: E402
 
 GPU_BASELINE_MB = 2000                       # desktop apps hold ~1.3 GB with no job
-GPU_SCRIPTS = {"train.py": "cuda", "train_motion_block.py": "cuda", "bev_suite.py": "cuda", "bev_runner.py": "cuda", "bev_timing.py": "cuda",
-               "bev_prototype.py": "cuda", "cache_bevfusion_features.py": "cuda", "bev_modules.py": "cpu"}        # script -> the device it uses when --device is not given
-SUITE_OPTIONS_WITH_VALUE = ("--device", "--workers", "--split", "--ckpt-dir", "--out", "--control", "--state")    # bev_suite.py's global options that take a value
+PROBLEMS = os.path.join(ROOT, "..")          # problems/: the steps of their problem.json say which scripts take a GPU
+OWN_GPU_SCRIPTS = {"bev_timing.py": "cuda", "cache_bevfusion_features.py": "cuda", "bev_modules.py": "cpu"}       # this problem's GPU tools that are no step -> the device without --device
+RESEARCH_MODULES = ("research.evaluate",)    # the core's evaluation step; `-m research worker` (a run's worker) counts too
+
+
+def gpu_scripts(problems_dir=PROBLEMS):
+    """script name -> the device it uses without --device: this problem's GPU tools and every script of a problem step with "gpus" >= 1 (problems/*/problem.json, read only;
+    a problem.json that cannot be read is an error, not a script less)"""
+    out = dict(OWN_GPU_SCRIPTS)
+    for path in sorted(glob.glob(os.path.join(problems_dir, "*", "problem.json"))):
+        try:
+            with open(path, encoding="utf-8") as f:
+                steps = json.load(f).get("steps", {})
+            for step in steps.values():
+                run = step.get("run")
+                if isinstance(run, list) and step.get("gpus", 0) >= 1:
+                    out.update((os.path.basename(t), "cuda") for t in run if isinstance(t, str) and t.endswith(".py"))
+        except (OSError, ValueError, AttributeError, TypeError) as e:
+            raise ValueError(f"{path}: the GPU steps cannot be read ({type(e).__name__}: {e})") from None
+    return out
 
 
 def sync(device):
@@ -132,11 +149,11 @@ def train_split(loss_fn, zero_grad, device="cpu", n=8, warmup=5):
     return {"forward_loss": statistics.median(fw), "backward": statistics.median(bw), "forward_loss_min_max": [min(fw), max(fw)], "backward_min_max": [min(bw), max(bw)]}
 
 
-def holds_gpu(args):
-    """does this command line (`ps -eo args`) belong to a process that holds the GPU? Only a python interpreter RUNNING one of GPU_SCRIPTS does (the script is the first
-    token ending in .py, or the module of `-m`; `-W ignore` / `-X dev` values are not mistaken for it), on the device it was given (--device, else the script's default;
-    bev_suite's `modules` command defaults to the CPU). A waiting run.py launcher (queued for a GPU slot, its own arguments name train.py and run_ar.sh), a bash wrapper,
-    `python -c` and a shell are not users of the GPU."""
+def holds_gpu(args, scripts):
+    """does this command line (`ps -eo args`) belong to a process that holds the GPU? A python interpreter running a run's worker (`-m research worker`: it runs a step or
+    waits for its GPU slot, and a step that starts under a timing spoils it), the core's evaluation step (`-m research.evaluate`) or one of `scripts` (gpu_scripts(); the
+    script is the first token ending in .py, or the last part of the module of `-m`; `-W ignore` / `-X dev` values are not mistaken for it) on the device it was given
+    (--device, else the script's default). A bash wrapper, `python -c` and a shell are not users of the GPU."""
     tok = args.split()
     while tok and (os.path.basename(tok[0]) == "env" or "=" in tok[0]):         # `env VAR=1 python ...`
         tok = tok[1:]
@@ -147,35 +164,25 @@ def holds_gpu(args):
         return False
     if "-m" in opts[:4]:
         i = opts.index("-m")
-        script, after = opts[i + 1].split(".")[-1] + ".py" if i + 1 < len(opts) else "", opts[i + 2:]
+        module, after = (opts[i + 1], opts[i + 2:]) if i + 1 < len(opts) else ("", [])
+        if module in RESEARCH_MODULES or (module == "research" and after[:1] == ["worker"]):
+            return True
+        script = module.split(".")[-1] + ".py" if module else ""
     else:
-        i = next((k for k, t in enumerate(opts) if t.endswith(".py")), None)
-        script, after = (os.path.basename(opts[i]), opts[i + 1:]) if i is not None else ("", [])
-    if script not in GPU_SCRIPTS:
+        script = next((os.path.basename(t) for t in opts if t.endswith(".py")), "")
+    if script not in scripts:
         return False
-    device = GPU_SCRIPTS[script]
     m = re.search(r"--device(?:=|\s+)(\S+)", args)
-    if m:
-        device = m.group(1)
-    elif script == "bev_suite.py":
-        positional, k = [], 0
-        while k < len(after) and len(positional) < 2:
-            if after[k].startswith("--"):
-                k += 2 if after[k] in SUITE_OPTIONS_WITH_VALUE else 1
-            else:
-                positional.append(after[k])
-                k += 1
-        if len(positional) == 2 and positional[1] == "modules":
-            device = "cpu"
-    return device.startswith("cuda")
+    return (m.group(1) if m else scripts[script]).startswith("cuda")
 
 
-def busy_processes(ps_text, own):
-    """the processes of a `ps -eo pid,args` listing that hold the GPU (holds_gpu), except the pids in `own`"""
+def busy_processes(ps_text, own, scripts=None):
+    """the processes of a `ps -eo pid,args` listing that hold the GPU (holds_gpu), except the pids in `own`; scripts: default gpu_scripts()"""
+    scripts = gpu_scripts() if scripts is None else scripts
     out = []
     for ln in ps_text.splitlines()[1:]:
         parts = ln.strip().split(None, 1)
-        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) not in own and holds_gpu(parts[1]):
+        if len(parts) == 2 and parts[0].isdigit() and int(parts[0]) not in own and holds_gpu(parts[1], scripts):
             out.append(f"{parts[0]} {parts[1][:100]}")
     return out
 
@@ -198,9 +205,10 @@ def gpu_state(samples=3, gap=0.5):
         st["other_processes"] = [ln.strip() for ln in p.splitlines() if ln.strip() and ln.split(",")[0].strip() != str(os.getpid())]      # nvidia-smi lists this process too once it holds a CUDA context
     except Exception:                                                   # noqa: BLE001  (no nvidia-smi: unknown)
         pass
+    scripts = gpu_scripts()                                             # outside the try: a problem.json that cannot be read stops the timing, never a quiet miss
     try:
-        st["busy_processes"] = busy_processes(subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=20).stdout, {os.getpid(), os.getppid()})
-    except Exception:                                                   # noqa: BLE001
+        st["busy_processes"] = busy_processes(subprocess.run(["ps", "-eo", "pid,args"], capture_output=True, text=True, timeout=20).stdout, {os.getpid(), os.getppid()}, scripts)
+    except Exception:                                                   # noqa: BLE001  (no ps: unknown)
         pass
     return st
 
@@ -424,30 +432,37 @@ def selftest():
     assert timing_with(ok, busy).startswith("refused before the timed loop") and seen == ["first", "build", "second cuda"], seen
     assert timing_with(ok, ok) == "went on" and seen == ["first", "build", "second cuda"], seen
     assert timing_with(ok, busy, force=True) == "went on" and timing_with(busy, ok, force=True) == "went on", "--force times a busy GPU (and marks the result not idle)"
-    ps = "  PID COMMAND\n  101 /usr/bin/python -u runs/t16/code/train.py cfg\n  102 python evaluation/bev_suite.py runs/x timing\n  103 bash -c sleep 5\n  104 python other.py\n"
-    assert [x.split()[0] for x in busy_processes(ps, {102})] == ["101"] and busy_processes(ps, {101, 102}) == [], "ps: trainers / evaluations, not ourselves"
-    # queued jobs are not GPU users (the bug: a run.py launcher waiting for a slot, whose arguments name train.py / run_ar.sh / bev_suite, refused the timing on an idle GPU)
-    waiting = ("  PID COMMAND\n"
-               "  201 python3 /mnt/c/Auto-research/autoresearch/tools/run.py --id t17.data --gpu --split train --hyp more scenes -- bash temp/train/run_ar.sh temp/compose/t17_data.json\n"
-               "  202 python3 ../autoresearch/tools/run.py --id t17.data.eval --gpu --split val --no-card --after t17.data -- bash temp/t16/eval_chain.sh runs/t17_data\n"
-               "  203 bash temp/train/run_ar.sh temp/compose/t17_data.json\n"
-               "  204 python3 ../autoresearch/tools/run.py --id x --gpu -- python evaluation/bev_suite.py runs/x eval --n 10\n")
-    assert busy_processes(waiting, set()) == [], busy_processes(waiting, set())
-    running = ("  PID COMMAND\n  301 /home/ml/miniconda3/envs/gcar/bin/python -u runs/t17_data/code/train.py temp/compose/t17_data.json\n"
-               "  302 python -u evaluation/bev_suite.py runs/t17_data eval --n 1000\n  303 python -u evaluation/bev_suite.py runs/t17_data --device cpu eval --n 6\n"
-               "  304 python evaluation/bev_suite.py runs/t17_data modules --frames 3\n  305 python evaluation/bev_suite.py runs/t17_data --device cuda modules\n  306 python -c import train.py\n")
-    assert [x.split()[0] for x in busy_processes(running, set())] == ["301", "302", "305"], busy_processes(running, set())
-    for line, want in (("python3.12 -u runs/x/code/train.py cfg.json", True), ("python -W ignore runs/x/code/train.py cfg.json", True), ("python -X dev -u train.py cfg", True),
-                       ("env CUDA_VISIBLE_DEVICES=0 python train.py cfg", True), ("python -m evaluation.bev_suite runs/x eval --n 5", True),
-                       ("python -m evaluation.bev_suite runs/x --device=cpu eval --n 5", False), ("python evaluation/bev_suite.py runs/x eval --n 5 --out modules", True),
-                       ("python evaluation/bev_suite.py runs/x --workers 0 modules", False), ("python evaluation/bev_suite.py runs/modules eval", True),
-                       ("python evaluation/bev_suite.py runs/x --curves --fusion eval", True), ("python evaluation/bev_suite.py runs/x --device=cuda modules", True),
-                       ("python evaluation/bev_suite.py runs/x --device cuda modules", True), ("python runner/bev_runner.py full runs/x", True),
-                       ("python runner/bev_runner.py full runs/x --device cpu", False), ("python evaluation/bev_timing.py runs/x", True), ("python evaluation/bev_modules.py runs/x", False),
-                       ("python evaluation/bev_modules.py runs/x --device cuda", True), ("python evaluation/bev_prototype.py runs/x", True),
-                       ("python -c train.py", False), ("python -m json.tool train.py", False), ("python3 tools/run.py --id x --gpu -- python train.py", False),
-                       ("bash temp/train/run_ar.sh cfg train.py", False), ("bash tools/run_ar.sh cfg train.py", False), ("python other.py train.py", False)):
-        assert holds_gpu(line) == want, (line, want)
+    # the GPU steps of the problems: a step with "gpus" >= 1 names its scripts, a step without, the core's evaluation step and a broken problem.json do not (the latter is an error)
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, steps in (("a", {"train": {"run": ["{python}", "training/train.py", "{config}"], "gpus": 1}, "prepare": {"run": ["{python}", "gt/generate.py", "{config}"]}}),
+                            ("b", {"stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1}, "evaluate": {"run": "evaluate", "gpus": 1}})):
+            os.makedirs(os.path.join(tmp, name))
+            json.dump({"steps": steps}, open(os.path.join(tmp, name, "problem.json"), "w"))
+        scripts = gpu_scripts(tmp)
+        assert scripts == {**OWN_GPU_SCRIPTS, "train.py": "cuda", "lane_train.py": "cuda"}, scripts
+        open(os.path.join(tmp, "b", "problem.json"), "w").write("{broken")
+        try:
+            gpu_scripts(tmp)
+            raise AssertionError("a broken problem.json was read as no GPU step")
+        except ValueError as e:
+            assert "problem.json" in str(e), e
+    assert gpu_scripts().get("train.py") == "cuda", "this problem's own train step (problem.json: gpus 1) is a GPU script"
+    ps = ("  PID COMMAND\n  101 /home/ml/miniconda3/envs/gcar/bin/python training/train.py /runs/bev_fusion/E27.a_s0/config.json\n"
+          "  102 python evaluation/bev_timing.py runs/x\n  103 bash -c sleep 5\n  104 python other.py\n")
+    assert [x.split()[0] for x in busy_processes(ps, {102}, scripts)] == ["101"] and busy_processes(ps, {101, 102}, scripts) == [], "ps: trainers / evaluations, not ourselves"
+    # a run's worker counts, also while it waits for its GPU slot (its step would start under the timing); the commands of the core that start or show runs do not
+    research = ("  PID COMMAND\n  201 /home/ml/miniconda3/envs/gcar/bin/python -m research worker bev_fusion E27.a_s0\n  202 python3 -m research status bev_fusion\n"
+                "  203 python3 -m research start bev_fusion E27\n  204 python -m research.evaluate bev_fusion E27.a_s0\n"
+                "  205 python training/train/lane_train.py stage1 /runs/lane_center/E400.a_s0/config.json\n  206 python gt/generate.py make --config cfg\n  207 python -c import train.py\n")
+    assert [x.split()[0] for x in busy_processes(research, set(), scripts)] == ["201", "204", "205"], busy_processes(research, set(), scripts)
+    for line, want in (("python3.12 -u /runs/_code/abc/problems/bev_fusion/training/train.py cfg.json", True), ("python -W ignore training/train.py cfg.json", True),
+                       ("python -X dev -u train.py cfg", True), ("env CUDA_VISIBLE_DEVICES=0 python train.py cfg", True), ("python -m evaluation.bev_timing runs/x", True),
+                       ("python -m evaluation.bev_timing runs/x --device=cpu", False), ("python evaluation/bev_timing.py runs/x", True), ("python evaluation/bev_modules.py runs/x", False),
+                       ("python evaluation/bev_modules.py runs/x --device cuda", True), ("python net/prep/cache_bevfusion_features.py", True),
+                       ("python -m research worker toy E4.m_s0", True), ("python -m research.evaluate lane_center E400.a_s0", True), ("python -m research status", False),
+                       ("python -c train.py", False), ("python -m json.tool train.py", False), ("bash -c python training/train.py cfg", False), ("python other.py train.py", False)):
+        assert holds_gpu(line, scripts) == want, (line, want)
     print("bev_timing selftest ok: per call / per frame / exclusive milliseconds of toy modules with known sleeps, hooks removed and output unchanged, training split, idle rule")
 
 

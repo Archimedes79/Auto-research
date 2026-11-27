@@ -6,14 +6,12 @@
 A set is `<split>.<part>`: the name of a training split (`small`, `large`, `xl`: the file the training config's `"split"` names) and its part, `train` or `val`
 (`small.val` = the 10 val scenes of splits/small.json). The bare names `val` and `train` (the default `val`) are the lists the run itself was trained and validated on
 (its `config.json`, as before): for a run trained on `large`, `val` and `large.val` are the same 82 scenes. A new set is a new split file in `splits/` (and then also usable
-by the training), never a list in the evaluation. The TEST split is not a set: it needs a logged row under Mirko's recorded OK (`run.py --split test`), so `test` and
-`<split>.test` are refused here.
+by the training), never a list in the evaluation. The TEST split is not a set: it opens only in a run of `research test` (a row of TEST_LOG.md under a decided decision), so
+`test` and `<split>.test` are refused here.
 
-Where it is used: `evaluation/evaluate.py RUN --split small.val ...` and `bev_suite.py RUN --split small.val <command>` (`--split` takes a set name; `val` / `train` as always),
-`bev_adapter.build(run, split=<set>)` puts the set's lists into the run's config before the data is made, so the run's checkpoint and caches are the run's own and only the
-scenes change. Outputs of a named set carry its name (`eval/card_small_val.json`, `eval/suite/quant/eval_small_val_n80`); the card says `"split": "small.val"`, its `provenance.data` holds the
-set, the scenes and the frame hash, so `decide.py` (a card's split must be the one the experiment declares, the frame hashes must agree) and `bev_suite.py compare --split
-small.val` (the store of that name on both runs) keep sets apart.
+Where it is used: the set of an Evaluation (`Evaluation.run(RUN, "small.val")`, `spread:1000:small.val`; `val` / `train` as always); `bev_adapter.build(run, split=<set>)` puts
+the set's lists into the run's config before the data is made, so the run's checkpoint and caches are the run's own and only the scenes change. The set name and its hash
+(`set_hash` of the Source's description) are part of the evaluation id, so evaluations of different sets are kept apart.
 """
 from __future__ import annotations
 
@@ -48,7 +46,7 @@ def parse(name: str):
         return None, name
     split, dot, part = str(name).partition(".")
     if name == "test" or (dot and part == "test" and re.fullmatch(r"[a-z0-9_]+", split)) or (dot and part in PARTS and split == "test"):
-        raise ValueError(f"set {name!r}: the TEST split is not offered (a logged row under a recorded decision, then `run.py --split test`)")
+        raise ValueError(f"set {name!r}: the TEST split is not offered (it opens only in a run of `research test`)")
     if not (dot and part in PARTS and name_ok(split)):
         raise ValueError(f"set {name!r}: val | train (the run's own lists) or <split>.<part> with part train | val, e.g. small.val (`evaluation/bev_sets.py --list`)")
     return split, part

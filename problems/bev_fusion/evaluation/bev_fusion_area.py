@@ -277,29 +277,8 @@ def selftest():
     print("bev_fusion_area selftest ok: footprint shares, GT classes, neutral detections, coverage classes")
 
 
-def coverage_table(n: int = 300, sig: Optional[str] = None, seed: int = 0, pts=None):
-    """how the COMPLETE GT set (every annotated box in the scored window) of `n` cached frames splits by what the rig can observe: counts per class and share of the class's total"""
-    from evaluation import bev_gtcheck as G
-    from Evaluation.contracts import FrameRef
-    task = G.build_task()
-    metric = BevCoverageMetric(task.groups, pts if pts is not None else task._pts())
-    counts, sig = [], G.resolve_sig(sig)
-    for i, (name, s) in enumerate(G.pick(n, sig, seed)):
-        counts.append(metric.frame(Sample(ref=FrameRef("gt", i, name), inputs=None, reference=s), Prediction(outputs={"dt": {0.0: {"dets": []}}})))
-    res = metric.reduce(counts)
-    shown = [c for c in COV_CLASSES if metric.pts or c not in RADAR_CLASSES]
-    print(f"{len(counts)} frames of signature {sig}; annotated boxes in the scored window (x < 60 m, +-32.3 deg), observed or not")
-    print(f"{'class':14s}" + "".join(f"{c:>12s}" for c in shown))
-    for grp in task.groups:
-        tot = res[f"dt+0.00/{grp}/all/n_gt"]
-        print(f"{grp:14s}" + "".join(f"{int(res[f'dt+0.00/{grp}/{c}/n_gt']):7d}{100 * res[f'dt+0.00/{grp}/{c}/n_gt'] / tot if tot else 0:4.0f} %" for c in shown))
-    return res
-
-
 if __name__ == "__main__":
     if "--selftest" in sys.argv:
         selftest()
-    elif "--coverage" in sys.argv:
-        coverage_table(int(sys.argv[sys.argv.index("--n") + 1]) if "--n" in sys.argv else 300)
     else:
         print(__doc__)

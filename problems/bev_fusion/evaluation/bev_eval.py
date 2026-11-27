@@ -1,16 +1,17 @@
 """The BEV system as a project of the evaluation class (`autoresearch/Evaluation/api.py`, named in `evaluation/evaluation.json`): what a network, a set and a frame are here.
 
-    AR_PROJECT=../bev_fusion  python -m Evaluation Evaluation.run runs/t23_C_s1 small.val --gt-key v8      (from autoresearch/; the whole interface: `python -m Evaluation methods`)
+    AR_PROJECT=../problems/bev_fusion RESEARCH_RUNS=<runs root>/bev_fusion  python -m Evaluation Evaluation.run t21_ctl_s0 small.val --gt-key v13
+                                                    (from autoresearch/; the whole interface: `python -m Evaluation methods`)
 
-It adds no logic of its own: the Source and the Subject are `bev_adapter.build` (so the objects, and with them the numbers, are those of `bev_suite.py eval`), the sets are `bev_sets.py`
-(the training's `splits/`), the Task is `bev_suite._task_only` (the metric definitions without a model; the metric flags: maps / boxes are always on, `curves`, `fusion`, `velocity`
-switch the families of `--curves --fusion --velocity`), the card is `bev_suite.contract_card`. A network is a run folder, `runs/<name>`; everything of an evaluation goes under its
-`eval/` (`eval/results/<id>` the predictions, `eval/suite/quant/<id>` the scored evaluation).
+It adds no logic of its own: the Source and the Subject are `bev_adapter.build`, the sets are `bev_sets.py` (the training's `splits/`), the Task is `_task_only` below (the metric
+definitions without a model; maps / boxes are always on, `curves`, `fusion`, `velocity` switch their families on, `board` is the score of the problem). A network is a run folder
+(its config.json and checkpoints; by path or by name in the run root, `Evaluation/defaults.py`); everything of an evaluation goes under its `eval/` (`eval/results/<id>` the
+predictions, `eval/suite/quant/<id>` the scored evaluation).
 
-What differs from `bev_suite.py eval`: the memory is always carried (D70: whole scenes in time order from the network's own start, the frames asked for decide what is kept and scored; the
-old `eval` without `--warm` starts every frame cold), the predictions are stored, so a new GT is scored without the network, and the network is run by the Runner (D72), which reads no ground
-truth: a prediction carries no validation loss, so `loss.*` / `val_loss/*` are not among the numbers of an Evaluation (`bev_suite.py eval` keeps them).
-Limits: the identity of a network reads its last checkpoint, so predictions of a run whose checkpoints were archived or slimmed (keep3) are found under the identity of the file that was there, and a
+The memory is always carried (D70: whole scenes in time order from the network's own start, the frames asked for decide what is kept and scored), the predictions are stored, so a
+new GT is scored without the network, and the network is run by the Runner (D72, `Evaluation/netrunner.py`), which reads no ground truth: a prediction carries no validation loss,
+so `loss.*` / `val_loss/*` are not among the numbers of an Evaluation.
+Limits: the identity of a network reads its last checkpoint, so predictions of a run whose checkpoints were archived or slimmed are found under the identity of the file that was there, and a
 changed file is another network; a network is addressed by the name of its run folder (`runs/x` and `archive/x` would share the id `x@...`).
 """
 from __future__ import annotations

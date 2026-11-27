@@ -1,4 +1,4 @@
-"""Velocity of the dense field and of the box centres, split the way the velocity cards need it (t12, t15): `bev_suite.py eval --velocity`.
+"""Velocity of the dense field and of the box centres, split the way the velocity cards need it (t12, t15): the metric `velocity` of an Evaluation.
 
     cells     the field `vhat` (the time mover's / motion block's velocity, dt 0) against the GT velocity layer on the object cells of the camera view
               (`masks()['obj_fov']` x any object layer > 0.5 x known velocity: `flow_weight` > 0 where the GT has it; GtGenerator writes 0 m/s with

@@ -12,6 +12,7 @@ Colour scheme (Mirko, 2026-11-03): black plot background, dark-grey road with a 
 objects (vehicles, pedestrians, two-wheelers) and the same red translucent where they lie outside the observed area (camera x radar x not hidden); boxes: GT outline red
 (translucent outside), the dashed GT outline on a prediction white, predicted boxes amber. The error maps (Mirko, 2026-11-04) use the same class colours: right = the class colour, false = mixed with green, missed = mixed with blue, black
 background, no red (`ERR`, `class_colors`).
+    python evaluation/bev_views.py --selftest
 """
 from __future__ import annotations
 
@@ -773,4 +774,12 @@ def selftest():
     out = loss_overlay(base, np.array([[0.0, 0.0], [0.0, 4.0]]), vmax=2.0)
     assert np.allclose(out[0, 0], 0.3) and out[1, 1].mean() > 0.6, out
     print("bev_views selftest ok: radar opacity / direction, speed-direction colours, moving layer, faded past boxes through the poses, error colours of the boxes")
+
+
+if __name__ == "__main__":
+    import sys
+    if "--selftest" in sys.argv:
+        selftest()
+    else:
+        print(__doc__)
 

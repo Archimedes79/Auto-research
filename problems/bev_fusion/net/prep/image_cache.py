@@ -169,6 +169,6 @@ def build_cache(datasets, root, workers=1, older=False):
             for k in pool.imap_unordered(fill, [(root, c) for c in chunks]):
                 n += k
                 print(f"lane image cache{' (older frames)' if older else ''}: {n} samples, {time.time() - t0:.0f} s", flush=True)
-    if datasets:                                           # startable.py asks for this (student_frames 'all'): a half-built cache is not started on
+    if datasets:                                           # the finished-build mark (training/build_image_cache.py checks it; student_frames 'all'): a half-built cache is not started on
         _mark_built(older_root(root), older_key(datasets[0].n_cam, datasets[0].cam_stride), datasets) if older else _mark_built(root, KEY, datasets)
     return n

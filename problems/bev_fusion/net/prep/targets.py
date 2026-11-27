@@ -27,7 +27,7 @@ def sample_targets(samples):
 
 def head_box(bx, groups=NUSC_GROUPS):
     """gt_bev meta box (center, size = w, l, h, yaw, vel, group) -> object_head box dict; circles: radius = half the
-    larger side (as studies/early/object_head_synth.py). None for a group the head does not have."""
+    larger side (as studies/early/object_head_synth.py, tag v1). None for a group the head does not have."""
     kinds = dict(groups)
     if bx["group"] not in kinds:
         return None
@@ -45,7 +45,7 @@ def refine_gt_boxes(g, grid, groups=NUSC_GROUPS):
     """GT boxes of one gt_bev GT dict for the S5c candidates (object_head.refine_candidates): head_box dicts whose
     'observed' is True only where stage 1 supervises the box too (a lidar / radar point AND its centre cell covered:
     camera and not occluded, or radar), so every other box is ignored, not background. It does NOT follow
-    LossConfig.fusion_area_only (startable.py refuses model.refine together with it)."""
+    LossConfig.fusion_area_only."""
     X, Y = np.asarray(g["camera"]).shape[-2:]
     w = np.maximum(np.asarray(g["camera"]) * (1 - np.asarray(g["occluded"])), np.asarray(g["radar"]))
     out = []

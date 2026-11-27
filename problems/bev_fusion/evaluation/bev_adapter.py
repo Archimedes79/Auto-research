@@ -122,16 +122,6 @@ def load_run(run: str, device: str, ckpt_dir: Optional[str] = None, ns=None):
     return cfg, model, loss, step, ckpts[-1]
 
 
-def freeze_scenes(cfg) -> None:
-    """Runs of 2026-10-26 (t1_*) have no scene lists and meant the 428 / 82 scenes of nuScenes parts 1-6; after parts 7-10 were added
-    the same config means 700 / 150 scenes and most val frames would have no cached features. An empty list is replaced by the
-    frozen one (data/scenes_parts1_6.json, data/README.md)."""
-    path = os.path.join(ROOT, "data", "scenes_parts1_6.json")
-    if os.path.exists(path) and not cfg.val_scenes and cfg.feature_cache:
-        frozen = json.load(open(path))
-        cfg.train_scenes, cfg.val_scenes = cfg.train_scenes or frozen["train"], frozen["val"]
-
-
 def gt_version(sig) -> Optional[str]:
     """the GT version key (D29: v5, ...) of a GT identity '<res>_<ss>_<generator signature>'; None when it is not a released version"""
     try:
@@ -152,7 +142,7 @@ def gt_signature(ds) -> Optional[str]:
         return None
 
 
-EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(AUTORESEARCH, "Evaluation"))        # everything the evaluator is made of (the card's provenance block)
+EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(AUTORESEARCH, "Evaluation"))        # everything the evaluator is made of (the default of evaluator_tree_hash)
 # the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the Evaluation's frame loop,
 # counts, sampling and comparison core, and the views (D73: `bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`; `bev_annotation_pts.py`
 # builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too;
@@ -164,11 +154,13 @@ NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.
 
 def evaluator_tree_hash(paths=None) -> str:
     """12 hex over the posix-relative names (sorted) and the bytes, CRLF read as LF, of the python files under `paths` (default: evaluation/ and
-    autoresearch/Evaluation/)"""
+    autoresearch/Evaluation/); a path that does not exist is refused (FileNotFoundError)"""
     import hashlib
     files = []
     for p in (EVALUATOR_PATHS if paths is None else paths):
         p = os.path.abspath(p)
+        if not os.path.exists(p):                                             # a renamed or missing file must not drop out of the hash unseen
+            raise FileNotFoundError(f"evaluator path not found: {p}")
         files += [p] if os.path.isfile(p) else [os.path.join(d, f) for d, _, fs in os.walk(p) for f in fs if f.endswith(".py")]
     h = hashlib.sha256()
     for rel, f in sorted((os.path.relpath(f, REPO).replace("\\", "/"), f) for f in files):
@@ -296,7 +288,7 @@ def _make_source_class():
                     **({"set_hash": self.set_hash} if self.set_hash else {}),
                     **({"junction_mask": self.junction_mask} if self.junction_mask else {})}
 
-        junction_mask = None          # the mask id of the junction-free rows (bev_junction.JunctionMasks.describe, set by bev_suite.make_suite): part of the store identity, so a resume or a compare with another mask is refused
+        junction_mask = None          # the mask id of the junction-free rows (bev_junction.JunctionMasks.describe; no entry point sets it now): part of the store identity, so a resume or a compare with another mask is refused
 
         # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
         def prefetch(self, refs: Sequence[FrameRef]) -> None:
@@ -581,7 +573,6 @@ def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, 
     device = device if torch.cuda.is_available() else "cpu"
     with open(os.path.join(run, "config.json")) as f:
         cfg = ns.T.TrainConfig(**{k: v for k, v in json.load(f).items() if not k.startswith("_")})      # "_" keys: comments and research steps (_import)
-    freeze_scenes(cfg)
     from evaluation import bev_sets
     cfg.train_scenes, cfg.val_scenes = bev_sets.lists(split, cfg.train_scenes, cfg.val_scenes)       # the run's own lists for val / train, the file's for small.val
     cfg.workers, cfg.seq_len, cfg.batch_size = 0, 1, 1
