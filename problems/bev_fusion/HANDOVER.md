@@ -5,7 +5,7 @@ the t20 network continued 1500 steps); the evaluation is warm (D70) on 1000 fram
 `board.board7` (the mean of six map rows and the object mAP). Measured through the research system (E27, E28: weights imported, kind
 measure): `t21_ctl` board7 0.4631 / 0.4635 (seed 0 / 1), `t20_base_s0` 0.4569 - inside the band 0.02 of each other. The older
 0.4549 / 0.4465 are cold reads on ground truth v8 and not comparable. The problem's tests pass
-(`research tests bev_fusion`; the trainkit equivalence needs a checkout that the git of WSL can read).
+(`research tests bev_fusion`).
 
 **Next.**
 1. The owner's choice of the champion (`DECISIONS.md`, Open): `t21_ctl` or `t20_base_s0`; then `research register bev_fusion E27 t21

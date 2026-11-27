@@ -1,20 +1,20 @@
 # PROBLEM - <name>
 
-Owned by the person. Every agent reads this first. Keep it under two pages; details go into the linked files.
+Owned by the person (list it under "protected" in `problem.json`). Every agent reads this first. Keep it under two pages.
 
 ## Goal and constraints
 - what the product must do, for whom, and what "better" means (quality AND cost, e.g. ms per frame)
-- hard constraints (differentiable path, data licence, compute: one GPU, budget per loop, TEST usage)
+- hard constraints (differentiable path, data licence, compute, TEST use)
 
 ## The product chain
-input -> stage -> stage -> output (one line per stage, with the code folder and the current best block)
+input -> stage -> stage -> output (one line per stage, with its code folder)
 
 ## Metrics and protocol
-- headline metrics and how they are read (which is the target, which are checks); the evaluation entry point; splits; seeds; noise band; TEST rule -> link to the protocol file
+- headline metrics and how they are read (which is the target, which are checks); the score, guards, splits, holdout and noise band are in
+  `problem.json` and are not repeated here; seeds; the TEST rule: `TEST_LOG.md`
 
-## Current best (with numbers, split, date)
-| system | metric 1 | metric 2 | ms | card |
-|---|---|---|---|---|
+## Current best
+The champion and its numbers: `champions/<name>/`. Here only what it is and what it lacks; no copied numbers.
 
 ## Known gaps (ranked)
 1. ...
@@ -28,5 +28,4 @@ input -> stage -> stage -> output (one line per stage, with the code folder and 
 |---|---|---|
 
 ## Problem-specific workflow
-- folder mapping (research, training, evaluation, experiment summaries, execution state)
 - anything that deviates from `autoresearch/METHOD.md` (extra gates, special protocols)

@@ -1,6 +1,6 @@
 # agents
 
-The four agent roles of the method (`../METHOD.md`, "Roles"). Each file is a short, stable English role text with a frontmatter; `install.py` lints them (no paths, names, dates or run ids) and copies them to the workspace's `.claude/agents/`, where Claude Code finds them (`--check` tells when the copies drift). This README is not copied.
+The four agent roles of the method (`../METHOD.md`, "Roles"). Each file is a short, stable English role text with a frontmatter; `install.py` lints them (no machine paths, dates or run ids) and copies them to the workspace's `.claude/agents/`, where Claude Code finds them (`--check` tells when the copies drift). This README is not copied. A new role: `../EXTENDING.md`.
 
 | file | role | modes |
 |---|---|---|

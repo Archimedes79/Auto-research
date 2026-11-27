@@ -10,8 +10,8 @@ Built from the notes listed below only; regenerate rather than edit by hand. Thi
 |---|---|---|---|---|---|
 
 ## Techniques ranked by expected transfer to our product
-| K id | technique | where it would plug in | expected effect | cost | evidence |
-|---|---|---|---|---|---|
+| technique | where it would plug in | expected effect | cost | evidence (note) |
+|---|---|---|---|---|
 
 ## For experiment planning
 | candidate | gap of PROBLEM.md it attacks | note | variant or block | cost (GPU h, days) | first test |
