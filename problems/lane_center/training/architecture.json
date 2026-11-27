@@ -101,7 +101,7 @@
    "note": "one encoder-decoder with three taps: 0.5 m lines, 1 m centres + event heats, 2 m road / intersection; features of the node grid; frozen in both stages",
    "why": "the pixel stage of the lane head B' (E273 stage A, trained before, checkpoint runs/e292_a_s<seed>) is frozen: in stage 2 only its node head trains",
    "replace_with": "train the pyramid with the token loss in stage 2 as well",
-   "catch": "the stage-2 recipe of D120 (E372) trains the node head only; I found no card that trains the pyramid with the token loss, so the gain is unmeasured",
+   "catch": "measured, no gain: E393 (2026-11-25, VAL, seeds 0 / 1, card in tag v1) trained the pyramid with the token loss from the champion; against the same recipe with the pyramid frozen (B''s node loss off in both) topo F1 changed by +0.0012 / -0.0004, both intervals include 0, so it stays frozen; with the node loss kept it gained +0.0016 on seed 0 (below the 0.010 bar; seed 1 invalid)",
    "sub": "pyramid.py +1"
   },
   {
@@ -314,7 +314,8 @@
     "evaluation/jmaneuver.py",
     "evaluation/adapter.py"
    ],
-   "note": "dump (the head's output per frame) -> a decode of the dump -> the qformat prediction -> the scorer; one definition of every metric, never a private one"
+   "note": "dump (the head's output per frame) -> a decode of the dump -> the qformat prediction -> the scorer; one definition of every metric, never a private one",
+   "sub": "jtoken_eval.py +10"
   },
   {
    "id": "timing",
@@ -369,7 +370,8 @@
     "net/model/soft_lines.py",
     "net/prep/targets.py"
    ],
-   "note": "pixel maps -> nodes in gated phases, then phase 9 with the Matrix-NMS layer; the checkpoint runs/e292_a_s<seed> is the B' of the champion"
+   "note": "pixel maps -> nodes in gated phases, then phase 9 with the Matrix-NMS layer; the checkpoint runs/e292_a_s<seed> is the B' of the champion",
+   "sub": "loss_qgraph.py +3"
   },
   {
    "id": "cache",
@@ -410,7 +412,7 @@
   },
   {
    "id": "trainer",
-   "label": "Shared trainer: checkpoint, resume,\nstatus.json, probe; the two stages\nfrom a run's config",
+   "label": "Shared trainer: checkpoint, resume, status.json,\nprobe; the two stages from a run's config",
    "kind": "train",
    "col": 0,
    "row": 7,
@@ -440,7 +442,7 @@
   },
   {
    "id": "ref_j",
-   "label": "E284 junction end head\nand the junction ends GT\n(measured, not adopted)",
+   "label": "E284 junction end head and the junction ends GT\n(measured, not adopted)",
    "kind": "alt",
    "col": 2,
    "row": 9,
@@ -473,7 +475,7 @@
   },
   {
    "id": "ref_t0",
-   "label": "E357 stage T0: GT nodes\nas tokens, rule controls\n(its pair head: tag v1)",
+   "label": "E357 T0: GT nodes as\ntokens, rule controls\n(pair head: tag v1)",
    "kind": "alt",
    "col": 4,
    "row": 9,

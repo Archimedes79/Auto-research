@@ -197,12 +197,29 @@ def edge_path(a, b, via=None):
     return f"M{x1:.1f},{y1:.1f} C{x1 + d:.1f},{y1:.1f} {x2 - d:.1f},{y2:.1f} {x2:.1f},{y2:.1f}", ((x1 + x2) / 2, (y1 + y2) / 2), False, abs(x2 - x1)
 
 
+def legend_layout(spec, width):
+    """(kind, x, row) of every legend entry: the kinds the boxes use, wrapped at the drawing's width"""
+    out, cx, row = [], MARGIN, 0
+    for k in spec["kinds"]:
+        if not any(n["kind"] == k for n in spec["nodes"]):
+            continue
+        step = 26 + 6.2 * len(spec["kinds"][k]["label"]) + 14
+        if cx + step > width - MARGIN:
+            cx, row = MARGIN, row + 1
+        out.append((k, cx, row))
+        cx += step
+    return out
+
+
 def render_svg(spec):
     geometry(spec)
     cols = max(n["col"] + span(n)[0] for n in spec["nodes"])
     rows = max(n["row"] + span(n)[1] for n in spec["nodes"])
     extra = spec.get("extra_w", 0)
-    width, height = 2 * MARGIN + cols * COLW + extra, TITLE_H + rows * ROWH + LEGEND_H + 8
+    width = 2 * MARGIN + cols * COLW + extra
+    legend = legend_layout(spec, width)
+    legend_h = max(LEGEND_H, 28 + 18 * (legend[-1][2] + 1 if legend else 1))     # the canvas grows with the legend's rows
+    height = TITLE_H + rows * ROWH + legend_h + 8
     on_path = set(main_path(spec))
     o = [f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {width} {height}" width="{width}" height="{height}" font-family="{FONT}">',
          f'<title>{escape(spec["title"])}</title>',
@@ -264,19 +281,14 @@ def render_svg(spec):
                      f'{escape(sub[:int((w - 8) / 6.1)])}</text>')
         o.append("</g>")
     o += glabels + labels                                           # titles and labels above the arrows
-    lx, ly = MARGIN, height - LEGEND_H + 14
+    lx, ly = MARGIN, height - legend_h + 14
     o.append(f'<text x="{lx}" y="{ly}" font-size="11" font-weight="600" fill="#64748b">legend (bold arrow = main path or the information flow; dashed arrow = optional or no data flow through it)</text>')
-    used = [k for k in spec["kinds"] if any(n["kind"] == k for n in spec["nodes"])]
-    cx, cy = lx, ly + 12
-    for k in used:
+    for k, cx, row in legend:
         kd = spec["kinds"][k]
+        cy = ly + 12 + 18 * row
         dash = ' stroke-dasharray="4 2"' if kd.get("dashed") else ""
-        step = 26 + 6.2 * len(kd["label"]) + 14
-        if cx + step > width - MARGIN:
-            cx, cy = lx, cy + 18
         o.append(f'<rect x="{cx}" y="{cy}" width="18" height="12" rx="3" fill="{kd["fill"]}" stroke="{kd["stroke"]}" stroke-width="1.4"{dash}/>'
                  f'<text x="{cx + 24}" y="{cy + 10}" font-size="11" fill="#334155">{escape(kd["label"])}</text>')
-        cx += step
     o.append("</svg>")
     return "\n".join(o) + "\n"
 
@@ -538,6 +550,12 @@ def selftest():
         json.dump(dict(spec, rowh=60, colw=150), open(f"{t}/other.json", "w"))
         load(f"{t}/other.json")
         assert render_svg(sa) == first, "a drawing does not depend on the spec loaded last"
+        wide = {k: dict(v, label=v["label"] + " x" * 40) for k, v in DEFAULT_KINDS.items()}   # a legend that wraps to many rows
+        json.dump(dict(spec, kinds=wide), open(p, "w"))
+        svg = render_svg(load(p))
+        high = float(re.search(r'viewBox="0 0 \S+ (\S+)"', svg).group(1))
+        tops = [float(y) for y in re.findall(r'<rect x="[\d.]+" y="([\d.]+)" width="18" height="12"', svg)]
+        assert len(set(tops)) >= 3 and max(tops) + 12 <= high, ("a legend row is cut off", high, tops)
         bad = json.loads(json.dumps(spec))
         bad["nodes"][1]["code"] = ["code/a.py::Missing"]                                  # a box whose symbol is gone
         bad["nodes"][3]["code"] = ["code/nope.py"]
