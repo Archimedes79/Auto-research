@@ -1,0 +1,30 @@
+{
+ "_about": "the base config of a lane run; an experiment's arms change values of it (nested sections key by key)",
+ "name": "E398.retrain_s0",
+ "seed": 0,
+ "out_root": "{runs}",
+ "import_weights": "",
+ "decode": {
+  "link_thr": 0.3,
+  "link_thr_long": 0.2,
+  "keep_thr": 0.6,
+  "none_gate": false
+ },
+ "stage1": {
+  "ident": "e292_a",
+  "head_seed_offset": 2,
+  "none_weight": 0.25,
+  "steps": 12000,
+  "bs": 8,
+  "lr": 0.001,
+  "workers": 4
+ },
+ "stage2": {
+  "train_nodes": 1,
+  "live_inputs": 1,
+  "steps": 3000,
+  "bs": 8,
+  "lr": 0.0001,
+  "workers": 4
+ }
+}

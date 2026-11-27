@@ -1,0 +1,44 @@
+{
+ "run": "E398.retrain_s1",
+ "problem": "lane_center",
+ "experiment": "E398",
+ "arm": "retrain",
+ "seed": 1,
+ "commit": "034fac9b5efafabb5fe1a2a18562f7a9e8665d5e",
+ "tag": "lane_center/E398",
+ "steps": {
+  "stage1": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 1963.8,
+   "log": "stage1.log",
+   "gpu_slot": 1
+  },
+  "stage2": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 476.4,
+   "log": "stage2.log",
+   "gpu_slot": 0
+  },
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 102.0,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 121.1,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-27 22:42:25",
+ "host": "Desktop-I511600",
+ "started": "2026-11-27 22:42:26",
+ "ended": "2026-11-27 23:41:48",
+ "resumed": "2026-11-27 23:30:07"
+}

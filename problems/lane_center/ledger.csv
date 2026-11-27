@@ -3,3 +3,5 @@ E396,E396.champ_s0,champ,0,ok,graph.topo_F1,0.668172,MEASURED,,2c5a373751e4,2026
 E396,E396.champ_s1,champ,1,ok,graph.topo_F1,0.681281,MEASURED,,2c5a373751e4,2026-11-27 00:51:12,2026-11-27 00:55:51
 E397,E397.kt05_s0,kt05,0,ok,graph.topo_F1,0.664815,TIE,"gain -0.0026 lies inside the band 0.01 (interval [-0.0039, -0.0017])",301c41575d48,2026-11-27 00:54:01,2026-11-27 00:58:54
 E397,E397.kt05_s1,kt05,1,ok,graph.topo_F1,0.679334,TIE,"gain -0.0026 lies inside the band 0.01 (interval [-0.0039, -0.0017])",301c41575d48,2026-11-27 00:54:01,2026-11-27 00:58:53
+E398,E398.retrain_s0,retrain,0,ok,graph.topo_F1,0.668172,TIE,"gain -0.0004 lies inside the band 0.01 (interval [-0.0011, +0.0003])",034fac9b5efa,2026-11-27 22:17:59,2026-11-27 23:07:35
+E398,E398.retrain_s1,retrain,1,ok,graph.topo_F1,0.680401,TIE,"gain -0.0004 lies inside the band 0.01 (interval [-0.0011, +0.0003])",034fac9b5efa,2026-11-27 22:42:26,2026-11-27 23:41:48

@@ -1,0 +1,120 @@
+{
+ "experiment": "E398",
+ "problem": "lane_center",
+ "tag": "lane_center/E398",
+ "snapshot": "034fac9b5efafabb5fe1a2a18562f7a9e8665d5e",
+ "control": "champ",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "boot": 2000,
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "retrain": {
+   "verdict": "TIE",
+   "reason": "gain -0.0004 lies inside the band 0.01 (interval [-0.0011, +0.0003])",
+   "gain": -0.0004438183784156724,
+   "interval": [
+    -0.001089848008091307,
+    0.00027392363363922803
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.6747575051232815,
+     "variant": 0.6743136867448658,
+     "diff": -0.0004438183784156724,
+     "lo": -0.001089848008091307,
+     "hi": 0.00027392363363922803,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.668172321247442,
+      "variant": 0.668172321247442,
+      "diff": 0.0,
+      "lo": 0.0,
+      "hi": 0.0
+     },
+     "1": {
+      "control": 0.6812810912549837,
+      "variant": 0.6804013563232171,
+      "diff": -0.0008797349317666292,
+      "lo": -0.0021599260520064863,
+      "hi": 0.0005458479152077418
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.2509537409577019,
+      "variant": 0.25104357989647685,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8467391074067518,
+      "variant": 0.8465534899563569,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7222955145118733,
+      "variant": 0.7219779145900518,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.06369088407850881,
+      "variant": 0.06376369731094228,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 23.964357736707864,
+      "variant": 23.94979056006618,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.0,
+   "prediction_hit": true,
+   "guards_broken": [],
+   "warnings": [
+    "ground truth compared by name only: the records of E396.champ_s0, E396.champ_s1 hold no signature"
+   ]
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "7c0fbb07bd27",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-27 23:42",
+ "control_check": {
+  "scores": {
+   "0": 0.668172321247442,
+   "1": 0.6812810912549837
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}
