@@ -716,6 +716,7 @@
   "net/tests/test_jlive_train.py": "test of the stage-2 trainer (jlive_train.py)",
   "net/tests/test_jtoken.py": "test of the token head (jtoken.py)",
   "net/tests/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
-  "net/tests/test_lane_tokcache.py": "test of the token cache and its loader"
+  "net/tests/test_lane_tokcache.py": "test of the token cache and its loader",
+  "net/tests/test_net_layering.py": "test of the layer order of net/ (DESIGN R13)"
  }
 }

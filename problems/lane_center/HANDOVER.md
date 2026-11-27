@@ -18,5 +18,6 @@ read-out, not the network's time (16.21 ms per frame, v1). The anchor re-scores 
 runs incomparable (the judge refuses a `from` control), so they were left byte for byte; known stale text there (`_py14.sh` usage lines,
 `evaluate.py` / `decide.py` mentions) and the timing's idle check `jtoken_eval.gpu_free` (it greps the gone `run.py`, so it never sees a
 research job) go with the next real change of the evaluator, which then re-measures the champion. A TEST
-evaluation needs the token cache of the test split first (`net/prep/lane_tokcache.py build --split test`; the test rows are in the val
-features). Owner of the code: the lead chat of a round.
+evaluation is not built yet: `net/prep/lane_tokcache.py build` takes train and val only and the token loaders refuse `test`, so
+`research test lane_center` ends in the step `predict`; that path (the test rows are in the val features) is built before the owner's TEST
+row. The same holds for BEV Fusion (`evaluation/bev_sets.py`). Owner of the code: the lead chat of a round.

@@ -13,7 +13,6 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
 | `evaluation/` | `lane_predict.py` (the step `predict`: the live dump), `adapter.py` (the evaluation step: decode and score through `autoresearch/Evaluation`), `jtoken_eval.py` (dumps, decodes, diagnostics), `jtiming.py` (the timing protocol of its `timing`), `qgraph_eval.py` + `sparse_lanes/` + `lane_task/` (the scorer and its metrics) |
 | `tools/viz/` | pictures of graphs over BEV and camera (`qual_frames.py`, `qgraph_view.py`) |
 | `experiments/` | from E396 on, one folder per experiment (`research new lane_center <slug> "<title>"`) |
-| `literature/` | the research notes of the problem |
 | `data/splits.json` | the splits by row: VAL 873 frames in 22 scenes, TEST 833 frames in 21 scenes (holdout) |
 
 ## Data and runs (not in git; where the machine file says)
@@ -31,8 +30,9 @@ python -m research new lane_center <slug> "<title>"   # a card: arms are setting
 python -m research start lane_center E<n>             # steps predict + evaluate by default; a training card names "steps": ["stage1", "stage2", "predict", "evaluate"]
 python -m research judge lane_center E<n> --write
 ```
-Tests: `python evaluation/sparse_lanes/selftest.py`, `python net/tests/test_jtoken.py`, `test_lane_tokcache.py`, `test_lane_live.py`, `test_jlive_train.py`, `python evaluation/tests/test_jtoken_eval.py`, `python evaluation/jtiming.py`
-(from this folder, the module path of `problem.json` "pythonpath" on `PYTHONPATH`).
+Tests: `research tests lane_center` (the list in `problem.json`), and `python net/tests/test_net_layering.py` (R13; not in that list until the
+owner adds it to `problem.json`, a protected file). By hand: from this folder, the module path of `problem.json` "pythonpath" on `PYTHONPATH`.
+The research notes of the older literature work are in the tag `v1`.
 
 What is not here: the code of the earlier chain (loops 8 - 18, E324 s, the junction and route heads, E357's pair head, E368's past-frame data,
 the old lane suite, the old reports and their builders) and

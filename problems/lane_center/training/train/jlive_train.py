@@ -413,9 +413,9 @@ def export(run, joint, args, b_args, start):
     try:
         torch.save(dict(state=joint.head.state_dict(), args=args, steps=args["steps"], b_state=joint.src.model.state_dict(), b_args=b_args, rec=joint.get_extra_state()), p + ".tmp")
         os.replace(p + ".tmp", p)
-        runs = os.path.dirname(run.dir)
-        head, _ = JKT.load_model(run.name, "cpu", runs)
-        b = load_b(run.name, "cpu", runs).state_dict()
+        runs, folder = os.path.split(run.dir)                                       # the run's own folder: run.name may hold one ("<run>/stage2")
+        head, _ = JKT.load_model(folder, "cpu", runs)
+        b = load_b(folder, "cpu", runs).state_dict()
         assert same(head.state_dict(), joint.head.state_dict()) and head.live_inputs == bool(args["live_inputs"]), "model.pt: the head read back is not the trained head"
         assert same(b, joint.src.model.state_dict()), "model.pt: B' read back is not the trained B'"
         moved = [k for k in b if not torch.equal(b[k].cpu(), start[k].cpu()) and not (args["train_nodes"] and k.startswith("nodes.")) and not (args.get("train_pyr") and k.startswith("pyr."))]

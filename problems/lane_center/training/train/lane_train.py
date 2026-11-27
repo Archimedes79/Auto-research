@@ -37,14 +37,15 @@ def main(argv):
     if os.path.normpath(cfg["out_root"]) != os.path.normpath(BP.RUNS):
         raise SystemExit(f"the run's out_root {cfg['out_root']} is not the problem's run root {BP.RUNS}")
     run_dir = os.path.join(BP.RUNS, cfg["name"])
+    complete = lambda s: os.path.isfile(os.path.join(run_dir, s, ".done"))          # the trainer's flag: a model.pt alone may be unchecked (a failed export)
     if stage == "stage1":
-        if os.path.isfile(os.path.join(run_dir, "stage1", "model.pt")):
+        if complete("stage1"):
             print("stage 1 is complete")
             return 0
         import jtoken_train
         return jtoken_train.main(stage1_args(cfg)) or 0
     if stage == "stage2":
-        if not os.path.isfile(os.path.join(run_dir, "stage2", "model.pt")):
+        if not complete("stage2"):
             import jlive_train
             code = jlive_train.main(stage2_args(cfg)) or 0
             if code:

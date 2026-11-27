@@ -594,6 +594,11 @@ def runs(T, w, tmp):
     assert moved("z") == ([], True) and moved("bb") == (["nodes"], True), (moved("z"), moved("bb"))
     assert "ushare" not in rd("z")[-1] and "ushare" not in rd("bb")[-1] and rd("z")[-1]["b_loss"] > 0 and "jlive arm z" in text("z") and "jlive arm b" in text("bb") and "0: arm b" in text("bb"), "z and b: no share; B''s loss logged"
     assert not JKT.load_model("bb", "cpu", tmp)[0].live_inputs
+    # the stage of a research run: a name with a folder ("<run>/stage2", `lane_train.py`) is exported and read back too
+    with Built(T, [w["B"]]):
+        T.train(T.parse_args(cli(w, "nest/stage2", 1, steps=1)), runs=tmp, ckpt_every=500)
+    nest = os.path.join(tmp, "nest", "stage2")
+    assert JKT.load_model("nest/stage2", "cpu", tmp)[0].live_inputs and not os.path.exists(os.path.join(nest, ".done.FALSE")), os.listdir(nest)
     # the export check: a frozen tensor of B' that moved (here: a start that differs) is refused and fit's .done becomes .done.FALSE
     jz = bt.joints[0]
     st = {k: v.clone() for k, v in start.items()}

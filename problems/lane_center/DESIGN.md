@@ -1,6 +1,6 @@
 # DESIGN - lane-centre graph from camera + radar (lcr)
 
-One small file for people and for AI: the modules of the chain at a glance and the rules it obeys. With it a coder can build a similar chain; the exact specification is the code (paths in the table). Every rule can be attacked: a card names the rule and a new mechanism or a cheaper test, and the written verdict changes the rule here. The goal, data, protocol and numbers are in `PROBLEM.md`, the owner's permissions in `experiment_execution/DECISIONS.md`.
+One small file for people and for AI: the modules of the chain at a glance and the rules it obeys. With it a coder can build a similar chain; the exact specification is the code (paths in the table). Every rule can be attacked: a card names the rule and a new mechanism or a cheaper test, and the written verdict changes the rule here. The goal, data, protocol and numbers are in `PROBLEM.md`, the owner's permissions in `DECISIONS.md`. The experiments the rules cite below E396, and the older chains, are in the tag `v1`.
 
 ## The chain
 
@@ -25,7 +25,7 @@ The model lives in `net/` in three layers, apart from the training system: `net/
 | Losses (training) | the token likelihood with the `none` slot, node types and handle scales; B''s own node loss | `net/loss/loss_jtoken.py`, `net/loss/loss_qgraph.py` |
 
 Training: stage 1 trains the head on cached tokens (`training/train/jtoken_train.py`); stage 2 trains the head and the node head of B' together through the token loss (`training/train/jlive_train.py`).
-Not in the chain: the SD-map route and a past state (rules R2 and R9). The earlier system E324 s (`training/lanegraph/`) is a reference, never a bar.
+Not in the chain: the SD-map route and a past state (rules R2 and R9). The earlier system E324 s (its code in the tag `v1`) is a reference, never a bar.
 Headline, VAL 873 frames: topo F1 0.668 / 0.681 (two seeds), 16.2 ms on an RTX 3060, 2.3 M parameters; current best and the reference rows are in `PROBLEM.md`.
 
 ## Rules
@@ -42,8 +42,8 @@ Headline, VAL 873 frames: topo F1 0.668 / 0.681 (two seeds), 16.2 ms on an RTX 3
 | R9 **Perception first, map later, step by step:** the SD map joins as a logical road graph (lanes per direction, connections), encoded first, fusion second, error models third; the owner sees each result; a wrong map must not be worse than no map | the owner: D130. Tried: one cross-attention to route samples read the map but missed its bar (E389) | the bars of E390 step 1 |
 | R10 **Heads keep their width (64 channels);** how small they can be is measured by importance pruning, not by narrowing | the owner: D92, D99 | the size-against-loss table of D99 |
 | R11 **Ground truth:** junction entry and exit points as late as possible, but only where the network can see them | the owner: D71; E283: later than the end of the map's lane has no support in the data | a definition of 'can see' |
-| R12 **Protocol:** TEST once per finished design with the owner's recorded OK; select and tune on TRAIN / VAL only; the D115 cell (batch 4, 873 VAL frames), noise band 0.010 topo F1, 2 seeds, paired scene bootstrap | hard rule 1; D115; CLAUDE.md "Numbers" | the owner |
-| R13 **The model is apart from the training system:** preprocessing (`net/prep`) < network (`net/model`) < losses (`net/loss`) < `training/`; a new import against this order is refused (`net/tests/test_net_layering.py`, no exceptions since 2026-11-26; only a command line may hand a preprocessing step the stored model it runs); runs are started, stopped and watched by the tooling in `../autoresearch/` | the owner: D152 | the owner |
+| R12 **Protocol:** TEST once per finished design with the owner's recorded OK; select and tune on TRAIN / VAL only; the D115 cell (batch 4, 873 VAL frames), noise band 0.010 topo F1, 2 seeds, paired scene bootstrap | hard rule 1; D115; `PROBLEM.md`, `autoresearch/METHOD.md` | the owner |
+| R13 **The model is apart from the training system:** preprocessing (`net/prep`) < network (`net/model`) < losses (`net/loss`) < `training/`; a new import against this order is refused (`net/tests/test_net_layering.py`, no exceptions since 2026-11-26; only a command line may hand a preprocessing step the stored model it runs; the paths module `training/bflc_paths.py`, where data and runs are, counts as below `net/prep` since v2); runs are started, stopped and watched by the research system (`autoresearch/research/`) | the owner: D152 | the owner |
 
 ## How this file moves
 A card names the rules it attacks or changes (its Design delta); the coder is given this file plus the delta. KEEP: the delta becomes the rule and the card's id the reason (the old text stays in git); CUT or TIE: the rule stays and records the result of the attack. An instruction of the owner that fixes how the system must be becomes a rule, his words or the decision id in the reason; permissions go to `DECISIONS.md`. The evidence stays in the cards and the ledger; the first, evidence-heavy version of this file is at git `6b160e66`.
