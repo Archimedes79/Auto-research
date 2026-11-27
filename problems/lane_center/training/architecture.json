@@ -416,10 +416,11 @@
    "row": 7,
    "code": [
     "training/trainer.py",
-    "training/probe.py",
+    "../../autoresearch/trainkit/control.py",
+    "../../autoresearch/trainkit/probe.py",
     "training/train/lane_train.py"
    ],
-   "note": "every stage trains and resumes through trainer.fit (the run-directory contract of the research worker, trainkit.control); lane_train.py starts the two stages from a run's config",
+   "note": "every stage trains and resumes through trainer.fit (the run-directory contract of the research worker; the stop protocol and the probes are trainkit's); lane_train.py starts the two stages from a run's config",
    "w": 2,
    "hpx": 50
   },

@@ -13,27 +13,29 @@ What it adds to a plain loop (each of these was missing in a run that was lost):
   * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of optimizer steps made
   * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
-  * the run-directory contract of the research worker (`research stop` writes CONTROL; `autoresearch/trainkit/control.py` is the contract): `config.json` ({"steps": N, ...}), `log.jsonl` (one row per
-    logged step: step, t, total, lr, grad_norm, s_per_step, gpu_gb, the scalars of the loss's info dict, and with `probe=True` the keys grad.<module> / upd.<module> / t_data / t_step; an eval
-    row {"step", "val": {...}}), `train.log` (the text output, also `log.txt`), a stop request: the file CONTROL = {"cmd": "stop"} is looked at before every step, then the trainer saves a
-    checkpoint, writes STOPPED and exits with code 75 (never 0, so no `.done` and nobody evaluates a half-trained model); the files of an earlier stop are moved aside at the start;
-    an `incident_<step>.json` for a skipped non-finite step
+  * the run-directory contract of the research worker: `config.json` ({"steps": N, ...}), `log.jsonl` (one row per logged step: step, t, total, lr, grad_norm, s_per_step, gpu_gb, the
+    scalars of the loss's info dict, and with `probe=True` the keys grad.<module> / upd.<module> / t_data / t_step; an eval row {"step", "val": {...}}), `train.log` (the text output, also
+    `log.txt`), the stop protocol of `trainkit.control` (`research stop`: the worker writes CONTROL, looked at before every step; the trainer saves a checkpoint, writes STOPPED and exits
+    with code 75, never 0, so no `.done` and nobody evaluates a half-trained model), an `incident_<step>.json` for a skipped non-finite step (`trainkit.probe`)
 """
 import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import math
 import os
 import random
+import sys
 import time
 import traceback
 
 import numpy as np
 import torch
 
-import probe as PR  # noqa: E402  (training/probe.py: gradient and update size per module, copied from the BEV system)
+if os.path.join(BP.REPO, "autoresearch") not in sys.path:
+    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
+from trainkit import control  # noqa: E402  (the stop protocol of the training engine)
+from trainkit import probe as PR  # noqa: E402  (gradient and update size per module, data wait, incident dumps)
 
 RUNS = BP.RUNS
-EXIT_STOPPED = 75                       # a stopped run exits with this code and never with 0 (`.done` means "finished correctly"; = trainkit.control.EXIT_STOPPED, which the research worker knows)
 
 
 class Run:
@@ -54,32 +56,17 @@ class Run:
     def log(self, *a):
         line = time.strftime("%H:%M:%S ") + " ".join(str(x) for x in a)
         print(line, flush=True)
-        for name in ("log.txt", "train.log"):                              # log.txt: the name of every older run, train.log: the Training contract
+        for name in ("log.txt", "train.log"):                              # log.txt: the name of every older run, train.log: trainkit's run folder
             with open(os.path.join(self.dir, name), "a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
     def jsonl(self, row):
-        """one row of log.jsonl (the metrics stream the Training reads); a reader on the Windows side may hold the file open: a failed write is printed, not raised"""
+        """one row of log.jsonl (the metrics stream the research worker's kill rules read); a reader on the Windows side may hold the file open: a failed write is printed, not raised"""
         try:
             with open(os.path.join(self.dir, "log.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, default=float) + "\n")
         except OSError as e:
             print(f"WARNING: log.jsonl row not written ({e})", flush=True)
-
-    def stop_requested(self):
-        """the reason (a string) when the file CONTROL says {"cmd": "stop"}, else None (same reading as trainkit.control.stop_requested)"""
-        try:
-            with open(self.path("CONTROL"), encoding="utf-8") as fh:
-                d = json.load(fh)
-            return str(d.get("reason", "")) if d.get("cmd") == "stop" else None
-        except (OSError, ValueError, AttributeError):
-            return None
-
-    def clear_control(self):
-        """at the start: CONTROL / STOPPED of an earlier stop are moved aside (*.old), so a new process never obeys an old request"""
-        for n in ("CONTROL", "STOPPED"):
-            if os.path.exists(self.path(n)):
-                os.replace(self.path(n), self.path(n) + ".old")
 
     def status(self, **kw):
         self._status.update(kw)
@@ -158,8 +145,8 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
         run.log(f"resumed from {ck} at step {step}")
     it = None if batch_fn else _endless(loader)
     bad = 0                                                              # non-finite steps in a row
-    run.clear_control()
-    with open(run.path("config.json"), "w", encoding="utf-8") as fh:        # the Training reads `steps` from it (percent, ETA)
+    control.clear_stale(run.dir)                                           # a new process never obeys an old stop request
+    with open(run.path("config.json"), "w", encoding="utf-8") as fh:        # the run's own record of its arguments
         json.dump(dict(config or {}, steps=steps, lr=lr, amp=amp, clip=clip, seed=seed, args=args), fh, indent=1, default=str)
     mprobe, timer = (PR.ModuleProbe(model, every=log_every, depth=probe_depth), PR.StepTimer()) if probe else (None, None)
     last_info, gn_last, prow = {}, float("nan"), {}
@@ -185,14 +172,13 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
     model.train()
     try:
         while step < steps:
-            reason = run.stop_requested()                                # `python -m Training stop <run>`
+            reason = control.stop_requested(run.dir)                     # `research stop`: the worker writes CONTROL
             if reason is not None:
                 save_ckpt()
-                with open(run.path("STOPPED"), "w", encoding="utf-8") as fh:
-                    json.dump({"step": step, "reason": reason, "t": time.time()}, fh)
+                control.mark_stopped(run.dir, step, reason)
                 run.status(state="stopped", step=step)
-                run.log(f"step {step}: stop requested ({reason}), checkpoint saved, exit {EXIT_STOPPED}")
-                raise SystemExit(EXIT_STOPPED)
+                run.log(f"step {step}: stop requested ({reason}), checkpoint saved, exit {control.EXIT_STOPPED}")
+                raise SystemExit(control.EXIT_STOPPED)
             if timer is not None:
                 with timer.data():
                     batch = batch_fn(step) if batch_fn else next(it)

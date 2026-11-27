@@ -1,5 +1,5 @@
-"""Self-test of the engine on a toy (CPU, a few seconds): known answers for the schedule, the EMA, the clip and step rules, the resume rules and the stop protocol, and the
-example of README.md end to end (gradient reaches every parameter, accumulation, checkpoints, resume, stop, hooks).
+"""Self-test of the engine on a toy (CPU, a few seconds): known answers for the schedule, the EMA, the clip and step rules, the resume rules, the stop protocol, warm start,
+fp16 and the probes, and the example of README.md end to end (gradient reaches every parameter, accumulation, checkpoints, resume, stop, hooks).
 Run: python -m trainkit.selftest    (from autoresearch/)"""
 import contextlib
 import dataclasses
@@ -15,7 +15,7 @@ import torch
 from torch import nn
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from trainkit import checkpoint, control, optim, schedule  # noqa: E402
+from trainkit import checkpoint, control, optim, probe, schedule  # noqa: E402
 from trainkit.config import Config  # noqa: E402
 from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.ema import EMA  # noqa: E402
@@ -53,7 +53,7 @@ def stop_after(n, reason="selftest"):                  # a stop_check that asks 
     return stop_check
 
 
-def run(tmp, name="toy", batches=None, stop_check=None, hooks=None, step_fn=None, fracs=None, **kw):
+def run(tmp, name="toy", batches=None, stop_check=None, hooks=None, step_fn=None, fracs=None, evaluate=None, **kw):
     cfg = Config(**{**dict(name=name, out_root=tmp, steps=12, accum=2, warmup=2, lr=0.05, device="cpu", log_every=4, save_every=6, eval_every=0), **kw})
     model, loss = Net(), Loss()
 
@@ -63,8 +63,26 @@ def run(tmp, name="toy", batches=None, stop_check=None, hooks=None, step_fn=None
         l = loss(model.fc(batch["x"]), batch["y"])
         info.backward(l)
         return {"total": float(l.detach())}, bool(torch.isfinite(l)), None
-    out = fit(cfg, model, loss, toy_data() if batches is None else batches, step_fn or default_step, prepare_run_dir(cfg), "cpu", stop_check=stop_check, hooks=hooks)
+    out = fit(cfg, model, loss, toy_data() if batches is None else batches, step_fn or default_step, prepare_run_dir(cfg), "cpu", stop_check=stop_check, hooks=hooks, evaluate=evaluate)
     return cfg, model, loss, out
+
+
+def log_rows(tmp, name, file="log.jsonl"):
+    with open(os.path.join(tmp, name, file)) as f:
+        return [json.loads(ln) for ln in f]
+
+
+def ckpts(tmp, name):
+    return sorted(f for f in os.listdir(os.path.join(tmp, name)) if f.startswith("ckpt_"))
+
+
+def ended(fn):
+    """fn() must end the run: -> the exception"""
+    try:
+        fn()
+    except BaseException as e:  # noqa: BLE001
+        return e
+    raise AssertionError("the run was not ended")
 
 
 def resume_toy(tmp, name, plain=False, stop=None, n=40, batch_size=4):
@@ -372,23 +390,131 @@ def main():
         check(resolve_device("cuda") == "cuda", "resolve_device: cuda with CUDA is cuda")
     finally:
         torch.cuda.is_available = real_available
-    # the engine of a trainer script: a pinned copy next to it that is not the imported trainkit is refused, no pinned copy says which one runs, the pinned copy imported says so
-    from trainkit.util import check_engine
-    with tempfile.TemporaryDirectory() as td:
-        live, script, pin = os.path.join(td, "live"), os.path.join(td, "script"), os.path.join(td, "script", "trainkit")
-        os.makedirs(live)
-        os.makedirs(pin)
-        line = check_engine(os.path.join(td, "nowhere"), live)
-        check("live copy" in line and live in line and "no pinned copy" in line, "check_engine: no pinned copy -> one line that names the trainkit in use")
-        try:
-            check_engine(script, live)
-            raise AssertionError("a pinned copy next to the script and another trainkit imported must be refused")
-        except SystemExit as e:
-            check(pin in str(e) and live in str(e), "check_engine: a pinned copy next to the script that is not the imported trainkit is refused, naming both")
-        check("pinned copy" in check_engine(script, pin), "check_engine: the pinned copy imported -> the line says so")
-        named = check_engine(td).split("the live copy ")[1].split(" (no pinned")[0]                  # td has no trainkit folder: the line names the imported one
-        check(os.path.realpath(named) == os.path.dirname(os.path.realpath(sys.modules["trainkit.util"].__file__)), "check_engine: the default engine is the imported trainkit")
+    with tempfile.TemporaryDirectory() as tmp:
+        crashes(tmp)
+        warm_start_and_slim(tmp)
+        fp16(tmp)
+        probes(tmp)
     print("trainkit selftest passed")
+
+
+def crashes(tmp):
+    """what a run that dies leaves behind, and what the next start makes of it"""
+    model, loss = Net(), Loss()
+    opt = torch.optim.AdamW(optim.param_groups(model, loss, 1e-3, 0.0), lr=1e-3)
+    real_save = torch.save
+
+    def dying_save(obj, path):                           # a full disk: half a file, then the error
+        real_save(obj, path)
+        os.truncate(path, 100)
+        raise OSError("disk full")
+    torch.save = dying_save
+    try:
+        os.makedirs(os.path.join(tmp, "atomic"))
+        e = ended(lambda: checkpoint.save_checkpoint(os.path.join(tmp, "atomic", "ckpt_00000003.pt"), model, loss, opt, EMA(model, 0.9), 3, Config()))
+    finally:
+        torch.save = real_save
+    check(isinstance(e, OSError) and ckpts(tmp, "atomic") == ["ckpt_00000003.pt.tmp"], "checkpoint: a write that dies half way leaves no checkpoint, only its .tmp")
+
+    boundaries = []
+
+    def crash(run_dir):                                  # at the 7th step boundary: rows 5 and 6 are logged, the newest checkpoint is of step 4
+        boundaries.append(1)
+        if len(boundaries) > 6:
+            raise MemoryError("simulated crash")
+    ended(lambda: run(tmp, "crash", stop_check=crash, log_every=1, save_every=4))
+    run(tmp, "crash", log_every=1, save_every=4)
+    check([r["step"] for r in log_rows(tmp, "crash")] == list(range(1, 13)) and [r["step"] for r in log_rows(tmp, "crash", "log_superseded.jsonl")] == [5, 6],
+          "resume after a crash: the rows above the checkpoint move to log_superseded.jsonl, one row per step")
+    evals = []
+
+    def evaluate(ema):
+        evals.append(1)
+        if len(evals) == 1:
+            raise MemoryError("simulated ENOMEM in a validation worker")
+        return {"total": 1.0}
+    cut = dict(steps=8, save_every=4, eval_every=4, evaluate=evaluate)
+    ended(lambda: run(tmp, "evalcrash", **cut))
+    run(tmp, "evalcrash", **cut)
+    check([r["step"] for r in log_rows(tmp, "evalcrash") if "val" in r] == [4, 8], "resume: the evaluation that a crash cut is made up (its checkpoint was saved before it)")
+
+
+def warm_start_and_slim(tmp):
+    run(tmp, "src", steps=4, save_every=4)
+    src = os.path.join(tmp, "src", "ckpt_00000004.pt")
+    ck = torch.load(src, weights_only=False)
+    _, model, loss, _ = run(tmp, "warm0", init_from=src, init_reset=("fc.bias",), lr=0.0, steps=1, save_every=1)      # lr 0: the weights stay the start weights
+    check(not torch.equal(ck["ema"]["fc.weight"], ck["state"]["model.fc.weight"]) and torch.equal(model.fc.weight, ck["ema"]["fc.weight"])
+          and torch.equal(model.fc.bias, Net().fc.bias) and torch.equal(loss.log_w, ck["state"]["loss.log_w"]),
+          "warm start: the checkpoint's EMA weights and loss weights, an init_reset prefix keeps its fresh values")
+    warm = dict(init_from=src, steps=8, save_every=2, batches=toy_data(1))         # one batch, so a pass that starts again gives the same data
+    whole = run(tmp, "warm", **warm)[1]
+    ended(lambda: run(tmp, "warm_cut", stop_check=stop_after(4), **warm))
+    check(torch.equal(run(tmp, "warm_cut", **warm)[1].fc.weight, whole.fc.weight), "warm start: a resume of the run does not warm start again")
+    run(tmp, "slim", steps=4, save_every=2, slim_at_end=True)
+    run(tmp, "slim", steps=4, save_every=2, slim_at_end=False)                   # the finished run started again stays slim
+    s = torch.load(os.path.join(tmp, "slim", "ckpt_00000004.pt"), weights_only=False)
+    check(ckpts(tmp, "slim") == ["ckpt_00000004.pt"] and s["slim"] and "opt" not in s and "rng" not in s,
+          "slim_at_end: a finished run keeps one checkpoint without optimiser state and RNG")
+    refused = ended(lambda: run(tmp, "slim", steps=6, save_every=2))
+    os.environ[Config.RESUME_ENV] = "1"
+    try:
+        slim = ended(lambda: run(tmp, "slim", steps=6, save_every=2))
+    finally:
+        os.environ.pop(Config.RESUME_ENV)
+    check("steps" in str(refused) and "slim checkpoint" in str(slim), "resume of a slim run: refused, and refused with the override too (it cannot continue training)")
+
+
+def fp16(tmp):
+    p = nn.Parameter(torch.zeros(1))
+    opt = torch.optim.SGD([p], lr=1.0)
+    scaler = torch.amp.GradScaler("cpu", init_scale=4.0)
+    scaler.scale((p * float("inf")).sum()).backward()
+    status = optim.optimizer_step(opt, [p], 1.0, scaler)[1]
+    check(status == "overflow" and scaler.get_scale() == 2.0 and p.item() == 0.0 and optim.bad_steps_after(status, 0, scaler) == 0,
+          "fp16: an overflow makes no step, halves the scale and is no bad step above scale 1")
+    scaler.update(0.5)
+    check(optim.bad_steps_after("overflow", 2, scaler) == 3, "fp16: below scale 1 an overflow counts (a diverged run)")
+    cfg = dict(amp="fp16", fp16_scale=8.0, steps=4, save_every=2, log_every=1)
+    ended(lambda: run(tmp, "f16", stop_check=stop_after(2), **cfg))
+    path = os.path.join(tmp, "f16", "ckpt_00000002.pt")
+    ck = torch.load(path, weights_only=False)
+    saved = ck["extra"]["scaler"]["scale"]
+    ck["extra"]["scaler"]["scale"] = 2.0
+    torch.save(ck, path)
+    run(tmp, "f16", **cfg)
+    check(saved == 8.0 and log_rows(tmp, "f16")[-1]["loss_scale"] == 2.0, "fp16: the checkpoint keeps the loss scale and the resume goes on with it")
+
+
+def probes(tmp):
+    m = nn.ModuleDict({k: nn.Linear(2, 1, bias=False) for k in ("a", "zero", "frozen")})
+    with torch.no_grad():
+        m["a"].weight.copy_(torch.tensor([[3.0, 4.0]]))
+        m["zero"].weight.zero_()
+    m["frozen"].weight.requires_grad_(False)
+    mp = probe.ModuleProbe(m, every=2)
+    step = mp.begin(2)
+    m["a"].weight.grad = torch.tensor([[0.6, 0.8]])
+    step.grads()
+    with torch.no_grad():
+        m["a"].weight -= torch.tensor([[0.6, 0.8]])
+        m["zero"].weight += torch.tensor([[0.001, 0.0]])
+    got = step.finish()
+    want = {"grad.a": 1.0, "upd.a": 0.2, "grad.zero": 0.0, "upd.zero": 0.1}
+    check(mp.begin(3) is None and got.keys() == want.keys() and all(abs(got[k] - v) < 1e-6 for k, v in want.items()),
+          "probe: gradient norm and update ratio per module on the logged steps; a floor under a zero weight; no keys for a frozen module")
+    timer = probe.StepTimer()
+    with timer.data():
+        pass
+    check(timer.row() == {} and set(timer.row()) == {"t_data", "t_step"}, "probe: the timer's first row is empty, then the data wait and the step")
+    cap, probe.MAX_INCIDENTS = probe.MAX_INCIDENTS, 1
+    try:
+        first = probe.dump_incident(tmp, 4, "nonfinite", batch_ids=probe.batch_tokens([{"tokens": ["x"]}, {"tokens": ["y"]}]), losses={"total": float("nan")})
+        second = probe.dump_incident(tmp, 5, "nonfinite")
+    finally:
+        probe.MAX_INCIDENTS = cap
+    rec = json.load(open(first))
+    check(second is None and rec["batch"] == ["x", "y"] and rec["step"] == 4 and math.isnan(rec["losses"]["total"]), "probe: an incident names the step and the samples; their number is capped")
 
 
 if __name__ == "__main__":

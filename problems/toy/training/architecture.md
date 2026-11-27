@@ -1,6 +1,6 @@
-# Toy: a disc in noise, from the raw shards to the metric card
+# Toy: a disc in noise, from the raw shards to the result
 
-![Toy: a disc in noise, from the raw shards to the metric card](architecture.svg)
+![Toy: a disc in noise, from the raw shards to the result](architecture.svg)
 
 the reference problem of the research system; every report of it shows this drawing
 

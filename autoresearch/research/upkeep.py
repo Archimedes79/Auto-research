@@ -1,9 +1,9 @@
 """tests, anchor, compare, clean: the upkeep of a problem's code and runs.
 
-tests    the problem's own tests (problem.json "tests"), each with the problem's interpreter and module path from its folder, in a session of
-         its own; passed = exit 0 and no "Traceback (most recent call last)" in the output (a script can die with exit 0 behind a wrapper, so
-         a test that prints an expected traceback fails); past the timeout the test and all it started are killed; after any change of the
-         problem's code
+tests    the problem's own tests (problem.json "tests") and, when it has a training/architecture.json, the drawing check against the code
+         (reporter/archdraw.py check), each with the problem's interpreter and module path from its folder, in a session of its own; passed =
+         exit 0 and no "Traceback (most recent call last)" in the output (a script can die with exit 0 behind a wrapper, so a test that prints
+         an expected traceback fails); past the timeout the test and all it started are killed; after any change of the problem's code
 anchor  a finished run evaluated again with the code of the working tree, into a fresh folder: do its numbers still come out? (the champion's
          check after any change of the problem's code; research/anchor.py does the work with the problem's interpreter)
 compare  two finished runs side by side: the paired scene bootstrap of the score and the guards (a diagnostic, never a verdict)
@@ -29,9 +29,11 @@ from typing import Any, Dict, List, Optional
 
 from research import gates, spec
 from research.launch import load_problem
-from research.paths import (RUN_ID, ResearchError, child_env, interpreter, module_path, parse_run, problem_dir, read_json, record_dir, rel, repo,
-                            runs_root, write_json)
+from research.paths import (CORE, RUN_ID, ResearchError, child_env, interpreter, module_path, parse_run, problem_dir, read_json, record_dir, rel,
+                            repo, runs_root, write_json)
 from research.worker import step_alive
+
+DRAWING = "training/architecture.json"                                  # a problem's system drawing (reporter/archdraw.py)
 
 
 def _env(problem: str) -> Dict[str, str]:
@@ -40,13 +42,16 @@ def _env(problem: str) -> Dict[str, str]:
 
 def tests(problem: str, only: str = "", timeout: float = 3600) -> Dict[str, Any]:
     p = load_problem(problem)
-    scripts = [t for t in p.get("tests", []) if only in t]
-    if not scripts:
+    checks = [(t, t.split()) for t in p.get("tests", [])]                # name -> the arguments of the interpreter
+    if os.path.isfile(os.path.join(problem_dir(problem), DRAWING)):
+        checks.append((f"archdraw check {DRAWING}", [os.path.join(CORE, "reporter", "archdraw.py"), "check", DRAWING]))
+    checks = [(name, args) for name, args in checks if only in name]
+    if not checks:
         raise ResearchError(f"problem.json of {problem} lists no test{' matching ' + repr(only) if only else ''} (key \"tests\")")
     rows = []
-    for t in scripts:
+    for name, args in checks:
         t0 = time.time()
-        proc = subprocess.Popen([interpreter(p["python"]), *t.split()], cwd=problem_dir(problem), env=_env(problem), stdout=subprocess.PIPE,
+        proc = subprocess.Popen([interpreter(p["python"]), *args], cwd=problem_dir(problem), env=_env(problem), stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
         try:
             out, code = proc.communicate(timeout=timeout)[0].decode("utf-8", "replace"), proc.returncode
@@ -55,7 +60,7 @@ def tests(problem: str, only: str = "", timeout: float = 3600) -> Dict[str, Any]
             proc.wait()
             out, code = f"timed out after {timeout:.0f} s: its process group was killed", -1
         lines = [ln for ln in out.splitlines() if ln.strip()]
-        rows.append({"test": t, "passed": code == 0 and "Traceback (most recent call last)" not in out, "exit": code,
+        rows.append({"test": name, "passed": code == 0 and "Traceback (most recent call last)" not in out, "exit": code,
                      "seconds": round(time.time() - t0, 1), "last": lines[-1][:200] if lines else ""})
     return {"problem": problem, "passed": all(r["passed"] for r in rows), "tests": rows}
 

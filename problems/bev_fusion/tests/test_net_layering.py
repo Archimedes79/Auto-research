@@ -1,6 +1,6 @@
 """D152: the model is separate from the training system and layered. net/prep (preprocessing) < net/model (the network) < net/loss (losses and targets)
 < training/ (the training system). A module imports only its own layer and layers below it; nothing of net/ imports training/ or the training tooling
-(autoresearch/trainkit, autoresearch/Training). Imports inside a self-test (a `_selftest...` function or an `if __name__ == "__main__"` block) are exempt.
+(autoresearch/trainkit, autoresearch/research). Imports inside a self-test (a `_selftest...` function or an `if __name__ == "__main__"` block) are exempt.
 Two named exceptions: the offline cache builders of the preprocessing run the frozen camera heads (net/model), and feature_cache.CachedBEVFusionModel
 forwards to net/model/cached_model inside the function (the evaluation reads that name, also from old pinned run snapshots).
 Also: module names are unique over the four folders (they are imported flat, and a run's snapshot is one flat folder).
@@ -13,7 +13,7 @@ LAYERS = (("prep", "net/prep"), ("model", "net/model"), ("loss", "net/loss"), ("
 ORDER = [name for name, _ in LAYERS]
 BUILDERS = {"build_feature_cache", "cache_bevfusion_features"}          # preprocessing that runs the frozen camera heads
 FORWARDS = {("feature_cache", "cached_model", "CachedBEVFusionModel")}  # (module, imported module, inside this function)
-TOOLING = {"trainkit", "Training", "run", "jobrunner"}                  # the training tooling of autoresearch/
+TOOLING = {"trainkit", "research"}                                      # the training tooling of autoresearch/
 LAZY_TOOLING = {("student_encoder", "trainkit")}                        # the engine's strict checkpoint loader, imported inside the function that warm-starts the student
 
 

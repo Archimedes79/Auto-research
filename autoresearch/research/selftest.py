@@ -218,7 +218,7 @@ while time.time() < end:
 def make_repo(tmp: str) -> str:
     root = os.path.join(tmp, "repo")
     skip = shutil.ignore_patterns("__pycache__", "*.pyc", "temp", "eval_out", "state", "history")
-    for d in ("research", "Evaluation", "trainkit", "templates"):
+    for d in ("research", "Evaluation", "trainkit", "templates", "reporter"):
         shutil.copytree(os.path.join(CORE, d), os.path.join(root, "autoresearch", d), ignore=skip)
     toy = os.path.join(root, "problems", "toy")
     shutil.copytree(os.path.join(REPO, "problems", "toy"), toy, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
@@ -463,8 +463,13 @@ def chain(tmp: str) -> None:
     st = research(["status", "toy"], env).stdout
     assert "E1.a_s0" in st and "E4.m_s0" in st
     tr = json.loads(research(["tests", "toy"], env).stdout)
-    assert tr["passed"] and [t["test"] for t in tr["tests"]] == ["tests/test_toy.py --quick"], tr
-    say("tests: the problem's own tests with its interpreter and module path")
+    assert tr["passed"] and [t["test"] for t in tr["tests"]] == ["tests/test_toy.py --quick", "archdraw check training/architecture.json"], tr
+    drawing = os.path.join(root, "problems", "toy", "training", "architecture.svg")
+    keep_svg = open(drawing, encoding="utf-8").read()
+    open(drawing, "a", encoding="utf-8").write("<!-- edited by hand -->\n")
+    assert "archdraw check" in research(["tests", "toy", "--only", "archdraw"], env, ok=(1,)).stderr, "a stale drawing fails the tests"
+    open(drawing, "w", encoding="utf-8").write(keep_svg)
+    say("tests: the problem's own tests with its interpreter and module path, and its drawing against the code")
     # clean: E2 is judged (INVALID): its runs go on the list; E3 has a KEEP arm, E5 a MEASURED one, E4's step lives, E1.a is the champion:
     # they stay; E1's control goes too when E1's arm is CUT (KEEP, INCONCLUSIVE and TIE keep it)
     runs = os.path.join(tmp, "runs", "toy")
@@ -513,6 +518,29 @@ def chain(tmp: str) -> None:
     assert not os.path.exists(os.path.join(runs, "E2.a_s0")) and os.path.isdir(os.path.join(runs, "E2.c_s0")) and os.path.isdir(os.path.join(runs, "E4.m_s0"))
     say("clean: a list (a live step, KEEP and MEASURED experiments, the champion kept), then exactly that list under the decided row that names "
         "its hash, checked as a whole first and each run again; another decision, a list by hand and an unreadable champions.json refuse")
+    new_problem(tmp, root, env, quick)
+
+
+def new_problem(tmp: str, root: str, env: dict, quick: dict) -> None:
+    """the extension recipe of EXTENDING.md: the toy copied under a new name (problem.json name and tag prefix, the data root of the base
+    config) is a problem of its own - nothing in the core or the copy names the toy"""
+    new = os.path.join(root, "problems", "disc")
+    shutil.copytree(os.path.join(root, "problems", "toy"), new, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
+    for path, change in ((os.path.join(new, "problem.json"), {"name": "disc", "tag_prefix": "disc"}),
+                         (os.path.join(new, "training", "configs", "base.json"), {"name": "disc", "data_root": "{data}/disc"})):
+        cfg = json.load(open(path, encoding="utf-8"))
+        json.dump(cfg | change, open(path, "w", encoding="utf-8"), indent=1)
+    for cmd in (["git", "add", "problems/disc"], ["git", "commit", "-qm", "a second problem"]):
+        subprocess.run(cmd, cwd=root, check=True, capture_output=True)
+    e = json.loads(research(["new", "disc", "first", "the copy runs"], env).stdout)["folder"]
+    write_card(root, e, {"id": "E1", "title": "the copy runs", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0],
+                         "arms": {"m": {"set": quick}}})
+    research(["start", "disc", "E1"], env)
+    st = wait(root, e, ["E1.m_s0"])
+    assert st["E1.m_s0"] == "ok", (st, run_trace(tmp, root, e, "E1.m_s0"))
+    m = json.loads(research(["judge", "disc", "E1", "--write"], env).stdout)
+    assert m["arms"]["m"]["verdict"] == "MEASURED" and os.path.isdir(os.path.join(tmp, "data", "disc")), m
+    say("a new problem: the toy copied under a new name runs from start to its verdict, with its own data folder")
 
 
 def main(argv) -> int:

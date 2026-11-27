@@ -47,13 +47,12 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-# the engine: a pinned copy next to this file (a run snapshot) wins, else the live autoresearch/ of the repository, found by walking up (as nuscenes_dataset.py finds GtGenerator)
+# the engine: autoresearch/ of this checkout (a run's worker has the snapshot's on the path; by hand it is found by walking up, as nuscenes_dataset.py finds GtGenerator)
 _REPO = os.path.dirname(os.path.abspath(__file__))
 while not os.path.isdir(os.path.join(_REPO, "autoresearch", "trainkit")) and os.path.dirname(_REPO) != _REPO:
     _REPO = os.path.dirname(_REPO)
 if os.path.join(_REPO, "autoresearch") not in sys.path:
     sys.path.append(os.path.join(_REPO, "autoresearch"))
-import trainkit  # noqa: E402
 from trainkit import checkpoint as tk_ckpt  # noqa: E402
 from trainkit import control  # noqa: E402
 from trainkit.config import Config, read_config as read_engine_config  # noqa: E402
@@ -61,12 +60,13 @@ from trainkit.control import EXIT_STOPPED  # noqa: E402
 from trainkit.data import EpochLoader  # noqa: E402
 from trainkit.loop import Hooks, fit  # noqa: E402
 from trainkit.optim import clip_groups, lr_group_params  # noqa: E402
-from trainkit.util import check_engine as engine_line, detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
+from trainkit.probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident  # noqa: E402
+from trainkit.util import detach_tree, prepare_run_dir, resolve_device, seed_all  # noqa: E402
 # engine names that are also read as train.X (evaluation/ and the tests); anything else of the engine is imported from trainkit
 from trainkit.amp import amp_context  # noqa: E402,F401
-from trainkit.checkpoint import check_resume, prune_checkpoints, refuse_slim_resume  # noqa: E402,F401
+from trainkit.checkpoint import prune_checkpoints, refuse_slim_resume  # noqa: E402,F401
 from trainkit.ema import EMA  # noqa: E402,F401
-from trainkit.optim import optimizer_step, param_groups  # noqa: E402,F401
+from trainkit.optim import param_groups  # noqa: E402,F401
 from trainkit.runlog import val_logged  # noqa: E402,F401
 from trainkit.schedule import lr_factor  # noqa: E402,F401
 
@@ -74,7 +74,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from augment import draw_jitter, flip_batch, jitter_seed
 from feature_cache import CachedBEVFusionModel, CachedFrontRadarDataset, FeatureStore, collate_cached
 import freeze as freeze_mod
-from probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident
 from interface import check_inputs, check_outputs
 from loss_extras import UWSO, cross_time_consistency, group_gradient_cosines
 from losses import BEVLoss, LossConfig, build_layer_targets, sample_targets
@@ -150,9 +149,9 @@ class TrainConfig(Config):
     prefetch_factor: int = 0                     # batches each loader worker prepares ahead (0 = the torch default, 2); only with workers > 0
     cudnn_benchmark: bool = False                # torch.backends.cudnn.benchmark: the fastest convolution algorithm per input shape (shapes are static here); the last bits may differ
     tf32: bool = False                           # torch.set_float32_matmul_precision("high"): TF32 for fp32 matrix products (torch already runs convolutions in TF32 by default); changes the numbers slightly
-    profile_steps: int = 0                       # > 0: torch.profiler over that many optimiser steps (at most 8: 30 steps held 22 GB of host RAM) after 10 warm-up steps; writes profile.txt into the run folder (probe.StepProfiler)
+    profile_steps: int = 0                       # > 0: torch.profiler over that many optimiser steps (at most 8: 30 steps held 22 GB of host RAM) after 10 warm-up steps; writes profile.txt into the run folder (trainkit.probe.StepProfiler)
     probe: bool = False                          # log grad.<module> / upd.<module> (gradient norm, update-to-weight ratio) and t_data / t_step in the rows of log_every,
-                                                 # dump incident_<step>.json on a skipped step (probe.py; costs one copy of the trainable weights per logged step)
+                                                 # dump incident_<step>.json on a skipped step (trainkit/probe.py; costs one copy of the trainable weights per logged step)
     model: dict = field(default_factory=dict)    # ModelConfig fields
     loss: dict = field(default_factory=dict)     # LossConfig fields
 
@@ -473,7 +472,7 @@ def evaluate(model, loss, ema, loader, n_batches, device, amp, eval_fn=None, cfg
 
 
 def _stop_requested(run_dir):
-    """reason (a string) when the file CONTROL of the run directory says {"cmd": "stop"}, else None (`python -m Training stop <run>`; the protocol is trainkit.control).
+    """reason (a string) when the file CONTROL of the run directory says {"cmd": "stop"}, else None (`research stop <problem> <run>`; the protocol is trainkit.control).
     The loop asks through this name, so a test can let a stop request arrive at a chosen step"""
     return control.stop_requested(run_dir)
 
@@ -538,7 +537,7 @@ def apply_speed_flags(cfg):
 
 
 class ProbeHooks(Hooks):
-    """probe.py on the engine's hooks: the gradient norm and update ratio per module on the logged steps (ModuleProbe), the wait for the data and the length of a step (StepTimer),
+    """trainkit/probe.py on the engine's hooks: the gradient norm and update ratio per module on the logged steps (ModuleProbe), the wait for the data and the length of a step (StepTimer),
     torch.profiler over a window of steps (StepProfiler) and incident dumps for a skipped step (dump_incident); each one only if the config asks for it (TrainConfig.probe,
     profile_steps). With both off every method does nothing, the loop's numbers are the same"""
 
@@ -574,12 +573,6 @@ class ProbeHooks(Hooks):
     def close(self):
         if self.prof is not None:
             self.prof.close()
-
-
-def check_engine(here=None, engine=None):
-    """trainkit.util.check_engine for this file's folder: the log line that says which trainkit this process runs, SystemExit when a pinned copy lies next to train.py and another
-    trainkit was imported. here / engine: the folder of this file and of the imported trainkit (the arguments are for the test)"""
-    return engine_line(here or os.path.dirname(os.path.abspath(__file__)), engine or os.path.dirname(os.path.abspath(trainkit.__file__)))
 
 
 def train(cfg, eval_fn=None, datasets=None):
@@ -861,7 +854,7 @@ def _selftest():
         assert not os.path.exists(os.path.join(sdir, "STOPPED")) and not os.path.exists(os.path.join(sdir, "CONTROL")), "old files not moved"
         assert os.path.exists(os.path.join(sdir, "CONTROL.old")) and os.path.exists(os.path.join(sdir, "STOPPED.old"))
         assert all("t" in json.loads(ln) for ln in open(os.path.join(sdir, "log.jsonl")) if '"val"' not in ln), "log rows carry t"
-        # 3d one module trains, the rest is frozen (freeze.py) and the probe logs the module keys (probe.py); with the defaults neither exists
+        # 3d one module trains, the rest is frozen (freeze.py) and the probe logs the module keys (trainkit/probe.py); with the defaults neither exists
         assert not any(k.startswith(("grad.", "upd.", "t_data")) for ln in open(os.path.join(sdir, "log.jsonl")) if '"val"' not in ln for k in json.loads(ln)), "the probe is off by default"
         # the average of a frozen weight is the weight: after 200 updates a plain EMA of a constant has drifted by rounding, the one with `skip` has not
         e_net = nn.Linear(64, 64)
@@ -966,7 +959,6 @@ def read_config(path):
 
 if __name__ == "__main__":
     if len(sys.argv) > 1:
-        print(check_engine(), flush=True)
         cfg_ = read_config(os.path.abspath(sys.argv[1]))
         import netpath
         os.chdir(netpath.SITE)                                           # the data folder: the config names its files relative to it

@@ -7,7 +7,6 @@ In a run of the research system the worker composes the config (the base config,
 this script from the run's snapshot.
 """
 import argparse
-import os
 import sys
 from dataclasses import dataclass
 
@@ -21,7 +20,7 @@ from net.prep import shards as S
 from trainkit.config import Config, read_config
 from trainkit.data import EpochLoader
 from trainkit.loop import fit
-from trainkit.util import check_engine, prepare_run_dir, seed_all
+from trainkit.util import prepare_run_dir, seed_all
 
 
 @dataclass
@@ -89,7 +88,6 @@ def main(argv=None):
     ap.add_argument("config")
     ap.add_argument("--check", action="store_true")
     a = ap.parse_args(argv)
-    print(check_engine(os.path.dirname(os.path.abspath(__file__))), flush=True)
     try:
         cfg = read_config(TrainConfig, a.config)
     except TypeError as e:

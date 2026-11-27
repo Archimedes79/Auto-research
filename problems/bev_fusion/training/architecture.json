@@ -395,11 +395,10 @@
     "training/train.py::train",
     "../../autoresearch/trainkit/",
     "training/freeze.py",
-    "training/probe.py",
     "net/model/model.py::check_config",
     "net/prep/feature_cache.py::CachedBEVFusionModel"
    ],
-   "note": "ModelConfig picks one kind per slot from the builder tables of model.py (LIFTS, COLLAPSES, TEMPORALS, RADARS, FUSIONS, TRUNKS); check_config refuses every unknown kind and unfitting combination in one place; since D48 train() builds model, loss and data and hands them to the project-independent loop autoresearch/trainkit (checkpoints with resume, EMA, clipping, the stop request), the probes of probe.py are its hooks"
+   "note": "ModelConfig picks one kind per slot from the builder tables of model.py (LIFTS, COLLAPSES, TEMPORALS, RADARS, FUSIONS, TRUNKS); check_config refuses every unknown kind and unfitting combination in one place; since D48 train() builds model, loss and data and hands them to the project-independent loop autoresearch/trainkit (checkpoints with resume, EMA, clipping, the stop request), train.py's ProbeHooks calls the probes of trainkit/probe.py"
   },
   {
    "id": "loss",

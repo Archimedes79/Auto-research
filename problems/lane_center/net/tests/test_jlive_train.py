@@ -856,8 +856,12 @@ def real_check(train_path=TRAIN):
     """the real data (needs the E365 cache and the lane GT store): `batches` checks that the B' run is the checkpoint of the cache (seed 0's B' accepted, seed 1's refused) and hands out the live loader's batches (x, table, token, row, targets)"""
     import lane_ptok_data as LP
     T = load(train_path, "jlive_train_real")
-    if not os.path.exists(os.path.join(LP.cache_dir("train", 0, "e292_a"), "meta.json")):
-        print(f"real check SKIPPED: no E365 TRAIN cache of B' seed 0 at {LP.cache_dir('train', 0, 'e292_a')}")
+    try:
+        LP.cache_dir("train", 0, "e292_a")                                        # asserts unless exactly one finished cache is there
+    except AssertionError as e:
+        if not str(e).startswith("0 finished caches"):
+            raise                                                                 # several caches match: a real problem, not a skip
+        print(f"real check SKIPPED: no E365 TRAIN cache of B' seed 0 ({e})")
         return
     refuses(lambda: T.batches(0, 2, 0, "runs/e292_a_s1", "e292_a"), "is not the checkpoint that the cache")
     b = next(iter(T.batches(0, 2, 0, "runs/e292_a_s0", "e292_a")))

@@ -1,8 +1,8 @@
-"""See inside a training step: per-module gradient and update sizes, data wait against compute time, a dump of the batch when a step goes wrong.
+"""See inside a training step: per-module gradient and update sizes, data wait against compute time, a profile of a few steps, a dump of the batch when a step goes wrong.
 
-The numbers go into the same log row as the loss (keys the Training reads: `grad.<module>`, `upd.<module>`, `t_data`, `t_step`) and the dump is a file next
-to the log (`incident_<step>.json`); `python -m Training status RUN` shows them and `health` warns (dead module, a module that blows up, weights that do not
-move or move too fast, a data loader that starves the GPU). Nothing here imports the trainer: it takes the model, the step number and plain values.
+The numbers go into the log row of the step (keys `grad.<module>`, `upd.<module>`, `t_data`, `t_step`; `research status` prints the last row) and a dump is a file next
+to the log (`incident_<step>.json`). Nothing here imports a trainer: it takes the model, the step number and plain values (a trainer on `loop.fit` calls it from its
+`Hooks`).
 
     probe = ModuleProbe(model, every=cfg.log_every)                 # once, after the model is frozen / built
     timer = StepTimer()
@@ -19,7 +19,7 @@ move or move too fast, a data loader that starves the GPU). Nothing here imports
     dump_incident(run_dir, step, "nonfinite", batch_ids=batch_ids, losses=loss_dict)
 
 A module is the first `depth` dotted parts of a parameter name (depth 1: `obj_head`, `fusion`, `lane`). Only parameters that train (requires_grad) are measured:
-a frozen module has no keys, which is what the suite expects.
+a frozen module has no keys.
 """
 import json
 import os
@@ -89,9 +89,9 @@ class ModuleProbe:
 
 class StepTimer:
     """seconds a step waited for its data (`with timer.data():` around the fetch) and the whole step (from the end of the previous `row()`; the first step has no
-    start and gives no t_step). Call `row()` once per step at its end; `sync` makes the CUDA work count (a synchronisation per call: use it on logged steps only)"""
-    def __init__(self, sync=False):
-        self.sync, self._t0, self._data = sync, None, 0.0
+    start and gives no t_step). Call `row()` once per step at its end"""
+    def __init__(self):
+        self._t0, self._data = None, 0.0
 
     @contextmanager
     def data(self):
@@ -102,8 +102,6 @@ class StepTimer:
             self._data += time.perf_counter() - t
 
     def row(self):
-        if self.sync and torch.cuda.is_available():
-            torch.cuda.synchronize()
         now = time.perf_counter()
         out = {"t_data": self._data, "t_step": now - self._t0} if self._t0 is not None else {}
         self._t0, self._data = now, 0.0
@@ -123,7 +121,7 @@ def dump_incident(run_dir, step, kind, batch_ids=None, losses=None, extra=None):
     """write run_dir/incident_<step>.json ({step, kind, batch, losses, ...}) and return its path; None when there are already MAX_INCIDENTS (the first ones are the
     informative ones) or the dump itself fails (a dump must never stop the training). `batch_ids` = the sample tokens of the step (all micro-batches so far); `extra` =
     whatever helps to rebuild it (micro-batch index, the tokens per micro-batch, the fraction of the schedule, the gradient norm). It names the step and the samples; it
-    does not hold the weights or the random state: to look at the step again, load the checkpoint before it and run these samples with debug.anomaly()"""
+    does not hold the weights or the random state: to look at the step again, load the checkpoint before it and run these samples under torch.autograd.set_detect_anomaly(True)"""
     try:
         existing = [f for f in os.listdir(run_dir) if f.startswith("incident_") and f.endswith(".json")]
         if len(existing) >= MAX_INCIDENTS:
@@ -141,17 +139,12 @@ def dump_incident(run_dir, step, kind, batch_ids=None, losses=None, extra=None):
         return None
 
 
-def read_incident(path):
-    with open(path, encoding="utf-8") as f:
-        return json.load(f)
-
-
 class StepProfiler:
-    """torch.profiler over `steps` optimiser steps after `warmup` steps (TrainConfig.profile_steps; off by default). Writes <run folder>/profile.txt: the wall time of the window,
+    """torch.profiler over `steps` optimiser steps after `warmup` steps (off unless a trainer's config asks for it). Writes <run folder>/profile.txt: the wall time of the window,
     how much of it the GPU was busy (the sum of the kernel times over the wall time: a low share means the GPU waits for the host), how often the host synchronised with
     the GPU (aten::item / cudaStreamSynchronize / cudaMemcpy calls per step) and the top operators by GPU time and by CPU time. Call tick() once at the end of every optimiser
     step and close() when the loop ends (a run shorter than warm-up + window writes what it has). The window is at most MAX_STEPS: the profiler keeps every event in host memory
-    (30 steps of the bev_fusion trainer held 22 GB and took 3 minutes to close, 2026-11-02, run speed.b; 8 steps still take about 100 s to close). close() never raises"""
+    (30 steps of the BEV trainer held 22 GB and took 3 minutes to close, 2026-11-02, run speed.b; 8 steps still take about 100 s to close). close() never raises"""
     MAX_STEPS = 8
 
     def __init__(self, out_dir, steps, warmup=10, device="cuda"):

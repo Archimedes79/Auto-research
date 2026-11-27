@@ -2,8 +2,9 @@
 
 The report folder (in git: a problem's reports/<name>/, or an experiment's report/) holds report.json and the author's parts (the format of
 autoresearch/reporter). Its report.json may add "draw": [{"run", "frame", "view", "as"}]: pictures drawn from the run's STORED predictions,
-its raw data and ground truth (research/draw.py, no network runs); "as" is the name the parts use (e.g. "media/e1a.png"). The build goes to
-<runs>/<problem>/reports/<name>/ (report.html, media/), outside git; the paths of values and sources are made absolute on the way."""
+its raw data and ground truth (research/draw.py, no network runs); "as" is the name the parts use (e.g. "media/e1a.png"). The build is a copy of
+the report folder in <runs>/<problem>/reports/<name>/ (outside git) with the pictures drawn into it, report.html and media/; the copy's
+report.json names the folder it came from ("origin"), where the reporter reads what lies outside the report folder."""
 from __future__ import annotations
 
 import glob
@@ -19,10 +20,6 @@ from research.paths import CORE, ResearchError, child_env, interpreter, module_p
 REPORTER = os.path.join(CORE, "reporter", "reporter.py")
 
 
-def _abs(base: str, value: Any) -> Any:
-    return os.path.normpath(os.path.join(base, value)) if isinstance(value, str) and not os.path.isabs(value) else value
-
-
 def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
     src = os.path.abspath(folder)
     if not os.path.isfile(os.path.join(src, "report.json")):
@@ -34,16 +31,6 @@ def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
     if os.path.exists(out):
         shutil.rmtree(out)
     shutil.copytree(src, out)
-    for v in spec.get("values", {}).values():
-        if "file" in v:
-            v["file"] = _abs(src, v["file"])
-    spec["sources"] = [_abs(src, s) for s in spec.get("sources", [])]
-    for s in spec.get("sections", []):                      # an svg is named relative to parts/ (reporter): one outside the report folder
-        svg = s.get("svg")                                  # would not be found from the copy, so it is made absolute
-        if svg and not os.path.isabs(svg):
-            full = os.path.normpath(os.path.join(src, "parts", svg))
-            if os.path.relpath(full, src).startswith(".."):
-                s["svg"] = full
     draw = [{"run": d["run"], "frame": d["frame"], "view": d.get("view", "overview"), "out": os.path.join(out, d["as"])} for d in spec.pop("draw", [])]
     env = child_env(RESEARCH_REPO=repo(), RESEARCH_RUNS=runs_root(problem), PYTHONPATH=module_path(repo(), problem))
     if draw:
@@ -51,7 +38,7 @@ def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
                            input=json.dumps(draw).encode(), capture_output=True)
         if r.returncode != 0:
             raise ResearchError(f"drawing the pictures failed: {r.stderr.decode('utf-8', 'replace')[-1500:]}")
-    write_json(os.path.join(out, "report.json"), spec)
+    write_json(os.path.join(out, "report.json"), dict(spec, origin=src))
     r = subprocess.run([interpreter(p["python"]), REPORTER, "build", out] + (["--strict"] if strict else []), capture_output=True, env=env)
     if r.returncode != 0:
         raise ResearchError(f"the report build failed: {(r.stdout + r.stderr).decode('utf-8', 'replace')[-1500:]}")

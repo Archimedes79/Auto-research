@@ -1028,7 +1028,14 @@ def _real_twin():
     import re
     import lane_ptok_data as LP
     e373 = BP.resolve(REAL_TEACHERS[0])
-    if not all(os.path.exists(os.path.join(BP.resolve(p), "model.pt")) for p in REAL_TEACHERS) or not os.path.exists(os.path.join(LP.cache_dir("train", 0, "e292_a"), "meta.json")):
+    try:
+        LP.cache_dir("train", 0, "e292_a")                                        # asserts unless exactly one finished cache is there
+        cache = True
+    except AssertionError as e:
+        if not str(e).startswith("0 finished caches"):
+            raise                                                                 # several caches match: a real problem, not a skip
+        cache = False
+    if not cache or not all(os.path.exists(os.path.join(BP.resolve(p), "model.pt")) for p in REAL_TEACHERS):
         return "twin SKIPPED (the E373 run or the TRAIN cache of B' seed 0 is not there)"
     ea = torch.load(os.path.join(e373, "model.pt"), map_location="cpu", weights_only=False)["args"]
     built, real_bh = [], JKT.build_head

@@ -1,45 +1,21 @@
 # reporter
 
-A small, standalone documentation system. It turns a folder of markdown parts into a **paper-style, engineer-readable report**: one html file (pictures embedded, videos next to it), numbers **filled from result files**, every number **checked against its sources**, the **helper scripts listed and kept**, and report + code + utilities **packed** into a size-limited zip. It imports nothing from any project; copy this folder anywhere.
-
-## The shape of a report (an extended paper)
-Abstract and a teaser figure first, then:
-
-| | chapter | what it holds |
-|---|---|---|
-| 1 | Introduction: purpose and status | the problem in plain words, what was built, the headline result against its baseline, a map of the report |
-| 2 | The system: architecture and description | one drawing, the chain, what is learned and what is a named rule, the loss, parameters, time per frame |
-| 3 | Required ground truth | what the labels must contain and why, how they are made, **with pictures**, how to know they are right, limits |
-| 4 | Experiments done, very short | one row per step: idea, result, verdict (negatives stay in) |
-| 5 | Quantitative results | numbered tables with split and denominator, controls, seeds; plots and videos |
-| 6 | Qualitative results: good cases and issues | real examples chosen by a written rule, failure modes with counts, baseline and winner side by side |
-| 7 | The winning systems | each winner with its architecture, numbers, cost and where the weights are |
-| 8 | Conclusion and next steps | three lines of what it shows, what is still hard, next steps very brief |
-| A | How to repeat the result | data, commands, seeds, numbers to hit per stage, checks, pitfalls |
-| B | Utilities | the helper scripts that are kept (listed automatically, shipped in the package) |
-| C | Sources of the numbers | generated |
-
-Layout: serif text, sans headings and tables, numbered figures ("Figure 3.") and tables with captions, an abstract box, a print stylesheet (browser "Save as PDF" gives a clean paper), light and dark mode.
-
-## Use (one page)
-Needs python 3.8+ with `markdown-it-py` (Pillow optional: it recompresses images). In this workspace: `wsl ~/miniconda3/envs/gcar/bin/python reporter.py ...` (it has both).
-
+A standalone tool: a folder of markdown parts becomes one paper-style **html report**; numbers are **filled from result files** and **checked against their sources**; report, code and helper scripts are **packed** into a size-limited zip. It imports nothing of any project. The chapters and what each must hold: `CHAPTERS` in `reporter.py`; how to write a good one: `SKILL.md` (an agent skill: install it as `.claude/skills/reporter/SKILL.md`). Needs python 3.8+ with `markdown-it-py` (Pillow optional); here `wsl ~/miniconda3/envs/gcar/bin/python reporter.py ...`.
 ```
-python reporter.py new   my_report --title "My system"   # scaffold: report.json + the chapters above, each with a prompt
+python reporter.py new   my_report --title "My system"   # scaffold: report.json and parts/, one per chapter with its prompt
 python reporter.py build my_report                        # -> my_report/report.html (+ media/); prints figures, tables, PENDING marks
 python reporter.py check my_report                        # every decimal number of the text must be in the sources
-python reporter.py pack  my_report                        # -> package.zip: report.html, media/, README.txt, code/, utilities/ ; refuses over the limit
-python reporter.py selftest                               # builds, checks and packs a throw-away example
+python reporter.py pack  my_report                        # -> package.zip: report.html, media/, README.txt, code/, utilities/
+python reporter.py selftest
 ```
-`--strict` on `build` / `check` exits 1 when a PENDING mark or an unfound number is left: the last gate before sending. `build --strict` also exits 1 when the report has no architecture drawing: every report holds one (the owner, 2026-11-25), i.e. at least one section has an `svg` part (a file in `parts/`; the `svg` path is relative to `parts/`) that exists and is not the scaffold's placeholder; a teaser svg or an svg linked as a markdown image does not count. A problem's drawing is its `training/architecture.svg` (made by `archdraw.py`): copy it or a cut of it into `parts/`.
 
 ## Minimal example
-`my_report/report.json` (paths relative to the report folder):
+`my_report/report.json` (paths relative to the report folder; a section's `part` and `svg` relative to `parts/`):
 ```json
 {"title": "My system", "subtitle": "Project, date, status",
  "abstract": "Four sentences with the headline result {{topo_s0}} against its baseline.",
  "teaser": {"image": "parts/teaser.jpg", "caption": "A real example: input left, output right."},
- "sections": [{"id": "quant", "title": "5. Quantitative results", "part": "05_quant.md"}],
+ "sections": [{"id": "quant", "title": "5. Quantitative results", "part": "05_quant.md", "svg": "02_system.svg"}],
  "values": {"topo_s0": {"file": "../runs/a/metrics.json", "key": "scores.topo_f1.0", "fmt": "{:.4f}"}},
  "sources": ["../experiments/E1*/experiment.md", "../runs/**/*.json"],
  "utilities": [{"path": "../scripts/plot_curves.py", "usage": "python plot_curves.py run_dir"}],
@@ -51,28 +27,17 @@ Table: Topo F1 on VAL, two seeds.
 
 | system | s0 |
 |---|---|
-| baseline | 0.6259 |
 | ours | {{topo_s0}} |
 
-![A failure case: the far lane is missed; look at the right edge.](parts/fail.jpg)   <- a numbered figure, embedded
-![A short drive.](media/clip.mp4)                                                   <- a video next to the html, with controls
+![A failure case: the far lane is missed.](parts/fail.jpg)
+![A short drive.](media/clip.mp4)
 ```
-The line `Table: ...` before a table becomes its numbered caption; the alt text of an image becomes its caption. The scaffold gives the other chapters as `parts/01_intro.md ... parts/A1_repeat.md` and the drawing as `parts/02_system.svg`.
+A `Table: ...` line becomes the numbered caption of the table after it, the alt text of a picture (embedded) or video (next to the html) its caption.
 
 ## Rules the tool enforces
-- **Numbers come from files.** `{{name}}` is filled from `values` (a JSON key path with a format, or a literal), also in the abstract and captions. A missing file or key, an unknown name or a missing picture becomes a visible, highlighted **PENDING** mark, never an empty cell.
-- **`check`** takes every decimal number in the text (abstract, captions, chapters; after filling; code blocks excluded) and looks for it in the `sources`: found exactly, or as a rounded form of a source number; everything else is listed with its line.
-- **Utilities.** `utilities` lists the helper scripts that stay with the work; chapter B shows name, what it does (the first line of its docstring unless `what` is given) and how to run it; `pack` ships them in `utilities/`.
-- **Size.** With `pack.include_report: false` the zip holds code + utilities only (the html is sent next to it) and the limit counts html + zip together. `pack` refuses a zip at or above `pack.limit` and, with `require_clean_git`, code or utilities with uncommitted changes. Videos are not embedded in the html; they travel in `media/` (and in the zip).
-- **Nothing is sent.** The tool writes files only.
+- `{{name}}` is filled from `values` (a JSON key path with a format, or a literal). A missing file, key, name or picture becomes a highlighted **PENDING** mark. `check` looks for every decimal number of the text (code blocks aside) in the `sources`, exactly or as a rounded source number.
+- `--strict` (build, check) exits 1 while a PENDING mark or an unfound number is left; `build --strict` also without an architecture drawing: a section's `svg` part that is not the scaffold's placeholder (a problem's: its `training/architecture.svg`).
+- `pack` ships the `utilities` (chapter B lists them, by default with the first line of their docstring) and refuses a zip at or above `pack.limit` (`include_report: false`: code and utilities only, the limit counts html + zip) and, with `require_clean_git`, uncommitted code. Nothing is sent.
+- A **copy** of a report folder names the original in `"origin"`: paths that leave the folder are read from there. `research report <problem> <folder>` builds such a copy in the run root and draws the pictures its `"draw"` names.
 
-## Files
-| file | what |
-|---|---|
-| `reporter.py` | the whole report tool, one file, with `selftest` |
-| `archdraw.py` | the system drawings: a JSON spec -> svg + the file map of its md (`render`), and `check` (exit 1 when a box points at nothing, a file is in no box, or svg / md are stale); `python archdraw.py render <spec.json>`, `--selftest` |
-| `SKILL.md` | the procedure and the quality bar for writing such a report (an agent skill: copy it to `.claude/skills/reporter/SKILL.md` to install) |
-| `README.md` | this page |
-
-## Not in the tool, on purpose
-Choosing the examples, judging the results and writing the plain-language reading stay with the author; so does a fresh reviewer pass before sending. The tool makes the mechanical part repeatable and the numbers traceable.
+`archdraw.py` (same folder) draws a system from a JSON spec: `render` writes the svg and the file map of the spec's md; `check` exits 1 when a box points at nothing, a file is in no box, or svg / md are stale; `--selftest`.

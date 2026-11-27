@@ -10,7 +10,7 @@ files, check every number against its sources, list the kept helper scripts, and
 
 Needs: python 3.8+, markdown-it-py; Pillow is optional (recompresses images). Standalone: no import from any project.
 Full description with a minimal example: README.md. The procedure and the quality bar for writing the text: SKILL.md."""
-import argparse, base64, glob, io, json, os, re, shutil, subprocess, sys, tempfile, zipfile
+import argparse, base64, functools, glob, io, json, os, re, shutil, subprocess, sys, tempfile, zipfile
 
 PENDING = "PENDING"
 PLACEHOLDER_SVG = "PENDING: architecture drawing"                       # the text of the scaffold's placeholder drawing (`new`); `drawings` does not count it
@@ -71,8 +71,14 @@ def load_spec(folder):
     return json.load(open(p, encoding="utf-8"))
 
 
-def rel(folder, path):
-    return path if os.path.isabs(path) else os.path.normpath(os.path.join(folder, path))
+def locate(folder, spec, path, sub=""):
+    """the file a path of report.json or of a part names; relative to the report folder (sub = "parts": a section's part and svg are relative to parts/). A path that
+    leaves the report folder is read from spec["origin"] when that is given: the folder this one is a copy of (`research report` builds a copy outside git)"""
+    if os.path.isabs(path):
+        return path
+    p = os.path.normpath(os.path.join(sub, path))
+    outside = p == os.pardir or p.startswith(os.pardir + os.sep)
+    return os.path.normpath(os.path.join((outside and spec.get("origin")) or folder, p))
 
 
 def dig(obj, key):
@@ -88,7 +94,7 @@ def resolve_values(folder, spec):
     for name, v in spec.get("values", {}).items():
         if isinstance(v, dict) and "file" in v:
             try:
-                x = json.load(open(rel(folder, v["file"]), encoding="utf-8"))
+                x = json.load(open(locate(folder, spec, v["file"]), encoding="utf-8"))
                 x = dig(x, v["key"]) if v.get("key") else x
                 out[name] = v.get("fmt", "{}").format(x)
             except Exception:
@@ -112,15 +118,15 @@ def fill(text, values):
     return re.sub(r"\{\{([^}]+)\}\}", sub, text), unknown
 
 
-def read_part(folder, name):
-    p = os.path.join(folder, "parts", name)
+def read_part(folder, spec, name):
+    p = locate(folder, spec, name, "parts")
     return open(p, encoding="utf-8").read() if os.path.exists(p) else ""
 
 
 def sources_text(folder, spec):
     files = []
     for g in spec.get("sources", []):
-        files += sorted(glob.glob(rel(folder, g), recursive=True))
+        files += sorted(glob.glob(locate(folder, spec, g), recursive=True))
     txt = []
     for f in files:
         try:
@@ -160,7 +166,8 @@ def figure(inner, caption, st):
     return "<figure>%s%s</figure>" % (inner, cap)
 
 
-def render_md(md, text, folder, out_dir, st, demote=1):
+def render_md(md, text, find, out_dir, st, demote=1):
+    """find(path) -> the file a picture or video of the text names (locate)"""
     if demote:
         text = re.sub(r"\A\s*#+ [^\n]*\n", "", text)                      # the section title comes from report.json
     text = re.sub(r"^(#+) ", lambda m: "#" * min(6, len(m.group(1)) + demote) + " ", text, flags=re.M)
@@ -168,7 +175,7 @@ def render_md(md, text, folder, out_dir, st, demote=1):
 
     def media(m):                                                         # images are embedded, videos / gifs are copied next to the html
         src, alt = m.group(1), m.group(2)
-        f = os.path.join(folder, src)
+        f = find(src)
         ext = os.path.splitext(src)[1].lower()
         if not os.path.exists(f):
             return figure('<span class="pend">PENDING</span> (missing: %s)' % esc(src), alt, st)
@@ -206,7 +213,7 @@ def drawings(folder, spec):
     Every report holds at least one (the owner, 2026-11-25: "always add an architecture drawing into the reports"); `build --strict` refuses without it"""
     out = []
     for s in spec.get("sections", []):
-        svg = read_part(folder, s["svg"]) if s.get("svg") else ""
+        svg = read_part(folder, spec, s["svg"]) if s.get("svg") else ""
         if svg.strip() and PLACEHOLDER_SVG not in svg:
             out.append(s["svg"])
     return out
@@ -220,44 +227,45 @@ def build(folder, out=None, strict=False):
     out = out or os.path.join(folder, spec.get("output", "report.html"))
     out_dir = os.path.dirname(os.path.abspath(out))
     st, unknown_all, secs = State(), [], []
+    find = functools.partial(locate, folder, spec)
 
     head = ""                                                             # abstract + teaser (a paper starts with them)
     if spec.get("abstract"):
         text, unk = fill(spec["abstract"], values)
         unknown_all += unk
-        head += '<div class="abs"><b class="lab">Abstract</b>%s</div>' % render_md(md, text, folder, out_dir, st, demote=0)
+        head += '<div class="abs"><b class="lab">Abstract</b>%s</div>' % render_md(md, text, find, out_dir, st, demote=0)
     if spec.get("teaser"):
         t = spec["teaser"]
         cap, unk = fill(t.get("caption", ""), values)
         unknown_all += unk
         if str(t.get("image", "")).endswith(".svg"):
-            svg = open(rel(folder, t["image"]), encoding="utf-8").read() if os.path.exists(rel(folder, t["image"])) else ""
+            svg = open(find(t["image"]), encoding="utf-8").read() if os.path.exists(find(t["image"])) else ""
             head += figure(re.sub(r"^<\?xml[^>]*\?>\s*", "", svg) or '<span class="pend">PENDING</span>', cap, st)
         else:
-            head += render_md(md, "![%s](%s)" % (cap.replace("]", ")"), t.get("image", "")), folder, out_dir, st, demote=0)
+            head += render_md(md, "![%s](%s)" % (cap.replace("]", ")"), t.get("image", "")), find, out_dir, st, demote=0)
 
     for s in spec["sections"]:
-        text, unk = fill(read_part(folder, s["part"]), values)
+        text, unk = fill(read_part(folder, spec, s["part"]), values)
         unknown_all += unk
         fig = ""
         if s.get("svg"):
-            svg = read_part(folder, s["svg"])
+            svg = read_part(folder, spec, s["svg"])
             cap, unk = fill(s.get("svg_caption", ""), values)
             fig = figure(re.sub(r"^<\?xml[^>]*\?>\s*", "", svg) or '<span class="pend">PENDING</span>', cap, st)
-        secs.append((s["id"], s["title"], fig + render_md(md, text, folder, out_dir, st, demote=0 if s.get("keep_heading") else 1)))
+        secs.append((s["id"], s["title"], fig + render_md(md, text, find, out_dir, st, demote=0 if s.get("keep_heading") else 1)))
 
     util = spec.get("utilities", [])                                      # the helper scripts that are kept
     if util:
         rows = ["Table: The helper scripts that belong to this work and are kept with it (they are in the package under `utilities/`).", "",
                 "| script | what it does | how to run it |", "|---|---|---|"]
         for u in util:
-            what = u.get("what") or script_summary(rel(folder, u["path"])) or PENDING
+            what = u.get("what") or script_summary(find(u["path"])) or PENDING
             rows.append("| `%s` | %s | `%s` |" % (os.path.basename(u["path"]), what, u.get("usage", PENDING)))
-        secs.append(("utilities", "B. Utilities", render_md(md, "\n".join(rows), folder, out_dir, st, demote=0)))
+        secs.append(("utilities", "B. Utilities", render_md(md, "\n".join(rows), find, out_dir, st, demote=0)))
     if spec.get("sources"):
         _, files = sources_text(folder, spec)
         body = "The numbers of this report come from %d stored source file(s) matched by:\n\n%s\n" % (len(files), "\n".join("- `%s`" % g for g in spec["sources"]))
-        secs.append(("sources", "C. Sources of the numbers", render_md(md, body, folder, out_dir, st, demote=0)))
+        secs.append(("sources", "C. Sources of the numbers", render_md(md, body, find, out_dir, st, demote=0)))
 
     nav = " ".join('<a href="#%s">%s</a>' % (k, t.split(":")[0] if t[0].isdigit() or t[1:2] == "." else t) for k, t, _ in secs)
     body = "\n".join('<section id="%s"><h2>%s</h2>%s</section>' % (k, t, h) for k, t, h in secs if h.strip())
@@ -292,7 +300,7 @@ def check(folder, strict=False):
     exact = set(NUM.findall(src))
     srcnums = [float(x) for x in exact]
     texts = [("abstract", spec.get("abstract", "")), ("teaser", spec.get("teaser", {}).get("caption", ""))]
-    texts += [(s["part"], read_part(folder, s["part"])) for s in spec["sections"]]
+    texts += [(s["part"], read_part(folder, spec, s["part"])) for s in spec["sections"]]
     bad, total = [], 0
     for name, raw in texts:
         text, _ = fill(raw, values)
@@ -329,10 +337,10 @@ def pack(folder, out=None):
     out = out or os.path.join(folder, spec.get("package", "package.zip"))
     code = []
     for g in pk.get("code", []):
-        code += [f for f in sorted(glob.glob(rel(folder, g), recursive=True)) if os.path.isfile(f) and "__pycache__" not in f and not f.endswith(".pyc")]
-    strip = os.path.abspath(rel(folder, pk["strip"])) if pk.get("strip") else None
+        code += [f for f in sorted(glob.glob(locate(folder, spec, g), recursive=True)) if os.path.isfile(f) and "__pycache__" not in f and not f.endswith(".pyc")]
+    strip = os.path.abspath(locate(folder, spec, pk["strip"])) if pk.get("strip") else None
     code = [os.path.abspath(f) for f in code]
-    utils = [rel(folder, u["path"]) for u in spec.get("utilities", []) if os.path.isfile(rel(folder, u["path"]))]
+    utils = [f for f in (locate(folder, spec, u["path"]) for u in spec.get("utilities", [])) if os.path.isfile(f)]
     if pk.get("require_clean_git") and (code or utils):
         for f in code + utils:
             dirty = subprocess.run(["git", "status", "--porcelain", "--", f], capture_output=True, text=True, cwd=os.path.dirname(f)).stdout.strip()
@@ -450,6 +458,28 @@ def selftest():
         json.dump({"title": "Clean", "sections": [dict(sec, svg="02_system.svg")]}, open(os.path.join(clean, "report.json"), "w"))
         open(os.path.join(clean, "parts", "02_system.svg"), "w").write('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>\n')
         build(clean, strict=True)
+        # a copy of a report folder (research report): what lies outside the folder is read from `origin`, whatever names it
+        src, copy = os.path.join(d, "deep", "src"), os.path.join(d, "a", "b", "c", "copy")
+        os.makedirs(os.path.join(src, "parts"))
+        open(os.path.join(d, "res", "draw.svg"), "w").write('<svg xmlns="http://www.w3.org/2000/svg"><rect width="7" height="7"/></svg>\n')
+        open(os.path.join(d, "res", "pic.png"), "wb").write(b"\x89PNG not really")
+        spec = {"title": "Copy", "abstract": "Topo F1 {{v}}.", "teaser": {"image": "../../res/pic.png", "caption": "Teaser."},
+                "sections": [{"id": "s", "title": "2. The system", "part": "02_system.md", "svg": "../../../res/draw.svg"}],
+                "values": {"v": {"file": "../../res/m.json", "key": "a.topo.0"}}, "sources": ["../../res/*.md"],
+                "utilities": [{"path": "../../tools/helper.py", "usage": "python helper.py"}], "pack": {"code": ["../../code/*.py"], "strip": "../../code"}}
+        open(os.path.join(src, "parts", "02_system.md"), "w").write("Exact 0.6912.\n\n![A picture.](../../res/pic.png)\n")
+        json.dump(spec, open(os.path.join(src, "report.json"), "w"))
+        shutil.copytree(src, copy)
+        try:
+            build(copy, strict=True)
+            raise AssertionError("a copy without origin must not find what lies outside it")
+        except SystemExit:
+            pass
+        json.dump(dict(spec, origin=src), open(os.path.join(copy, "report.json"), "w"))
+        html = open(build(copy, strict=True), encoding="utf-8").read()
+        assert html.count("data:image/png") == 2 and 'width="7"' in html and "Topo F1 0.5486." in html and "Helper: prints one." in html, "outside paths of a copy"
+        assert check(copy) == 0, "the sources of a copy"
+        assert {"code/x.py", "utilities/helper.py"} <= set(zipfile.ZipFile(pack(copy)).namelist()), "the package of a copy"
         print("selftest OK")
     finally:
         shutil.rmtree(d, ignore_errors=True)

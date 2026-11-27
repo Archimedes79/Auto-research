@@ -1,66 +1,41 @@
 # trainkit - the project-independent training engine
 
-The part of a training that does not depend on the network, the loss or the data: the fit loop with accumulation, EMA, the learning-rate schedule (an own rate per module), gradient clipping and the optimiser step with the non-finite rules, AMP with the GradScaler, atomic checkpoints with resume and warm start, the log files, and the stop protocol of the research worker (exit 75). Plain torch, no project code. Users: the BEV problem (`problems/bev_fusion/training/train.py`, the first, D48) and the toy (`problems/toy/training/train.py`); the lane problem has a trainer of its own. `problems/bev_fusion/tests/test_trainkit_equivalence.py` runs the trainer from before the move and the live one on the same toy and requires the same rows, weights, files and messages; it also kills eighteen mutants of this package.
+What a training needs and that does not depend on the network, the loss or the data: the fit loop (accumulation, EMA, schedule, clipping, AMP), atomic checkpoints with resume and warm start, the log, the probes and the stop protocol of the research worker. Plain torch. The BEV problem and the toy train on `fit`; the lane problem has its own loop (`problems/lane_center/training/trainer.py`) and takes `control` and `probe` from here. A run imports the trainkit of its code snapshot.
 
-## The contract: model, loss, data, config - and two functions of yours
+## Minimal example (`selftest.py` runs it)
 ```python
-from trainkit.config import Config            # 4. CONFIG: a dataclass; a project extends it with its own fields (and overrides RESUME_FREE, RESUME_SWITCHES, RESUME_ENV)
+from trainkit.config import Config            # a dataclass; a project adds its fields (and overrides RESUME_FREE, RESUME_SWITCHES, RESUME_ENV)
 from trainkit.loop import fit
 from trainkit.util import prepare_run_dir
 
-model, loss = Net(), Loss()                   # 1. MODEL and 2. LOSS: nn.Modules. The loss module holds learnable loss weights (an empty nn.Module() if there are none);
-                                              #    its parameters train, are saved and are warm-started with the model
-batches = [...]                               # 3. DATA: any re-iterable of batches (a DataLoader, a list); the loop starts over when it ends. With `iter_from(epoch, pos)`
-                                              #    (`trainkit.data.EpochLoader`: a shuffling DataLoader whose pass order is a function of (seed, epoch)) a resume continues the pass it was in
+model, loss = Net(), Loss()                   # nn.Modules; the loss holds the learnable loss weights (an empty nn.Module() if none): they train and are saved
+batches = [...]                               # any re-iterable of batches; with `data.EpochLoader` a resume continues the pass it was in
 
-def step_fn(batch, info):                     # one micro-batch: forward AND backward -> (terms, finite?, extra)
+def step_fn(batch, info):                     # one micro-batch: forward AND backward
     l = loss(model.fc(batch["x"]), batch["y"])
-    info.backward(l)                          # divides by accum, applies the loss scale under fp16 (a step that needs more may call .backward itself)
-    return {"total": float(l.detach())}, bool(torch.isfinite(l)), None
+    info.backward(l)                          # divides by accum, applies the loss scale under fp16
+    return {"total": float(l.detach())}, bool(torch.isfinite(l)), None      # terms (at least "total"), finite?, extra fields of the log row or None
 
 cfg = Config(name="toy", out_root="runs", steps=12, accum=2, lr=0.05, warmup=2, device="cpu", save_every=6)
-out_dir = prepare_run_dir(cfg)                # runs/toy, created; the CONTROL / STOPPED files of an earlier stop moved aside
-model, loss, ema, last = fit(cfg, model, loss, batches, step_fn, out_dir, "cpu")     # `selftest.py` runs this example
+model, loss, ema, last = fit(cfg, model, loss, batches, step_fn, prepare_run_dir(cfg), "cpu")
 ```
-`terms` = `{name: float}` with at least `total` (averaged over the micro-batches into the row; every other name is a column of `log.jsonl`); `finite? = False` skips the step; `extra` = None or a dict that goes into the row and forces it to be written (the BEV gradient-conflict diagnostic). The autocast context of the forward pass (`trainkit.amp.amp_context`) and the data pipeline are yours: they live in `step_fn` and in the batches.
+`fit` also takes `evaluate(ema) -> {name: float}` (under the average: `with ema.applied(model): ...`), `hooks` (`loop.Hooks`: probes around a step), `frozen` (state keys the EMA leaves alone), `external` (state-key prefixes that are not saved) and `stop_check`. The autocast of the forward pass (`amp.amp_context`) and the data are yours.
 
-Further arguments of `fit`: `evaluate(ema) -> {name: float}` (a validation under the averaged weights: `with ema.applied(model): ...`; it is logged as `{"step", "val": {...}}`), `hooks`, `frozen` (state keys whose average stays the value itself: a freeze plan), `external` (state-key prefixes that are not in the checkpoints because they come from elsewhere: a frozen pre-trained part), `stop_check(out_dir)` (default `control.stop_requested`).
-
-## Hooks (`loop.Hooks`, every method optional)
-| method | when | use |
-|---|---|---|
-| `begin_step(n)` | before the micro-batches of step n (1-based) | return a probe with `grads()` (between the backward and the clip, unscaled gradients) and `finish()` (after the optimiser step -> a dict added to the row), or None |
-| `data_wait()` | around every batch fetch | a context manager that times the wait for the data |
-| `batch(item)` | after every fetch | remember the samples (for an incident dump) |
-| `skipped(step, what, gn, terms, step_frac)` | a step skipped as non-finite (`what` = loss / gradient) | dump the incident |
-| `end_step()` | at the end of every step | return a dict added to the row (timings), tick a profiler |
-| `close()` | after the last step, before the final checkpoint | write the profile |
-The BEV probes (`problems/bev_fusion/training/probe.py`) are one implementation: `ProbeHooks` in its `train.py`.
-
-## What the loop guarantees, in this order, for every optimiser step
-1. The stop request comes first: a `CONTROL` file with `{"cmd": "stop"}` ends the run with a checkpoint, a `STOPPED` file and exit code 75 (never 0, so no `.done` and nobody evaluates half a model); the next start moves both files aside (`control.py` is the one implementation; on `research stop` the worker writes the `CONTROL` file).
-2. The learning rate of every group follows the schedule (warm-up from lr / 3, cosine to `lr_min_frac`; an `lr_groups` prefix has its own rate and warm-up).
-3. `accum` micro-batches go through `step_fn`; a non-finite loss skips the step. Then the gradients are clipped (one global clip, or per `grad_clip_split` group) and the optimiser steps; a non-finite gradient skips the step (fp16: an overflow halves the scale and counts only below scale 1); `max_bad_steps` skipped steps in a row abort the run; a skipped step prints `step N: non-finite ..., skipped (k in a row)` (an fp16 overflow above scale 1: `fp16 gradient overflow, skipped`).
-4. The EMA is updated after a step that was made; a row goes to `log.jsonl` at step 1, every `log_every` steps and when `extra` is given; a checkpoint every `save_every` steps (atomic: write, fsync, rename; the newest `keep` stay (`keep` is at least 1, else `fit` refuses at the start), and the checkpoints of the steps in `keep_steps`, each a multiple of `save_every` and not above `steps`, else `fit` refuses at the start), then the evaluation every `eval_every` steps, so a crash in the evaluation costs nothing.
-5. At the start: resume from the newest readable checkpoint of the run folder (a damaged one is kept as `.damaged`; the configuration must be the checkpoint's except `RESUME_FREE`, and the switches in `RESUME_SWITCHES` must not be turned on in the middle of a run; the environment variable `RESUME_ENV` = 1 overrides), or a warm start from `init_from`; log rows above the resumed step move to `log_superseded.jsonl`; an evaluation that a crash cut is made up. A finished run is written slim (`slim_at_end`: weights only, evaluates and warm-starts but cannot resume).
-A resume is the uninterrupted run (bit for bit on the CPU) when the data has `iter_from`: the checkpoint holds the random streams (torch, numpy and, when CUDA is up, every CUDA device; older checkpoints lack the CUDA key and load as before) and, in `extra["data"]`, the pass and the number of micro-batches taken from it, with the number of samples and the batch size it is valid for; the loop opens that pass at that place (a position that does not fit these data, and a checkpoint without one, are printed and the pass starts again; so is a position that plain data cannot use). On the GPU the float atomics of some layers are not deterministic: bit for bit is what the CPU test shows. Data without `iter_from` (a list, a plain DataLoader) starts a pass afresh on a resume, as before. Randomness inside a dataset's `__getitem__` in a worker process is not restored.
-Not in the loop: a roll-back to an earlier checkpoint on divergence (a run that skips `max_bad_steps` steps stops; the trainer resumes by starting the same command again).
+## What the loop guarantees
+1. **Stop**: a `CONTROL` file `{"cmd": "stop"}` (the worker writes it on `research stop`) ends the run at a step boundary: checkpoint, `STOPPED`, exit 75 (never 0). The next start moves both files aside.
+2. **Bad steps**: a non-finite loss or gradient skips the step, `max_bad_steps` in a row abort; non-finite batch-norm statistics abort at once; an fp16 overflow halves the scale and counts only below scale 1.
+3. **Saved**: the EMA after every step that was made; a row of `log.jsonl` every `log_every`; a checkpoint every `save_every` (atomic; the newest `keep` and the `keep_steps` stay), then the evaluation.
+4. **Start**: resumes from the newest readable checkpoint, only with the same config (`RESUME_FREE` aside; `RESUME_ENV`=1 overrides); log rows above it move to `log_superseded.jsonl`, a cut evaluation is made up. A run without one warm-starts from `init_from`.
+5. With `EpochLoader` a resumed run is the uninterrupted one, bit for bit on the CPU. Not restored: GPU float atomics, randomness inside worker processes. No roll-back on divergence.
 
 ## Files
 | file | content |
 |---|---|
 | `loop.py` | `fit`, `Hooks`, `StepInfo` |
-| `config.py` | `Config`: the fields the engine reads (steps, lr, warm-up, accum, clip, EMA, AMP, cadence of logging and saving, seed, warm start, device) and the rules of a resume |
-| `ema.py` | `EMA` (weights and buffers, decay ramp, frozen keys stay the value itself), `ema.applied(model)` |
-| `schedule.py` | `lr_factor`, `scheduled_lr` |
-| `optim.py` | `param_groups` (decay / no decay, one pair per `lr_groups` prefix), `clip_groups` / `clip_gradients`, `optimizer_step`, `bad_steps_after`, `poisoned_buffers` |
-| `amp.py` | `amp_context`, `make_scaler` (GradScaler for fp16), `scaler_extra` |
-| `checkpoint.py` | `save_checkpoint` / `load_checkpoint` (state without the `external` prefixes, optimiser, EMA, RNG: `capture_rng` / `restore_rng`, torch + numpy + CUDA), `resume`, `check_resume`, `refuse_slim_resume`, `warm_start`, `prune_checkpoints` |
-| `data.py` | `EpochLoader` (a DataLoader with `iter_from(epoch, pos)`), `EpochSampler` (pass order = numpy permutation seeded by (seed, epoch)) |
-| `runlog.py` | `supersede_log`, `val_logged` (the `log.jsonl` rules) |
+| `config.py` | `Config`, `read_config` |
+| `optim.py`, `schedule.py`, `ema.py`, `amp.py` | parameter groups, clipping and the step; the learning rate; the average; mixed precision |
+| `checkpoint.py` | save, load, the rules of a resume, warm start, pruning |
+| `data.py`, `runlog.py`, `util.py` | `EpochLoader`; the log rules; seed, device, run folder |
 | `control.py` | the stop protocol, standard library only |
-| `util.py` | `seed_all`, `resolve_device`, `prepare_run_dir`, `detach_tree`, `check_engine` (a pinned copy next to the script that is not the imported trainkit is refused; every trainer script calls it first) |
-| `selftest.py` | known answers for the schedule, the EMA, the clip and step rules, the stop protocol, the CUDA random state (stubbed), `EpochLoader`, a stop + resume that equals the uninterrupted run, and the example above; `python -m trainkit.selftest` from `autoresearch/` (needs torch) |
-
-## A run trains from a code snapshot
-In the research system a run executes its experiment's snapshot: the worker (`research/worker.py`) unpacks the tag once per commit and starts the problem's `train.py` from it, with the snapshot's `autoresearch/` on the path, so the trainkit a run imports is the snapshot's. `check_engine` still refuses a pinned copy next to a trainer that is not the imported one.
+| `probe.py` | gradient and update size per module, data wait, profile of a few steps, incident dumps |
+| `selftest.py` | known answers of all of it: `python -m trainkit.selftest` from `autoresearch/` (needs torch, seconds) |

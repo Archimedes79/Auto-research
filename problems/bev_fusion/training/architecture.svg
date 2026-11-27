@@ -185,10 +185,10 @@
 <text x="499.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clips, mirror</text>
 <text x="499.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Cache</text>
 </g>
-<g><title>trainer: training/build_image_cache.py; training/train.py::train; ../../autoresearch/trainkit/; training/freeze.py; training/probe.py; net/model/model.py::check_config; net/prep/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>trainer: training/build_image_cache.py; training/train.py::train; ../../autoresearch/trainkit/; training/freeze.py; net/model/model.py::check_config; net/prep/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="974.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer + trainkit</text>
 <text x="974.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">slot tables, check_config</text>
-<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">build_image_cache.py +6</text>
+<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">build_image_cache.py +5</text>
 </g>
 <g><title>loss: net/loss/object_loss.py; net/loss/radar_loss.py; net/loss/motion_loss.py; net/prep/targets.py; net/loss/losses.py::BEVLoss; net/loss/loss_extras.py</title><rect x="1374" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="1449.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Loss</text>
