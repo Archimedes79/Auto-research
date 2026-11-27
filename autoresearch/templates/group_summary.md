@@ -14,11 +14,11 @@ Built from the notes listed below only; regenerate rather than edit by hand. Thi
 |---|---|---|---|---|---|
 
 ## For experiment planning
-| candidate | gap of PROBLEM.md it attacks | K id / note | variant or block | cost (GPU h, days) | first test |
+| candidate | gap of PROBLEM.md it attacks | note | variant or block | cost (GPU h, days) | first test |
 |---|---|---|---|---|---|
 
 ## Detail links
-The generated table of all notes (title, summary, relevance, status, paper, code): [table.md](table.md). The notes this overview rests on, one line each:
+The notes this overview rests on, one line each:
 - [<id> <short title>](<id>/note.md) - why it is named here
 
 ## Open questions the literature does not answer

@@ -22,7 +22,8 @@ Code and text are in git; data and run outputs never: they are where `~/.researc
   `~/miniconda3/envs/gcar/bin/python` from the problem folder, its module path as in its `problem.json`.
 - An experiment: `research new` -> the card -> `ar-critic` (cards) -> code default-off, committed, with its test -> `research check` ->
   `research start` -> `research judge --write`; an adoption only on the owner's decision (`research adopt`). After a change of a problem's
-  code: `research tests <problem>` (its own tests) and `research anchor <problem> <champion run>` (the champion's numbers still come out).
+  code: `research tests <problem>` (its own tests) and `research anchor <problem> <champion run>` (the champion's numbers still come out of
+  the evaluation step; for lane_center that step re-scores stored predictions, so a network change is checked by a new run).
 - Commit own paths only (`research commit <paths> -m ...`), never `git add -A` in this shared checkout; push only when asked, after
   `research push-check`.
 - Protected files change only under a grant of a decided decision (`research grant`); the hook `autoresearch/research/hook.py` refuses

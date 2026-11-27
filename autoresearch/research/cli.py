@@ -13,7 +13,7 @@ from typing import Any, Dict, List
 from research import adopt as adopt_mod
 from research import gates, index, judge, launch, worker
 from research.paths import (RUN_ID, ResearchError, experiment_dir, machine, machine_file, parse_run, problem_dir, read_json, record_dir, rel,
-                            run_dir, write_json)
+                            repo, run_dir, write_json)
 
 
 def _runs(problem: str, target: str) -> List[str]:
@@ -53,10 +53,17 @@ def status(problem: str, target: str = "") -> List[Dict[str, Any]]:
     return rows
 
 
+def _run_record(problem: str, rid: str) -> Dict[str, Any]:
+    path = os.path.join(record_dir(problem, rid), "run.json")
+    if not os.path.isfile(path):
+        raise ResearchError(f"no run {rid}: {rel(path)} is missing (`research status {problem}` lists the runs)")
+    return read_json(path)
+
+
 def stop(problem: str, target: str) -> List[str]:
     done = []
     for rid in _runs(problem, target):
-        run = read_json(os.path.join(record_dir(problem, rid), "run.json"))
+        run = _run_record(problem, rid)
         if run.get("status") in ("running", "queued"):
             os.makedirs(run_dir(problem, rid), exist_ok=True)
             write_json(os.path.join(run_dir(problem, rid), "STOP_REQUESTED"), {"at": time.strftime("%Y-%m-%d %H:%M:%S")})
@@ -72,6 +79,19 @@ def _repo_path(top: str, path: str) -> str:
         return here
     from_top = os.path.normpath(path).replace("\\", "/")
     return from_top if os.path.exists(os.path.join(top, from_top)) else here
+
+
+def _grant_path(path: str) -> str:
+    """the protected file (or the folder above files, ending in /) a grant names, as gates reads it: relative to the top of this checkout;
+    given from here or from the top"""
+    top = repo()
+    p = _repo_path(top, path)
+    if not os.path.exists(os.path.join(top, p)):
+        p = os.path.normpath(path).replace("\\", "/")                           # a file that does not exist yet: named from the top
+    if p == "." or p.startswith("..") or os.path.isabs(p):
+        raise ResearchError(f"{path}: not a path inside {top}")
+    folder = path.replace("\\", "/").endswith("/") or os.path.isdir(os.path.join(top, p))
+    return p.rstrip("/") + ("/" if folder else "")
 
 
 STALE_S = 600                                                  # a heartbeat older than this: the worker is gone
@@ -92,7 +112,7 @@ def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     done = []
     for rid in _runs(problem, target):
         path = os.path.join(record_dir(problem, rid), "run.json")
-        run = read_json(path)
+        run = _run_record(problem, rid)
         if worker.step_alive(problem, rid):
             raise ResearchError(f"{rid}: a step of it still runs (pid in {os.path.join(run_dir(problem, rid), 'step.pid')}): stop it first")
         orphan = run.get("status") == "running" and heartbeat_age(problem, rid) > STALE_S       # its worker died (a reboot, a killed WSL)
@@ -108,6 +128,8 @@ def machine_init(data: str, runs: str, python: List[str], gpu_slots: int) -> str
     path = machine_file()
     if os.path.exists(path):
         raise ResearchError(f"{path} exists: edit it by hand")
+    if not data or not runs or any("=" not in x for x in python):
+        raise ResearchError("machine init --data <dir> --runs <dir> --python <name>=<interpreter> [--python ...] [--gpu-slots N]")
     envs = dict(x.split("=", 1) for x in python)
     write_json(path, {"data": os.path.abspath(data), "runs": os.path.abspath(runs), "python": envs, "gpu_slots": gpu_slots})
     machine()
@@ -184,7 +206,11 @@ def run(a: argparse.Namespace) -> Any:
     if v == "check":
         return launch.check(a.problem, a.experiment)
     if v == "start":
-        return launch.start(a.problem, a.experiment, [x for x in a.arms.split(",") if x] or None, [int(x) for x in a.seeds.split(",") if x] or None)
+        try:
+            seeds = [int(x) for x in a.seeds.split(",") if x]
+        except ValueError:
+            raise ResearchError(f"--seeds {a.seeds!r}: numbers, comma separated") from None
+        return launch.start(a.problem, a.experiment, [x for x in a.arms.split(",") if x] or None, seeds or None)
     if v == "status":
         return status(a.problem, a.target)
     if v == "stop":
@@ -240,12 +266,14 @@ def run(a: argparse.Namespace) -> Any:
             return {"current": True}
         return {"written": rel(index.write(a.problem))}
     if v == "hold":
+        problem_dir(a.problem)                                                  # a typo would hold nothing
         gates.hold(a.problem, a.reason)
         return {"held": a.problem}
     if v == "release":
+        problem_dir(a.problem)
         return {"released": gates.release(a.problem)}
     if v == "grant":
-        path = a.path.replace("\\", "/")
+        path = _grant_path(a.path)
         prob = path.split("/")[1] if path.startswith("problems/") and path.count("/") >= 2 else None
         return gates.grant(path, a.decision, a.hours, a.note, prob)
     if v == "machine":
@@ -271,4 +299,4 @@ def main(argv: List[str]) -> int:
         print(f"refused: {e}", file=sys.stderr)
         return 1
     print(json.dumps(res, indent=1, default=str) if a.json else show(res))
-    return 0
+    return 1 if a.verb == "check" and res["errors"] else 0                       # `check && start` must not go on when start would refuse

@@ -9,7 +9,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DEST = os.path.join(os.path.dirname(os.path.dirname(HERE)), ".claude", "agents")
-LINT = re.compile(r"(/mnt/[a-z]/|[A-Z]:\|/home/|\b20\d\d-\d\d-\d\d\b|\bE\d{2,}\.[a-z])")
+LINT = re.compile(r"(/mnt/[a-z]/|\b[A-Z]:\\|/home/|\b20\d\d-\d\d-\d\d\b|\bE\d{2,}\.[a-z])")   # a drive letter, a home folder, a date, a run id
 
 
 def main(argv):

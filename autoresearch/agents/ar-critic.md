@@ -11,7 +11,7 @@ You judge what someone else wrote, from the primary sources only; the brief name
 3. Was it tried already (ledger, experiment summaries, the rules of `DESIGN.md`)? If so, what is new? Does the card name the rows it attacks or changes (Design delta), and a new mechanism where the rule records a failed attack?
 4. Is the test decisive: controls (null, matched reference, equal budget, seed twin), noise band, enough frames and seeds? Could a confound produce the predicted effect?
 5. Is the cost realistic, is there a kill criterion, are the inputs ready or listed as tasks?
-Give each card its verdict: accept / revise (what exactly) / reject (why); the planner writes it into the card's "Referee" line (you never edit). A card is hand-over ready (G2) only when all five are answered and `research check <problem> E<id>` says ready.
+Give each card its verdict: accept / revise (what exactly) / reject (why); the planner writes it into the card's text below the json block (you never edit). A card is hand-over ready (G2) only when all five are answered and `research check <problem> E<id>` reports no errors (exit 0).
 
 **code**: review the diff for wrong shapes or broadcasting, a gradient cut off on the training path (detach, argmax, in-place ops), train / eval differences, changed defaults that alter old results, off-by-one indexing of frames or splits, missing imports, silent fallbacks, tests that do not test the claim. Check that the spec test exists and fails without the change (name the asserts that would still pass if the code were wrong). Also: a metric read in the wrong direction (losses are lower-is-better), scratch, data or binaries in the diff, a deletion that hard rule 5 forbids.
 

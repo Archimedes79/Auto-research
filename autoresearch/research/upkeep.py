@@ -104,8 +104,12 @@ def _size(path: str) -> int:
 
 
 def kept_runs(problem: str) -> List[str]:
-    """every seed of the champion and the comparison networks; a champions.json or a network.json it names that cannot be read refuses"""
+    """every seed of the champion and the comparison networks; a champions.json or a network.json it names that cannot be read refuses
+    (a problem with nothing registered yet, no champions.json and no network.json, keeps none)"""
     base = os.path.join(repo(), "champions", problem)
+    registered = os.path.isdir(base) and any(os.path.isfile(os.path.join(base, d, "network.json")) for d in os.listdir(base))
+    if not os.path.exists(os.path.join(base, "champions.json")) and not registered:
+        return []
     try:
         idx = read_json(os.path.join(base, "champions.json"))
         names = [n for n in [idx.get("champion")] + list(idx.get("comparison", [])) if n]

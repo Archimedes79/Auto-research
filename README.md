@@ -25,6 +25,12 @@ Not in git: data and run outputs (where the machine file `~/.research/machine.js
   (from `autoresearch/`, the interpreter with torch), each problem's `tests/`.
 
 ## A fresh checkout
-`git clone` gives the code and the text records. A machine needs WSL2 Ubuntu (or Linux) with the conda environment `gcar` (torch 2.8;
-`datasets/nuscenes/README.md` names how the data are fetched and checked), and a machine file:
-`python3 -m research machine init --data <dir> --runs <dir> --python gcar=<interpreter> --gpu-slots 2` (from `autoresearch/`).
+`git clone` gives the code and the text records. A machine needs:
+- WSL2 Ubuntu (or Linux) with the conda environment `gcar` (torch 2.8; `datasets/nuscenes/README.md` names how the data are fetched and
+  checked);
+- a git identity in the checkout the research system commits in (`git config user.name` / `user.email`, readable by WSL's git);
+- a machine file: `python3 -m research machine init --data <dir> --runs <dir> --python gcar=<interpreter> --gpu-slots 2` (from
+  `autoresearch/`);
+- the agent roles: `python3 autoresearch/agents/install.py` (from the top; copies them into `.claude/agents/`).
+
+The edit hook (`.claude/settings.json`) calls `wsl.exe`: on a machine without Windows it guards nothing.

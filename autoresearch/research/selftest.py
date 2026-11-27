@@ -57,6 +57,12 @@ def parts(tmp: str) -> None:
     assert any("control" in e for e in spec.card_errors(dict(card, control="x", arms={"c": {}, "a": {}}), p, base))
     measure = {**{k: v for k, v in card.items() if k not in ("control", "prediction")}, "kind": "measure", "arms": {"m": {}}}
     assert spec.card_errors(measure, p, base) == []
+    written = dict(card, hypothesis=spec.PLACEHOLDERS["hypothesis"], arms={"c": {"set": {"width": 4}}, "a": {"set": {"width": 8}}})
+    assert spec.card_errors(written, p, base) == ["card: 'hypothesis' is still the template's text"], spec.card_errors(written, p, base)
+    same = dict(card, arms={"c": {}, "a": {"set": {"width": base["width"]}}})
+    assert any("same settings as the control" in e for e in spec.card_errors(same, p, base))
+    template = open(os.path.join(CORE, "templates", "experiment.md"), encoding="utf-8").read()
+    assert all(v in template for v in spec.PLACEHOLDERS.values()), "the placeholders are the template's texts"
     cfg = spec.compose(base, {"arms": {"a": {"set": {"width": 12}, "needs": {"data_root": "E3.b"}}}}, "a", 1, "E1.a_s1")
     assert cfg["width"] == 12 and cfg["seed"] == 1 and cfg["name"] == "E1.a_s1" and cfg["out_root"] == "{runs}" and cfg["data_root"] == "{runs}/E3.b_s1"
     assert parse_run(run_id("E12", "b2", 3)) == ("E12", "b2", 3)
@@ -137,6 +143,14 @@ def parts(tmp: str) -> None:
                    {"id": "E1", "title": "t", "arms": {"r": {"from": "E2.c"}, "w": {"set": {"init": "{runs}/E3.b_s1"}}}})
         refs = upkeep.referenced("x")
         assert "names E3.b_s1" in upkeep.why_kept("x", "E3.b_s1", [], refs) and "names E2.c" in upkeep.why_kept("x", "E2.c_s0", [], refs), refs
+        assert upkeep.kept_runs("x") == [], "nothing registered yet: nothing kept, no refusal"
+        os.makedirs(os.path.join(root, "champions", "x", "E1.a"))
+        open(os.path.join(root, "champions", "x", "E1.a", "network.json"), "w").write("{}")
+        expect_error(upkeep.kept_runs, "cannot be read", "x")                       # a network without champions.json
+        from research import cli
+        assert cli._grant_path("problems/x/problem.json") == "problems/x/problem.json" and cli._grant_path("champions") == "champions/"
+        assert cli._grant_path(os.path.join(root, "problems", "x", "TEST_LOG.md")) == "problems/x/TEST_LOG.md"
+        expect_error(cli._grant_path, "not a path inside", "../elsewhere.md")
         # research tests: a test past its timeout is killed with everything it started
         with open(os.path.join(root, "problems", "x", "hang.py"), "w") as f:
             f.write("import subprocess, time\nopen('child.pid', 'w').write(str(subprocess.Popen(['sleep', '60']).pid))\ntime.sleep(60)\n")
@@ -268,6 +282,9 @@ def chain(tmp: str) -> None:
     # E1: two arms, two seeds
     e1 = json.loads(research(["new", "toy", "width", "width of the network"], env).stdout)["folder"]
     assert e1 == "problems/toy/experiments/E001_width", e1
+    blank = json.loads(research(["check", "toy", "E1"], env, ok=(1,)).stdout)["errors"]     # the unwritten card: check exits 1
+    assert any("template's text" in e for e in blank) and any("same settings" in e for e in blank), blank
+    assert "a typo" not in blank and "no problem" in research(["hold", "toyy", "a typo"], env, ok=(1,)).stderr
     card = {"id": "E1", "title": "width", "question": "does a wider network find the disc better?", "hypothesis": "more channels, better masks",
             "prediction": 0.05, "control": "c", "seeds": [0, 1],
             "arms": {"c": {"set": {**quick, "steps": 300, "width": 8}}, "a": {"set": {**quick, "steps": 300, "width": 12}}},
@@ -283,7 +300,8 @@ def chain(tmp: str) -> None:
     net_py = os.path.join(root, "problems", "toy", "net", "model", "net.py")
     keep = open(net_py, encoding="utf-8").read()
     open(net_py, "a", encoding="utf-8").write("# a half-done edit of another chat\n")
-    assert any("not committed" in e for e in json.loads(research(["check", "toy", "E1"], env).stdout)["errors"])
+    dirty = json.loads(research(["check", "toy", "E1"], env, ok=(1,)).stdout)["errors"]
+    assert any("not committed" in e and "problems/toy/net/model/net.py" in e for e in dirty), dirty
     assert "not committed" in research(["start", "toy", "E1"], env, ok=(1,)).stderr
     open(net_py, "w", encoding="utf-8").write(keep)
     started = json.loads(research(["start", "toy", "E1"], env).stdout)
@@ -301,8 +319,10 @@ def chain(tmp: str) -> None:
     # the card may not change after its start
     text = open(os.path.join(root, e1, "experiment.md")).read()
     write_card(root, e1, dict(card, rule={"boot": 300, "min_effect": 0.5}))
-    assert any("changed since its snapshot" in e for e in json.loads(research(["check", "toy", "E1"], env).stdout)["errors"])
+    assert any("changed since its snapshot" in e for e in json.loads(research(["check", "toy", "E1"], env, ok=(1,)).stdout)["errors"])
     assert "changed since its snapshot" in research(["judge", "toy", "E1"], env, ok=(1,)).stderr
+    assert "no run E1.zz_s0" in research(["stop", "toy", "E1.zz_s0"], env, ok=(1,)).stderr
+    assert "numbers, comma separated" in research(["start", "toy", "E1", "--seeds", "abc"], env, ok=(1,)).stderr
     open(os.path.join(root, e1, "experiment.md"), "w").write(text + "\nThe conclusion may be written; the card block may not change.\n")
     v = json.loads(research(["judge", "toy", "E1", "--write", "--boot", "300"], env).stdout)
     arm = v["arms"]["a"]

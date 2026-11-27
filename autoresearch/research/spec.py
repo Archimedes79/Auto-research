@@ -37,6 +37,8 @@ CARD_KEYS = {
     "kill": (list, False), "split": (str, False), "note": (str, False),
 }
 KINDS = ("compare", "measure")                              # compare: arms against the control, a verdict; measure: the numbers of each arm, no verdict
+PLACEHOLDERS = {"title": "<title>", "question": "the one question this experiment answers",   # templates/experiment.md: a card that
+                "hypothesis": "what you expect and why (the mechanism)"}                      # still holds one of these was not written
 ARM_KEYS = {"set": (dict, False), "from": (str, False), "needs": (dict, False), "note": (str, False)}
 RULE_KEYS = {"min_effect": ((int, float), False), "max_seed_spread": ((int, float), False), "script": (str, False), "boot": (int, False)}
 KILL_KEYS = {"metric": (str, True), "after_step": (int, True), "above": ((int, float), False), "below": ((int, float), False)}
@@ -145,7 +147,20 @@ def card_errors(card: Dict[str, Any], problem: Dict[str, Any], base_config: Opti
     split = card.get("split", problem.get("evaluate", {}).get("split"))
     if split in problem.get("holdout", []):
         errs.append(f"card: the split {split!r} is a holdout split; the verdict of an experiment is made on {problem['evaluate']['split']!r}")
+    errs += [f"card: {k!r} is still the template's text" for k, v in PLACEHOLDERS.items() if card.get(k) == v]
+    if base_config is not None and kind == "compare" and card.get("control") in card["arms"]:
+        errs += _same_as_control(card, base_config)
     return errs
+
+
+def _same_as_control(card: Dict[str, Any], base: Dict[str, Any]) -> List[str]:
+    """an arm that runs exactly the control's settings compares nothing (an arm with stored runs, `from`, is judged by the numbers)"""
+    ctl = card["arms"][card["control"]]
+    objects = lambda a: isinstance(a, dict) and "from" not in a and isinstance(a.get("set", {}), dict)   # noqa: E731
+    if not objects(ctl):
+        return []
+    return [f"card arms.{n}: the same settings as the control {card['control']!r}, nothing is compared" for n, a in card["arms"].items()
+            if n != card["control"] and objects(a) and merged(base, a.get("set", {})) == merged(base, ctl.get("set", {})) and a.get("needs", {}) == ctl.get("needs", {})]
 
 
 def parse_card(text: str, where: str = "experiment.md") -> Dict[str, Any]:

@@ -25,6 +25,8 @@ def _abs(base: str, value: Any) -> Any:
 
 def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
     src = os.path.abspath(folder)
+    if not os.path.isfile(os.path.join(src, "report.json")):
+        raise ResearchError(f"{src} holds no report.json (a report folder: report.json and parts/, autoresearch/reporter)")
     spec = read_json(os.path.join(src, "report.json"))
     p = load_problem(problem)
     name = os.path.basename(src.rstrip("/")) if os.path.basename(src) != "report" else os.path.basename(os.path.dirname(src))
@@ -36,9 +38,12 @@ def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
         if "file" in v:
             v["file"] = _abs(src, v["file"])
     spec["sources"] = [_abs(src, s) for s in spec.get("sources", [])]
-    for s in spec.get("sections", []):
-        if s.get("svg") and not os.path.exists(os.path.join(src, s["svg"])):
-            s["svg"] = _abs(src, s["svg"])
+    for s in spec.get("sections", []):                      # an svg is named relative to parts/ (reporter): one outside the report folder
+        svg = s.get("svg")                                  # would not be found from the copy, so it is made absolute
+        if svg and not os.path.isabs(svg):
+            full = os.path.normpath(os.path.join(src, "parts", svg))
+            if os.path.relpath(full, src).startswith(".."):
+                s["svg"] = full
     draw = [{"run": d["run"], "frame": d["frame"], "view": d.get("view", "overview"), "out": os.path.join(out, d["as"])} for d in spec.pop("draw", [])]
     env = child_env(RESEARCH_REPO=repo(), RESEARCH_RUNS=runs_root(problem), PYTHONPATH=module_path(repo(), problem))
     if draw:

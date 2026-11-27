@@ -69,3 +69,6 @@ heartbeat
 # drawings are text made by autoresearch/reporter/archdraw.py from the spec next to them
 !**/training/architecture.svg
 !champions/**/architecture.svg
+# the drawings a report's author puts into its parts
+!problems/*/reports/*/parts/*.svg
+!problems/*/experiments/*/report/parts/*.svg

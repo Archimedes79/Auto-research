@@ -22,7 +22,9 @@
 ```
 
 Upkeep: `tests <problem>` (the problem's own tests, problem.json `tests`, with its interpreter and module path), `anchor <problem> <run>`
-(a finished run evaluated again with the working tree), `compare <problem> <run> <run>` (a diagnostic, never a verdict), `clean <problem>`
+(a finished run's evaluation step run again with the working tree: it covers what that step runs; a problem that predicts in a step of its own
+re-scores the stored predictions, so a change of its network needs a new run: lane_center), `compare <problem> <run> <run>` (a diagnostic,
+never a verdict), `clean <problem>`
 (the run folders nothing needs any more, written to a list file in the run root with a hash; the owner confirms the list with a decided row
 that names the hash, then `clean <problem> --delete <list> --decision D<n>` deletes the runs of that list, each checked again: finished, no
 live step, no arm KEEP, INCONCLUSIVE, TIE or MEASURED, named by no card (`from`, `needs`, a `{runs}/<run>` setting), no champion or

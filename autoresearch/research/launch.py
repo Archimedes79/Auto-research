@@ -35,10 +35,16 @@ def load_problem(problem: str, root: Optional[str] = None, at: Optional[str] = N
 
 def load_card(problem: str, exp_id: str, root: Optional[str] = None, at: Optional[str] = None) -> Dict[str, Any]:
     path = os.path.join(experiment_dir(problem, exp_id, root), "experiment.md")
-    text = gitio.show(root or repo(), at, rel(path, root)) if at else open(path, encoding="utf-8").read()
+    if at:
+        text = gitio.show(root or repo(), at, rel(path, root))
+    elif os.path.isfile(path):
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+    else:
+        raise ResearchError(f"{rel(path, root)} is missing: the experiment's card (`research new` writes it from the template)")
     card = spec.parse_card(text, rel(path, root))
     if card.get("id") != exp_id:
-        raise ResearchError(f"{rel(path, root)}: the card says id {card.get('id')!r}, the folder {exp_id}")
+        raise ResearchError(f"{rel(path, root)}: the card's id is {card.get('id')!r}, name the experiment by it (not {exp_id!r})")
     return card
 
 
@@ -138,7 +144,7 @@ def code_paths(problem: str) -> List[str]:
 def uncommitted_code(problem: str) -> List[str]:
     """files of the code that differ from HEAD or are new (ignored files aside): another chat's half-done edit never becomes a run's code"""
     out = gitio.git(repo(), "status", "--porcelain", "--untracked-files=all", "--", *code_paths(problem))
-    return [ln[3:] for ln in out.splitlines() if ln.strip()]
+    return [ln.split(maxsplit=1)[1] for ln in out.splitlines() if ln.strip()]     # git() strips: the first line may have lost its leading blank
 
 
 # ------------------------------------------------------------------------------------------------ start

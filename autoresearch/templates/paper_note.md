@@ -1,6 +1,6 @@
 # <paper id> <short title>
 
-<!-- One note per paper, with its code, in its own subfolder of the topic (topics/<slug>/<paper id>/note.md), written by one agent. The eight lines below are the header from which the table of the topic is made: exactly these keys, in this order, one per line, directly after the title line, nothing between them; delete this comment. Links are plain (no spaces, quotes, brackets, parentheses, pipes: percent-encode them). -->
+<!-- One note per paper, with its code, in its own subfolder of the topic (topics/<slug>/<paper id>/note.md), written by one agent. The eight lines below are the header the topic's summary reads: exactly these keys, in this order, one per line, directly after the title line, nothing between them; delete this comment. Links are plain (no spaces, quotes, brackets, parentheses, pipes: percent-encode them). -->
 
 - title: <the title of the paper>
 - relevance: <0-3; 3 = take it into the plan now>
@@ -22,7 +22,7 @@
 
 **Results that matter** (numbers with dataset and metric): ...
 
-**Transferable technique** (what we could take; the K id if registered): ...
+**Transferable technique** (what we could take): ...
 
 **Why it performs** (the ingredients that carry the gain: the paper's ablation, or say that none is shown): ...
 
