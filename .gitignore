@@ -69,6 +69,8 @@ heartbeat
 # drawings are text made by autoresearch/reporter/archdraw.py from the spec next to them
 !**/training/architecture.svg
 !champions/**/architecture.svg
+# the scene names a tool writes next to a config (problems/bev_fusion/training/gt_scenes.py)
+*.scenes.txt
 # the drawings a report's author puts into its parts
 !problems/*/reports/*/parts/*.svg
 !problems/*/experiments/*/report/parts/*.svg

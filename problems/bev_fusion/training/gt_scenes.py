@@ -10,7 +10,7 @@ line) and calls `python -m GtGenerator have|generate --scenes-file` from the rep
 out scenes whose CAM_FRONT files are not on disk; the store check wants all of them (`python -m GtGenerator data` says which raw files are missing).
 Which store: the GtGenerator store is the single source going forward; until the dataset reads it (D29 part 5), the trainer builds its own cache (`gt_cache`) from the live
 generator, so a passing check says that the GtGenerator store holds the GT, not that this cache is filled.
-Run from the bev_fusion folder in the WSL with the gcar environment; tests/test_gt_prepare.py.
+Run from the bev_fusion folder in the WSL with the gcar environment (the names file `*.scenes.txt` is ignored by git).
 """
 import os
 import subprocess
@@ -18,7 +18,7 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                                   # bev_fusion/
-REPO = os.path.dirname(ROOT)                                   # the repository top: GtGenerator runs from there
+REPO = os.path.dirname(os.path.dirname(ROOT))                  # the repository top (above problems/): GtGenerator runs from there
 sys.path.insert(0, HERE)
 
 

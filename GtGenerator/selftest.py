@@ -307,7 +307,7 @@ def run(root=None, verbose=True):
     repo_ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     if os.path.exists(os.path.join(repo_, ".git")):
         try:
-            tags_ = set(subprocess.run(["git", "-C", repo_, "tag", "-l", "GtGenerator/*"], capture_output=True, text=True, timeout=30).stdout.split())
+            tags_ = set(subprocess.run(["git", "-C", repo_, "tag", "-l", "autogt/*"], capture_output=True, text=True, timeout=30).stdout.split())
         except (OSError, subprocess.SubprocessError):
             tags_ = set()
         lost_ = [r["tag"] for r in rows_[:-1] if r["tag"] not in tags_]

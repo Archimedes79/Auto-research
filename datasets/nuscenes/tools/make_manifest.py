@@ -33,7 +33,7 @@ SCHEMA = 2                                               # 2: archives carry pre
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 DEFAULT_ROOT = "/mnt/d/Auto-research/NuScenes"
-DEFAULT_OUT = os.path.join(REPO, "data", "NuScenes", "manifest.json")
+DEFAULT_OUT = os.path.normpath(os.path.join(HERE, "..", "manifest.json"))     # the committed manifest, read by GtGenerator (gt_api.MANIFEST)
 IGNORE = {"generated", "generator"}                      # never part of the comparison
 # where archives lie while they are unpacked: ../NuScenes_zips (sibling of the data root; since 2026-11-02) or downloads/ (inside it; the former place)
 ZIPS_BASES = ("downloads", os.path.join("..", "NuScenes_zips"))
