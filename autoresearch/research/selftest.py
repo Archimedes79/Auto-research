@@ -144,6 +144,8 @@ def parts(tmp: str) -> None:
         refs = upkeep.referenced("x")
         assert "names E3.b_s1" in upkeep.why_kept("x", "E3.b_s1", [], refs) and "names E2.c" in upkeep.why_kept("x", "E2.c_s0", [], refs), refs
         assert upkeep.kept_runs("x") == [], "nothing registered yet: nothing kept, no refusal"
+        from research import index
+        assert index.current("x"), "no run recorded yet: no ledger needed"
         os.makedirs(os.path.join(root, "champions", "x", "E1.a"))
         open(os.path.join(root, "champions", "x", "E1.a", "network.json"), "w").write("{}")
         expect_error(upkeep.kept_runs, "cannot be read", "x")                       # a network without champions.json
@@ -167,6 +169,9 @@ def parts(tmp: str) -> None:
     r = {"split": "val", "frames": 160, "evaluation": {"gt": "g1", "evaluator": "e1", "metrics": ["seg"]}}
     assert judge.incomparable([{"result": r}, {"result": r}]) == []
     assert any("ground truth" in x for x in judge.incomparable([{"result": r}, {"result": dict(r, evaluation=dict(r["evaluation"], gt="g2"))}]))
+    signed = lambda s: {"run": f"E1.a_{s}", "result": dict(r, evaluation=dict(r["evaluation"], gt_signature=s))}      # noqa: E731
+    assert judge.incomparable([signed("s1"), signed("s1")]) == [] and any("signature" in x for x in judge.incomparable([signed("s1"), signed("s2")]))
+    assert judge.incomparable([signed("s1"), {"result": r}]) == [] and judge.unsigned([signed("s1"), {"run": "E1.c_s0", "result": r}]) == ["E1.c_s0"]
     say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, a needed run, decisions, the TEST log, "
         "protected paths, stream names, a step's environment, the references clean keeps, a test past its timeout")
 

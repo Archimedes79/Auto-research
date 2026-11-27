@@ -82,13 +82,22 @@ COMPARABLE = (("split", lambda r: r["split"]), ("frames", lambda r: r["frames"])
 
 
 def incomparable(runs: List[Dict[str, Any]]) -> List[str]:
-    """what differs between the results of the runs of one comparison (they must be scored on the same frames, ground truth and evaluator)"""
+    """what differs between the results of the runs of one comparison (they must be scored on the same frames, ground truth and evaluator).
+    "ground truth" is the name a source gives it; its content signature is compared between the records that hold one (`unsigned`)"""
     out = []
     for name, get in COMPARABLE:
         vals = {json.dumps(get(r["result"]), sort_keys=True, default=str) for r in runs}
         if len(vals) > 1:
             out.append(f"{name} differs: {sorted(vals)[:3]}")
+    signatures = {r["result"]["evaluation"].get("gt_signature") for r in runs} - {None, ""}
+    if len(signatures) > 1:
+        out.append(f"ground truth signature differs: {sorted(signatures)[:3]}")
     return out
+
+
+def unsigned(runs: List[Dict[str, Any]]) -> List[str]:
+    """the runs whose record holds no ground-truth signature (records of before it was kept): their ground truth is compared by name only"""
+    return [r.get("run", "?") for r in runs if not r["result"]["evaluation"].get("gt_signature")]
 
 
 def standard(gain: float, lo: float, hi: float, e: float) -> Tuple[str, str]:
@@ -226,6 +235,9 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
         arm_out = {"verdict": verdict, "reason": reason, "gain": gain, "interval": [lo, hi], "seeds": seeds, "numbers": num,
                    "prediction": card["prediction"], "prediction_hit": abs(gain - card["prediction"]) <= e,
                    "guards_broken": broken}
+        old = unsigned([c_runs[s] for s in seeds] + [v_runs[a][s] for s in seeds])
+        if old:
+            arm_out["warnings"] = [f"ground truth compared by name only: the records of {', '.join(old)} hold no signature"]
         script = card.get("rule", {}).get("script")
         if script:
             arm_out["standard"] = {"verdict": verdict, "reason": reason}

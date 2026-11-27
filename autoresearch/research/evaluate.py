@@ -46,7 +46,7 @@ def main(problem: str, rid: str, test: bool = False) -> int:
         "numbers": nums["numbers"], "better": nums["better"],
         "per_scene": {sc: row.get(score) for sc, row in sorted(per_scene.items())} if isinstance(per_scene, dict) else {},
         "evaluation": {"id": done["id"], "results": done.get("results"), "frames": frames, "metrics": list(e["metrics"]), "gt": info.get("gt"),
-                       "evaluator": info.get("evaluator"), "warnings": nums.get("warnings", []) + done.get("warnings", [])},
+                       "gt_signature": info.get("gt_signature"), "evaluator": info.get("evaluator"), "warnings": nums.get("warnings", []) + done.get("warnings", [])},
         "identity": {"commit": os.environ.get("RESEARCH_COMMIT", ""), **ident},
         "cost": ev.get_cost(done["id"]).get("predict"), "seconds": round(time.time() - t0, 1), "date": time.strftime("%Y-%m-%d %H:%M:%S"),
     }

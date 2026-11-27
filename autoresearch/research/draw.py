@@ -32,9 +32,9 @@ def main(problem: str) -> int:
         net = run_dir(problem, it["run"])
         source = ev._source(net, res["split"], 0, "", True)
         try:
-            now = source.describe().get("gt_signature")
-            if info.get("gt") and now and str(now) not in json.dumps(info["gt"]):
-                raise ResearchError(f"{it['run']} was evaluated on ground truth {info['gt']}, the source gives {now} now: the picture would not show what was scored")
+            now, then = source.describe().get("gt_signature"), info.get("gt_signature")     # info["gt"] is the version's name when it has one
+            if then and now and str(now) != str(then):
+                raise ResearchError(f"{it['run']} was evaluated on ground truth {info.get('gt')} ({then}), the source gives {now} now: the picture would not show what was scored")
             ref = next((r for r in source.frames(parsed[0]) if r.index == parsed[1]), None)
             if ref is None:
                 raise ResearchError(f"no frame {it['frame']} in {res['split']}")

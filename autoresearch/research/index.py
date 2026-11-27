@@ -67,5 +67,7 @@ def current(problem: str) -> bool:
     try:
         with open(path_of(problem), encoding="utf-8", newline="") as f:
             return f.read() == text(problem)
+    except FileNotFoundError:
+        return not rows(problem)                 # nothing recorded yet needs no ledger (a new problem)
     except OSError:
         return False
