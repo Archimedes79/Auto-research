@@ -1,4 +1,4 @@
-"""Known-answer tests of the comparison core (`comparison/maps.py`, `boxes.py`, `metrics.py`). Registered into the core self-test
+"""Known-answer tests of the comparison core (`comparison/maps.py`, `boxes.py`, `metrics.py`). Run with the tests of the evaluation
 (`python -m Evaluation selftest comparison`).
 
 Every function is checked three ways: by a hand calculation, against an independent brute-force implementation written here in plain
@@ -647,7 +647,7 @@ class _Task(Task):
         return {"overview": _TextView()}
 
 
-@check("comparison.metrics.MapMetric: through quant.run the suite's numbers equal the core applied to the same frames; contract checker; the default score works")
+@check("comparison.metrics.MapMetric: through quant.run the suite's numbers equal the core applied to the same frames; the default score works")
 def _():
     import tempfile
     tols = (0, 1.5, 2)
@@ -655,7 +655,6 @@ def _():
     src, sub = _MapSource(), _MapSubject()
     with tempfile.TemporaryDirectory() as d:
         suite = EvalSuite(src, sub, _Task(metric), out=d)
-        assert all(r["ok"] for r in suite.check()), suite.check()
         st = suite.quant.run(name="a", progress=0)
         tab = suite.quant.table(st)
     totals = {t: np.zeros(4, np.int64) for t in tols}
@@ -714,14 +713,13 @@ class _BoxSubject(Subject):
         return Prediction(outputs=sample.inputs)
 
 
-@check("comparison.metrics.BoxMetric: through quant.run the suite's per-class and mean numbers equal one global matching (the former BEV code); contract checker; frames add up")
+@check("comparison.metrics.BoxMetric: through quant.run the suite's per-class and mean numbers equal one global matching (the former BEV code); frames add up")
 def _():
     import tempfile
     metric = BoxMetric(lambda s, p: (p.outputs, s.reference), classes=("car", "ped", "bike"), name="det")       # "bike": no box at all
     src, sub = _BoxSource(), _BoxSubject()
     with tempfile.TemporaryDirectory() as d:
         suite = EvalSuite(src, sub, _Task(metric), out=d)
-        assert all(r["ok"] for r in suite.check()), suite.check()
         st = suite.quant.run(name="a", progress=0)
         tab = suite.quant.table(st)
         part = suite.quant.table(st, labels=[f["label"] for f in st.frames if f["scene"] == "b-1"])

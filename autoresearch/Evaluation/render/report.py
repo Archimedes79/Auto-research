@@ -42,10 +42,6 @@ def image(path: str, start: str, width: int = 420, caption: str = "") -> str:
     return f'<div style="display:inline-block;vertical-align:top"><a href="{r}"><img src="{r}" width="{width}"></a>{cap}</div>'
 
 
-def link(path: str, start: str, text: str) -> str:
-    return f'<a href="{rel(path, start)}">{html.escape(text)}</a>'
-
-
 def write(path: str, title: str, sections: Iterable[tuple]) -> str:
     """sections: (heading, html body) pairs -> the page at `path`"""
     parts = [f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title><style>{CSS}</style>",

@@ -27,14 +27,8 @@ def _split(name: str):
 def main() -> int:
     q = json.load(sys.stdin)
     ev = Evaluation(project=os.getcwd())
-    stores: Dict[str, Dict[str, Any]] = {"control": {}, "variant": {}}
-    quant = None
-    for arm in ("control", "variant"):
-        for seed, eid in q[arm].items():
-            info, store, qq = ev._open(eid)
-            stores[arm][seed] = store
-            quant = quant or qq
-    metrics = quant._metrics()
+    stores = {arm: {seed: ev.stored_counts(eid) for seed, eid in q[arm].items()} for arm in ("control", "variant")}
+    metrics = ev.metrics_of(next(iter(q["control"].values())))          # the control's definitions reduce both arms (the judge refuses arms not scored alike)
     names = [q["score"]] + [g for g in q.get("guards", []) if g != q["score"]]
     by: Dict[str, Dict[str, Dict[str, List[Any]]]] = {}               # metric -> arm -> scene -> counts of every seed
     for name in names:

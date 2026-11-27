@@ -1,7 +1,7 @@
 """Gate of the class interface of the evaluation on the BEV system (`autoresearch/Evaluation/api.py`, adapter `evaluation/bev_eval.py`, command line `python -m Evaluation`).
 
-Without option (CPU, seconds, no data): the checks of the interface on its toy project (`Evaluation/selftest_api.py`), the adapter contract (what `api.load_adapter` returns: bev_eval
-defines `defaults.REQUIRED` itself, the defaults of `Evaluation/defaults.py` add name / out / network / resolve, bev_eval's own identity wins), and the command line lists its methods.
+Without option (CPU, seconds, no data): the adapter contract (what `api.load_adapter` returns: bev_eval defines `defaults.REQUIRED` itself, the defaults of `Evaluation/defaults.py`
+add name / out / network / resolve, bev_eval's own identity wins), and the command line lists its methods. The interface itself is tested on a toy project by `python -m Evaluation.selftest`.
 With --real [RUN] (a finished run with a checkpoint made after D76, in the site's run root `netpath.SITE/runs`, default runs/t21_ctl_s1; D81: older runs are not run any more; CPU, 4 frames,
 about 5 minutes; skips with a message without a checkpoint): the proof that the interface changes no number. On a copy of the run folder (config, GT identity, code snapshot when there is one,
 the checkpoint linked):
@@ -11,8 +11,6 @@ the checkpoint linked):
      families both have
   3  `check` (the dry run, with the id it would give) and `list` name what is stored
 Without option it also tests the adapter's identity of a network (a retrained checkpoint of the same name is another identity), the run resolution, the refusal of TEST and of unknown metrics.
-Removed in v2 (D154): the metric card (`bev_eval.card`, `bev_suite`, `autoresearch/tools/card.py` are gone), the problem's own Runner (`runner/runner.py`: the default
-`Evaluation/netrunner.py` runs the network) and bev_eval's own `resolve` with its folding of a run id `a.b` to the folder `a_b` (the default resolve takes a path or a name in the run root).
 Usage (from the problem folder): python tests/test_evaluation_api.py [--real [RUN]] [--scene scene-0106] [--index 3]
 """
 import argparse
@@ -30,19 +28,15 @@ sys.path[:0] = [ROOT, os.path.join(ROOT, "..", "..", "autoresearch"), os.path.jo
 
 
 def quick():
-    from Evaluation.selftest_api import run_all
-    from Evaluation.api import Evaluation as _Evaluation
-    r = run_all(type(_Evaluation(project=ROOT).runner))                                                    # the Evaluation together with the problem's Runner (the default one) on the toy adapter
-    assert r["ok"], r
     os.chdir(ROOT)
     from evaluation import bev_eval
     from Evaluation import defaults
-    from Evaluation.api import ADAPTER_FUNCTIONS, Evaluation, load_adapter
+    from Evaluation.api import Evaluation, load_adapter
     ad = load_adapter(None, ROOT)                                                                       # the adapter evaluation.json names, with the defaults for what it does not define
     assert isinstance(ad, defaults.Adapter) and ad._mod is bev_eval, ad
     missing = [f for f in defaults.REQUIRED if not hasattr(bev_eval, f)]
     assert not missing, f"bev_eval lacks {missing}"
-    missing = [f for f in ADAPTER_FUNCTIONS if not hasattr(ad, f)]
+    missing = [f for f in defaults.REQUIRED + defaults.DEFAULTS if not hasattr(ad, f)]
     assert not missing, f"the adapter lacks {missing}"
     assert ad.identity is bev_eval.identity and ad.sets is bev_eval.sets, "what the adapter defines itself wins over the defaults"
     assert hasattr(bev_eval, "reference") and hasattr(bev_eval, "time") and hasattr(bev_eval, "probe")
@@ -65,9 +59,7 @@ def quick():
             assert pts(tok) == want, (tok, pts(tok), want)
     else:
         print(f"SKIP the annotation table's known counts: no {bev_annotation_pts.OUT}")
-    ev_ = Evaluation(project=ROOT)                                                                     # evaluation.json names no Runner: the default one, built with (project, adapter)
-    assert type(ev_.runner).__module__ == "Evaluation.netrunner", type(ev_.runner)
-    assert type(Evaluation(adapter="evaluation.bev_eval").runner).__module__ == "Evaluation.netrunner", "the Evaluation always includes the project's Runner, whichever way the adapter is named"
+    ev_ = Evaluation(project=ROOT)
     cfg = json.load(open(os.path.join(ROOT, "evaluation", "evaluation.json")))
     assert cfg == {"adapter": "evaluation.bev_eval"}, cfg
     s = bev_eval.sets()
@@ -174,7 +166,7 @@ def quick():
         assert "unknown metrics" in str(e)
     out = subprocess.run([sys.executable, "-m", "Evaluation", "methods"], cwd=os.path.join(ROOT, "..", "..", "autoresearch"), capture_output=True, text=True, timeout=120)
     assert out.returncode == 0 and "Evaluation.run(" in out.stdout and "Evaluation.report(" in out.stdout, out.stderr[-300:]
-    print(f"quick: interface checks {r['checks']} on the toy project, bev_eval has the adapter contract, sets {len(s)}, the command line lists its methods")
+    print(f"quick: bev_eval has the adapter contract, sets {len(s)}, the command line lists its methods")
 
 
 def available_gb():
@@ -210,8 +202,7 @@ def real(run, scene, index):
         ck = sorted(glob.glob(os.path.join(src_run, "ckpt_*.pt")))[-1]
         os.symlink(ck, os.path.join(net, os.path.basename(ck)))
         frames = f"frames:{scene}/{index}:val"
-        ev = Evaluation(project=ROOT)                                                                     # the default Runner (Evaluation/netrunner.py) predicts, the Evaluation scores
-        assert type(ev.runner).__module__ == "Evaluation.netrunner", type(ev.runner)
+        ev = Evaluation(project=ROOT)                                                                     # the Runner (Evaluation/netrunner.py) predicts, the Evaluation scores
         # 1 the interface against the engine's own run of the same objects
         r = ev.run(net, frames, gt_key=None, device="cpu", workers=0, progress=0)
         assert r["n_frames"] == 1 and r["frames_predicted"] == 1 and r["predictions_reused"] is False and r["warnings"] == [], r
@@ -259,7 +250,7 @@ def main():
     ap.add_argument("--index", type=int, default=3)
     a = ap.parse_args()
     quick()
-    done = "interface, adapter contract, command line ok"
+    done = "adapter contract, command line ok"
     if a.real:
         done += "; " + ("real check ok" if real(a.real, a.scene, a.index) else "real check skipped")
     print(f"evaluation api: {done}")

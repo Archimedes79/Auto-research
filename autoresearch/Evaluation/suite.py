@@ -1,52 +1,51 @@
-"""EvalSuite: the engine's workbench. `Evaluation` (api.py) is the front door of a person or an agent and builds one of these for each call; the engine's selftests use it directly
-(the older entry point), and it is the way to work with a network that has no project adapter.
+"""EvalSuite: the counting engine on a Source, a Subject (or None) and a Task. The Evaluation (api.py) builds one for each call; it is used directly to run a network that has no project
+adapter (the tests do).
 
     suite = EvalSuite(source, subject, task, out="eval_out")
-    suite.qual.frame("scene-0061/12", views=("overview", "debug"))      # one concrete frame
-    suite.qual.random(6, seed=1)                                        # first a random video, then a random frame, 6 times
-    suite.qual.videos(2)                                                # 2 random sequences as videos
-    run = suite.quant.run(n_scenes=20)                                  # numbers over many videos, stored per frame
-    suite.quant.table(run); suite.quant.outliers(run); suite.quant.report(run)
-    suite.probe.scan(run)                                               # where do the errors come from: budget, situations, random examples
-    suite.check()                                                       # does the adapter keep the contracts?
-`state` is the suite-wide default of how the Subject's memory is treated: 'carry' (frame to frame along a scene, as deployed) or
-'reset' (every frame independent).
-"""
+    store = suite.quant.run(name="a")          # every frame through the Subject, or results=<ResultSet>: its stored predictions -> counts per frame (store.py)
+    suite.quant.table(store);  suite.quant.per_scene(store);  suite.quant.outliers(store);  suite.quant.compare("a", "b");  suite.quant.report(store)
+`state`: how the Subject's memory is treated: 'carry' (frame to frame along a scene, as deployed), 'reset' or 'warmup' (runner.py)."""
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from .contracts import Source, Subject, Task
+from .quantitative import Quantitative
+
+
+class Counting(Quantitative):
+    """the engine of quantitative.py (a file of the evaluator hash) with what this package offers: a row of the outlier search names the command that draws its frame, the report has no
+    pictures, and its two methods whose parts are gone refuse"""
+
+    def trace(self, *args, **kwargs):
+        raise NotImplementedError("quant.trace is not offered: draw a stored frame with `Evaluation.draw_frame(id, frame, view)`")
+
+    def pareto(self, *args, **kwargs):
+        raise NotImplementedError("quant.pareto is not offered: compare two evaluations with `compare` and read the ms per frame with `get_cost`")
+
+    def outliers(self, run, *args, **kwargs) -> Dict[str, List[dict]]:
+        res, store = super().outliers(run, *args, **kwargs), self.open(run)
+        eval_id = store.manifest.get("evaluation", {}).get("id", "ID")
+        first: Dict[str, str] = {}                                             # a scene row is looked at through its first scored frame
+        for frame in store.frames:
+            first.setdefault(frame["scene"], frame["label"])
+        for row in (row for rows in res.values() for row in rows):
+            row["view"] = f"draw-frame {eval_id} {row.get('label') or first[row['scene']]}"
+        return res
+
+    def report(self, run, k: int = 8) -> str:
+        return super().report(run, render=0, k=k)
 
 
 class EvalSuite:
-    """the engine's workbench: a Source, a Subject (None when nothing is run: scoring stored predictions, reading counts) and a Task, with the qualitative and the quantitative part on them.
-    The class interface (api.py, `Evaluation`) builds one per call and is what a person uses; `EvalSuite` itself is the older entry point, used directly by the selftests."""
     def __init__(self, source: Source, subject: Optional[Subject], task: Task, out: str = "eval_out", state: str = "carry"):
         if state not in ("carry", "reset", "warmup"):
             raise ValueError("state must be 'carry', 'reset' or 'warmup'")
         self.source, self.subject, self.task = source, subject, task
         self.out, self.state = os.path.abspath(out), state
         os.makedirs(self.out, exist_ok=True)
-        from .qualitative import Qualitative
-        from .quantitative import Quantitative
-        self.qual = Qualitative(self)
-        self.quant = Quantitative(self)
-        self._probe = None
-
-    @property
-    def probe(self):
-        """the probing (see probing.py): loaded when it is first used, needs a Task that implements probe()"""
-        if self._probe is None:
-            from .probing import Prober
-            self._probe = Prober(self)
-        return self._probe
-
-    def check(self) -> List[Dict[str, Any]]:
-        """run the contract checker of the adapter (see check.py); a list of {name, ok, note}"""
-        from .check import check_adapter
-        return check_adapter(self)
+        self.quant = Counting(self)
 
     def close(self) -> None:
         if self.subject is not None:

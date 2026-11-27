@@ -17,7 +17,7 @@ Writes OUT (default RUN/eval/modules/):
 The probed modules are the model's direct children (`chain_modules`: lift AND lift2 of a dual camera, lane, ...), the trunk through its `.features()`; `bev_timing.py`
 times the same. What to know when reading the numbers:
   * a module called once per dt (the heads) is recorded at its FIRST call (dt -0.5 for `sem_head:` / `obj_head:`); `OUT dt0:` holds the dt-0 outputs
-  * `aux_cam` / `aux_rad` only run while training: no output here (the `radar_aux` tap of `qual debug` runs the head on the radar branch for a look)
+  * `aux_cam` / `aux_rad` only run while training: no output here (for a look, the `radar_aux` tap runs the head on the radar branch: `run --taps radar_aux`, `draw-frame ... --view taps`)
   * the response row of a stage uses its first two tensors (motion_block: the two coarsest levels; `OUT:v_hat` is the finest)
   * `zero_doppler` sets the radial velocity of every detection to 0, which in the ego-compensated frame reads "every detection stands still", not "no Doppler";
     the camera perturbation also zeroes `lane_img` / `img`; a perturbation that changes nothing at all prints a WARNING (the t3 cam_off class of bug)

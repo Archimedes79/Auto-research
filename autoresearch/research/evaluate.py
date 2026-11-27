@@ -38,15 +38,14 @@ def main(problem: str, rid: str, test: bool = False) -> int:
     score = p["score"]["metric"]
     if score not in nums["numbers"]:
         raise ResearchError(f"the score {score} is not among the numbers of the evaluation ({sorted(nums['numbers'])})")
-    info = ev._open_store(done["id"])[0]
     ident = ev.net_identity(out)
     result = {
         "run": rid, "split": split, "frames": nums["n_frames"], "scenes": len(per_scene),
         "score": {"metric": score, "value": nums["numbers"][score], "better": p["score"]["better"]},
         "numbers": nums["numbers"], "better": nums["better"],
         "per_scene": {sc: row.get(score) for sc, row in sorted(per_scene.items())} if isinstance(per_scene, dict) else {},
-        "evaluation": {"id": done["id"], "results": done.get("results"), "frames": frames, "metrics": list(e["metrics"]), "gt": info.get("gt"),
-                       "gt_signature": info.get("gt_signature"), "evaluator": info.get("evaluator"), "warnings": nums.get("warnings", []) + done.get("warnings", [])},
+        "evaluation": {"id": done["id"], "results": done.get("results"), "frames": frames, "metrics": list(e["metrics"]), "gt": done.get("gt"),
+                       "gt_signature": done.get("gt_signature"), "evaluator": done.get("evaluator"), "warnings": nums.get("warnings", []) + done.get("warnings", [])},
         "identity": {"commit": os.environ.get("RESEARCH_COMMIT", ""), **ident},
         "cost": ev.get_cost(done["id"]).get("predict"), "seconds": round(time.time() - t0, 1), "date": time.strftime("%Y-%m-%d %H:%M:%S"),
     }
