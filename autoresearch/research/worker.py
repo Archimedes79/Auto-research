@@ -2,7 +2,8 @@
 
 The code is the snapshot commit unpacked once per commit into <runs>/<problem>/_code/<commit>/. A step is a command of problem.json (its words
 may name {python} {config} {run_dir} {data} {runs} {seed}) or the core's evaluation step. A GPU step waits for one of the machine's GPU slots;
-on a machine with several GPUs a step of one GPU sees the device of its slot (`gpu_env`).
+on a machine with several GPUs a step of one GPU sees the device of its slot (`gpu_env`); a step with `gpu_mb` then waits for that much
+free GPU memory (`wait_memory`).
 Exit 0 = done; 75 = stopped (trainkit's stop protocol; `research resume` continues); anything else = failed. A kill rule of the card that fires
 stops the training and marks the run killed; a step's log.jsonl and CONTROL lie in its folder (problem.json step "dir", default the run
 folder). run.json (in the records) changes at step boundaries only; the heartbeat lies in the run folder."""
@@ -18,7 +19,7 @@ import subprocess
 import sys
 import time
 from contextlib import contextmanager
-from typing import Any, Callable, Dict, Iterator, List, Optional
+from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from research import spec
 from research.launch import SNAPSHOT_PATHS
@@ -28,6 +29,7 @@ from research import gitio
 
 EXIT_STOPPED = 75
 BEAT_S = 15
+SETTLE_S = 45                                                    # after a step with `gpu_mb` started, the next one waits this long before it reads the free memory
 
 
 @contextmanager
@@ -98,6 +100,45 @@ def gpu_env(slot: int, env: Dict[str, str], listed: Callable[[], List[str]] = li
     if shown is None:
         out["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"                          # nvidia-smi counts in this order
     return out
+
+
+def gpu_free_mb() -> Dict[str, Tuple[int, int]]:
+    """GPU number -> (its free memory, its whole memory) in MiB as nvidia-smi reports them; {} when it cannot be asked"""
+    try:
+        r = subprocess.run(["nvidia-smi", "--query-gpu=index,memory.free,memory.total", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.TimeoutExpired):
+        return {}
+    return parse_free(r.stdout) if r.returncode == 0 else {}
+
+
+def parse_free(text: str) -> Dict[str, Tuple[int, int]]:
+    out = {}
+    for line in text.splitlines():
+        cells = [c.strip() for c in line.split(",")]
+        if len(cells) == 3 and all(c.isdigit() for c in cells):
+            out[cells[0]] = (int(cells[1]), int(cells[2]))
+    return out
+
+
+def visible_free(env: Dict[str, str], free: Callable[[], Dict[str, Tuple[int, int]]] = gpu_free_mb) -> Optional[Tuple[int, int]]:
+    """(the least free memory, the least whole memory) in MiB among the GPUs a step with this environment would use; None when nvidia-smi
+    cannot be asked. The step's own devices count when their numbers are nvidia-smi's (CUDA_VISIBLE_DEVICES with
+    CUDA_DEVICE_ORDER=PCI_BUS_ID, as the worker sets it on a machine with several GPUs); in any other case ALL GPUs count: CUDA's own
+    numbering need not be nvidia-smi's, and waiting too long is the safe side (a caller that pins a device sets the order too)"""
+    table = free()
+    if not table:
+        return None
+    shown = [d.strip() for d in env.get("CUDA_VISIBLE_DEVICES", "").split(",") if d.strip()]
+    mine = [table[d] for d in shown] if env.get("CUDA_DEVICE_ORDER") == "PCI_BUS_ID" and shown and all(d in table for d in shown) else list(table.values())
+    return min(f for f, _ in mine), min(t for _, t in mine)
+
+
+def memory_wait(need: int, free: int, since_start: float) -> str:
+    """'' when a step that needs `need` MiB of GPU memory may start, else what it waits for: the memory, or the step that started less
+    than SETTLE_S ago (its memory is not taken yet, so the free number still counts it as free)"""
+    if 0 <= since_start < SETTLE_S:                              # a clock that went back (a negative age) does not hold a step
+        return f"a GPU step started {since_start:.0f} s ago: its memory is not taken yet"
+    return "" if free >= need else f"{need} MiB of GPU memory ({free} free)"
 
 
 def ensure_code(problem: str, commit: str) -> str:
@@ -272,6 +313,38 @@ class Worker:
         status = "ok" if code_ == 0 and not reason else ("killed" if reason.startswith("kill rule") else "stopped" if reason or code_ == EXIT_STOPPED else "failed")
         return {"status": status, "exit": code_, "seconds": round(time.time() - t0, 1), "log": os.path.basename(log_path), **({"why": reason} if reason else {})}
 
+    def wait_memory(self, need: int, env: Dict[str, str]) -> Optional[int]:
+        """waits, inside its GPU slot, until the step's GPU has `need` MiB free (problem.json step "gpu_mb") and no other such step started
+        within SETTLE_S; -> the free MiB it saw, None when nvidia-smi cannot be asked twice in a row (the step then starts as one without
+        `gpu_mb`). A `need` above the GPU's whole memory fails the step: it could only wait for ever. The slot is held while it waits, and
+        there is no order among waiting steps. It reads what is allocated NOW: memory a job takes later (a step that grows after SETTLE_S,
+        a job outside this system that started a moment ago) is not reserved"""
+        stamp = os.path.join(state_dir(), "slots", "gpu_start")
+        while True:
+            with flocked(stamp + ".lock"):                       # the reading and the claim of the start are one step for all workers
+                got = visible_free(env)
+                if got is None:
+                    time.sleep(2)
+                    got = visible_free(env)
+                if got is None:
+                    return None
+                free, total = got
+                if need > total:
+                    raise ResearchError(f"the step needs {need} MiB of GPU memory (gpu_mb) but its GPU has {total} MiB")
+                try:
+                    since = time.time() - os.path.getmtime(stamp)
+                except OSError:
+                    since = float("inf")
+                why = memory_wait(need, free, since)
+                if not why:
+                    with open(stamp, "w", encoding="utf-8") as f:
+                        f.write(f"{self.rid}\n")
+                    return free
+            if self.stop_requested():
+                raise Stopped()
+            self.beat(f"waiting for {why}")
+            time.sleep(BEAT_S)
+
     def wait_needs(self, card_needs: Dict[str, str]) -> str:
         """'' when every run this one needs is finished, else why it cannot go on (see `needed`)"""
         for key, ref in card_needs.items():
@@ -355,11 +428,15 @@ class Worker:
                 try:
                     with gpu_slot(self.m["gpu_slots"], self.beat, self.stop_requested) as slot:
                         device = gpu_env(slot, dict(os.environ)) if step["gpus"] == 1 else {}       # a step of several GPUs sees them all
+                        need = step.get("gpu_mb", 0)
+                        free = self.wait_memory(need, {**os.environ, **device}) if need > 0 else None
                         res = {**self.execute(name, cmd, code, kill, where, device), "gpu_slot": slot}
                         if device:
                             res["gpu_device"] = device["CUDA_VISIBLE_DEVICES"]
+                        if need > 0:
+                            res["gpu_free_mb"] = free                                               # what it saw before it started (null: not asked)
                 except Stopped:
-                    res = {"status": "stopped", "why": "stop requested while it waited for a GPU slot"}
+                    res = {"status": "stopped", "why": "stop requested while it waited for a GPU slot or for GPU memory"}
             else:
                 res = self.execute(name, cmd, code, kill, where)
             if self.test:

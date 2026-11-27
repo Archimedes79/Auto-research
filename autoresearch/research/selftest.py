@@ -74,6 +74,11 @@ def parts(tmp: str) -> None:
     assert judge.standard(-0.002, -0.005, -0.0001, 0.01)[0] == "TIE"           # significant but inside the band: a tie
     assert judge.standard(0.05, -0.01, 0.1, 0.01)[0] == "INCONCLUSIVE"
     assert judge.standard(float("nan"), 0.0, 0.1, 0.01)[0] == "INCONCLUSIVE"
+    # a KEEP needs two seeds that agree; no other verdict is touched
+    assert judge.seed_check("KEEP", "r", {"0": 0.03, "1": 0.02}) == ("KEEP", "r")
+    assert judge.seed_check("KEEP", "r", {"0": 0.03})[0] == "INCONCLUSIVE" and "one seed" in judge.seed_check("KEEP", "r", {"0": 0.03})[1]
+    assert judge.seed_check("KEEP", "r", {"0": 0.03, "1": -0.01})[0] == "INCONCLUSIVE" and "disagree" in judge.seed_check("KEEP", "r", {"0": 0.03, "1": 0.0})[1]
+    assert all(judge.seed_check(v, "r", {"0": -0.03}) == (v, "r") for v in ("CUT", "TIE", "INCONCLUSIVE"))
     # lower is better: a variant 0.05 lower than the control is a gain of +0.05; guards in both directions, an undefined number breaks its guard
     assert judge.gain_interval({"diff": -0.05, "lo": -0.08, "hi": -0.02}, -1.0) == (0.05, 0.02, 0.08)
     assert judge.standard(*judge.gain_interval({"diff": -0.05, "lo": -0.08, "hi": -0.02}, -1.0), 0.01)[0] == "KEEP"
@@ -153,6 +158,27 @@ def parts(tmp: str) -> None:
         assert cli._grant_path("problems/x/problem.json") == "problems/x/problem.json" and cli._grant_path("champions") == "champions/"
         assert cli._grant_path(os.path.join(root, "problems", "x", "TEST_LOG.md")) == "problems/x/TEST_LOG.md"
         expect_error(cli._grant_path, "not a path inside", "../elsewhere.md")
+        # a step with `gpu_mb` waits for the memory; the next one waits while the first one's start is fresh, and a stop request ends
+        # that wait; a machine whose nvidia-smi cannot be asked gates nothing
+        w = object.__new__(worker.Worker)
+        w.rid, w.out = "E1.a_s0", os.path.join(tmp, "gated_step")
+        os.makedirs(w.out)
+        seen, real = [2000, 2000, 9000], (worker.visible_free, worker.BEAT_S, worker.SETTLE_S)
+        try:
+            worker.BEAT_S, worker.visible_free = 0, lambda env: ((seen.pop(0) if seen else 9000), 12288)
+            assert w.wait_memory(6000, {}) == 9000 and not seen, "it waits until the memory is free"
+            expect_error(w.wait_memory, "its GPU has 12288 MiB", 20000, {})         # more than the GPU has: it fails, it does not wait for ever
+            worker.SETTLE_S = 3600
+            open(os.path.join(w.out, "STOP_REQUESTED"), "w").close()
+            try:
+                w.wait_memory(6000, {})
+                raise AssertionError("a step that started a moment ago makes the next one wait, although the memory looks free")
+            except worker.Stopped:
+                pass
+            worker.visible_free = lambda env: None
+            assert w.wait_memory(6000, {}) is None
+        finally:
+            worker.visible_free, worker.BEAT_S, worker.SETTLE_S = real
         # research new: the number is not given twice, also when another caller takes it between the look at the folders and the claim
         from research import launch
         experiments = os.path.join(root, "problems", "x", "experiments")
@@ -200,6 +226,18 @@ def parts(tmp: str) -> None:
     assert worker.gpu_env(1, {}, lambda: ["0"]) == {} and worker.gpu_env(0, {}, lambda: []) == {}
     assert worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "0,-1"}) == {} and worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "-1,0"}) == {}
     assert worker.gpu_env(1, {"CUDA_VISIBLE_DEVICES": "4,7,-1,9"}) == {"CUDA_VISIBLE_DEVICES": "7"}
+    # a step's `gpu_mb`: it waits for the memory and for a step that started a moment ago; its own devices count only when their numbers
+    # are nvidia-smi's, else every GPU; a machine that cannot be asked gates nothing
+    table = lambda: worker.parse_free("0, 11000, 12288\n1, 3000, 24576\nnot a row\n1, 2\n")                              # noqa: E731
+    assert table() == {"0": (11000, 12288), "1": (3000, 24576)} and worker.parse_free("") == {}
+    assert worker.visible_free({}, table) == (3000, 12288) and worker.visible_free({"CUDA_VISIBLE_DEVICES": "0"}, table) == (3000, 12288)
+    assert worker.visible_free({"CUDA_VISIBLE_DEVICES": "0", "CUDA_DEVICE_ORDER": "PCI_BUS_ID"}, table) == (11000, 12288)
+    assert worker.visible_free({"CUDA_VISIBLE_DEVICES": "1,0", "CUDA_DEVICE_ORDER": "PCI_BUS_ID"}, table) == (3000, 12288)
+    assert worker.visible_free({"CUDA_VISIBLE_DEVICES": "7", "CUDA_DEVICE_ORDER": "PCI_BUS_ID"}, table) == (3000, 12288) and worker.visible_free({}, dict) is None
+    assert worker.memory_wait(6000, 11000, 1e9) == "" and worker.memory_wait(6000, 6000, worker.SETTLE_S) == "" and worker.memory_wait(6000, 11000, -5.0) == ""
+    assert "MiB" in worker.memory_wait(6000, 5999, 1e9) and "started" in worker.memory_wait(6000, 11000, worker.SETTLE_S - 1)
+    gated = lambda **keys: [e for e in spec.problem_errors(dict(p, steps=dict(p["steps"], train=dict(p["steps"]["train"], **keys)))) if "gpu_mb" in e]   # noqa: E731
+    assert gated(gpus=1, gpu_mb=6000) == [] and gated(gpu_mb=6000) and gated(gpus=1, gpu_mb=0) and gated(gpus=1, gpu_mb="6000")
     scored_by_the_snapshot(tmp, p, card)
     for tool, said in (("topic_table.py --selftest", "topic_table selftest passed"), ("code_digest.py selftest", "selftest ok")):
         name, *args = tool.split()
@@ -307,6 +345,7 @@ def make_repo(tmp: str) -> str:
     prob["steps"]["stage"] = {"run": ["{python}", "stage_probe.py", "{run_dir}"], "dir": "stage1", "note": "selftest: a step with its own folder"}
     for name, gpus in (("one", 1), ("all", 2)):
         prob["steps"][name] = {"run": ["{python}", "device_probe.py", "{run_dir}", f"{name}.txt"], "gpus": gpus, "note": "selftest: a GPU step"}
+    prob["steps"]["one"]["gpu_mb"] = 1                           # selftest: the step asks for free GPU memory before it starts
     json.dump(prob, open(os.path.join(toy, "problem.json"), "w", encoding="utf-8"), indent=1)
     for name, text in (("stage_probe.py", STAGE_PROBE), ("device_probe.py", DEVICE_PROBE)):
         with open(os.path.join(toy, name), "w", encoding="utf-8") as f:
@@ -626,6 +665,7 @@ def chain(tmp: str) -> None:
     steps = json.load(open(os.path.join(root, e7, "runs", "E7.d_s0", "run.json"), encoding="utf-8"))["steps"]
     seen = {name: open(os.path.join(runs, "E7.d_s0", f"{name}.txt")).read() for name in ("one", "all")}
     assert seen == {"one": "5", "all": "5,6"} and steps["one"]["gpu_device"] == "5" and "gpu_device" not in steps["all"], (seen, steps)
+    assert "gpu_free_mb" in steps["one"] and "gpu_free_mb" not in steps["all"], steps       # the step with gpu_mb asked for the memory (null: no nvidia-smi)
     say("a GPU step on a machine with two devices: one GPU sees the device of its slot, two see all")
     # a KEEP (the card's rule script says so): a verdict.json whose gain was edited is refused, the verdict as judged is adopted
     e8 = json.loads(research(["new", "toy", "kept", "a rule that keeps"], env).stdout)["folder"]
@@ -636,6 +676,7 @@ def chain(tmp: str) -> None:
     wait(root, e8, json.loads(research(["start", "toy", "E8"], env).stdout)["started"])
     v8 = json.loads(research(["judge", "toy", "E8", "--write", "--boot", "250"], env).stdout)
     assert v8["arms"]["a"]["verdict"] == "KEEP" and v8["boot"] == 250, v8
+    assert v8["arms"]["a"]["standard"]["verdict"] != "KEEP", v8      # one seed: the standard rule itself never keeps (the card's script did)
     verdict_json = os.path.join(root, e8, "verdict.json")
     judged = open(verdict_json, encoding="utf-8").read()
     forged = json.loads(judged)

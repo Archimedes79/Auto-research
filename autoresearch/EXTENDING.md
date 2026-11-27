@@ -51,7 +51,8 @@ An entry in `problem.json` `steps`:
 ```json
 "stats": {"run": ["{python}", "training/stats.py", "{config}"], "gpus": 1, "dir": "stats"}
 ```
-- The words may name `{python} {config} {run_dir} {data} {runs} {seed} {split}`. `gpus` above 0 waits for a GPU slot; `dir` (optional) is
+- The words may name `{python} {config} {run_dir} {data} {runs} {seed} {split}`. `gpus` above 0 waits for a GPU slot; `gpu_mb` (optional, with
+  `gpus`) is the MiB of GPU memory the step needs: it then also waits until that much is free; `dir` (optional) is
   the step's own folder in the run folder. `"run": "evaluate"` is the core's evaluation step.
 - It runs when `default_steps` or a card's `steps` name it; a TEST evaluation runs `test_steps`.
 - The script runs from the snapshot in the problem folder: exit 0 done, 75 stopped, anything else failed. A long step stops when a `CONTROL`

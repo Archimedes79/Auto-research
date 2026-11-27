@@ -4,7 +4,7 @@ For every arm other than the control: every run finished and evaluated? (else IN
 arm CUT, the control INVALID) -> the control valid? (its score reaches the floor of problem.json for every seed, and its seeds lie no further
 apart than the card's max_seed_spread; else INVALID) -> scored alike? (split, frames, ground truth, evaluator and metrics the same in both
 arms; else INVALID) -> the paired scene bootstrap of the pooled seeds (research/compute.py, in the snapshot with the problem's interpreter)
--> the standard rule (a KEEP whose seeds disagree in sign is INCONCLUSIVE):
+-> the standard rule (a KEEP of one seed only, or whose seeds disagree in sign, is INCONCLUSIVE: `seed_check`):
 
     gain = variant - control in the direction of the score (positive = better); e = the card's min_effect (default: the problem's band)
     TIE           |gain| < e: inside the band, whatever the interval  (also a KEEP whose guard broke: the gain and the guard are in the reason)
@@ -110,6 +110,18 @@ def standard(gain: float, lo: float, hi: float, e: float) -> Tuple[str, str]:
     if gain < 0 and hi < 0:
         return "CUT", f"loss {gain:+.4f} beyond the band {e} and its interval [{lo:+.4f}, {hi:+.4f}] lies below 0"
     return "INCONCLUSIVE", f"gain {gain:+.4f} but its interval [{lo:+.4f}, {hi:+.4f}] includes 0: add a seed"
+
+
+def seed_check(verdict: str, reason: str, per_seed: Dict[str, float]) -> Tuple[str, str]:
+    """a KEEP needs two seeds that agree: the interval is a bootstrap over the scenes, so only a second seed shows what training alone moves.
+    A KEEP of one seed, or of seeds that disagree in sign, is INCONCLUSIVE; every other verdict stays"""
+    if verdict != "KEEP":
+        return verdict, reason
+    if len(per_seed) < 2:
+        return "INCONCLUSIVE", f"{reason}, but from one seed only: add a seed"
+    if any(g <= 0 for g in per_seed.values()):
+        return "INCONCLUSIVE", f"{reason}, but the seeds disagree (gain per seed {per_seed}): add a seed"
+    return verdict, reason
 
 
 def gain_interval(pooled: Dict[str, float], sign: float) -> Tuple[float, float, float]:
@@ -227,11 +239,13 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
         gain, lo, hi = gain_interval(num["pooled"], sign)
         verdict, reason = standard(gain, lo, hi, e)
         per_seed = {s: sign * v["diff"] for s, v in num["seeds"].items()}
-        if verdict == "KEEP" and any(g <= 0 for g in per_seed.values()):
-            verdict, reason = "INCONCLUSIVE", f"{reason}, but the seeds disagree (gain per seed {per_seed}): add a seed"
+        kept = verdict == "KEEP"
+        verdict, reason = seed_check(verdict, reason, per_seed)
         broken = guards_broken(guards, num["guards"])
         if verdict == "KEEP" and broken:
             verdict, reason = "TIE", f"not adopted: {reason}, but a guard broke: {'; '.join(broken)}"
+        elif kept and broken:                                    # the seeds stopped it first: the reason still names the guard
+            reason = f"{reason}; a guard broke too: {'; '.join(broken)}"
         arm_out = {"verdict": verdict, "reason": reason, "gain": gain, "interval": [lo, hi], "seeds": seeds, "numbers": num,
                    "prediction": card["prediction"], "prediction_hit": abs(gain - card["prediction"]) <= e,
                    "guards_broken": broken}

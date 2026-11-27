@@ -73,6 +73,14 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
   that hold no signature are compared by the ground truth's name, with a warning in the verdict.
 - A control below the floor of `problem.json`, or with seeds further apart than the card allows, makes the verdict INVALID. A broken guard
   makes a winning variant a TIE, with the gain and the guard in the verdict.
+- A KEEP of the standard rule needs two seeds that agree in sign: from one seed, or from seeds that disagree, it is INCONCLUSIVE (the
+  interval is a bootstrap over the scenes; only a second seed shows what training alone moves). A card's own rule script decides after it.
+- A GPU step waits for one of the machine's slots; a step with `gpu_mb` also waits, holding its slot, until that much memory is free on
+  its GPU and no other such step started in the last 45 s; waiting steps have no order. It reads what is allocated now, so memory that
+  jobs outside this system hold counts, but nothing is reserved: a job that grows later, or one that started a moment ago outside this
+  system, is not seen. Its own GPU counts when the worker bound it (a machine with several GPUs) or the caller set
+  `CUDA_DEVICE_ORDER=PCI_BUS_ID`; otherwise every GPU of the machine must have the memory. More than the GPU has at all fails the step.
+  When `nvidia-smi` cannot be asked, it does not wait; `run.json` records the free memory the step saw (`gpu_free_mb`).
 - TEST and protected files: `../METHOD.md`, hard rules 1 and 2. The holdout gate is read by `research test`, in the evaluation step and
   wherever data are read through `Evaluation` (`Evaluation/defaults.py`: `holdout_open`; `guard` for a problem's own reader).
 

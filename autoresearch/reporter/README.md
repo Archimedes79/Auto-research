@@ -2,7 +2,7 @@
 
 A standalone tool: a folder of markdown parts becomes one paper-style **html report**; numbers are **filled from result files** and **checked against their sources**; report, code and helper scripts are **packed** into a size-limited zip. It imports nothing of any project. The chapters and what each must hold: `CHAPTERS` in `reporter.py`; how to write a good one: `SKILL.md` (an agent skill: install it as `.claude/skills/reporter/SKILL.md`). Needs python 3.8+ with `markdown-it-py` (Pillow optional); here `wsl ~/miniconda3/envs/gcar/bin/python reporter.py ...`.
 ```
-python reporter.py new   my_report --title "My system"   # scaffold: report.json and parts/, one per chapter with its prompt
+python reporter.py new   my_report --title "My system"   # scaffold: report.json and parts/, one per chapter with its prompt (refuses a folder that has a report.json)
 python reporter.py build my_report                        # -> my_report/report.html (+ media/); prints figures, tables, PENDING marks
 python reporter.py check my_report                        # every decimal number of the text must be in the sources
 python reporter.py pack  my_report                        # -> package.zip: report.html, media/, README.txt, code/, utilities/

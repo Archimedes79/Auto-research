@@ -13,6 +13,7 @@ Full description with a minimal example: README.md. The procedure and the qualit
 import argparse, base64, functools, glob, io, json, os, re, shutil, subprocess, sys, tempfile, zipfile
 
 PENDING = "PENDING"
+PEND_HTML = '<span class="pend">PENDING</span>'                          # how a PENDING mark looks in the page (build counts them)
 PLACEHOLDER_SVG = "PENDING: architecture drawing"                       # the text of the scaffold's placeholder drawing (`new`); `drawings` does not count it
 NUM = re.compile(r"(?<![\w.])-?\d+\.\d+(?![\w.])")
 CHAPTERS = [  # id, title, part file, prompt written into the scaffold (what the chapter must contain)
@@ -248,7 +249,7 @@ def build(folder, out=None, strict=False):
         unknown_all += unk
         if str(t.get("image", "")).endswith(".svg"):
             svg = open(find(t["image"]), encoding="utf-8").read() if os.path.exists(find(t["image"])) else ""
-            head += figure(re.sub(r"^<\?xml[^>]*\?>\s*", "", svg) or '<span class="pend">PENDING</span>', cap, st)
+            head += figure(re.sub(r"^<\?xml[^>]*\?>\s*", "", svg) or PEND_HTML, cap.replace(PENDING, PEND_HTML), st)
         else:
             head += render_md(md, "![%s](%s)" % (cap.replace("]", ")"), t.get("image", "")), find, out_dir, st, demote=0)
 
@@ -259,7 +260,8 @@ def build(folder, out=None, strict=False):
         if s.get("svg"):
             svg = read_part(folder, spec, s["svg"])
             cap, unk = fill(s.get("svg_caption", ""), values)
-            fig = figure(re.sub(r"^<\?xml[^>]*\?>\s*", "", svg) or '<span class="pend">PENDING</span>', cap, st)
+            unknown_all += unk
+            fig = figure(re.sub(r"^<\?xml[^>]*\?>\s*", "", svg) or PEND_HTML, cap.replace(PENDING, PEND_HTML), st)
         secs.append((s["id"], s["title"], fig + render_md(md, text, find, out_dir, st, demote=0 if s.get("keep_heading") else 1)))
 
     util = spec.get("utilities", [])                                      # the helper scripts that are kept
@@ -379,6 +381,8 @@ def pack(folder, out=None):
 
 # ------------------------------------------------------------------ new
 def new(folder, title):
+    if os.path.exists(os.path.join(folder, "report.json")):              # a report that exists is never overwritten by its scaffold
+        sys.exit("%s has a report.json already: `new` writes the scaffold of a new report only" % folder)
     os.makedirs(os.path.join(folder, "parts"), exist_ok=True)
     os.makedirs(os.path.join(folder, "media"), exist_ok=True)
     spec = {
@@ -468,6 +472,22 @@ def selftest():
         json.dump({"title": "Clean", "sections": [dict(sec, svg="02_system.svg")]}, open(os.path.join(clean, "report.json"), "w"))
         open(os.path.join(clean, "parts", "02_system.svg"), "w").write('<svg xmlns="http://www.w3.org/2000/svg"><rect width="9" height="9"/></svg>\n')
         build(clean, strict=True)
+        # the caption of the drawing: a placeholder without a value is a PENDING mark there too, so the strict build refuses it
+        json.dump({"title": "Clean", "sections": [dict(sec, svg="02_system.svg", svg_caption="The system, {{no_such_value}}.")]}, open(os.path.join(clean, "report.json"), "w"))
+        assert 'class="pend"' in open(build(clean), encoding="utf-8").read(), "an unknown placeholder in a drawing's caption is marked"
+        try:
+            build(clean, strict=True)
+            raise AssertionError("strict build must fail with an unknown placeholder in a drawing's caption")
+        except SystemExit:
+            pass
+        # `new` never overwrites a report that exists
+        before = open(os.path.join(clean, "report.json"), encoding="utf-8").read()
+        try:
+            new(clean, "Again")
+            raise AssertionError("new must refuse a folder that has a report.json")
+        except SystemExit:
+            pass
+        assert open(os.path.join(clean, "report.json"), encoding="utf-8").read() == before, "the existing report.json is untouched"
         # a copy of a report folder (research report): what lies outside the folder is read from `origin`, whatever names it
         src, copy = os.path.join(d, "deep", "src"), os.path.join(d, "a", "b", "c", "copy")
         os.makedirs(os.path.join(src, "parts"))

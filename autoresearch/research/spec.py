@@ -22,7 +22,7 @@ PROBLEM_KEYS = {
 # test_steps: the steps a TEST evaluation of a finished run runs (default ["evaluate"]; a problem that predicts in a step of its own names it too)
 # tests: the problem's own tests, "script.py [args]" relative to its folder (`research tests`: each with the problem's interpreter and module path)
 CONFIG_KEYS = ("name", "seed", "out_root")                 # every base config has them: the run's name, its seed and where it writes
-STEP_KEYS = {"run": ((list, str), True), "gpus": (int, False), "dir": (str, False), "note": (str, False)}
+STEP_KEYS = {"run": ((list, str), True), "gpus": (int, False), "gpu_mb": (int, False), "dir": (str, False), "note": (str, False)}
 # dir: the step's own folder inside the run folder, where it writes log.jsonl (the kill rules) and reads CONTROL (default "": the run folder)
 SCORE_KEYS = {"metric": (str, True), "better": (str, True), "band": ((int, float), True)}
 EVALUATE_KEYS = {"split": (str, True), "metrics": (list, True), "device": (str, False), "frames": (str, False), "anchor_tolerance": ((int, float), False)}
@@ -71,6 +71,9 @@ def problem_errors(p: Dict[str, Any], folder_name: str = "") -> List[str]:
         errs += _check(step, STEP_KEYS, f"problem.json steps.{name}")
         if isinstance(step, dict) and isinstance(step.get("run"), str) and step["run"] not in CORE_STEPS:
             errs.append(f"problem.json steps.{name}: 'run' is a list of words, or one of {sorted(CORE_STEPS)}")
+        mb = step.get("gpu_mb") if isinstance(step, dict) else None
+        if isinstance(mb, int) and not isinstance(mb, bool) and (mb <= 0 or not isinstance(step.get("gpus", 0), int) or step.get("gpus", 0) < 1):
+            errs.append(f"problem.json steps.{name}.gpu_mb: the MiB of GPU memory the step needs before it starts, above 0 and only with 'gpus' above 0")
         d = step.get("dir") if isinstance(step, dict) else None
         if isinstance(d, str) and (d.startswith(("/", "\\")) or ":" in d or ".." in d.replace("\\", "/").split("/")):
             errs.append(f"problem.json steps.{name}.dir: a subfolder of the run folder, got {d!r}")
