@@ -4,15 +4,17 @@ What a training needs and that does not depend on the network, the loss or the d
 
 ## Minimal example (`selftest.py` runs it)
 ```python
+import torch
+from torch import nn
 from trainkit.config import Config            # a dataclass; a project adds its fields (and overrides RESUME_FREE, RESUME_SWITCHES, RESUME_ENV)
 from trainkit.loop import fit
 from trainkit.util import prepare_run_dir
 
-model, loss = Net(), Loss()                   # nn.Modules; the loss holds the learnable loss weights (an empty nn.Module() if none): they train and are saved
-batches = [...]                               # any re-iterable of batches; with `data.EpochLoader` a resume continues the pass it was in
+model, loss = nn.Linear(3, 1), nn.Module()    # nn.Modules; the loss holds the learnable loss weights (an empty one if none): they train and are saved
+batches = [{"x": torch.randn(4, 3), "y": torch.zeros(4, 1)} for _ in range(8)]     # any re-iterable; `data.EpochLoader`: a resume continues its pass
 
 def step_fn(batch, info):                     # one micro-batch: forward AND backward
-    l = loss(model.fc(batch["x"]), batch["y"])
+    l = ((model(batch["x"]) - batch["y"]) ** 2).mean()
     info.backward(l)                          # divides by accum, applies the loss scale under fp16
     return {"total": float(l.detach())}, bool(torch.isfinite(l)), None      # terms (at least "total"), finite?, extra fields of the log row or None
 

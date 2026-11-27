@@ -42,4 +42,7 @@ def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
     r = subprocess.run([interpreter(p["python"]), REPORTER, "build", out] + (["--strict"] if strict else []), capture_output=True, env=env)
     if r.returncode != 0:
         raise ResearchError(f"the report build failed: {(r.stdout + r.stderr).decode('utf-8', 'replace')[-1500:]}")
-    return {"report": os.path.join(out, "report.html"), "pictures": len(draw), "media": len(glob.glob(os.path.join(out, "media", "*")))}
+    said = r.stdout.decode("utf-8", "replace").splitlines()
+    warnings = [ln.strip() for ln in said if "no architecture drawing" in ln or (" PENDING mark" in ln and " 0 PENDING mark" not in ln)]
+    return {"report": os.path.join(out, "report.html"), "pictures": len(draw), "media": len(glob.glob(os.path.join(out, "media", "*"))),
+            **({"warnings": warnings} if warnings else {})}

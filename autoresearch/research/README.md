@@ -61,7 +61,8 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 
 ## Rules the code enforces
 - The rule is what the tag holds: the judge reads card and `problem.json` from the snapshot; later edits do not count.
-- A run executes its snapshot, never the working tree. A second `start` of the same experiment (more seeds) reuses its tag.
+- A run executes its snapshot, never the working tree. A second `start` of the same experiment reuses its tag; more seeds: append them to
+  the card's `seeds`, then `start`.
 - Only the worker of a registered run writes records: the evaluation step refuses to run outside a worker. `start` refuses uncommitted code
   of the problem and the core.
 - Identity = code, config, weights, ground truth, data. Stored predictions are reused only under the same identity.

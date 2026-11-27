@@ -27,7 +27,8 @@ picture = ev.draw_frame(a, "demo-1/3")["image"]                 # a png from the
 
 ## Commands
 `python -m Evaluation <command>`: every method of the class, `_` written `-`; `--project DIR` (or `AR_PROJECT`), `--adapter`, `--json`;
-exit 0 done, 1 `check` found problems, 2 an error.
+exit 0 done, 1 `check` found problems, 2 an error. The evaluations of research runs lie below the run folders: read them by their id with
+`RESEARCH_RUNS=<runs root>/<problem>` set.
 
 | command | what |
 |---|---|

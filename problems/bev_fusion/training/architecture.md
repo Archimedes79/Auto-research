@@ -2,7 +2,7 @@
 
 ![bev_fusion: camera + radar BEV system in five layers](architecture.svg)
 
-Built 2026-11-01 as a five-layer design (updated 2026-11-21: see "Changes since 2026-11-03"); the design record with its corrections is the git history of `training/architecture_target.*` (commits 91d4b92 to 08377e5), which this drawing replaces. `archdraw.py check training/architecture.json` confirms that the code every box names exists and that every `.py` of `training/` is in a box; it does not check the wiring between the boxes.
+`archdraw.py check training/architecture.json` (part of `research tests`) confirms that the code every box names exists and that every `.py` of `training/` is in a box; it does not check the wiring between the boxes.
 
 ## Five layers
 | layer | code | what it holds | its rule |
@@ -14,19 +14,6 @@ Built 2026-11-01 as a five-layer design (updated 2026-11-21: see "Changes since 
 | 5 Post-processing | `extract.select_boxes`, the line threshold (`evaluation/metrics.line_cells` stays the metric's definition) | the selection of boxes and line cells | for the metrics and the prototype only; with the hard gate it gives exactly the boxes of `object_head.decode` |
 
 The **planner** is not part of the system: it comes after it and reads the output interface; because that interface is dense and differentiable, a later joint training lets its loss flow back into the fusion.
-
-## Changes of 2026-11-03 (D48), drawn in the picture
-- **Layer table** (`layers.py`): a head layer is a row (name, kind, level); channels, targets and loss follow the kind, so a new layer is a row. The 1 m centre-line head is one row at level 1m.
-- **In the chain since t15 / t16**: the motion block M (the velocity field), the delta-slot radar encoder, the stride-4 lane branch (now also on the dual camera features).
-- **Split lists** (`splits/`, `training/splits.py`): a config names its scenes (`"split": "large"`); the run records them in `config.json` and `manifest.json`.
-- **Trainer**: `train.py` builds model, loss and data, the loop is the project-independent `autoresearch/trainkit/`; evaluation goes through `Evaluation` (adapter `evaluation/bev_eval.py`).
-- Drawing note: the arrow from the input interface to the temporal block runs behind the camera encoder box; what enters the temporal block are the camera BEVs.
-
-## Changes since 2026-11-03, drawn in the picture (all options, off by default unless a config says otherwise)
-- **Temporal input** (t21, D51; t25, D91): `cam_buffer` "pair" / "recurrent" carries ONE buffered frame or the previous fused state instead of the window of frames; `radar_per_frame` gives the radar branch one sweep per camera frame inside the recurrent unroll (it needs `cam_buffer` "recurrent" and `rad_temporal` "window_memory"). The window stays the default; the radar memory of the temporal block has not trained successfully so far, and the t25 arms are not started.
-- **Student image encoder** (t22, t26): `camera_student` ("evit_b1" / "resnet18", `student_encoder.py`) replaces the cached DualBEV / BEVFusion teacher outputs of the current frame, with `student_frames` "all" (t26) of every frame of the window; it can be trained on the task (`student_trainable`). It is drawn inside the camera encoder box.
-- **Lane branch** (L4): off for new from-scratch base runs (D65; its config `t20_base_nol4.json` is in the tag v1); the box stays because the stored base `t20_base_s0` has it.
-- **Masks and ground truth**: the evaluation's headline rows are scored on the fusion area (D31, default on since 2026-11-11) and `loss.fusion_area_only` restricts the loss of the fused heads to it (option, on in v1's `t20_base_nol4.json`); the ground truth is GT release v14 (front v13 + lane l6, merged under D83).
 
 ## The visibility maps: made once, used three times (D36)
 | map | the network | the training | the evaluation |
@@ -51,33 +38,11 @@ The **planner** is not part of the system: it comes after it and reads the outpu
 | heads | S moved to each dt by the shared time mover -> maps, object maps | maps (channels from the layer table `layers.py`), 1 m centre-line head (`centreline_1m`: presence, distance, direction at 1 m cells, targets pooled from the 0.5 m GT), objects (`object_direction`, `object_moving`, refiner option) |
 | soft extraction | head maps -> dense boxes (peak weight, box, heading vector), soft line map (fixed math) | `dense_outputs` off (default; nothing reads the outputs yet; v1's `test_slots.py` switched it on) |
 
-## Checks of the build (2026-11-01)
-A record of the build; `test_slots.py` and the equivalence runs named here are v1's (tag v1), v2 keeps the tests of `problem.json`.
-
-- **Equivalence** (`tests/support/equivalence.py`, CPU, deterministic; the code before the build against the final tree): the `t10_dual_s0` checkpoint (step 3000) on 4 val frames, all 29 outputs identical (max abs difference 0.0); the hurdle model of the stopped long run (`t10_dual_long_s0`, step 5030, `object_moving`) on 3 frames, all 32 outputs identical; the state-dict keys identical in both (every checkpoint loads). On the GPU the same code differs from itself by up to 3e-3 between runs (scatter order), so the GPU cannot show bit equality. The dense outputs are off by default (`dense_outputs`: nothing reads them yet, only `tests/test_slots.py` switches it on), so training, timing and op counts compute what they did before.
-- **Slots** (updated after the build: 7 combinations incl. both `delta_slots` ones, every build also runs the precompute step with all maps, and the dense boxes and soft lines must keep the gradient of the maps they are built from - a loss on them reaches every parameter that a loss on the heat map, box parameters and distance channels reaches): `tests/test_slots.py` (CPU, 25 s at the time of the build, 96 s now): 28 kinds and switches build, pass both interfaces, give finite dense outputs, send a nonzero gradient through the trained outputs to every trainable parameter (zero-start layers given small values first) and carry state; 6 invalid combinations refused; the parts that cannot train are named with their reason (the radar memory's window part, the blocks of `camera_off` and `radar_kind` off).
-- **Extraction:** `training/extract.py` self-test: the selection equals `object_head.decode` box by box (120 boxes; also on float32 maps), every head map gets a real gradient through the dense output (the direction class through the heading vector, also at logit 0), the soft line map >= 0.5 equals `line_cells` (exact ties and clamped negative distances included).
-- **Fresh critic pass** (mode code) on the build: 10 findings, all fixed (the zero gradient of the soft direction sign, the unclamped line map, extra work on the training and timing paths, a weak gradient test, float32 selection, mixed frames of the maps for flipped samples, a radar-less batch, dead code).
-- **Finding:** with no past radar frames the radar memory block's window part and velocity head get no gradient (named in `tests/test_slots.py`): the radar memory needs its own static gate (the measured Doppler) or past radar BEVs before it is a fair arm. **Built since:** `ModelConfig.rad_static_gate` (off by default) makes the radar memory write only where the measured Doppler calls the detections static (`precompute.radar_static`, weight exp(-(vr / rad_static_vr)^2), mean per cell), so a moving car is not remembered; `tests/test_slots.py` checks it with a known answer (the same detections static: confidence written as without the gate; moving at 6 m/s: below 1e-3 of it). The window part and the velocity head of the radar memory stay without a gradient inside one call (no past radar frames: the 0.5 s of sweeps are already points); no run has used the gate yet.
-
-## Bug hunt before the first training (2026-11-01, two fresh critics + a real-data dry run)
-Fixed:
-- **bf16 crashed the GPU** (`splat.py`, a bug older than the build): the cell index was computed in the feature dtype, and bf16 is exact for integers only up to 256, so indices ran past the grid (device-side assert). Positions now float32, indices integer. Every stored config runs `amp: off`, so no number of a past run is affected.
-- **bf16 geometry was cached** (`lift_pd.build_table`): under autocast the projection tables and the camera visibility were built in bf16 (about 4 px error) and reused by float32 calls. Now always float32; the visibility cache key also holds the depth range.
-- **unequal temporal arms:** the ego-GRU control never got the visibility mask the window memory gets; every memory kind gets its write mask now (no stored config uses a changed path's numbers: old runs evaluate from their own code snapshot).
-- `flip_batch` mirrors precomputed maps; a radar-less batch no longer breaks the radar memory; `interface.py` names the radar fields (`RADAR_FIELDS`), requires `v_hat` at dt 0 and checks the dense boxes for finiteness; the contracts now run on the first real batch of every process (`train.forward_loss`: training, validation and the evaluation adapter); stale references and the model docstring updated; the drawing's wiring corrected (backbone -> time mover -> heads; the planned mask edges dashed).
-- **tests:** `tests/support/equivalence.py` now runs clips of 2 keyframes (memory carried, one sample mirrored, batch 2) and compares the memory state too: base model 64, hurdle model 70 outputs identical to the code before the build; `tests/test_slots.py` adds 5 combinations (33 builds).
-
-Design gaps left (named, not fixed; the next decisions):
-1. ~~Layer 1 leaks into the trainer~~ **closed:** the dataset makes the ego steps to the neighbouring keyframes from the poses (`batch["gap_steps"]`, mirrored by `flip_batch`); `train.batch_ego`, `clip_step` and the consistency term read them, the GT only supplies the loss targets. Checked against the GT's own steps on real frames (`nuscenes_dataset.py`, `train.py` and `augment.py` self-tests).
-2. ~~The camera slot is not one builder entry~~ **closed (c6abdbc):** a camera kind is a tuple of `CameraSource` entries in `model.CAMERAS` (cache field, ida, suffix of the extra lift / reduction modules); the model, the cached dataset, `collate_cached`, the cached subclass and `train.build` read the table, several sources are merged by `cam_merge`. Gates: `test_camera_features.py` (table section), `test_dual_camera_geometry.py`, `test_slots.py`, `equivalence.py` clip mode on `t10_dual_s0` and `t10_dual_long_s0` (max abs diff 0, keys identical).
-3. **The refiner puts GT matching inside the network** (`_refine_train`); it belongs in the loss (harmless while `refine` is off).
-4. **Two box extractors:** the evaluation adapter scores with `object_head.decode`, `model.boxes()` with `select_boxes` (equal box for box).
-
-## What comes next inside this frame
-1. The radar memory with the Doppler static gate (`rad_static_gate`) and the per-frame radar recursion (`radar_per_frame`) are built; the t25 arms that would train them are not started (card `experiments/t25_one_frame_one_scan/experiment.md`).
-2. The one long run of the recursive network with a trainable image encoder (t26) waits for the open decision D102 (`../bev_fusion_lane_center/experiment_execution/DECISIONS.md`, table Open).
-3. The network runs on frames without ground truth through the default Runner of `Evaluation` (`autoresearch/Evaluation/netrunner.py`, D72).
+## Known gaps
+- The refiner puts GT matching inside the network (`_refine_train`); it belongs in the loss (harmless while `refine` is off).
+- Two box extractors: the evaluation adapter scores with `object_head.decode`, `model.boxes()` with `select_boxes` (equal box for box).
+- The radar memory has no gradient in its window part and velocity head inside one call (the 0.5 s of sweeps are already points); the
+  option `rad_static_gate` (off by default) makes it write only static detections; no run has used it.
 
 <!-- archdraw:begin: generated from architecture.json by autoresearch/reporter/archdraw.py; edit the spec, then `archdraw.py render` -->
 ## File map: every box and the code it stands for

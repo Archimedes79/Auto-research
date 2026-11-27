@@ -82,9 +82,17 @@ def locate(folder, spec, path, sub=""):
 
 
 def dig(obj, key):
-    """'a.b.0.c' into nested dicts / lists"""
-    for k in key.split("."):
-        obj = obj[int(k)] if isinstance(obj, list) else obj[k]
+    """'a.b.0.c' into nested dicts / lists; a dict key may hold dots itself ('numbers.graph.topo_F1' of a result or champion record): at each
+    level the longest key that matches wins"""
+    parts = key.split(".")
+    while parts:
+        if isinstance(obj, list):
+            obj, parts = obj[int(parts[0])], parts[1:]
+            continue
+        n = next((n for n in range(len(parts), 0, -1) if ".".join(parts[:n]) in obj), 0)
+        if not n:
+            raise KeyError(key)
+        obj, parts = obj[".".join(parts[:n])], parts[n:]
     return obj
 
 
@@ -421,6 +429,8 @@ def selftest():
             "# Q\n\nTable: Topo F1 on VAL.\n\n| split | topo F1 |\n|---|---|\n| VAL s0 / s1 | {{s0}} / {{s1}} |\n| missing | {{gone}} |\n\n"
             "rounded 0.549, exact 0.6912, wrong 0.7777, unknown {{nope}}.\n\n![A clip of a drive.](media/clip.mp4)\n")
         open(os.path.join(rep, "media", "clip.mp4"), "wb").write(b"\0" * 100)
+        record = {"numbers": {"graph.topo_F1": 0.5, "graph": {"n": 1}}, "seeds": [{"seg.iou@0.5": 2}]}
+        assert dig(record, "numbers.graph.topo_F1") == 0.5 and dig(record, "numbers.graph.n") == 1 and dig(record, "seeds.0.seg.iou@0.5") == 2, "keys with dots"
         out = build(rep)
         html = open(out, encoding="utf-8").read()
         assert "Topo F1 0.5486 / 0.5743." in html, "abstract / values not filled"
