@@ -20,6 +20,8 @@ import time
 import torch
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(1, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # net/
+import netpath  # noqa: E402
 from nuscenes_dataset import FrontRadarDataset, available_scenes
 
 
@@ -68,7 +70,7 @@ def prefill(ds, workers=4, log_every=200, chunk=16):
 
 
 def _selftest():
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))                 # the bev_fusion folder
+    os.chdir(netpath.SITE)                                       # the data folder: a relative cache folder is below it
     from nuscenes.nuscenes import NuScenes
     root = os.path.expanduser("~/data/nuscenes")
     nusc = NuScenes("v1.0-mini", dataroot=root, verbose=False)

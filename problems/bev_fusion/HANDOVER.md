@@ -16,4 +16,5 @@ measure): `t21_ctl` board7 0.4631 / 0.4635 (seed 0 / 1), `t20_base_s0` 0.4569 - 
 **Know.** The code works in `<data root>/bev_fusion/` (configs name their files relative to it; `net/netpath.py` SITE). On the GPU a repeated
 evaluation differs by up to 3e-3 (`anchor_tolerance`); the CPU is deterministic but takes about 85 minutes for 1000 frames, the GPU about 21.
 Building the model loads the DualBEV weights in `models/pretrained/` every time. The split files name ground truth v8 (historical); the
-site's cache is v13 (a107e0b4e8).
+site's cache is v13 (a107e0b4e8). A TEST evaluation is not built yet (`evaluation/bev_sets.py` offers no test set), so
+`research test bev_fusion` cannot finish.

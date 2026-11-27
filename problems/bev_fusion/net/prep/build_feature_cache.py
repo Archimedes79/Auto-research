@@ -65,7 +65,7 @@ def build(ds, root, sample_tokens=None, device="cpu", batch=16, checkpoint=CHECK
 def _selftest():
     import tempfile
     _selftest_shards()
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))                 # the bev_fusion folder
+    os.chdir(netpath.SITE)                                       # the data folder: the default weights are named relative to it
     from model import BEVFusionModel, ModelConfig
     torch.manual_seed(0)
     root_nusc = os.path.expanduser("~/data/nuscenes")

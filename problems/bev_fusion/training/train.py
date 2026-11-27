@@ -631,11 +631,12 @@ def train(cfg, eval_fn=None, datasets=None):
 def _selftest():
     import shutil
     import tempfile
-    os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))                 # the bev_fusion folder
+    import netpath
+    os.chdir(netpath.SITE)                                     # the data folder: the caches and default weights are below it
     torch.set_num_threads(4)                                   # the machine is shared: do not take all cores
     cache = "data/cache/cam_feats_mini"
     assert os.path.isdir(cache) and len(FeatureStore(cache)) > 0, \
-        "build the mini cache first: python net/prep/build_feature_cache.py build ~/data/nuscenes v1.0-mini data/cache/cam_feats_mini --limit 6"
+        f"build the mini cache first: python net/prep/build_feature_cache.py build ~/data/nuscenes v1.0-mini {netpath.SITE}/{cache} --limit 6"
     store = FeatureStore(cache)
     tmp = tempfile.mkdtemp()
     try:
