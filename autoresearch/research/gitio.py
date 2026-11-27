@@ -56,6 +56,9 @@ def _tree_with(root: str, paths: Sequence[str], parent: str) -> str:
         git(root, "read-tree", parent, env=env)
         present = [p for p in paths if os.path.exists(os.path.join(root, p))]
         gone = [p for p in paths if p not in present]
+        unknown = [p for p in gone if not git(root, "ls-tree", "--name-only", parent, "--", p)]
+        if unknown:                                          # neither on disk nor in the parent: a typo or a path relative to elsewhere
+            raise ResearchError(f"no such path in {root} (not on disk, not in {parent[:10]}): {unknown}")
         if present:
             git(root, "add", "-A", "--", *present, env=env)
         for p in gone:                                       # a path that is gone from disk: its removal is recorded

@@ -4,7 +4,8 @@ names an evaluation uses when none are named); whatever it defines itself wins.
 
 The identity of a network covers its config, its checkpoint and the code of the project (every .py outside experiments/, tests/, temp/ and
 literature/): stored predictions are reused only when none of the three changed. The holdout splits of a project are the list "holdout" of its
-problem.json; they open only in a run of `research test` (the worker sets RESEARCH_HOLDOUT_RUN to the run it evaluates)."""
+problem.json; they open only in a run of `research test` (the worker sets RESEARCH_HOLDOUT_RUN to the run it evaluates) that the problem's
+TEST_LOG.md names under a decided decision (research.gates.test_refusal, read again here). This file is protected (research/gates.py)."""
 from __future__ import annotations
 
 import glob
@@ -59,8 +60,16 @@ def holdout_sets(project: str) -> List[str]:
 
 
 def holdout_open() -> bool:
+    """the worker of `research test` (RESEARCH_HOLDOUT_RUN = RESEARCH_RUN) for a run that the TEST log of RESEARCH_PROBLEM names under a
+    decided decision; whatever cannot be checked keeps the holdout closed"""
     run = os.environ.get("RESEARCH_HOLDOUT_RUN", "")
-    return bool(run) and run == os.environ.get("RESEARCH_RUN", "")
+    if not run or run != os.environ.get("RESEARCH_RUN", ""):
+        return False
+    try:
+        from research.gates import test_refusal
+        return test_refusal(os.environ.get("RESEARCH_PROBLEM", ""), run) == ""
+    except Exception:                                           # noqa: BLE001 - no gate code, no problem, no log: closed
+        return False
 
 
 def guard(split: str, project: str) -> None:

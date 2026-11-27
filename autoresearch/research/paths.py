@@ -144,6 +144,19 @@ def module_path(code_root: str, problem: str) -> str:
     return os.pathsep.join([pdir] + [os.path.join(pdir, d) for d in extra] + [os.path.join(code_root, "autoresearch"), code_root])
 
 
+DROP_ENV = ("BFLC_ROOT", "AR_PROJECT", "PYTHONHOME", "PYTHONSTARTUP", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")
+
+
+def child_env(**values: str) -> Dict[str, str]:
+    """the environment of a process that runs a problem's code: this one's without what could point it at another tree (every RESEARCH_*
+    variable, the old project roots, PYTHONHOME / PYTHONSTARTUP, git's own), then the machine file and `values`; the rest (CUDA, conda, PATH)
+    is kept"""
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RESEARCH_") and k not in DROP_ENV}
+    env["RESEARCH_MACHINE"] = machine_file()
+    env.update(values)
+    return env
+
+
 # ------------------------------------------------------------------------------------------------ files
 def read_json(path: str) -> Any:
     with open(path, encoding="utf-8") as f:

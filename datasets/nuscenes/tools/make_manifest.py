@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """make_manifest.py - the manifest of the raw nuScenes data: which dataset version, which archives, which files, on D:.
 
-    python3 data/NuScenes/tools/make_manifest.py                  # writes data/NuScenes/manifest.json from the files on disk (no network, read-only on D:)
-    python3 data/NuScenes/tools/make_manifest.py --check          # compares the disk with the committed manifest; exit 1 and the differences when they differ
-    python3 data/NuScenes/tools/make_manifest.py --selftest       # a fake data root in a temporary folder: determinism, known answers, the check finds changes
+    python3 datasets/nuscenes/tools/make_manifest.py                  # writes datasets/nuscenes/manifest.json from the files on disk (no network, read-only on D:)
+    python3 datasets/nuscenes/tools/make_manifest.py --check          # compares the disk with the committed manifest; exit 1 and the differences when they differ
+    python3 datasets/nuscenes/tools/make_manifest.py --selftest       # a fake data root in a temporary folder: determinism, known answers, the check finds changes
 
 Why: the data itself is never in git, so a result must be able to NAME the data it was made from. This manifest is small enough for git (about 25 KB) and pins
 the data by what cannot change unnoticed: the S3 ETag and size of every archive that was downloaded (from the download logs; an archive is deleted after it was
@@ -11,7 +11,7 @@ unpacked and compared with the data, the manifest then keeps its entry with `pre
 `--archive-check FILE` merges it), the SHA-256 of the metadata tables
 (`v1.0-trainval/*.json`, the dataset version itself), of the map expansion, of the licence and of the stored file lists, and, per sensor folder, the number of
 files, their bytes and the SHA-256 of the sorted list "path<TAB>size" (so one missing or extra file shows). A result card names the manifest by its SHA-256
-(`sha256sum data/NuScenes/manifest.json`); the GT built from this data is named by `GtGenerator/versions.csv` and its `data/autogt/<signature>/index.json`
+(`sha256sum datasets/nuscenes/manifest.json`); the GT built from this data is named by `GtGenerator/versions.csv` and its `data/autogt/<signature>/index.json`
 (pointers under "links", not copies). Paths in the manifest are relative to the data root (`D:\\Auto-research\\NuScenes`) or to the repository.
 
 The folder fingerprints read 1.5 million files; from WSL that takes 30 minutes, so `scan_tree.ps1` (PowerShell, native, about a minute) does it when `powershell.exe`
@@ -38,7 +38,7 @@ IGNORE = {"generated", "generator"}                      # never part of the com
 # where archives lie while they are unpacked: ../NuScenes_zips (sibling of the data root; since 2026-11-02) or downloads/ (inside it; the former place)
 ZIPS_BASES = ("downloads", os.path.join("..", "NuScenes_zips"))
 ARCHIVE_DIRS = (("nuscenes_camera", "camera"), ("nuscenes_radar", "radar"), ("nuscenes_radar_456", "radar"))
-ABOUT = ("Identity of the raw nuScenes data on D: and of the files that are derived from it by pointer. Made by data/NuScenes/tools/make_manifest.py from the files "
+ABOUT = ("Identity of the raw nuScenes data on D: and of the files that are derived from it by pointer. Made by datasets/nuscenes/tools/make_manifest.py from the files "
          "on disk (no network); `make_manifest.py --check` compares the disk with it. Paths are relative to the data root; \"$REPO\" and \"$ROOT\" in view targets "
          "stand for the repository and the data root. A result names the data by `data_identity` (the SHA-256 of the data part of this file: tables, files, file lists, "
          "folder fingerprints; archives, views and dates are not in it, so deleting an archive or making the file again does not change it).")
@@ -295,7 +295,7 @@ def scan_folders(root, scanner="auto"):
 # ---- Occ3D, views, links --------------------------------------------------------------------------------------------------------------------------------
 def drive_ids(repo):
     """the Google Drive ids of the Occ3D fetch, read from tools/get_occ3d_labels.sh (working tree, else the tag that holds the former history/ copy)"""
-    text, path = None, os.path.join(repo, "data", "NuScenes", "tools", "get_occ3d_labels.sh")
+    text, path = None, os.path.join(repo, "datasets", "nuscenes", "tools", "get_occ3d_labels.sh")
     if os.path.isfile(path):
         text = open(path, encoding="utf-8", errors="replace").read()
     else:
@@ -352,9 +352,9 @@ def views(home, root, repo):
     return out
 
 
-LINKS = {"gt": {"registry": "GtGenerator/versions.csv", "tags": "autogt/v<N>", "store": "data/autogt/<signature>/index.json", "check": "python -m GtGenerator data <dataroot>"},
-         "lane_additions": "bev_fusion_lane_center/data/rebuild.json",
-         "recipes": "data/NuScenes/README.md and data/NuScenes/tools/ (link_views.sh builds the views)"}
+LINKS = {"gt": {"registry": "GtGenerator/versions.csv", "tags": "autogt/v<N>", "store": "<data root>/groundtruth/<signature>/index.json", "check": "python -m GtGenerator data <dataroot>"},
+         "lane_additions": "the CRN info files, real files in the views <data root>/nuscenes and nuscenes_mini (how they were made: tag v1, bev_fusion_lane_center/data/rebuild.json)",
+         "recipes": "datasets/nuscenes/README.md and datasets/nuscenes/tools/ (link_views.sh builds the views)"}
 
 
 # ---- build, diff, check ---------------------------------------------------------------------------------------------------------------------------------
@@ -409,11 +409,11 @@ def build(root, home=None, repo=REPO, deep=True, scanner="auto", hash_files=True
     m = {"schema": SCHEMA, "about": ABOUT,
          "root": {"windows": "D:\\Auto-research\\NuScenes", "wsl": "/mnt/d/Auto-research/NuScenes"},
          "licence": "nuScenes is for non-commercial use (the LICENSE of the data is under files); downloads only with the owner's OK",
-         "source": {"bucket": "motional-nuscenes", "listing": "data/NuScenes/tools/list_nuscenes_bucket.py", "etag_check": "data/NuScenes/tools/verify_s3_etag.py"},
+         "source": {"bucket": "motional-nuscenes", "listing": "datasets/nuscenes/tools/list_nuscenes_bucket.py", "etag_check": "datasets/nuscenes/tools/verify_s3_etag.py"},
          "datasets": ds, "files": files, "file_lists": file_lists(root, hash_files), "archives": archives, "data_markers": data_markers(root),
          "occ3d": occ, "views": views(home, root, repo), "links": LINKS, "generated": today}
     tool = os.path.join(HERE, "make_manifest.py")
-    gen = {"tool": "data/NuScenes/tools/make_manifest.py", "tool_sha256": sha256_file(tool) if os.path.isfile(tool) else None}
+    gen = {"tool": "datasets/nuscenes/tools/make_manifest.py", "tool_sha256": sha256_file(tool) if os.path.isfile(tool) else None}
     if deep:
         m["folders"], gen["folder_scanner"] = scan_folders(root, scanner)
         if hash_files:
@@ -428,7 +428,7 @@ def load_checks(path):
     def norm(obj):
         obj = dict(obj)
         name = obj.pop("archive")
-        obj.setdefault("method", "data/NuScenes/tools/verify_archive.ps1: every member against the data folder (existence, size, bytes)")
+        obj.setdefault("method", "datasets/nuscenes/tools/verify_archive.ps1: every member against the data folder (existence, size, bytes)")
         return os.path.basename(name), obj
     if os.path.isdir(path):
         items = []
@@ -502,7 +502,7 @@ def selftest():
         zips = os.path.join(tmp, "D", "NuScenes_zips")
         p_a1, p_r4 = os.path.join(root, "downloads/nuscenes_camera/p01", A1), os.path.join(root, "downloads/nuscenes_radar_456", R4)
         os.makedirs(os.path.join(repo, "data", "NuScenes", "tools"))
-        _w(os.path.join(repo, "data", "NuScenes", "tools", "get_occ3d_labels.sh"),
+        _w(os.path.join(repo, "datasets", "nuscenes", "tools", "get_occ3d_labels.sh"),
            'bash "$here/get_gdrive_file.sh" 1AAA "$root/downloads/occ3d/annotations.json"\nbash "$here/get_gdrive_file.sh" 1BBB "$root/downloads/occ3d/gts.tar.gz"\n')
         _w(p_a1, b"x" * 10)
         _w(p_a1 + ".unpacked")

@@ -3,7 +3,8 @@
 The code is the snapshot commit unpacked once per commit into <runs>/<problem>/_code/<commit>/. A step is a command of problem.json (its words
 may name {python} {config} {run_dir} {data} {runs} {seed}) or the core's evaluation step. A GPU step waits for one of the machine's GPU slots.
 Exit 0 = done; 75 = stopped (trainkit's stop protocol; `research resume` continues); anything else = failed. A kill rule of the card that fires
-stops the training and marks the run killed. run.json (in the records) changes at step boundaries only; the heartbeat lies in the run folder."""
+stops the training and marks the run killed; a step's log.jsonl and CONTROL lie in its folder (problem.json step "dir", default the run
+folder). run.json (in the records) changes at step boundaries only; the heartbeat lies in the run folder."""
 from __future__ import annotations
 
 import fcntl
@@ -20,7 +21,8 @@ from typing import Any, Dict, Iterator, List, Optional
 
 from research import spec
 from research.launch import SNAPSHOT_PATHS
-from research.paths import ResearchError, expand, interpreter, machine, module_path, read_json, record_dir, repo, run_dir, runs_root, state_dir, write_json
+from research.paths import (ResearchError, child_env, expand, interpreter, machine, module_path, read_json, record_dir, repo, run_dir, runs_root,
+                            state_dir, write_json)
 from research import gitio
 
 EXIT_STOPPED = 75
@@ -89,8 +91,23 @@ def ensure_code(problem: str, commit: str) -> str:
     return dest
 
 
+def step_alive(problem: str, rid: str) -> bool:
+    """does the process group of the run's current step (step.pid in the run folder) still exist?"""
+    try:
+        with open(os.path.join(run_dir(problem, rid), "step.pid"), encoding="utf-8") as f:
+            pid = int(f.read().strip())
+        os.killpg(pid, 0)
+        return True
+    except (OSError, ValueError):
+        return False
+
+
+def _number(value: Any) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 class Kill:
-    """the card's kill rules, read from the training's log.jsonl as it grows"""
+    """the card's kill rules, checked on every row of the step's log.jsonl as it grows (from the rule's after_step on); NaN fires a rule"""
 
     def __init__(self, rules: List[Dict[str, Any]], log_path: str):
         self.rules, self.path, self.pos, self.done = list(rules), log_path, 0, set()
@@ -108,19 +125,23 @@ class Kill:
                 row = json.loads(line)
             except ValueError:
                 continue
+            if not isinstance(row, dict) or not _number(row.get("step")):
+                continue                                         # not a row of a step
             for i, r in enumerate(self.rules):
-                if i in self.done or row.get("step", -1) < r["after_step"] or r["metric"] not in row:
-                    continue
-                value = row[r["metric"]]
-                if not isinstance(value, (int, float)) or isinstance(value, bool):
+                value = row.get(r["metric"])
+                if i in self.done or row["step"] < r["after_step"] or not _number(value):
                     continue                                     # not a number in this row (a nested validation block): the next row may carry it
-                self.done.add(i)
                 v = float(value)
                 if math.isnan(v):
-                    return f"kill rule: {r['metric']} is not a number at step {row['step']}"
-                if ("above" in r and v > r["above"]) or ("below" in r and v < r["below"]):
-                    side = f"above {r['above']}" if "above" in r else f"below {r['below']}"
-                    return f"kill rule: {r['metric']} = {v:.4g} at step {row['step']} is {side}"
+                    why = f"kill rule: {r['metric']} is not a number at step {row['step']}"
+                elif "above" in r and v > r["above"]:
+                    why = f"kill rule: {r['metric']} = {v:.4g} at step {row['step']} is above {r['above']}"
+                elif "below" in r and v < r["below"]:
+                    why = f"kill rule: {r['metric']} = {v:.4g} at step {row['step']} is below {r['below']}"
+                else:
+                    continue
+                self.done.add(i)
+                return why
         return ""
 
 
@@ -158,21 +179,18 @@ class Worker:
             raise ResearchError(f"step command {step['run']}: unknown placeholder {e}") from None
 
     def env(self, code: str) -> Dict[str, str]:
-        e = dict(os.environ)
-        e.update(RESEARCH_REPO=repo(), RESEARCH_PROBLEM=self.problem, RESEARCH_RUN=self.rid, RESEARCH_RUN_DIR=self.out, RESEARCH_RECORD=self.rec,
-                 RESEARCH_DATA=self.m["data"], RESEARCH_RUNS=runs_root(self.problem), RESEARCH_COMMIT=self.run["commit"], RESEARCH_CODE=code, RESEARCH_SPLIT=self.split,
-                 PYTHONPATH=module_path(code, self.problem),
-                 PYTHONUNBUFFERED="1")
+        e = child_env(RESEARCH_REPO=repo(), RESEARCH_PROBLEM=self.problem, RESEARCH_RUN=self.rid, RESEARCH_RUN_DIR=self.out, RESEARCH_RECORD=self.rec,
+                      RESEARCH_DATA=self.m["data"], RESEARCH_RUNS=runs_root(self.problem), RESEARCH_COMMIT=self.run["commit"], RESEARCH_CODE=code,
+                      RESEARCH_SPLIT=self.split, PYTHONPATH=module_path(code, self.problem), PYTHONUNBUFFERED="1")
         if self.test:
             e["RESEARCH_HOLDOUT_RUN"] = self.rid
-        else:
-            e.pop("RESEARCH_HOLDOUT_RUN", None)
         return e
 
-    def execute(self, name: str, cmd: List[str], code: str, kill: Optional[Kill]) -> Dict[str, Any]:
+    def execute(self, name: str, cmd: List[str], code: str, kill: Optional[Kill], where: str) -> Dict[str, Any]:
+        """one step; `where` is its folder (CONTROL goes there)"""
         log_path = os.path.join(self.out, f"{name}.log")
         pid_path = os.path.join(self.out, "step.pid")
-        control = os.path.join(self.out, "CONTROL")
+        control = os.path.join(where, "CONTROL")
         t0 = time.time()
         with open(log_path, "ab") as log:
             log.write(f"\n=== {time.strftime('%Y-%m-%d %H:%M:%S')} {' '.join(cmd)}\n".encode())
@@ -214,8 +232,9 @@ class Worker:
         status = "ok" if code_ == 0 and not reason else ("killed" if reason.startswith("kill rule") else "stopped" if reason or code_ == EXIT_STOPPED else "failed")
         return {"status": status, "exit": code_, "seconds": round(time.time() - t0, 1), "log": os.path.basename(log_path), **({"why": reason} if reason else {})}
 
-    def wait_needs(self, cfg: Dict[str, Any], card_needs: Dict[str, str]) -> str:
-        """'' when every run this one needs is finished, else why it cannot go on"""
+    def wait_needs(self, card_needs: Dict[str, str]) -> str:
+        """'' when every run this one needs is finished, else why it cannot go on (a needed run that ended without success: it is resumed
+        first, then this one)"""
         for key, ref in card_needs.items():
             other = f"{ref}_s{self.run['seed']}"
             path = os.path.join(record_dir(self.problem, other), "run.json")
@@ -226,7 +245,7 @@ class Worker:
                     st = "missing"
                 if st == "ok":
                     break
-                if st in ("failed", "killed", "missing"):
+                if st in ("failed", "killed", "stopped", "missing"):
                     return f"the needed run {other} is {st}"
                 if self.stop_requested():
                     return "stopped while it waited for " + other
@@ -249,13 +268,20 @@ class Worker:
                     self.save(status="failed", error=f"{type(e).__name__}: {e}"[:500], ended=time.strftime("%Y-%m-%d %H:%M:%S"))
                 raise
 
-    def _main(self) -> int:
-        for f in ("CONTROL", "STOPPED", "STOP_REQUESTED"):          # a fresh attempt: an earlier stop is history
-            path = os.path.join(self.out, f)
+    @staticmethod
+    def _rotate(folder: str, names: tuple) -> None:
+        """a fresh attempt: an earlier stop is history"""
+        for f in names:
+            path = os.path.join(folder, f)
             if os.path.exists(path):
                 os.replace(path, f"{path}.{int(time.time())}")
+
+    def _main(self) -> int:
+        self._rotate(self.out, ("CONTROL", "STOPPED", "STOP_REQUESTED"))
         code = ensure_code(self.problem, self.run["commit"])
         p = read_json(os.path.join(code, "problems", self.problem, "problem.json"))
+        for d in sorted({s.get("dir", "") for s in p["steps"].values()} - {""}):
+            self._rotate(os.path.join(self.out, d), ("CONTROL", "STOPPED"))
         card = spec.parse_card(open(os.path.join(self.rec, "..", "..", "experiment.md"), encoding="utf-8").read())
         frozen = spec.parse_card(gitio.show(repo(), self.run["commit"], os.path.relpath(os.path.join(self.rec, "..", "..", "experiment.md"), repo()).replace(os.sep, "/")))
         if not spec.same_rule(frozen, card):
@@ -267,7 +293,7 @@ class Worker:
         if not self.test:
             self.save(status="running", host=socket.gethostname(), started=self.run.get("started") or time.strftime("%Y-%m-%d %H:%M:%S"))
         steps = list(p.get("test_steps", ["evaluate"])) if self.test else list(self.run["steps"])
-        why = "" if self.test else self.wait_needs(cfg, frozen["arms"][self.run["arm"]].get("needs", {}))
+        why = "" if self.test else self.wait_needs(frozen["arms"][self.run["arm"]].get("needs", {}))
         if why:
             stopped = why.startswith("stopped")
             self.save(status="stopped" if stopped else "failed", error=why, ended=time.strftime("%Y-%m-%d %H:%M:%S"))
@@ -281,18 +307,19 @@ class Worker:
                 return EXIT_STOPPED
             step = p["steps"][name]
             cmd = self.command(step, code, cfg_path, p)
-            kill = Kill(frozen.get("kill", []), os.path.join(self.out, "log.jsonl")) if step["run"] != "evaluate" and not self.test else None
+            where = os.path.join(self.out, step.get("dir", ""))
+            kill = Kill(frozen.get("kill", []), os.path.join(where, "log.jsonl")) if step["run"] != "evaluate" and not self.test else None
             if not self.test:
                 self.run["steps"][name] = {"status": "running", "since": time.strftime("%Y-%m-%d %H:%M:%S")}
                 self.save()
             if step.get("gpus", 0) > 0:
                 try:
                     with gpu_slot(self.m["gpu_slots"], self.beat, self.stop_requested) as slot:
-                        res = {**self.execute(name, cmd, code, kill), "gpu_slot": slot}
+                        res = {**self.execute(name, cmd, code, kill, where), "gpu_slot": slot}
                 except Stopped:
                     res = {"status": "stopped", "why": "stop requested while it waited for a GPU slot"}
             else:
-                res = self.execute(name, cmd, code, kill)
+                res = self.execute(name, cmd, code, kill, where)
             if self.test:
                 if res["status"] != "ok":
                     print(f"TEST step {name} of {self.rid}: {res}", flush=True)

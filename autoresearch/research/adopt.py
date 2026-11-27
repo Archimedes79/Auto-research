@@ -4,7 +4,8 @@
 2. the arm's settings become the defaults of the base config (its code is committed already: `start` refuses uncommitted code, and a new option
    enters the code default-off);
 3. the anchor test: the arm's runs are evaluated again with the working tree's code, into a fresh folder, and must give the numbers of their
-   records (within problem.json evaluate.anchor_tolerance); a failure leaves the base config as it was;
+   records (within problem.json evaluate.anchor_tolerance); unless it passed (a failure, an error, an interrupt), the base config is put back
+   as it was;
 4. champions/<problem>/ records the champion (the old one stays as a comparison network); one commit of base config and champion facts.
 
 register: the same facts for a network measured by an experiment of kind `measure` (an imported or re-measured network), without a code change."""
@@ -31,8 +32,9 @@ def _facts(problem: str, exp_id: str, arm: str, card: Dict[str, Any], decision: 
         rid = f"{exp_id}.{arm}_s{s}"
         rec = record_dir(problem, rid)
         run, res = read_json(os.path.join(rec, "run.json")), read_json(os.path.join(rec, "result.json"))
+        ident = res["identity"]
         seeds[str(s)] = {"run": rid, "config": read_json(os.path.join(rec, "config.json")), "weights": {"run_dir": f"{{runs}}/{rid}",
-                         "checkpoint": res["identity"].get("checkpoint"), "sha256_16": res["identity"].get("checkpoint_hash")},
+                         "checkpoint": ident.get("checkpoint"), "sha256_16": ident.get("checkpoint_hash") or ident.get("sha1")},     # bev names it sha1
                          "split": res["split"], "frames": res["frames"], "scenes": res["scenes"], "numbers": res["numbers"],
                          "per_scene": res["per_scene"], "cost": res.get("cost"), "identity": res["identity"], "commit": run["commit"]}
     prefix = load_problem(problem)["tag_prefix"]
@@ -90,13 +92,15 @@ def adopt(problem: str, exp_id: str, arm: str, decision: str, by_hand: str = "",
     cfg_path = os.path.join(problem_dir(problem), p["config"])
     with open(cfg_path, "rb") as f:
         before = f.read()
-    write_json(cfg_path, spec.merged(read_json(cfg_path), card["arms"][arm].get("set", {})))      # the code is committed (start checks it): the arm's settings become the defaults
+    passed = False
     try:
+        write_json(cfg_path, spec.merged(read_json(cfg_path), card["arms"][arm].get("set", {})))  # the code is committed (start checks it): the arm's settings become the defaults
         _anchor(problem, [f"{exp_id}.{arm}_s{s}" for s in card["seeds"]], p, tol)
-    except ResearchError:
-        with open(cfg_path, "wb") as f:                                         # a failed anchor test leaves the working tree as it was
-            f.write(before)
-        raise
+        passed = True
+    finally:
+        if not passed:                                                          # whatever stopped the anchor test: the working tree as it was
+            with open(cfg_path, "wb") as f:
+                f.write(before)
     facts = _facts(problem, exp_id, arm, card, decision, f"by hand: {by_hand}" if by_hand else "verdict KEEP")
     written = _record(problem, facts, "champion")
     paths_c = sorted({rel(cfg_path)} | {rel(x) for x in written})
@@ -112,6 +116,8 @@ def register(problem: str, exp_id: str, arm: str, decision: str, role: str, comm
         raise ResearchError(f"{decision} is not a decided decision of {problem}")
     p = load_problem(problem)
     snap = gitio.tag_commit(repo(), f"{p['tag_prefix']}/{exp_id}")
+    if not snap:
+        raise ResearchError(f"{exp_id} has no snapshot {p['tag_prefix']}/{exp_id}: only a started measurement is registered")
     card = load_card(problem, exp_id, at=snap)
     if card.get("kind") != "measure":
         raise ResearchError(f"{exp_id} is not a measurement: a compared arm becomes champion through adopt")

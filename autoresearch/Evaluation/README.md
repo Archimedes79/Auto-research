@@ -14,7 +14,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
    make_card  draw_frame  list  list_sets  |  tap  time  probe (passed to the Runner)      v
         |  calls the layer below                                                    engine EvalSuite: Quantitative.run(results=...)
         v                                                                             -> RunStore  <net>/eval/suite/quant/<e-id>
- Runner (the project's class, BEV: runner/runner.py)  -- the only class that executes the network   (additive counts per frame: small)
+ Runner (netrunner.py, or the class a project names)  -- the only class that executes the network   (additive counts per frame: small)
    predict  plan  list_results  tap  time  probe     no ground truth, no loss, always warm (D70)
         |  writes / reads
         v
@@ -24,7 +24,7 @@ Needs numpy and matplotlib; videos are H.264 with an ffmpeg that has libx264 ($F
  project adapter  <project>/evaluation/evaluation.json -> bev_eval.py     (both classes call it; the core imports no torch / nuScenes)
    required: name out network sets identity source subject task
    optional: free_source + free_subject (together) reference card time probe resolve release inputs evaluator_now MEMORY_TAP COMPARE_IGNORE
-   BEV: bev_adapter, bev_free (the network without labels), bev_suite, bev_sets (the sets = the training's splits/)
+   BEV: bev_adapter, bev_free (the network without labels), bev_sets (the sets = the training's splits/)
 ```
 A caller (a person, a script, the command line) talks to the Evaluation only. The Runner is the layer below: the only class that runs a network (D72: it reads no ground truth and computes no loss) and stores what
 it predicts. There is one Runner and the Evaluation always includes it: the class a project names in `<project>/evaluation/evaluation.json` as `"runner": "module:Class"` (module relative to the
@@ -39,9 +39,9 @@ A network with a memory always runs warm (D70): whole scenes in time order from 
 ## Class interface
 ```python
 from Evaluation import Evaluation
-ev = Evaluation()                                                   # the project is AR_PROJECT; Evaluation(runner=...) injects another Runner
-ev.check("runs/t23_C_s1", "small.val")                              # the dry run: what would run, what is stored, the problems
-r = ev.run("runs/t23_C_s1", "small.val", gt_key="v8")               # the Runner predicts what is not stored yet (warm, D70), then the Evaluation scores it: a dict with the id
+ev = Evaluation()                                                   # the project is AR_PROJECT (a problem folder); Evaluation(runner=...) injects another Runner
+ev.check("t23_C_s1", "small.val")                                   # a run folder, or its name in the runs root; the dry run: what would run, what is stored, the problems
+r = ev.run("t23_C_s1", "small.val", gt_key="v8")                    # the Runner predicts what is not stored yet (warm, D70), then the Evaluation scores it: a dict with the id
 ev.show_numbers(r["id"]);  ev.split_numbers(r["id"], "scene");  ev.find_worst(r["id"], "seg", n=5);  ev.get_cost(r["id"]);  ev.report(r["id"]);  ev.make_card(r["id"])
 ev.compare(control_id, r["id"])                                     # b - a, paired bootstrap; one network per process: the control was run in another one, compare by ids
 ev.tap(r["results"], "scene-0061/12", "fused")                      # an intermediate result stored with the predictions (asked for with run(..., taps=("fused",)))
@@ -53,7 +53,7 @@ ev.tap(r["results"], "scene-0061/12", "fused")                      # an interme
 | `score(results, frames, gt_key, metrics)` | score stored predictions against the ground truth; no network |
 | `show_numbers(id, match)`, `split_numbers(id, axis)`, `find_worst(id, match, n)` | the numbers (with `warnings`: devices, the memory's health, evaluator code changed since), the numbers per scene or frame, where they come from |
 | `compare(a, b)` | paired bootstrap, b - a (a = the control); refused on another source, task or GT; `n_scenes` and `warnings`: frames in only one of the two, fewer than 30 scenes (the interval is too narrow then), other evaluator code |
-| `get_cost(id)`, `report(id)`, `make_card(id, out)` | ms per frame, the html page, the metric card in the project's contract WRITTEN as a file (default `<net>/eval/card_<e-id>.json`, or `out`; -> `{path, card}`; a verdict reads it: name it in the experiment card's `arm.cards`, check it with `python autoresearch/tools/card.py check FILE`); refused when the checkpoint or the evaluator code changed since, or the predictions are gone: score again |
+| `get_cost(id)`, `report(id)`, `make_card(id, out)` | ms per frame, the html page, the metric card in the project's contract WRITTEN as a file (default `<net>/eval/card_<e-id>.json`, or `out`; -> `{path, card}`; nothing in `research` reads it: a verdict comes from the evaluation step of a run); refused when the checkpoint or the evaluator code changed since, or the predictions are gone: score again |
 | `draw_frame(id, frame, view)` | one picture (the network runs on that frame with its scene's history; refused like `make_card`) |
 | `list_sets()`, `list(network)` | the sets a project defines, what is stored for a network (predictions and evaluations) |
 | `tap(results, frame, name)`, `time(network)`, `probe(network)` | passed to the Runner: which taps a stored frame has or the file, shape and dtype of one; ms per module on an idle GPU; the module probe |
@@ -66,18 +66,18 @@ ev.tap(r["results"], "scene-0061/12", "fused")                      # an interme
 
 What an id stands for. `<network>@r<hash>` the predictions: the network (checkpoint file hash, config, code snapshot or live code, the adapter files), what it was fed (the set's data, the control) and the
 memory mode; the same question gives the same id, a changed checkpoint another. `<network>@e<hash>` a scored evaluation: the predictions, the frames asked for (with their dataset keys), the set they were
-asked through, the ground truth, the metrics, the evaluator code. The numbers of an Evaluation have no `loss.*` (a prediction carries no validation loss, D72; `bev_suite.py eval` keeps them). One network per
+asked through, the ground truth, the metrics, the evaluator code. The numbers of an Evaluation have no `loss.*` (a prediction carries no validation loss, D72). One network per
 process (a project's code modules are imported once; the BEV adapter refuses a second code snapshot in a task, a timing, a probe or a source): run each network in its own process and compare the evaluations by
 their ids. Frames are a text: `val`, `small.val`, `spread:1000:large.val`, `random:3[:SEED]:val`, `scenes:a,b:val`, `frames:scene-0061/12:val` (the set is last, and one the project defines). A repeated question
 costs no network but still builds the data (about a minute for BEV). The head of `api.py` has the adapter's functions; test: `python -m Evaluation.selftest_api` (a toy project, seconds) and, for BEV,
-`tests/test_evaluation_api.py [--real RUN]`.
+`problems/bev_fusion/tests/test_evaluation_api.py [--real RUN]`.
 
 ## Command line
 Every Evaluation method is a command (`python -m Evaluation <method>` or `Evaluation.<method>`; `_` is `-`); `list`, `probe` and `selftest` need the class name because older commands of `cli.py` use these words.
-| what | command (from `autoresearch/`, `AR_PROJECT=../bev_fusion`) |
+| what | command (from `autoresearch/`, `AR_PROJECT=../problems/bev_fusion`) |
 |---|---|
-| the dry run | `python -m Evaluation check runs/t23_C_s1 small.val` |
-| run and score | `python -m Evaluation run runs/t23_C_s1 small.val --gt-key v8 [--metrics maps,boxes,fusion] [--taps fused] [--device cpu]` |
+| the dry run | `python -m Evaluation check t23_C_s1 small.val` |
+| run and score | `python -m Evaluation run t23_C_s1 small.val --gt-key v8 [--metrics maps,boxes,fusion] [--taps fused] [--device cpu]` |
 | score stored predictions | `python -m Evaluation score t23_C_s1@r3f9a2c1d4b0 small.val --gt-key v8` |
 | read | `show-numbers ID [--match M]`, `split-numbers ID [--axis scene]`, `find-worst ID`, `compare A B`, `get-cost ID`, `report ID`, `make-card ID [--out FILE]`, `draw-frame ID FRAME` |
 | what exists | `list-sets`, `Evaluation.list NETWORK`, `tap RESULTS FRAME [--name N]`, `methods` |
@@ -88,7 +88,7 @@ Every Evaluation method is a command (`python -m Evaluation <method>` or `Evalua
 
 ## Underneath: the engine `EvalSuite`
 The Evaluation counts and draws with this engine and builds its workbench (`EvalSuite`: a Source, a Subject or none, a Task, with `.quant` and `.qual`) for each call; a person does not construct one. `EvalSuite`
-is the older entry point of `bev_suite.py`, the lane project and the engine's selftests, and it works alone for a network that has no project adapter. You write three small classes for your network; the suite then gives you pictures, numbers and cost.
+is the older entry point (the engine's selftests use it directly), and it works alone for a network that has no project adapter. You write three small classes for your network; the suite then gives you pictures, numbers and cost.
 
 ### Try it
 The whole adapter is `adapters/minimal.py` (about 70 lines): a moving disc in noise, a thresholding "network", one metric.

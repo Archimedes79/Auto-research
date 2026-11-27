@@ -265,7 +265,7 @@ class Quantitative:
     def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0, force: bool = False,
                 ignore: Optional[Dict[str, Sequence[str]]] = None) -> Dict[str, Any]:
         """Paired scene bootstrap of the headline numbers on the frames both runs have: run_a = the CONTROL (reference), run_b = the
-        VARIANT, diff = b - a = variant - control (the sign autoresearch/tools/decide.py reads, the same as the lane project's
+        VARIANT, diff = b - a = variant - control (the sign of the judge, `research judge`, the same as the lane project's
         SB.paired(variant, control)). -> {'metric.key': {a, b, diff, lo, hi, p_b_better (direction-aware), p_diff_gt0, n_valid, ...}}.
         Both runs must come from the same Source and Task (their manifests' `source` and `task` entries: dataset, split, ground-truth
         version, caches); otherwise the counts are of different questions and the comparison is refused (force=True compares anyway).

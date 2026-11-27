@@ -2,8 +2,8 @@
 
     mask_for(project)            THE entry point: the mask of a project by its name ("bev_fusion" or "lane_center"), so nobody has to choose by guessing:
                                  project            folder                       mask                  frame of the arrays
-                                 "bev_fusion"       bev_fusion/                  bev_fusion_mask()     ego, x forward, y left; the front grid 120 x 104
-                                 "lane_center"      bev_fusion_lane_center/      lane_mask()           lane, x right, y forward; the window 200 x 200
+                                 "bev_fusion"       problems/bev_fusion/         bev_fusion_mask()     ego, x forward, y left; the front grid 120 x 104
+                                 "lane_center"      problems/lane_center/        lane_mask()           lane, x right, y forward; the window 200 x 200
     bev_fusion_mask(grid=None)   the front camera and the five radars on the BEV-fusion grid (default GridSpec(): x forward 0 - 60 m, y left +-26 m, 0.5 m):
                                  {"camera", "radar", "fusion"}, bool arrays [ix, iy] in the ego frame (x forward, y left)
     lane_mask(res=0.5, half=50)  the six cameras and the five radars on the Spurmitte window (the lane project: 100 x 100 m round the ego, 200 x 200 cells at 0.5 m):
@@ -62,8 +62,8 @@ PROJECTS = {"bev_fusion": "bev_fusion_mask", "lane_center": "lane_mask"}
 
 
 def mask_for(project, **kwargs):
-    """the coverage mask of a project: "bev_fusion" (the front fusion system, folder bev_fusion/) -> bev_fusion_mask(**kwargs); "lane_center" (the lane-centre project on
-    GaussianCaR features, folder bev_fusion_lane_center/) -> lane_mask(**kwargs). Any other name is an error that names the two. The arrays differ in shape and in frame, so a
+    """the coverage mask of a project: "bev_fusion" (the front fusion system, folder problems/bev_fusion/) -> bev_fusion_mask(**kwargs); "lane_center" (the lane-centre problem on
+    GaussianCaR features, folder problems/lane_center/) -> lane_mask(**kwargs). Any other name is an error that names the two. The arrays differ in shape and in frame, so a
     mask taken for the wrong project does not fit the project's grid and fails at once instead of scoring on the wrong area."""
     if project not in PROJECTS:
         raise ValueError(f"unknown project {project!r}: the masks are for {sorted(PROJECTS)} (bev_fusion = front camera + 5 radars, lane_center = 6 cameras + 5 radars)")

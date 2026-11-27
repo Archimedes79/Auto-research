@@ -5,7 +5,7 @@
 # The archive is kept until the extraction is checked: verify_archive.ps1 -Archive <archive> -Dest $NUSC_DEST must show 0 differences, then the archive is deleted
 # (README, "Archives"; `extract_blob.sh <archive> --delete` does both; make_manifest.py keeps the identity). Unpack everything (no NUSC_MEMBERS) unless a part is
 # really not wanted.
-# Usage (from the repository root): wsl bash data/NuScenes/tools/get_blob_part.sh <part 01..10> <camera|lidar|radar>
+# Usage (from the repository root): wsl bash datasets/nuscenes/tools/get_blob_part.sh <part 01..10> <camera|lidar|radar>
 # Environment: NUSC_DL download root, REQUIRED (a folder on D:, by convention /mnt/d/Auto-research/NuScenes_zips); NUSC_DEST (required), NUSC_MEMBERS, NUSC_WINTAR as in extract_blob.sh
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

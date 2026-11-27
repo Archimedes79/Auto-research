@@ -98,8 +98,8 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     """THE entry point of the suite: read nuScenes from `dataroot` and write the GT of every keyframe.
 
     dataroot   a nuScenes folder (it holds v1.0-mini/ or v1.0-trainval/, maps/, samples/, sweeps/); ~ is expanded
-    out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default data/autogt, the
-               place `GtGenerator.load(token)` reads from (not in git)
+    out        where the GT goes: OUT/<generator signature>/<sample token>.npz + index.json; default the store root of where.py
+               (<data root>/groundtruth), the place `GtGenerator.load(token)` reads from (not in git)
     version    v1.0-mini / v1.0-trainval; default: the one found in dataroot (an error if there are several)
     scenes     names such as ["scene-0061"]; default all sequences of the version
     set_name   "small" (the 10 sequences of mini: small experiments) or "full" (all 850 of trainval: releases), the files of

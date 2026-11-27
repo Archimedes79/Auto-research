@@ -74,11 +74,11 @@ class Hooks:
 
 
 def _skip_report(step, status, gn, bad, was_bad, n_overflow, scaler):
-    """the lines the Training's health check counts (`non-finite ... skipped (k in a row)`); -> the number of fp16 overflows so far"""
+    """the log lines of a skipped step (`non-finite ... skipped (k in a row)`); -> the number of fp16 overflows so far"""
     if status == "overflow" and bad == was_bad:             # fp16: expected now and then, the scaler halved its scale
         n_overflow += 1
         print(f"step {step}: fp16 gradient overflow, skipped, loss scale -> {scaler.get_scale():g} ({n_overflow} since this start)", flush=True)
-    elif status == "overflow":                              # the scale is below 1: a diverged run, in the words the health check counts
+    elif status == "overflow":                              # the scale is below 1: a diverged run, reported as a non-finite gradient
         n_overflow += 1
         print(f"step {step}: non-finite gradient (fp16 overflow, loss scale {scaler.get_scale():g}), skipped ({bad} in a row)", flush=True)
     elif status != "ok":
@@ -162,7 +162,7 @@ def fit(cfg, model, loss, batches, step_fn, out_dir, device, evaluate=None, hook
     params = [p for g in opt.param_groups for p in g["params"]]
     bad, n_overflow, t0, step0, last = 0, 0, time.time(), step, {}
     while step < cfg.steps:
-        reason = stop_check(out_dir)                    # `python -m Training stop <run>` (autoresearch/Training)
+        reason = stop_check(out_dir)                    # `research stop`: the worker writes CONTROL
         if reason is not None:
             save(step)
             checkpoint.prune_checkpoints(out_dir, cfg.keep, keep_steps)

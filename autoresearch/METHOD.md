@@ -18,11 +18,11 @@ Several experiments run at once (the machine's GPU slots decide). A card names t
 runs (`from`) or build on one (`needs`). INCONCLUSIVE means: add a seed; TIE: take the cheaper variant; INVALID: fix the control first.
 
 ## Hard rules (the code enforces them; everything else is a default)
-1. **TEST** opens only for a run named in the problem's `TEST_LOG.md` under a decided decision (`research test`; the start, the worker and the data reader all check it). A design sees TEST once; what was chosen on TEST is in-sample and labelled so.
-2. **Protected files** (`problem.json` "protected", `champions/`, the gates, `.claude/settings.json`) change only under a grant of a decided decision (`research grant`; the hook `research/hook.py` refuses otherwise).
+1. **TEST** opens only for a run named in the problem's `TEST_LOG.md` under a decided decision (`research test`; the evaluation step and every read through `Evaluation` check the log again). A design sees TEST once; what was chosen on TEST is in-sample and labelled so.
+2. **Protected files** (every problem's `problem.json` and `TEST_LOG.md`, its "protected" list, `champions/`, the gate code `research/gates.py`, `paths.py`, `hook.py` and `Evaluation/defaults.py`, `.claude/settings.json`) change only under a grant of a decided decision (`research grant`; the hook `research/hook.py` refuses otherwise, and refuses every edit of the machine's state folder, where the grants are).
 3. **A number that feeds a verdict** comes from a run of `research start`: it executes its snapshot, and only its worker writes records. A diagnostic is any other call and never a record.
 4. **A verdict** comes from the rule the snapshot holds (`research judge`), or is adopted by hand with a written reason (`research adopt --by-hand`).
-5. **Data**: raw data and the weights of champions and comparison networks are never deleted; other checkpoints, caches and run outputs only after the catalog lists them and the owner confirmed the list (D154).
+5. **Data**: raw data and the weights of champions and comparison networks are never deleted; other checkpoints, caches and run outputs only after a list names them and the owner confirmed that list in a decided decision (D154). For run folders that is `research clean`: `--delete <list> --decision D<n>` deletes only runs of that list that are still not needed (finished, no live step, no KEEP or INCONCLUSIVE verdict, named by no card).
 6. **Other people**: the owner's decisions are acted on only when recorded; mail, shutdown, downloads, installs and remote actions only when allowed; another chat's jobs, running scripts and uncommitted files are not touched.
 
 When a default does not fit, do the sensible thing and say in the record what was done differently and why; keep it away from where a

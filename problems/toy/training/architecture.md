@@ -4,30 +4,30 @@
 
 the reference problem of the research system; every report of it shows this drawing
 
-<!-- archdraw:begin: generated from architecture.json by autoresearch/tools/archdraw.py; edit the spec, then `archdraw.py render` -->
+<!-- archdraw:begin: generated from architecture.json by autoresearch/reporter/archdraw.py; edit the spec, then `archdraw.py render` -->
 ## File map: every box and the code it stands for
 
 | box | kind | code | note |
 |---|---|---|---|
-| raw shards + manifest | input | `data/make_data.py::make` |  |
-| truth store (signature) | fixed math, differentiable | `gt/raster.py::rasterise`, `gt/generate.py::generate` |  |
+| raw shards + manifest | input | `dataset/make_data.py::make` |  |
+| ground truth (signature) | fixed math, differentiable | `gt/raster.py::rasterise`, `gt/generate.py::generate` |  |
 | shard reader | fixed math, differentiable | `net/prep/shards.py::load_split` |  |
 | trainer on trainkit | fixed math, differentiable | `training/train.py::train` |  |
 | DiscNet three convolutions | learned network (gradient flows) | `net/model/net.py::DiscNet` |  |
 | pixel loss | fixed math, differentiable | `net/loss/loss.py::DiscLoss` |  |
 | logit above 0 is the disc | rule step (no gradient) | `evaluation/adapter.py::ToySubject.predict` |  |
-| Runner: stored predictions | fixed math, differentiable | `runner/runner.py::Runner` |  |
-| metric, pictures, card, timing | fixed math, differentiable | `evaluation/adapter.py::card`, `evaluation/score.py::main` |  |
-| metric card | delivered output |  |  |
+| core Runner: stored predictions | fixed math, differentiable |  |  |
+| metric, picture, timing (core step) | fixed math, differentiable | `evaluation/adapter.py::SegIoU`, `evaluation/adapter.py::Overview` |  |
+| result.json | delivered output |  |  |
 
 ## Arrows
 
 | from | to | carries |
 |---|---|---|
-| raw shards + manifest | truth store (signature) | annotation |
+| raw shards + manifest | ground truth (signature) | annotation |
 | shard reader | DiscNet three convolutions | pictures |
 | DiscNet three convolutions | logit above 0 is the disc | logits |
-| logit above 0 is the disc | Runner: stored predictions | mask |
+| logit above 0 is the disc | core Runner: stored predictions | mask |
 | pixel loss | DiscNet three convolutions | gradient (no data flow in training) |
 
 ## Main path from input to output
@@ -36,14 +36,14 @@ main path (bold): 8 stages = 1 learned, 6 fixed-differentiable, 0 frozen, 1 rule
 
 | stage | class | code |
 |---|---|---|
-| truth store (signature) | fixed-differentiable | `gt/raster.py::rasterise`, `gt/generate.py::generate` |
+| ground truth (signature) | fixed-differentiable | `gt/raster.py::rasterise`, `gt/generate.py::generate` |
 | shard reader | fixed-differentiable | `net/prep/shards.py::load_split` |
 | trainer on trainkit | fixed-differentiable | `training/train.py::train` |
 | pixel loss | fixed-differentiable | `net/loss/loss.py::DiscLoss` |
 | DiscNet three convolutions | learned | `net/model/net.py::DiscNet` |
 | logit above 0 is the disc | rule step | `evaluation/adapter.py::ToySubject.predict` |
-| Runner: stored predictions | fixed-differentiable | `runner/runner.py::Runner` |
-| metric, pictures, card, timing | fixed-differentiable | `evaluation/adapter.py::card`, `evaluation/score.py::main` |
+| core Runner: stored predictions | fixed-differentiable |  |
+| metric, picture, timing (core step) | fixed-differentiable | `evaluation/adapter.py::SegIoU`, `evaluation/adapter.py::Overview` |
 
 ## Where the path is not end to end, and what could stand in for it
 

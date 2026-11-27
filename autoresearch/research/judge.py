@@ -25,18 +25,25 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from research import gitio, spec
 from research.launch import load_card, load_problem
-from research.paths import ResearchError, experiment_dir, interpreter, module_path, read_json, record_dir, rel, repo, runs_root, write_json
+from research.paths import (CORE, ResearchError, child_env, experiment_dir, interpreter, module_path, read_json, record_dir, rel, repo, runs_root,
+                            write_json)
 from research.worker import ensure_code
 
 VERDICTS = ("KEEP", "CUT", "TIE", "INCONCLUSIVE", "INVALID")
+JUDGE_FILES = ("research/judge.py", "research/spec.py", "research/launch.py", "research/paths.py", "research/gitio.py", "research/worker.py")
+SNAPSHOT_FILES = ("research/compute.py", "Evaluation/stats.py")
 
 
-def judge_code() -> str:
-    """12 hex of the code that makes a verdict (this file, compute.py, the bootstrap): recorded in every verdict"""
+def judge_code() -> Dict[str, Any]:
+    """the code of a verdict, recorded in it: the files that run from the working tree while judging (the rule, the card and problem readers,
+    the snapshot's unpacking) with one hash (12 hex); compute.py and the bootstrap run from the snapshot (and so does a rule script), whose
+    commit the verdict records already"""
     import hashlib
-    here = os.path.dirname(os.path.abspath(__file__))
-    files = [os.path.join(here, "judge.py"), os.path.join(here, "compute.py"), os.path.join(os.path.dirname(here), "Evaluation", "stats.py")]
-    return hashlib.sha256(b"".join(open(p, "rb").read() for p in files)).hexdigest()[:12]
+    h = hashlib.sha256()
+    for f in JUDGE_FILES:
+        with open(os.path.join(CORE, f), "rb") as fh:
+            h.update(f.encode() + b"\0" + fh.read())
+    return {"hash": h.hexdigest()[:12], "files": [f"autoresearch/{f}" for f in JUDGE_FILES], "from_snapshot": [f"autoresearch/{f}" for f in SNAPSHOT_FILES]}
 
 
 def _arm_runs(problem: str, card: Dict[str, Any], arm: str) -> Dict[str, str]:
@@ -121,10 +128,30 @@ def guards_broken(guards: List[Dict[str, Any]], numbers: Dict[str, Dict[str, Any
     return broken
 
 
+def control_problems(scores: Dict[str, Any], floor: Optional[float], spread: Optional[float], sign: float, score: str) -> List[str]:
+    """why the control is not valid: a seed below the floor of problem.json, or seeds further apart than the card's max_seed_spread; an
+    undefined score fails both"""
+    ok = {s: v for s, v in scores.items() if isinstance(v, (int, float)) and math.isfinite(v)}
+    out = []
+    if floor is not None:
+        bad = {s: v for s, v in scores.items() if s not in ok or sign * (v - floor) < 0}
+        if bad:
+            out.append(f"the control does not reach the floor {score} {floor} (seed: score {bad})")
+    if spread is not None and len(scores) > 1:
+        if len(ok) < len(scores):
+            out.append(f"the control's seeds are not all defined ({scores}), so their spread is not known")
+        elif max(ok.values()) - min(ok.values()) > spread:
+            out.append(f"the control's seeds lie {max(ok.values()) - min(ok.values()):.4f} apart, more than {spread}")
+    return out
+
+
+def _snapshot_env(problem: str, code: str) -> Dict[str, str]:
+    """the environment of the computation and the rule script: the snapshot's code, nothing of the caller's trees"""
+    return child_env(RESEARCH_RUNS=runs_root(problem), RESEARCH_REPO=repo(), PYTHONPATH=module_path(code, problem))
+
+
 def _compute(problem: str, code: str, p: Dict[str, Any], query: Dict[str, Any]) -> Dict[str, Any]:
-    env = dict(os.environ, RESEARCH_RUNS=runs_root(problem), RESEARCH_REPO=repo(),
-               PYTHONPATH=module_path(code, problem))
-    r = subprocess.run([interpreter(p["python"]), "-m", "research.compute"], cwd=os.path.join(code, "problems", problem), env=env,
+    r = subprocess.run([interpreter(p["python"]), "-m", "research.compute"], cwd=os.path.join(code, "problems", problem), env=_snapshot_env(problem, code),
                        input=json.dumps(query).encode(), capture_output=True)
     if r.returncode != 0:
         raise ResearchError(f"the computation of the numbers failed: {r.stderr.decode('utf-8', 'replace').strip()[-1500:]}")
@@ -151,8 +178,8 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
     control = card["control"]
     c_runs, c_missing, c_killed = _results(problem, _arm_runs(problem, card, control))
     out: Dict[str, Any] = {"experiment": exp_id, "problem": problem, "tag": tag, "snapshot": commit, "control": control, "score": score, "better": better,
-                           "min_effect": e, "rule": card.get("rule", {}), "seeds": card["seeds"], "arms": {}, "by": f"research judge {judge_code()}",
-                           "date": time.strftime("%Y-%m-%d %H:%M")}
+                           "min_effect": e, "rule": card.get("rule", {}), "seeds": card["seeds"], "arms": {}, "by": "research judge",
+                           "judge_code": judge_code(), "date": time.strftime("%Y-%m-%d %H:%M")}
     incomplete = list(c_missing)
     arms = [a for a in card["arms"] if a != control]
     v_runs, v_killed = {}, {}
@@ -164,14 +191,8 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
     # the control
     floor = p.get("control_floor", {}).get(score)
     c_scores = {s: r["result"]["score"]["value"] for s, r in c_runs.items()}
-    problems = [f"a kill rule stopped the control: {', '.join(c_killed)}"] if c_killed else []
-    if floor is not None:
-        bad = {s: v for s, v in c_scores.items() if not math.isfinite(v) or sign * (v - floor) < 0}
-        if bad:
-            problems.append(f"the control does not reach the floor {score} {floor} (seed: score {bad})")
     spread = card.get("rule", {}).get("max_seed_spread")
-    if spread is not None and len(c_scores) > 1 and max(c_scores.values()) - min(c_scores.values()) > spread:
-        problems.append(f"the control's seeds lie {max(c_scores.values()) - min(c_scores.values()):.4f} apart, more than {spread}")
+    problems = ([f"a kill rule stopped the control: {', '.join(c_killed)}"] if c_killed else []) + control_problems(c_scores, floor, spread, sign, score)
     foreign = [r["run"] for runs_ in [c_runs] + list(v_runs.values()) for r in runs_.values()
                if r["run"].startswith(exp_id + ".") and (r["commit"] != commit or r["result"].get("identity", {}).get("commit") != commit)]
     if foreign:
@@ -209,7 +230,8 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
         if script:
             arm_out["standard"] = {"verdict": verdict, "reason": reason}
             res = subprocess.run([interpreter(p["python"]), os.path.join(code, rel(experiment_dir(problem, exp_id)), script)],
-                                 input=json.dumps(arm_out, default=float).encode(), capture_output=True, cwd=os.path.join(code, "problems", problem))
+                                 input=json.dumps(arm_out, default=float).encode(), capture_output=True, cwd=os.path.join(code, "problems", problem),
+                                 env=_snapshot_env(problem, code))
             try:
                 v = json.loads(res.stdout.decode())
                 if v.get("verdict") not in VERDICTS:
@@ -224,7 +246,7 @@ def judge(problem: str, exp_id: str, boot: int = 2000) -> Dict[str, Any]:
 def measure(problem: str, card: Dict[str, Any], p: Dict[str, Any], tag: str, commit: str) -> Dict[str, Any]:
     """a measurement: the numbers of every arm and seed, no comparison and no verdict"""
     out: Dict[str, Any] = {"experiment": card["id"], "problem": problem, "tag": tag, "snapshot": commit, "kind": "measure", "score": p["score"]["metric"],
-                           "arms": {}, "by": "research judge", "date": time.strftime("%Y-%m-%d %H:%M")}
+                           "arms": {}, "by": "research judge", "judge_code": judge_code(), "date": time.strftime("%Y-%m-%d %H:%M")}
     missing: List[str] = []
     for a in card["arms"]:
         got, miss, killed = _results(problem, _arm_runs(problem, card, a))

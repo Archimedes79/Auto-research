@@ -4,10 +4,12 @@ this checkout and no machine state is touched).
     python -m research.selftest [--quick]        (from autoresearch/, with the interpreter that has torch; --quick: the parts only, seconds)
 
 The chain: new -> check -> start (snapshot, tag, workers) -> runs from the snapshot -> judge (verdict, ledger, commit) -> adopt (anchor) and the
-refusals: a card changed after its start, an untrained control (INVALID), a kill rule, stop and resume, a holdout read, an evaluation by hand,
-an edit of a protected file without and with a grant."""
+refusals: a card changed after its start, an adoption whose anchor test fails (the base config put back), an untrained control (INVALID), a
+kill rule (also on a later row, in a step's own folder), stop and resume, a holdout read (also with the variables of a TEST run but no log
+row), an evaluation by hand, an edit of a protected file or the state folder without and with a grant, and clean (a list, then exactly it)."""
 from __future__ import annotations
 
+import glob
 import json
 import os
 import shutil
@@ -36,12 +38,14 @@ def expect_error(fn, text: str, *a, **k):
 
 # ------------------------------------------------------------------------------------------------ parts
 def parts(tmp: str) -> None:
-    from research import gates, judge, spec, worker
-    from research.paths import parse_run, run_id
+    from research import gates, hook, judge, spec, worker
+    from research.paths import child_env, machine_file, parse_run, run_id
     p = json.load(open(os.path.join(REPO, "problems", "toy", "problem.json"), encoding="utf-8"))
     assert spec.problem_errors(p, "toy") == []
     bad = dict(p, scroe=1)
     assert any("unknown key 'scroe'" in e for e in spec.problem_errors(bad, "toy"))
+    stage = lambda d: dict(p, steps=dict(p["steps"], stage={"run": ["{python}", "x.py"], "dir": d}))      # noqa: E731
+    assert spec.problem_errors(stage("stage1"), "toy") == [] and any("subfolder" in e for e in spec.problem_errors(stage("../x"), "toy"))
     base = json.load(open(os.path.join(REPO, "problems", "toy", "training", "configs", "base.json"), encoding="utf-8"))
     card = {"id": "E1", "title": "t", "question": "q", "hypothesis": "h", "prediction": 0.02, "control": "c", "seeds": [0, 1],
             "arms": {"c": {"set": {"width": 4}}, "a": {"set": {"widht": 8}}}}
@@ -70,15 +74,23 @@ def parts(tmp: str) -> None:
     assert judge.guards_broken([{"metric": "m.up", "max_drop": 0.01}], nums) and not judge.guards_broken([{"metric": "m.up", "max_drop": 0.05}], nums)
     assert judge.guards_broken([{"metric": "m.down", "max_drop": 1.0}], nums) and not judge.guards_broken([{"metric": "m.down", "max_drop": 2.0}], nums)
     assert judge.guards_broken([{"metric": "m.nan", "min": 0.0}], nums)
-    # kill rules on a growing log
+    # the control: an undefined seed fails the floor and the spread
+    assert judge.control_problems({"0": 0.50, "1": 0.52}, 0.3, 0.05, 1.0, "s") == []
+    assert len(judge.control_problems({"0": float("nan"), "1": 0.5}, 0.3, 0.05, 1.0, "s")) == 2
+    assert judge.control_problems({"0": 0.5, "1": 0.6}, None, 0.05, 1.0, "s") and judge.control_problems({"0": 0.2}, 0.3, None, 1.0, "s")
+    # kill rules on a growing log: every row from after_step on (a later row fires), NaN fires, rows that are no step rows are skipped
     log = os.path.join(tmp, "log.jsonl")
-    k = worker.Kill([{"metric": "total", "after_step": 20, "above": 0.5}], log)
+    k = worker.Kill([{"metric": "total", "after_step": 5, "above": 0.5}], log)
+    rows = [{"step": 2, "total": 0.9}, {"step": 10, "total": 0.1}, [1, 2], {"step": 15, "total": "n/a"}, {"step": "x", "total": 0.9}]
     with open(log, "w") as f:
-        f.write(json.dumps({"step": 10, "total": 0.9}) + "\n" + '{"step": 20, "tot')
+        f.write("".join(json.dumps(r) + "\n" for r in rows) + '{"step": 20, "tot')
     assert k.fired() == ""
     with open(log, "a") as f:
         f.write('al": 0.7}\n')
-    assert "kill rule" in k.fired()
+    assert "= 0.7 at step 20 is above 0.5" in k.fired()
+    with open(log, "w") as f:
+        f.write(json.dumps({"step": 1, "total": 0.0}) + "\n" + json.dumps({"step": 2, "total": float("nan")}) + "\n")
+    assert "not a number at step 2" in worker.Kill([{"metric": "total", "after_step": 0, "below": -1.0}], log).fired()
     # decisions and the TEST log
     root = os.path.join(tmp, "repo_g")
     os.makedirs(os.path.join(root, "problems", "x"))
@@ -92,6 +104,22 @@ def parts(tmp: str) -> None:
     assert "not named" in gates.test_refusal("x", "E1.b_s0", root)
     assert gates.is_protected("problems/x/problem.json", root) and gates.is_protected("problems/x/evaluation/adapter.py", root)
     assert gates.is_protected("champions/x/E1.a/network.json", root) and not gates.is_protected("problems/x/net/model/net.py", root)
+    os.makedirs(os.path.join(root, "problems", "y"))                  # a problem whose list does not name its TEST log
+    json.dump({k: v for k, v in p.items() if k != "protected"} | {"name": "y"}, open(os.path.join(root, "problems", "y", "problem.json"), "w"))
+    assert gates.is_protected("problems/y/TEST_LOG.md", root) and gates.is_protected("problems/x/test_log.md", root)
+    assert gates.is_protected("autoresearch/Evaluation/defaults.py", root) and not gates.is_protected("problems/x/DECISIONS.md", root)
+    if os.name != "nt":
+        assert hook.to_local("\\\\wsl.localhost\\Ubuntu\\home\\u\\.research\\state\\grants.json") == "/home/u/.research/state/grants.json"
+    # a step's environment: nothing of the caller's trees, the machine file and its own values; the rest (PATH) kept
+    saved = dict(os.environ)
+    try:
+        os.environ.update(BFLC_ROOT="/elsewhere", RESEARCH_EVAL_OUT="/elsewhere", RESEARCH_RUN="E9.z_s0", GIT_DIR="/elsewhere/.git")
+        e = child_env(RESEARCH_RUN="E1.a_s0")
+        assert not {"BFLC_ROOT", "RESEARCH_EVAL_OUT", "GIT_DIR"} & set(e) and e["RESEARCH_RUN"] == "E1.a_s0" and e["RESEARCH_MACHINE"] == machine_file()
+        assert e.get("PATH") == os.environ.get("PATH")
+    finally:
+        os.environ.clear()
+        os.environ.update(saved)
     # a card may only gain seeds after its start; nested settings merge key by key; results scored differently are not comparable
     assert spec.same_rule(card, dict(card, seeds=[0, 1, 2])) and not spec.same_rule(card, dict(card, seeds=[1, 0])) and not spec.same_rule(card, dict(card, prediction=0.1))
     assert spec.merged({"m": {"a": 1, "b": 2}, "c": 3}, {"m": {"b": 5}}) == {"m": {"a": 1, "b": 5}, "c": 3}
@@ -99,7 +127,8 @@ def parts(tmp: str) -> None:
     r = {"split": "val", "frames": 160, "evaluation": {"gt": "g1", "evaluator": "e1", "metrics": ["seg"]}}
     assert judge.incomparable([{"result": r}, {"result": r}]) == []
     assert any("ground truth" in x for x in judge.incomparable([{"result": r}, {"result": dict(r, evaluation=dict(r["evaluation"], gt="g2"))}]))
-    say("parts: schemas and typos, compose, run ids, the standard rule, kill rules, decisions, the TEST log, protected paths")
+    say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, decisions, the TEST log, protected paths, "
+        "a step's environment")
 
 
 # ------------------------------------------------------------------------------------------------ the chain
@@ -113,12 +142,32 @@ def research(args, env, ok=(0,)):
     return sh([sys.executable, "-m", "research", "--json", *args], env["RESEARCH_TMP_CORE"], env, ok)
 
 
+STAGE_PROBE = '''"""selftest: a step that writes its log into <run>/stage1 (problem.json step "dir") and stops when CONTROL appears there"""
+import json, os, sys, time
+d = os.path.join(sys.argv[1], "stage1")
+os.makedirs(d, exist_ok=True)
+with open(os.path.join(d, "log.jsonl"), "w") as f:
+    f.write("".join(json.dumps(r) + "\\n" for r in ({"step": 10, "total": 0.1}, [1, 2], {"step": 15, "total": "n/a"}, {"step": 20, "total": 0.9})))
+end = time.time() + 60
+while time.time() < end:
+    if os.path.exists(os.path.join(d, "CONTROL")):
+        sys.exit(75)
+    time.sleep(0.2)
+'''
+
+
 def make_repo(tmp: str) -> str:
     root = os.path.join(tmp, "repo")
     skip = shutil.ignore_patterns("__pycache__", "*.pyc", "temp", "eval_out", "state", "history")
     for d in ("research", "Evaluation", "trainkit", "templates"):
         shutil.copytree(os.path.join(CORE, d), os.path.join(root, "autoresearch", d), ignore=skip)
-    shutil.copytree(os.path.join(REPO, "problems", "toy"), os.path.join(root, "problems", "toy"), ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
+    toy = os.path.join(root, "problems", "toy")
+    shutil.copytree(os.path.join(REPO, "problems", "toy"), toy, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
+    prob = json.load(open(os.path.join(toy, "problem.json"), encoding="utf-8"))
+    prob["steps"]["stage"] = {"run": ["{python}", "stage_probe.py", "{run_dir}"], "dir": "stage1", "note": "selftest: a step with its own folder"}
+    json.dump(prob, open(os.path.join(toy, "problem.json"), "w", encoding="utf-8"), indent=1)
+    with open(os.path.join(toy, "stage_probe.py"), "w", encoding="utf-8") as f:
+        f.write(STAGE_PROBE)
     with open(os.path.join(root, "DECISIONS.md"), "w", encoding="utf-8") as f:
         f.write("# Decisions\n\n## Decided\n| date | decision |\n|---|---|\n| 2026-11-27 | D1: the selftest's owner says yes |\n\n## Open\n| id | question |\n|---|---|\n")
     with open(os.path.join(root, "problems", "toy", "TEST_LOG.md"), "w", encoding="utf-8") as f:
@@ -155,6 +204,17 @@ def wait(root: str, folder: str, rids, states=("ok", "failed", "killed", "stoppe
     raise AssertionError(f"runs did not end in {seconds} s: {got}")
 
 
+def run_trace(tmp: str, root: str, folder: str, rid: str) -> str:
+    """what a failed run left: its record and the tails of its logs (for an assertion message)"""
+    out = []
+    for path in [os.path.join(root, folder, "runs", rid, "run.json")] + sorted(glob.glob(os.path.join(tmp, "runs", "toy", rid, "*.log"))):
+        try:
+            out.append(f"--- {os.path.basename(path)}\n" + open(path, encoding="utf-8", errors="replace").read()[-1500:])
+        except OSError as e:
+            out.append(f"--- {path}: {e}")
+    return "\n".join(out)
+
+
 def chain(tmp: str) -> None:
     root = make_repo(tmp)
     machine = os.path.join(tmp, "machine", "machine.json")
@@ -174,6 +234,12 @@ def chain(tmp: str) -> None:
             "rule": {"boot": 300}, "kill": [{"metric": "total", "after_step": 10, "above": 100.0}]}
     write_card(root, e1, card)
     assert json.loads(research(["check", "toy", "E1"], env).stdout)["errors"] == []
+    with open(os.path.join(root, "notes.md"), "w", encoding="utf-8") as f:          # commit: a path named from the top, run from autoresearch/
+        f.write("a note\n")
+    assert json.loads(research(["commit", "notes.md", "-m", "a note"], env).stdout)["commit"] != "nothing changed"
+    assert subprocess.run(["git", "log", "-1", "--format=%s"], cwd=root, capture_output=True, text=True).stdout.strip() == "a note"
+    typo = research(["commit", "no/such.md", "-m", "a typo"], env, ok=(1,))
+    assert "no such path" in typo.stdout + typo.stderr, typo
     net_py = os.path.join(root, "problems", "toy", "net", "model", "net.py")
     keep = open(net_py, encoding="utf-8").read()
     open(net_py, "a", encoding="utf-8").write("# a half-done edit of another chat\n")
@@ -185,7 +251,7 @@ def chain(tmp: str) -> None:
     snap = subprocess.run(["git", "rev-parse", "toy/E1^{commit}"], cwd=root, capture_output=True, text=True).stdout.strip()
     assert snap and subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() != snap
     st = wait(root, e1, started["started"])
-    assert set(st.values()) == {"ok"}, (st, open(os.path.join(tmp, "runs", "toy", "E1.c_s0", "train.log")).read()[-1500:])
+    assert set(st.values()) == {"ok"}, (st, run_trace(tmp, root, e1, "E1.c_s0"))
     res = json.load(open(os.path.join(root, e1, "runs", "E1.a_s0", "result.json")))
     assert res["identity"]["commit"] == snap and res["split"] == "val" and res["frames"] == 160 and "seg.iou" in res["numbers"], res
     say(f"start: one snapshot {started['tag']}, four runs from it, results (E1.a_s0 IoU {res['score']['value']:.3f})")
@@ -205,31 +271,48 @@ def chain(tmp: str) -> None:
     assert "verdict" in log and "problems/toy/ledger.csv" in log and "verdict.json" in log, log
     assert json.loads(research(["index", "toy", "--check"], env).stdout)["current"]
     say(f"judge: {arm['verdict']} (gain {arm['gain']:+.3f} [{arm['interval'][0]:+.3f}, {arm['interval'][1]:+.3f}]), verdict.json, ledger, one commit")
-    # adopt (by hand when it was no KEEP): the anchor evaluates again with the working tree's code and must agree bit for bit
+    # adopt (by hand when it was no KEEP): the anchor evaluates again with the working tree's code and must agree bit for bit; an anchor test
+    # that dies (here: a record is missing) puts the base config back
     by_hand = [] if arm["verdict"] == "KEEP" else ["--by-hand", "the selftest adopts whatever won"]
+    base_json = os.path.join(root, "problems", "toy", "training", "configs", "base.json")
+    before = open(base_json, encoding="utf-8").read()
+    rec_a0 = os.path.join(root, e1, "runs", "E1.a_s0", "result.json")
+    os.replace(rec_a0, rec_a0 + ".away")
+    died = research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env, ok=(1,))
+    os.replace(rec_a0 + ".away", rec_a0)
+    assert "anchor test of E1.a_s0 did not run" in died.stderr and open(base_json, encoding="utf-8").read() == before, died.stderr[-2000:]
     ad = json.loads(research(["adopt", "toy", "E1", "a", "--decision", "D1", *by_hand], env).stdout)
     champ = json.load(open(os.path.join(root, "champions", "toy", "champions.json")))
     assert ad["champion"] == "E1.a" and champ["champion"] == "E1.a" and ad["commit"]
     assert json.load(open(os.path.join(root, "problems", "toy", "training", "configs", "base.json")))["width"] == 12
     expect = research(["adopt", "toy", "E1", "a", "--decision", "D2"], env, ok=(1,)).stderr
     assert "not a decided decision" in expect
-    say("adopt: anchor test passed, champions/toy/ written, the arm's settings in the base config, one commit; an undecided decision is refused")
+    say("adopt: a failed anchor test leaves the base config; anchor test passed, champions/toy/ written, the arm's settings in the base config, "
+        "one commit; an undecided decision is refused")
     # E2: an untrained control -> INVALID
     e2 = json.loads(research(["new", "toy", "broken_control", "a control that did not train"], env).stdout)["folder"]
     write_card(root, e2, {"id": "E2", "title": "broken control", "question": "q", "hypothesis": "h", "prediction": 0.1, "control": "c", "seeds": [0],
                           "arms": {"c": {"set": {**quick, "steps": 1, "lr": 1e-9, "warmup": 1, "save_every": 1, "eval_every": 1}}, "a": {"set": quick}}, "rule": {"boot": 200}})
     wait(root, e2, json.loads(research(["start", "toy", "E2"], env).stdout)["started"])
-    v2 = json.loads(research(["judge", "toy", "E2", "--boot", "200"], env).stdout)
+    v2 = json.loads(research(["judge", "toy", "E2", "--write", "--boot", "200"], env).stdout)
     assert v2["arms"]["a"]["verdict"] == "INVALID" and "floor" in v2["arms"]["a"]["reason"], v2
+    assert v2["judge_code"]["files"] and "autoresearch/research/compute.py" in v2["judge_code"]["from_snapshot"], v2["judge_code"]
     say("an untrained control makes the verdict INVALID, not KEEP")
-    # E3: a kill rule fires; E4: stop and resume
-    e3 = json.loads(research(["new", "toy", "kill", "kill rule"], env).stdout)["folder"]
+    # E3: a kill rule fires; E5 (next to it): a kill rule on a later row of a step that writes into its own folder (problem.json "dir"), the
+    # stop through CONTROL there (exit 75); E4: stop and resume
+    e3, e4, e5 = (json.loads(research(["new", "toy", slug, title], env).stdout)["folder"]
+                  for slug, title in (("kill", "kill rule"), ("long", "stop and resume"), ("stage", "a step with its own folder")))
     write_card(root, e3, {"id": "E3", "title": "kill", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0],
                           "arms": {"k": {"set": {**quick, "steps": 3000, "log_every": 1, "save_every": 500}}}, "kill": [{"metric": "total", "after_step": 5, "above": 0.0}]})
+    write_card(root, e5, {"id": "E5", "title": "stage", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0], "arms": {"s": {}},
+                          "steps": ["stage"], "kill": [{"metric": "total", "after_step": 5, "above": 0.5}]})
+    research(["start", "toy", "E5"], env)
     st3 = wait(root, e3, json.loads(research(["start", "toy", "E3"], env).stdout)["started"])
     assert st3 == {"E3.k_s0": "killed"}, st3
-    say("a kill rule stops the training and marks the run killed")
-    e4 = json.loads(research(["new", "toy", "long", "stop and resume"], env).stdout)["folder"]
+    assert wait(root, e5, ["E5.s_s0"], seconds=120) == {"E5.s_s0": "killed"}, run_trace(tmp, root, e5, "E5.s_s0")
+    s5 = json.load(open(os.path.join(root, e5, "runs", "E5.s_s0", "run.json")))["steps"]["stage"]
+    assert s5["exit"] == 75 and "at step 20" in s5["why"], s5
+    say("a kill rule stops the training and marks the run killed; also on a later row, in a step's own folder (log.jsonl and CONTROL there)")
     write_card(root, e4, {"id": "E4", "title": "long", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0],
                           "arms": {"m": {"set": {**quick, "steps": 4000, "log_every": 1, "save_every": 500, "eval_every": 4000}}}})
     research(["start", "toy", "E4"], env)
@@ -252,10 +335,18 @@ def chain(tmp: str) -> None:
     probe = ("import os,sys; from Evaluation import Evaluation\n"
              "try:\n    Evaluation(project=os.getcwd()).run(sys.argv[1], 'test', metrics=('seg',), device='cpu')\n"
              "except Exception as e:\n    print('REFUSED', e); sys.exit(0)\nsys.exit(1)\n")
-    r = sh([sys.executable, "-c", probe, os.path.join(tmp, "runs", "toy", "E1.a_s0")], os.path.join(code, "problems", "toy"),
-           dict(env, PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", "toy"), os.path.join(code, "autoresearch")]), RESEARCH_RUNS=os.path.join(tmp, "runs", "toy")))
-    assert "holdout" in r.stdout, r.stdout
-    say("refused: an evaluation step by hand, TEST without a log row, a holdout read outside a TEST run")
+    penv = dict(env, PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", "toy"), os.path.join(code, "autoresearch")]), RESEARCH_RUNS=os.path.join(tmp, "runs", "toy"))
+    read_test = lambda e: sh([sys.executable, "-c", probe, os.path.join(tmp, "runs", "toy", "E1.a_s0")], os.path.join(code, "problems", "toy"), e).stdout  # noqa: E731
+    assert "is a holdout split" in read_test(penv)
+    as_test = dict(penv, RESEARCH_REPO=root, RESEARCH_PROBLEM="toy", RESEARCH_RUN="E1.a_s0", RESEARCH_HOLDOUT_RUN="E1.a_s0")      # set by hand
+    assert "is a holdout split" in read_test(as_test), "the variables of a TEST run without a row of the TEST log"
+    test_log = os.path.join(root, "problems", "toy", "TEST_LOG.md")
+    keep_log = open(test_log, encoding="utf-8").read()
+    open(test_log, "a", encoding="utf-8").write("| 2026-11-27 | E1.a_s0 | D1 | selftest |\n")
+    opened = read_test(as_test)
+    open(test_log, "w", encoding="utf-8").write(keep_log)
+    assert "REFUSED" in opened and "is a holdout split" not in opened, opened         # the gate opens; the toy has no test shard to read
+    say("refused: an evaluation step by hand, TEST without a log row, a holdout read outside a TEST run or without a row of the TEST log")
     # the hook: a protected file without and with a grant
     hook = os.path.join(core, "research", "hook.py")
     ev = {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(root, "problems", "toy", "problem.json")}, "cwd": root}
@@ -265,12 +356,54 @@ def chain(tmp: str) -> None:
     assert subprocess.run([sys.executable, hook], input=json.dumps(ok), capture_output=True, text=True, env=env).returncode == 0
     mcp = {"tool_name": "mcp__files__write_file", "tool_input": {"path": os.path.join(root, "problems", "toy", "TEST_LOG.md")}, "cwd": root}
     assert subprocess.run([sys.executable, hook], input=json.dumps(mcp), capture_output=True, text=True, env=env).returncode == 2, "an MCP file tool is guarded too"
+    bare = os.path.join(root, "problems", "bare")                   # a problem whose problem.json lists nothing as protected
+    os.makedirs(bare)
+    toy_p = json.load(open(os.path.join(root, "problems", "toy", "problem.json"), encoding="utf-8"))
+    json.dump({k: v for k, v in toy_p.items() if k != "protected"} | {"name": "bare"}, open(os.path.join(bare, "problem.json"), "w"))
+    for path, why in ((os.path.join(os.path.dirname(machine), "state", "grants.json"), "state folder"),
+                      (os.path.join(root, "problems", "toy", "test_log.md"), "is protected"), (os.path.join(bare, "TEST_LOG.md"), "is protected")):
+        r = subprocess.run([sys.executable, hook], input=json.dumps(dict(ev, tool_input={"file_path": path})), capture_output=True, text=True, env=env)
+        assert r.returncode == 2 and why in r.stderr, (path, r.returncode, r.stderr)
     research(["grant", "problems/toy/problem.json", "--decision", "D1", "--hours", "1", "--note", "selftest"], env)
     assert subprocess.run([sys.executable, hook], input=json.dumps(ev), capture_output=True, text=True, env=env).returncode == 0
     assert "not a decided" in research(["grant", "problems/toy/TEST_LOG.md", "--decision", "D9", "--note", "x"], env, ok=(1,)).stderr
-    say("hook: a protected file is refused, allowed under a grant of a decided decision; an undecided grant is refused")
+    say("hook: a protected file is refused (any case, a TEST log its problem does not list, the state folder), allowed under a grant of a "
+        "decided decision; an undecided grant is refused")
+    open(os.path.join(root, e1, "runs", "README.md"), "w").write("not a run\n")
     st = research(["status", "toy"], env).stdout
     assert "E1.a_s0" in st and "E4.m_s0" in st
+    tr = json.loads(research(["tests", "toy"], env).stdout)
+    assert tr["passed"] and [t["test"] for t in tr["tests"]] == ["tests/test_toy.py --quick"], tr
+    say("tests: the problem's own tests with its interpreter and module path")
+    # clean: E2 is judged (INVALID): its runs go on the list; E3 has a KEEP arm, E4's step lives, E5 has no verdict, E1.a is the champion:
+    # they stay; E1's control goes too unless E1 has a KEEP or INCONCLUSIVE arm
+    runs = os.path.join(tmp, "runs", "toy")
+    json.dump({"experiment": "E3", "arms": {"k": {"verdict": "KEEP"}}}, open(os.path.join(root, e3, "verdict.json"), "w"))
+    json.dump({"experiment": "E4", "arms": {"m": {"verdict": "MEASURED"}}}, open(os.path.join(root, e4, "verdict.json"), "w"))
+    alive = subprocess.Popen(["sleep", "300"], start_new_session=True)
+    try:
+        open(os.path.join(runs, "E4.m_s0", "step.pid"), "w").write(str(alive.pid))
+        listed = json.loads(research(["clean", "toy"], env).stdout)
+        expect = {"E2.a_s0", "E2.c_s0"} | (set() if arm["verdict"] in ("KEEP", "INCONCLUSIVE") else {"E1.c_s0", "E1.c_s1"})
+        assert {i["run"] for i in listed["runs"]} == expect and os.path.isfile(listed["list"]), listed
+        assert "step still runs" in listed["kept"]["E4.m_s0"] and "KEEP" in listed["kept"]["E3.k_s0"] and "champion" in listed["kept"]["E1.a_s0"], listed["kept"]
+    finally:
+        alive.kill()
+        alive.wait()
+    # after the listing: a new card builds on E2.c (it must stay), E4's step ended (deletable now, but not on the list)
+    e6 = json.loads(research(["new", "toy", "reuse", "builds on E2.c"], env).stdout)["folder"]
+    write_card(root, e6, {"id": "E6", "title": "reuse", "question": "q", "hypothesis": "h", "kind": "measure", "seeds": [0], "arms": {"r": {"from": "E2.c"}}})
+    assert "needs a decided decision" in research(["clean", "toy", "--delete", listed["list"], "--decision", "D9"], env, ok=(1,)).stderr
+    champs = os.path.join(root, "champions", "toy", "champions.json")
+    keep_champs = open(champs, encoding="utf-8").read()
+    open(champs, "w").write("{")
+    assert "cannot be read" in research(["clean", "toy", "--delete", listed["list"], "--decision", "D1"], env, ok=(1,)).stderr
+    open(champs, "w", encoding="utf-8").write(keep_champs)
+    done = json.loads(research(["clean", "toy", "--delete", listed["list"], "--decision", "D1"], env).stdout)
+    assert set(done["deleted"]) == expect - {"E2.c_s0"} and list(done["kept"]) == ["E2.c_s0"] and "E006" in done["kept"]["E2.c_s0"], done
+    assert not os.path.exists(os.path.join(runs, "E2.a_s0")) and os.path.isdir(os.path.join(runs, "E2.c_s0")) and os.path.isdir(os.path.join(runs, "E4.m_s0"))
+    say("clean: a list (a live step, a KEEP experiment, the champion kept), then exactly that list under a decided decision, each run checked "
+        "again; an unreadable champions.json refuses")
 
 
 def main(argv) -> int:
@@ -279,6 +412,10 @@ def main(argv) -> int:
     try:
         parts(tmp)
         if "--quick" not in argv:
+            try:                                             # the chain trains the toy with this interpreter (the machine file names it)
+                import numpy, torch  # noqa: F401,E401
+            except ImportError as e:
+                raise SystemExit(f"the chain needs numpy and torch ({e}): run it with the problems' python, e.g. ~/miniconda3/envs/gcar/bin/python -m research.selftest")
             chain(tmp)
     finally:
         if "--keep" not in argv:

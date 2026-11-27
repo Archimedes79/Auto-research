@@ -16,11 +16,14 @@ PROBLEM_KEYS = {
     "name": (str, True), "tag_prefix": (str, True), "python": (str, True), "config": (str, True),
     "steps": (dict, True), "default_steps": (list, True), "score": (dict, True), "evaluate": (dict, True),
     "guards": (list, False), "control_floor": (dict, False), "holdout": (list, False), "protected": (list, False),
-    "data": (str, False), "first_experiment": (int, False), "test_steps": (list, False), "pythonpath": (list, False), "note": (str, False),
+    "data": (str, False), "first_experiment": (int, False), "test_steps": (list, False), "pythonpath": (list, False), "tests": (list, False),
+    "note": (str, False),
 }
 # test_steps: the steps a TEST evaluation of a finished run runs (default ["evaluate"]; a problem that predicts in a step of its own names it too)
+# tests: the problem's own tests, "script.py [args]" relative to its folder (`research tests`: each with the problem's interpreter and module path)
 CONFIG_KEYS = ("name", "seed", "out_root")                 # every base config has them: the run's name, its seed and where it writes
-STEP_KEYS = {"run": ((list, str), True), "gpus": (int, False), "note": (str, False)}
+STEP_KEYS = {"run": ((list, str), True), "gpus": (int, False), "dir": (str, False), "note": (str, False)}
+# dir: the step's own folder inside the run folder, where it writes log.jsonl (the kill rules) and reads CONTROL (default "": the run folder)
 SCORE_KEYS = {"metric": (str, True), "better": (str, True), "band": ((int, float), True)}
 EVALUATE_KEYS = {"split": (str, True), "metrics": (list, True), "device": (str, False), "frames": (str, False), "anchor_tolerance": ((int, float), False)}
 # frames: which frames of the split are scored (an Evaluation frame spec such as "spread:1000:val"; default: the whole split);
@@ -66,6 +69,9 @@ def problem_errors(p: Dict[str, Any], folder_name: str = "") -> List[str]:
         errs += _check(step, STEP_KEYS, f"problem.json steps.{name}")
         if isinstance(step, dict) and isinstance(step.get("run"), str) and step["run"] not in CORE_STEPS:
             errs.append(f"problem.json steps.{name}: 'run' is a list of words, or one of {sorted(CORE_STEPS)}")
+        d = step.get("dir") if isinstance(step, dict) else None
+        if isinstance(d, str) and (d.startswith(("/", "\\")) or ":" in d or ".." in d.replace("\\", "/").split("/")):
+            errs.append(f"problem.json steps.{name}.dir: a subfolder of the run folder, got {d!r}")
     for name in p["default_steps"]:
         if name not in p["steps"]:
             errs.append(f"problem.json default_steps: no step {name!r}")
@@ -79,6 +85,9 @@ def problem_errors(p: Dict[str, Any], folder_name: str = "") -> List[str]:
             errs.append(f"problem.json guards[{i}]: exactly one of min, max, max_drop")
     if p["evaluate"].get("split") in p.get("holdout", []):
         errs.append("problem.json: the evaluation split is a holdout split")
+    for t in p.get("tests", []):
+        if not isinstance(t, str) or not t.split(" ")[0].endswith(".py") or t.startswith(("/", "..")):
+            errs.append(f"problem.json tests: a script relative to the problem folder and its arguments, got {t!r}")
     return errs
 
 

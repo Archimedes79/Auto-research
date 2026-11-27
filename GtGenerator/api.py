@@ -8,7 +8,7 @@ every command is one method, `python -m GtGenerator generate-bev ROOT` is `GtGen
     GtGenerator.generate(root, set_name="small")                                       # everything (front, both lane GTs, masks)                      -> dict, with the keys
     GtGenerator.have(set_name="full")  /  GtGenerator.check_data(root)  /  GtGenerator.audit_lane("bev_fusion")  /  GtGenerator.sets()  /  GtGenerator.versions()   -> dict {ok, text, ...}
 
-The rules (the convention of the suites, autoresearch/README.md "The interface of the suites"): plain data in and out (paths, names, numbers, lists; a dict back, a `GtKey` for the keys); a method
+The rules: plain data in and out (paths, names, numbers, lists; a dict back, a `GtKey` for the keys); a method
 that has nothing to say about progress does not print; a wrong argument raises ValueError with the message; a dict may hold `text` (what the command line prints) and `ok` (False: the thing
 asked about is not there / not complete: exit code 1). Long runs print their progress when `verbose` (default True). The work itself is in the modules below this file (pipeline, gt_api,
 store_audit, lane_raster, sets, checks, report, view, video, clean ...): these methods only shape the arguments and the result, so a module can be used without the class too.
@@ -76,7 +76,7 @@ def _sets_text():
 
 # parts of the suite that `selftest(only=...)` can run alone: name -> module
 SELFTESTS = {"cli": "cli_selftest", "gt_api": "gt_api_selftest", "generator": "generator_selftest", "lane_graph": "lane_graph_selftest", "lane_tiers": "lane_tiers_selftest",
-             "clean": "clean", "rig_masks": "rig_masks", "lane_toy": "lane_tiers", "jobs": "jobs_selftest", "flow": "flow_selftest"}
+             "clean": "clean", "rig_masks": "rig_masks", "lane_toy": "lane_tiers", "flow": "flow_selftest"}
 
 
 class Interface:
@@ -184,7 +184,7 @@ class Interface:
 
     @staticmethod
     def area_mask(token, kind="intersection", border_m=0.0, png=None, out=None):
-        """one area mask of a keyframe of the BEV Fusion lane store below the store root `out` (default data/autogt): its number of cells, optionally drawn to `png` (lane_raster.area_mask) -> {cells, shape, text, png}"""
+        """one area mask of a keyframe of the BEV Fusion lane store below the store root `out` (default where.root()): its number of cells, optionally drawn to `png` (lane_raster.area_mask) -> {cells, shape, text, png}"""
         import numpy as np
         from . import lane_gt, lane_raster
         if not 0.0 <= border_m < 100.0:                                  # also refuses nan

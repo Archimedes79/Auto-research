@@ -11,7 +11,7 @@
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"
 f="$1"
-dest="${NUSC_DEST:?set NUSC_DEST to the target root on D: (see data/NuScenes/README.md)}"
+dest="${NUSC_DEST:?set NUSC_DEST to the target root on D: (see datasets/nuscenes/README.md)}"
 members="${NUSC_MEMBERS:-}"
 mkdir -p "$dest"
 echo "$(date +%T) path check $(basename "$f")"

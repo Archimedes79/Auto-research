@@ -11,7 +11,7 @@ trainval). Everything else is the unchanged devkit, so `get`, the reverse indice
 and the map API work as usual; the `prev` / `next` chains of the kept channels stay intact because a chain never leaves its sensor.
 
 CACHE. The scan of the three big tables takes 31 - 35 s for a group of 60 sequences of trainval (sample_data 17 s, ego_pose 7 s, sample_annotation 6 s) and is repeated for
-every group. `ensure_cache(dataroot, version)` reads them ONCE and writes the kept records per sequence (data/autogt/cache/light_<version>/<scene token>.pkl.gz, about
+every group. `ensure_cache(dataroot, version)` reads them ONCE and writes the kept records per sequence (<store root>/cache/light_<version>/<scene token>.pkl.gz, about
 the size of the records of CAM_FRONT and the radars); `light_nuscenes` takes a group from there (a second or two) when the cache is valid, i.e. built from tables of the same size
 and modification time, and scans as before otherwise (other cameras for pictures, `scenes=None`, no cache). The cache is derived data and rebuilt by `ensure_cache`.
 """

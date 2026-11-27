@@ -4,12 +4,12 @@
 
 Without --move / --delete it only lists what it would remove and the size (dry run). --move puts the items into
 _to_delete/autogt_cleanup_<date>/ (the project rule: nothing is deleted without a trace). --delete removes only what one command rebuilds
-(videos, pictures, reports); stored GT (caches) and the old outputs are only moved: a store is deleted by autoresearch/tools/package.py, which
-writes the package of the runs that used it first (D40, hard rule 5).
-- videos / pictures: *.mp4 / *.gif and *.png in data/autogt/examples (they are reproducible: `python -m GtGenerator video / view / sheets`)
-- reports: autogt_report_*.pdf in data/autogt/reports (what `python -m GtGenerator report` writes by default; the report is self-contained,
+(videos, pictures, reports); stored GT (caches) and the old outputs are only moved: a store is deleted only after the catalog lists it and the
+owner confirmed the list (autoresearch/METHOD.md, hard rule 5; D154).
+- videos / pictures: *.mp4 / *.gif and *.png in <store root>/examples (they are reproducible: `python -m GtGenerator video / view / sheets`)
+- reports: autogt_report_*.pdf in <store root>/reports (what `python -m GtGenerator report` writes by default; the report is self-contained,
   its sample pictures are drawn straight into the PDF and never exist as files; other PDFs there are not touched)
-(everything GtGenerator generates lives under data/autogt/, outside the code package GtGenerator/ and outside git)
+(everything GtGenerator generates lives under the store root, where.py: <data root>/groundtruth, outside the code package GtGenerator/ and outside git)
 - old-outputs: _to_delete/autogt_old_outputs (pictures and videos made before the suite existed)
 - stale-caches DIR: the cache folders `DIR/<signature>` of `python -m GtGenerator generate` / `build` / `report` whose signature is not a
   current one (the default options or `--boxes-at annotation`; every edit of the generator changes the signature); all-caches DIR: every
@@ -17,9 +17,10 @@ writes the package of the runs that used it first (D40, hard rule 5).
   signature, when it has one, is the folder name). A released store is left alone, because an experiment on that version needs it (a rebuild takes
   hours): one whose signature is in versions.csv (D29) or lane_versions.csv, or whose index.json says `release: true` (the lane stores of v11 / v12
   have no row of their own for the store folder). `--include-released` lists them too, and then `--delete` is refused, they can only be moved.
-  A folder that is a link (data/autogt/<store> -> D:) is never listed
+  A folder that is a link (<store root>/<store> -> another disk) is never listed
 Never touches code, the current cache, or anything outside these categories.
 """
+import contextlib
 import datetime
 import json
 import os
@@ -74,17 +75,20 @@ def _size(p):
 
 
 def collect(videos=False, pictures=False, reports=False, old_outputs=False, stale_caches=None, all_caches=None, older_than=None,
-            base=BASE, current_signature=None, include_released=False):
-    """list of (path, bytes, category) the cleanup would remove; category "released-cache" only with include_released."""
+            base=BASE, current_signature=None, include_released=False, store_root=None):
+    """list of (path, bytes, category) the cleanup would remove; category "released-cache" only with include_released. `store_root`: where the
+    examples and reports are (default where.root()); `base`: the folder of _to_delete/"""
+    from . import where
+    store_root = store_root or where.root()
     released = _protected()
     items = []
-    ex = os.path.join(base, "data", "autogt", "examples")
+    ex = os.path.join(store_root, "examples")
     if os.path.isdir(ex):
         for f in sorted(os.listdir(ex)):
             low = f.lower()
             if (videos and low.endswith((".mp4", ".gif"))) or (pictures and low.endswith(".png")):
                 items.append((os.path.join(ex, f), "videos" if videos and low.endswith((".mp4", ".gif")) else "pictures"))
-    rep = os.path.join(base, "data", "autogt", "reports")
+    rep = os.path.join(store_root, "reports")
     if reports and os.path.isdir(rep):
         items += [(os.path.join(rep, f), "reports") for f in sorted(os.listdir(rep))
                   if f.startswith("autogt_report_") and f.lower().endswith(".pdf")]
@@ -131,7 +135,7 @@ def clean(delete=False, move=False, base=BASE, verbose=True, **kw):
     if delete and any(c == "released-cache" for _, _, c in items):
         raise ValueError("a released GT store (versions.csv, lane_versions.csv, index.json release) is never deleted, a rebuild takes hours: use --move")
     if delete and any(c in ("cache", "stale-cache", "old-outputs") for _, _, c in items):
-        raise ValueError("stored GT and old outputs are only moved (--move): a store is deleted by autoresearch/tools/package.py gt (it writes the package of the runs first, D40); "
+        raise ValueError("stored GT and old outputs are only moved (--move): a store is deleted only after the catalog lists it and the owner confirmed the list (hard rule 5, D154); "
                          "--delete is for videos, pictures and reports")
     if move:
         dest = os.path.join(base, "_to_delete", f"autogt_cleanup_{datetime.date.today().isoformat()}")
@@ -151,16 +155,30 @@ def clean(delete=False, move=False, base=BASE, verbose=True, **kw):
     return items
 
 
+@contextlib.contextmanager
+def _data_root(path):
+    """RESEARCH_DATA set to `path` for the duration (where.root() is then <path>/groundtruth), restored afterwards"""
+    was = os.environ.get("RESEARCH_DATA")
+    os.environ["RESEARCH_DATA"] = path
+    try:
+        yield
+    finally:
+        if was is None:
+            os.environ.pop("RESEARCH_DATA", None)
+        else:
+            os.environ["RESEARCH_DATA"] = was
+
+
 def selftest():
     import tempfile
-    with tempfile.TemporaryDirectory() as b:
-        ex = os.path.join(b, "data", "autogt", "examples")
+    with tempfile.TemporaryDirectory() as b, _data_root(b):                                # examples and reports are read below where.root()
+        ex = os.path.join(b, "groundtruth", "examples")
         os.makedirs(ex)
         os.makedirs(os.path.join(b, "_to_delete", "autogt_old_outputs"))
         for f in ("a.mp4", "b.png", "make_videos.sh"):
             open(os.path.join(ex, f), "wb").write(b"x" * 100)
-        os.makedirs(os.path.join(b, "data", "autogt", "reports"))
-        rep = os.path.join(b, "data", "autogt", "reports")
+        rep = os.path.join(b, "groundtruth", "reports")
+        os.makedirs(rep)
         for f, n in (("autogt_report_v1.0-mini_2026-11-01.pdf", 100), ("autogt_quality_overview.pdf", 100), ("notes.txt", 1)):
             open(os.path.join(rep, f), "wb").write(b"x" * n)
         cache = os.path.join(b, "cache")

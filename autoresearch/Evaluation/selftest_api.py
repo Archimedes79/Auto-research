@@ -134,14 +134,14 @@ RUNNER = {"cls": None}
 
 
 def runner_class():
-    """THE Runner class (there is one: the project's, named in its evaluation.json): handed in by the caller (the BEV gate, `Evaluation.selftest`), else the class AR_PROJECT names. Evaluation has no
-    Runner of its own, so this selftest runs the Evaluation together with the real one on the toy adapter"""
+    """THE Runner class: handed in by the caller (the BEV gate, `Evaluation.selftest`), else the class AR_PROJECT names in its evaluation.json (none named: the default of
+    netrunner.py), so this selftest runs the Evaluation together with a real Runner on the toy adapter"""
     if RUNNER["cls"] is None:
         try:
             RUNNER["cls"] = type(load_runner(os.environ.get("AR_PROJECT"), ME))
         except EvaluationError as e:
-            raise EvaluationError(f"this selftest runs the Evaluation together with the project's Runner (Evaluation has none): set AR_PROJECT to a project that names one (AR_PROJECT=../bev_fusion), "
-                                  f"or call run_all(runner_cls); {e}") from None
+            raise EvaluationError(f"this selftest runs the Evaluation together with the project's Runner: the Runner AR_PROJECT names cannot be built; "
+                                  f"call run_all(runner_cls) or fix its evaluation.json; {e}") from None
     return RUNNER["cls"]
 
 
@@ -290,7 +290,7 @@ def check_results():
         f.write(b"x")
     listed = ResultSet.open(os.path.join(tmp, rid))
     assert {r.label for r in listed.refs()} == {r.label for r in refs} | {"demo-9/000"} and listed.n_frames() == 4, "notes.npz is not a frame"
-    # package.py clean removes the emptied frames / taps folders and keeps the manifest: the set takes frames again
+    # a clean-up that removes the frames / taps folders and keeps the manifest: the set takes frames again
     shutil.rmtree(os.path.join(tmp, rid, "frames"))
     shutil.rmtree(os.path.join(tmp, rid, "taps"))
     empty = ResultSet.open(os.path.join(tmp, rid), "a")
@@ -532,7 +532,7 @@ def check_reading(ev, net, allr, low):
     pic = ev.draw_frame(allr["id"], "demo-1/4")
     assert os.path.isfile(pic["images"]["overview"]) and "iou.iou" in pic["scores"]
     gone = os.path.join(out(net), "results", allr["results"].partition("@")[2], "manifest.json")
-    os.rename(gone, gone + ".away")                                                     # the predictions are gone (package.py clean keeps the manifest, a person may not): a card or a picture cannot be certified
+    os.rename(gone, gone + ".away")                                                     # the predictions are gone (a clean-up keeps the manifest, a person may not): a card or a picture cannot be certified
     try:
         _raises(EvaluationError, "are gone", ev.make_card, allr["id"])
         _raises(EvaluationError, "are gone", ev.draw_frame, allr["id"], "demo-1/4")

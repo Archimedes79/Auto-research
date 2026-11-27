@@ -358,7 +358,7 @@ def main():
             raise AssertionError("a NaN forward must not leave NaN batch-norm statistics unnoticed")
         except RuntimeError as e:
             check("batch-norm" in str(e) and not torch.isfinite(bn_model.bn.running_mean).all(), "fit: a non-finite loss that poisoned the batch-norm statistics ends the run (fp32 too), it does not skip on")
-    # CUDA asked for and not there: an error with the text run.py retries, never a silent CPU run
+    # CUDA asked for and not there: an error with the CUDA text of a failed initialisation, never a silent CPU run
     from trainkit.util import resolve_device
     real_available = torch.cuda.is_available
     try:
@@ -367,7 +367,7 @@ def main():
             resolve_device("cuda")
             raise AssertionError("cuda without CUDA must raise")
         except RuntimeError as e:
-            check("CUDA error: unknown error" in str(e) and resolve_device("cpu") == "cpu", "resolve_device: cuda without CUDA raises (with the retry text of run.py), cpu stays cpu")
+            check("CUDA error: unknown error" in str(e) and resolve_device("cpu") == "cpu", "resolve_device: cuda without CUDA raises (with the CUDA error text), cpu stays cpu")
         torch.cuda.is_available = lambda: True
         check(resolve_device("cuda") == "cuda", "resolve_device: cuda with CUDA is cuda")
     finally:

@@ -29,7 +29,7 @@ def code_signature(**options):
 
 
 def current_signature(**options):
-    """the folder name of the stored GT that THIS source makes and reads (data/autogt/<this>/): its own signature, or that of the older
+    """the folder name of the stored GT that THIS source makes and reads (<store root>/<this>/, where.py): its own signature, or that of the older
     version whose GT it makes byte for byte (`same_gt_as` in versions.csv)"""
     from .versions import canonical
     return canonical(code_signature(**options))

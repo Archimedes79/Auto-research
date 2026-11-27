@@ -12,17 +12,17 @@ from typing import Any, Dict, List
 
 from research import adopt as adopt_mod
 from research import gates, index, judge, launch, worker
-from research.paths import (ResearchError, experiment_dir, machine, machine_file, parse_run, problem_dir, read_json, record_dir, rel, run_dir,
-                            write_json)
+from research.paths import (RUN_ID, ResearchError, experiment_dir, machine, machine_file, parse_run, problem_dir, read_json, record_dir, rel,
+                            run_dir, write_json)
 
 
 def _runs(problem: str, target: str) -> List[str]:
-    """the run ids a target names: one run, or every run of an experiment"""
+    """the run ids a target names: one run, or every run of an experiment (other entries of its runs/ folder are no runs)"""
     if "." in target:
         parse_run(target)
         return [target]
     folder = os.path.join(experiment_dir(problem, target), "runs")
-    return sorted(os.listdir(folder)) if os.path.isdir(folder) else []
+    return sorted(d for d in os.listdir(folder) if RUN_ID.match(d)) if os.path.isdir(folder) else []
 
 
 def status(problem: str, target: str = "") -> List[Dict[str, Any]]:
@@ -64,6 +64,16 @@ def stop(problem: str, target: str) -> List[str]:
     return done
 
 
+def _repo_path(top: str, path: str) -> str:
+    """a path for `commit`, relative to the top of the repository: as git reads it (relative to here), else relative to the top (the
+    commands run from autoresearch/, the records are named from the top); a path that is in neither place is left to commit_paths to refuse"""
+    here = os.path.relpath(os.path.abspath(path), top).replace("\\", "/")
+    if os.path.exists(os.path.join(top, here)) or os.path.isabs(path):
+        return here
+    from_top = os.path.normpath(path).replace("\\", "/")
+    return from_top if os.path.exists(os.path.join(top, from_top)) else here
+
+
 STALE_S = 600                                                  # a heartbeat older than this: the worker is gone
 
 
@@ -75,17 +85,6 @@ def heartbeat_age(problem: str, rid: str) -> float:
         return float("inf")
 
 
-def step_alive(problem: str, rid: str) -> bool:
-    """does the process group of the run's current step still exist?"""
-    try:
-        with open(os.path.join(run_dir(problem, rid), "step.pid"), encoding="utf-8") as f:
-            pid = int(f.read().strip())
-        os.killpg(pid, 0)
-        return True
-    except (OSError, ValueError):
-        return False
-
-
 def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     """start the worker again for stopped runs (and failed ones with --failed); finished steps are skipped, a training resumes from its checkpoint"""
     if gates.hold_refusal(problem):
@@ -94,7 +93,7 @@ def resume(problem: str, target: str, failed: bool = False) -> List[str]:
     for rid in _runs(problem, target):
         path = os.path.join(record_dir(problem, rid), "run.json")
         run = read_json(path)
-        if step_alive(problem, rid):
+        if worker.step_alive(problem, rid):
             raise ResearchError(f"{rid}: a step of it still runs (pid in {os.path.join(run_dir(problem, rid), 'step.pid')}): stop it first")
         orphan = run.get("status") == "running" and heartbeat_age(problem, rid) > STALE_S       # its worker died (a reboot, a killed WSL)
         if run.get("status") in ("stopped", "queued") or orphan or (failed and run.get("status") == "failed"):
@@ -147,12 +146,16 @@ def build() -> argparse.ArgumentParser:
     s.add_argument("problem"), s.add_argument("run")
     s = sub.add_parser("report", help="build a report again from the records and the stored predictions (into the run root)")
     s.add_argument("problem"), s.add_argument("folder"), s.add_argument("--strict", action="store_true")
+    s = sub.add_parser("tests", help="the problem's own tests (problem.json \"tests\") with its interpreter and module path; exit 1 when one fails")
+    s.add_argument("problem"), s.add_argument("--only", default="", help="only the tests whose path contains this text")
     s = sub.add_parser("anchor", help="evaluate a finished run again with the working tree's code: do its numbers still come out?")
     s.add_argument("problem"), s.add_argument("run"), s.add_argument("--tolerance", type=float, default=None)
     s = sub.add_parser("compare", help="two finished runs side by side (a diagnostic, never a verdict)")
     s.add_argument("problem"), s.add_argument("control"), s.add_argument("variant"), s.add_argument("--boot", type=int, default=2000)
-    s = sub.add_parser("clean", help="list the run folders nothing needs any more; --delete under a decided decision")
-    s.add_argument("problem"), s.add_argument("--delete", action="store_true"), s.add_argument("--decision", default="")
+    s = sub.add_parser("clean", help="list the run folders nothing needs any more into a list file in the run root; --delete <list file> "
+                                     "--decision D<n> deletes the runs of that list that are still deletable")
+    s.add_argument("problem"), s.add_argument("--delete", default="", metavar="LIST", help="the list file the owner confirmed")
+    s.add_argument("--decision", default="", help="the decided decision that confirms the list")
     s = sub.add_parser("index", help="write ledger.csv from the records")
     s.add_argument("problem"), s.add_argument("--check", action="store_true", help="exit 1 when ledger.csv is not what the records give")
     s = sub.add_parser("hold", help="no start or resume of a problem until released")
@@ -202,8 +205,13 @@ def run(a: argparse.Namespace) -> Any:
     if v == "report":
         from research import report
         return report.build(a.problem, a.folder, a.strict)
-    if v in ("anchor", "compare", "clean"):
+    if v in ("tests", "anchor", "compare", "clean"):
         from research import upkeep
+        if v == "tests":
+            res = upkeep.tests(a.problem, a.only)
+            if not res["passed"]:
+                raise ResearchError("failed:\n" + "\n".join(f"  {r['test']} (exit {r['exit']}): {r['last']}" for r in res["tests"] if not r["passed"]))
+            return res
         if v == "anchor":
             res = upkeep.anchor(a.problem, a.run, a.tolerance)
             if not res["agree"]:
@@ -216,8 +224,7 @@ def run(a: argparse.Namespace) -> Any:
         from research import gitio
         trailer = "\n\nCo-Authored-By: " + os.environ["RESEARCH_COAUTHOR"] if os.environ.get("RESEARCH_COAUTHOR") else ""
         top = gitio.git(os.getcwd(), "rev-parse", "--show-toplevel")
-        paths = [os.path.relpath(os.path.abspath(p), top).replace("\\", "/") for p in a.paths]      # given relative to here, committed relative to the top
-        c = gitio.commit_paths(top, paths, a.message + trailer)
+        c = gitio.commit_paths(top, [_repo_path(top, p) for p in a.paths], a.message + trailer)
         return {"commit": c or "nothing changed"}
     if v == "push-check":
         from research import gitio

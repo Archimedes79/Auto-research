@@ -2,11 +2,14 @@
 
 Decisions: a problem's DECISIONS.md and the root DECISIONS.md, each a table of decided rows `| <date> | D<n>: ... |` above a heading `## Open`.
 TEST: a run opens a holdout split only when its problem's TEST_LOG.md has a row `| <date> | <run id> | D<n> | <note> |` in the table under
-`## Runs` and D<n> is decided. Holds and grants are machine state (research/paths.state_dir), never in a checkout."""
+`## Runs` and D<n> is decided. Holds and grants are machine state (research/paths.state_dir), never in a checkout.
+
+Protected: the root list (the hook, settings, the gate code: this file, paths.py and Evaluation/defaults.py, where every holdout read is decided;
+champions/; every problem's TEST_LOG.md and problem.json) and each problem's own `protected` list; matched without regard to case. DECISIONS.md
+is not protected: agents record the owner's answers there, and a grant needs one."""
 from __future__ import annotations
 
 import fnmatch
-import json
 import os
 import re
 import time
@@ -16,7 +19,8 @@ from research.paths import ResearchError, problem_dir, read_json, repo, state_di
 
 DECIDED_ROW = re.compile(r"^\|\s*\d{4}-\d{2}-\d{2}[^|]*\|\s*(D\d+)\s*:", re.M)
 ROOT_PROTECTED = (".claude/settings.json", ".claude/settings.local.json", "autoresearch/research/hook.py", "autoresearch/research/gates.py",
-                  "autoresearch/research/paths.py", "autoresearch/research/__init__.py", "champions/*")
+                  "autoresearch/research/paths.py", "autoresearch/research/__init__.py", "autoresearch/Evaluation/defaults.py", "champions/*",
+                  "problems/*/TEST_LOG.md")
 
 
 def decided(problem: Optional[str] = None, root: Optional[str] = None) -> Set[str]:
@@ -114,8 +118,9 @@ def protected_patterns(root: Optional[str] = None) -> List[str]:
 
 
 def is_protected(relpath: str, root: Optional[str] = None) -> bool:
-    relpath = relpath.replace("\\", "/")
-    return any(fnmatch.fnmatchcase(relpath, pat) for pat in protected_patterns(root))
+    """without regard to case: on Windows test_log.md opens TEST_LOG.md"""
+    relpath = relpath.replace("\\", "/").lower()
+    return any(fnmatch.fnmatchcase(relpath, pat.lower()) for pat in protected_patterns(root))
 
 
 def _grants_file() -> str:
@@ -141,25 +146,23 @@ def grant(relpath: str, decision: str, hours: float, note: str, problem: Optiona
     return g
 
 
-def granted(relpath: str) -> Optional[Dict[str, Any]]:
-    relpath = relpath.replace("\\", "/")
+def granted(relpath: str, root: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """the grant that allows an edit of this path now: it names the path (or a folder above it) and its decision is decided NOW, not only
+    when the grant was given (the problem's DECISIONS.md counts for a path of that problem)"""
+    rp = relpath.replace("\\", "/").lower()
+    parts = rp.split("/")
+    of_problem = len(parts) > 2 and parts[0] == "problems" and os.path.isfile(os.path.join(root or repo(), "problems", parts[1], "problem.json"))
+    problem = parts[1] if of_problem else None
     for g in grants():
-        if relpath == g["path"] or (g["path"].endswith("/") and relpath.startswith(g["path"])):
+        gp = str(g.get("path", "")).lower()
+        if (rp == gp or (gp.endswith("/") and rp.startswith(gp))) and g.get("decision") in decided(problem, root):
             return g
     return None
 
 
 def protected_refusal(relpath: str, root: Optional[str] = None) -> str:
     """'' when an edit of this repository-relative path may go ahead"""
-    if not is_protected(relpath, root):
+    if not is_protected(relpath, root) or granted(relpath, root):
         return ""
-    g = granted(relpath)
-    problem = relpath.replace("\\", "/").split("/")[1] if relpath.replace("\\", "/").startswith("problems/") else None
-    if g and g.get("decision") in decided(problem if problem and os.path.isdir(os.path.join(root or repo(), "problems", problem)) else None, root):
-        return ""                                                # the grant's decision is decided now, not only when the grant was given
     return (f"{relpath} is protected: an edit needs a grant under a decided decision (`research grant {relpath} --decision D<n> --hours 2 --note ...`); "
             "without one, write the question into the Open table of DECISIONS.md and wait for the owner")
-
-
-def dump(obj: Any) -> str:
-    return json.dumps(obj, indent=1, default=str)

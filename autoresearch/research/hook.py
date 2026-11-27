@@ -4,8 +4,10 @@
                              "hooks": [{"type": "command", "command": "python3 autoresearch/research/hook.py"}]}]}}
 
 Reads the event from stdin; exit 2 with the reason on stderr refuses the edit, exit 0 lets it through. The protected paths and the grants are
-research/gates.py. A file outside a research checkout is not this hook's business. When the hook itself fails, an edit of a file whose name
-is one of the gate files is refused, every other edit goes through (a broken hook must not stop all work, nor open the gates)."""
+research/gates.py. Every path inside the machine's state folder (the folder of the machine file: grants, holds, GPU slots) is refused: only
+the research commands write there. Any other file outside a research checkout is not this hook's business. When the hook itself fails, an
+edit of a file whose name is one of the gate files is refused, every other edit goes through (a broken hook must not stop all work, nor open
+the gates)."""
 from __future__ import annotations
 
 import json
@@ -14,7 +16,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-GATE_NAMES = {"problem.json", "TEST_LOG.md", "settings.json", "settings.local.json", "hook.py", "gates.py"}
+GATE_NAMES = {"problem.json", "test_log.md", "settings.json", "settings.local.json", "hook.py", "gates.py", "paths.py", "defaults.py", "grants.json",
+              "holds.json"}
 TOOLS = {"Write": "file_path", "Edit": "file_path", "MultiEdit": "file_path", "NotebookEdit": "notebook_path"}
 MCP_WRITERS = ("write_file", "edit_block", "move_file", "write_pdf")             # file tools of MCP servers (mcp__<server>__<tool>)
 PATH_KEYS = ("file_path", "notebook_path", "path", "source", "destination", "outputPath")
@@ -31,13 +34,23 @@ def targets(event: dict) -> list:
 
 
 def to_local(path: str) -> str:
-    """a Windows path seen from WSL and the other way round: the form this process can open"""
+    """a Windows path seen from WSL and the other way round: the form this process can open (C:\\x -> /mnt/c/x,
+    \\\\wsl.localhost\\<distro>\\home\\x -> /home/x)"""
     p = path.replace("\\", "/")
     if os.name != "nt" and len(p) > 2 and p[1] == ":":
         return f"/mnt/{p[0].lower()}{p[2:]}"
+    if os.name != "nt" and p.lower().startswith(("//wsl.localhost/", "//wsl$/")):
+        return "/" + (p.split("/", 4)[4] if p.count("/") >= 4 else "")
     if os.name == "nt" and p.startswith("/mnt/") and len(p) > 6 and p[6] == "/":
         return f"{p[5].upper()}:{p[6:]}"
     return path
+
+
+def in_state(path: str) -> bool:
+    """does `path` lie in the machine's state folder (the folder of the machine file)? Without regard to case"""
+    from research.paths import machine_file
+    state = os.path.realpath(os.path.dirname(machine_file())).lower()
+    return (os.path.realpath(path).lower() + os.sep).startswith(state + os.sep)
 
 
 def checkout_of(path: str) -> str:
@@ -58,7 +71,9 @@ def verdict(event: dict) -> str:
     for raw in targets(event):
         path = to_local(raw)
         if not os.path.isabs(path):
-            path = os.path.join(event.get("cwd") or os.getcwd(), path)
+            path = os.path.join(to_local(event.get("cwd") or os.getcwd()), path)
+        if in_state(path):
+            return f"{raw} lies in the machine's state folder (grants, holds, GPU slots): only the research commands write there (`research grant`)"
         root = checkout_of(path)
         reason = gates.protected_refusal(os.path.relpath(os.path.abspath(path), root), root) if root else ""
         if reason:
@@ -72,7 +87,7 @@ def main() -> int:
         event = json.load(sys.stdin)
         reason = verdict(event)
     except Exception as e:                                             # noqa: BLE001 - the hook must answer
-        names = {os.path.basename(str(p).replace("\\", "/")) for p in (targets(event) if isinstance(event, dict) else [])}
+        names = {os.path.basename(str(p).replace("\\", "/")).lower() for p in (targets(event) if isinstance(event, dict) else [])}
         reason = f"the gate hook failed ({type(e).__name__}: {e}); edits of the gate files are refused until it works" if names & GATE_NAMES else ""
     if reason:
         print(reason, file=sys.stderr)

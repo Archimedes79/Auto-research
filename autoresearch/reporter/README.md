@@ -31,7 +31,7 @@ python reporter.py check my_report                        # every decimal number
 python reporter.py pack  my_report                        # -> package.zip: report.html, media/, README.txt, code/, utilities/ ; refuses over the limit
 python reporter.py selftest                               # builds, checks and packs a throw-away example
 ```
-`--strict` on `build` / `check` exits 1 when a PENDING mark or an unfound number is left: the last gate before sending. `build --strict` also exits 1 when the report has no architecture drawing: every report holds one (the owner, 2026-11-25), i.e. at least one section has an `svg` part (a file in `parts/`; the `svg` path is relative to `parts/`) that exists and is not the scaffold's placeholder; a teaser svg or an svg linked as a markdown image does not count. For the lane project copy `bev_fusion_lane_center/training/architecture.svg` or a cut of it into `parts/`.
+`--strict` on `build` / `check` exits 1 when a PENDING mark or an unfound number is left: the last gate before sending. `build --strict` also exits 1 when the report has no architecture drawing: every report holds one (the owner, 2026-11-25), i.e. at least one section has an `svg` part (a file in `parts/`; the `svg` path is relative to `parts/`) that exists and is not the scaffold's placeholder; a teaser svg or an svg linked as a markdown image does not count. A problem's drawing is its `training/architecture.svg` (made by `archdraw.py`): copy it or a cut of it into `parts/`.
 
 ## Minimal example
 `my_report/report.json` (paths relative to the report folder):
@@ -70,8 +70,7 @@ The line `Table: ...` before a table becomes its numbered caption; the alt text 
 | file | what |
 |---|---|
 | `reporter.py` | the whole report tool, one file, with `selftest` |
-| `plots.py` | one clear bar chart from a small json (the ladder of systems with the gate floor; pending rows are a hatched stub) |
-| `winner.py` | exports the code of a winning system as a small folder (source + README + MANIFEST, never weights) for transfer and git; `verify` checks it against its manifest and reports drift; the folders live in each project's `winner/` folder (`bev_fusion_lane_center/winner/`, `bev_fusion/winner/`; D139 / D140), `--out` names it |
+| `archdraw.py` | the system drawings: a JSON spec -> svg + the file map of its md (`render`), and `check` (exit 1 when a box points at nothing, a file is in no box, or svg / md are stale); `python archdraw.py render <spec.json>`, `--selftest` |
 | `SKILL.md` | the procedure and the quality bar for writing such a report (an agent skill: copy it to `.claude/skills/reporter/SKILL.md` to install) |
 | `README.md` | this page |
 

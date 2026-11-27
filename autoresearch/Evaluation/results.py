@@ -119,7 +119,7 @@ def _n_arrays(tree: Any) -> int:
 
 
 def write_atomic(path: str, data: bytes) -> None:
-    os.makedirs(os.path.dirname(path), exist_ok=True)              # (package.py clean removes the emptied frames / taps folders of a set it keeps the manifest of)
+    os.makedirs(os.path.dirname(path), exist_ok=True)              # (a clean-up may remove the frames / taps folders of a set and keep its manifest)
     tmp = f"{path}.tmp.{os.getpid()}"
     try:
         with open(tmp, "wb") as f:

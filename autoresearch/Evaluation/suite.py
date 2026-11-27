@@ -1,5 +1,5 @@
-"""EvalSuite: the engine's workbench. `Evaluation` (api.py) is the front door of a person or an agent and builds one of these for each call; bev_suite.py, the lane project and the
-engine's selftests use it directly (the older entry point), and it is the way to work with a network that has no project adapter.
+"""EvalSuite: the engine's workbench. `Evaluation` (api.py) is the front door of a person or an agent and builds one of these for each call; the engine's selftests use it directly
+(the older entry point), and it is the way to work with a network that has no project adapter.
 
     suite = EvalSuite(source, subject, task, out="eval_out")
     suite.qual.frame("scene-0061/12", views=("overview", "debug"))      # one concrete frame
@@ -22,7 +22,7 @@ from .contracts import Source, Subject, Task
 
 class EvalSuite:
     """the engine's workbench: a Source, a Subject (None when nothing is run: scoring stored predictions, reading counts) and a Task, with the qualitative and the quantitative part on them.
-    The class interface (api.py, `Evaluation`) builds one per call and is what a person uses; `EvalSuite` itself is the older entry point of bev_suite.py, the lane project and the selftests."""
+    The class interface (api.py, `Evaluation`) builds one per call and is what a person uses; `EvalSuite` itself is the older entry point, used directly by the selftests."""
     def __init__(self, source: Source, subject: Optional[Subject], task: Task, out: str = "eval_out", state: str = "carry"):
         if state not in ("carry", "reset", "warmup"):
             raise ValueError("state must be 'carry', 'reset' or 'warmup'")

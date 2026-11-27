@@ -439,16 +439,14 @@ def _store_checks(root):
 
 def _architecture_check():
     """the architecture drawing (architecture.json -> .svg / .md) is in step with the code: every box points at real code, no file is in no box, the generated files are current (the check of
-    autoresearch/tools/archdraw.py; skipped when the tool is not there, e.g. in a copy of GtGenerator alone)"""
+    autoresearch/reporter/archdraw.py; a missing tool is a failure, not a skip)"""
     import subprocess
     import sys
     here = os.path.dirname(os.path.abspath(__file__))
-    tool = os.path.join(here, "..", "autoresearch", "tools", "archdraw.py")
-    if not os.path.exists(tool):
-        return False
+    tool = os.path.join(here, "..", "autoresearch", "reporter", "archdraw.py")
+    assert os.path.exists(tool), f"the drawing check needs {os.path.normpath(tool)}: it is not there"
     r = subprocess.run([sys.executable, tool, "check", os.path.join(here, "architecture.json")], capture_output=True, text=True)
-    assert r.returncode == 0, "the architecture drawing is out of step with the code (run `python autoresearch/tools/archdraw.py render GtGenerator/architecture.json`): " + r.stdout[-800:] + r.stderr[-300:]
-    return True
+    assert r.returncode == 0, "the architecture drawing is out of step with the code (run `python autoresearch/reporter/archdraw.py render GtGenerator/architecture.json`): " + r.stdout[-800:] + r.stderr[-300:]
 
 
 def run(root=None, verbose=True):
@@ -456,8 +454,8 @@ def run(root=None, verbose=True):
     _mapping_checks()
     _error_checks(root)
     _store_checks(root)
-    drawn = _architecture_check()
-    msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables" + ("; the architecture drawing is in step with the code" if drawn else "")
+    _architecture_check()
+    msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, build, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables; the architecture drawing is in step with the code"
     if verbose:
         print(msg)
     return msg

@@ -12,15 +12,15 @@
 The same as methods of the class: `GtGenerator.GtGenerator.generate_bev_gt(...)`, `GtGenerator.generate_lane_gt(...)`, `GtGenerator.gt_key(...)` (suite.py). Command line: `python -m GtGenerator generate-bev ROOT --set full`,
 `generate-lane ROOT --rig lane_center|bev_fusion|all`, `generate ROOT` (everything), `key SYSTEM --set full` (cli.py: each command is one of these calls).
 
-THE KEY says which GT it is: the DATA (the identity of the raw nuScenes files, `data_identity` of data/NuScenes/manifest.json: the hash of its tables and files; read from the store when the store
+THE KEY says which GT it is: the DATA (the identity of the raw nuScenes files, `data_identity` of datasets/nuscenes/manifest.json: the hash of its tables and files; read from the store when the store
 recorded it (the front index and the mask cache do), else from the manifest as it is now) and the CODE (per part the signature = hash of the generator files and options, the git commit of GtGenerator/ that made
 the store and whether it was clean, the GT version, the suite release of releases.csv). `key.id` is a hash of the data and of the signatures of ALL parts of the system (also those a partial key does not
 list) and of the rasteriser: two keys with the same id are the same GT, whatever set was asked for and whichever function made them. Not to be confused with the nuScenes SAMPLE TOKEN of a keyframe,
 which the methods take. `key.complete` is True when every part is stored for what was asked for: the sets `full` / `small` by the sets the index.json of the store says it holds, a list of scenes by
 those scenes, and, when the nuScenes folder is given, by every keyframe of the json tables; a store written with a stride is never complete. It never guesses: no index, no data identity = incomplete.
 
-Parts: bev_fusion = front (data/autogt/<signature>/), lane (data/autogt/lane/<signature of the rig>/), masks (data/autogt/lane/<that signature>/masks/); lane_center = lane only. A version whose code makes the GT of an
-older one (v9 -> v8, l5 lane_center -> l4) shows its own signature and "the GT of store ...". `out` is always the ROOT that holds the stores (default data/autogt; the lane stores are below `out/lane`).
+Parts: bev_fusion = front (<root>/<signature>/), lane (<root>/lane/<signature of the rig>/), masks (<root>/lane/<that signature>/masks/); lane_center = lane only. A version whose code makes the GT of an
+older one (v9 -> v8, l5 lane_center -> l4) shows its own signature and "the GT of store ...". `out` is always the ROOT that holds the stores (default where.root() = <data root>/groundtruth; the lane stores are below `out/lane`).
 """
 import hashlib
 import json
@@ -38,7 +38,7 @@ _DATA_MEMO = {}
 class Part:
     name: str                       # front | lane | masks
     signature: str                  # the code signature (hash of the generator files and options); for the masks: the lane code signature / the rasteriser version
-    store: str                      # the folder name of the stored GT below data/autogt (the store of an older version when the code makes its GT)
+    store: str                      # the folder name of the stored GT below the store root (the store of an older version when the code makes its GT)
     version: Optional[str]          # the GT version of the STORE (v8 / l4), None = unreleased
     commit: Optional[str]           # git commit of GtGenerator/ when the store was made
     dirty: Optional[bool]           # GtGenerator/ had uncommitted changes then (None: git could not tell)
@@ -54,7 +54,7 @@ class GtKey:
     data: str                       # data_identity[:12]: the identity of the raw nuScenes files ("unknown" when it cannot be read)
     release: Optional[str]          # the suite release of this source (releases.csv): v12
     parts: Tuple[Part, ...]
-    out: str                        # data/autogt (the folder that holds the stores)
+    out: str                        # <data root>/groundtruth (the folder that holds the stores)
     id: str                         # 12 hex characters over the data and the signatures of ALL parts of the system: the same GT has the same id, whatever was asked for
 
     @property
@@ -102,9 +102,13 @@ class GtKey:
         return lane_raster.load_mask(token, kind, border_m, store_dir=self.part("lane").path)
 
 
+MANIFEST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datasets", "nuscenes", "manifest.json")
+
+
 def data_identity():
-    """data_identity (12 hex characters) of data/NuScenes/manifest.json: the identity of the raw nuScenes files, "unknown" when the file cannot be read (a run snapshot has none)"""
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "NuScenes", "manifest.json")
+    """data_identity (12 hex characters) of datasets/nuscenes/manifest.json (data/NuScenes/ before 2026-11-27): the identity of the raw nuScenes files,
+    "unknown" when the file cannot be read"""
+    path = MANIFEST
     try:
         st = os.stat(path)
         sig = (st.st_mtime_ns, st.st_size)
@@ -153,7 +157,7 @@ def _complete(idx, held, want, set_name, scenes):
 
 
 def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=None, dataroot=None, scenes=None, options=None, borders=BORDERS, deep=True):
-    """the key of what is stored for `system` ("bev_fusion" | "lane_center") below `out` (default data/autogt): nothing is generated. `parts` limits the parts listed (default all of the system); the id is the
+    """the key of what is stored for `system` ("bev_fusion" | "lane_center") below `out` (default where.root() = <data root>/groundtruth): nothing is generated. `parts` limits the parts listed (default all of the system); the id is the
     same either way. `options`: the generator options of the front GT (they change its signature), `borders`: the mask borders of the cache. `deep`: a zero-byte file does not count as a keyframe (a stat per
     file on 16 threads: 12 - 16 s per store of 34k files; False = by name only). See the module doc for what complete means"""
     from . import lane_gt, lane_raster, versions

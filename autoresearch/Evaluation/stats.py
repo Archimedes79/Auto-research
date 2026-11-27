@@ -3,7 +3,7 @@
     robust_z(values)                      median / MAD z-scores (a few bad frames do not move their own yardstick)
     loo_influence(units, reduce, keys)    how much each unit (scene or frame) moves the dataset-level numbers: all - without it
     scene_picks / scene_draws             THE scene draws of every bootstrap in the repository (np.random.RandomState stream)
-    paired_draws(stat_a, stat_b, draws)   THE paired interval, a - b = variant - control (the lane project and decide.py use it too)
+    paired_draws(stat_a, stat_b, draws)   THE paired interval, a - b = variant - control (the lane problem uses it too, the judge through bootstrap_scenes)
     interval_draws(stat, draws)           the interval of one system
     bootstrap_scenes(a, b, reduce, ...)   paired bootstrap of two stored runs (a = control, b = variant): b - a
 """
@@ -92,8 +92,7 @@ def percentile_interval(values: Sequence[float], alpha: float = 0.05) -> Tuple[f
 def paired_draws(stat_a: Callable[[Any], Dict[str, float]], stat_b: Callable[[Any], Dict[str, float]], draws: Iterable[Any],
                  keys: Sequence[str], alpha: float = 0.05, better: Optional[Dict[str, str]] = None) -> Dict[str, Dict[str, Any]]:
     """THE paired interval: the difference a - b of two systems on the same draws. Convention of the repository: a = the variant,
-    b = the control, so `diff`, `lo`, `hi` are variant - control (what autoresearch/tools/decide.py reads from a card's
-    compare.paired.<metric>.lo / hi). stat_x(sel) -> {key: number} of system x on the selection `sel` of one draw (sel None = all
+    b = the control, so `diff`, `lo`, `hi` are variant - control (the sign the judge reads). stat_x(sel) -> {key: number} of system x on the selection `sel` of one draw (sel None = all
     frames); `draws` = scene_draws(...) (frame indices) or scene_picks(...) (scene positions) or anything stat_x understands.
     -> key -> {a, b, diff (a - b on all frames), lo, hi (interval of a - b over the draws), p_gt0 (share of the valid draws with
     a - b > 0), p_a_better (share of the valid draws in which a is strictly better: a - b > 0 for a 'high' key, < 0 for a 'low' key of
@@ -151,8 +150,8 @@ def bootstrap_scenes(a: Dict[str, list], b: Dict[str, list], reduce: Callable[..
                      ) -> Dict[str, Dict[str, Any]]:
     """Paired bootstrap over scenes of two stored runs: a = the CONTROL (reference), b = the VARIANT; a, b: scene -> list of Counts
     (only the scenes in both are used). Each draw samples scenes with replacement (scene_picks, the same draw for both), reduce() gives
-    both runs' numbers, the difference b - a = variant - control is recorded (paired_draws(b, a): the sign decide.py and the lane
-    project's SB.paired(variant, control) use). -> key -> {a, b, diff (b - a), lo, hi, p_b_better (share of the valid draws in which
+    both runs' numbers, the difference b - a = variant - control is recorded (paired_draws(b, a): the sign the judge (research/compute.py) and the lane
+    problem's SB.paired(variant, control) use). -> key -> {a, b, diff (b - a), lo, hi, p_b_better (share of the valid draws in which
     b is strictly better, by the direction in `better`, default 'high'), p_diff_gt0 (share with b - a > 0), n_valid (finite draws),
     n_draws, n_scenes}. reduce(counts, keys=keys) must accept the keys argument."""
     scenes = sorted(set(a) & set(b))

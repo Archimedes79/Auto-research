@@ -2,7 +2,7 @@
 
     import GtGenerator
     GtGenerator.generate("~/data/nuscenes_full")               # THE entry point: read nuScenes from a folder, write the GT of every keyframe
-                                                          #   to data/autogt/<signature>/ (or out=...); resumable, memory-light
+                                                          #   to <data root>/groundtruth/<signature>/ (where.py; or out=...); resumable, memory-light
     GtGenerator.generate("~/data/nuscenes", set_name="small")  # a scene set: small (mini, small experiments) or full (trainval, releases)
     from GtGenerator import GtGenerator
     gt = GtGenerator("~/data/nuscenes", "v1.0-mini")          # one object, for single keyframes in code
@@ -10,7 +10,7 @@
     s = gt.training_sample(sample_token)                  # {"prev", "cur", "next"} + the ego steps between them
     gt.signature()                                        # cache key of this generator
     from GtGenerator import load                               # stored GT of a keyframe, no nuScenes needed
-    g = load(sample_token)                                #   (data/autogt/<current_signature()>/<token>.npz)
+    g = load(sample_token)                                #   (<data root>/groundtruth/<current_signature()>/<token>.npz)
     GtGenerator.scene_tokens("scene-0561", "v1.0-trainval")    # the tokens of a sequence from the json tables, no devkit
 
     key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")   # BEV Fusion in one call: the front GT + the lane GT of its rig + the area masks -> the GT key (data + code signature)
@@ -22,11 +22,10 @@ Guide for agents: GtGenerator/AGENTS.md; reference: GtGenerator/README.md
 The velocity / flow estimator alone (dataset independent, numpy only): GtGenerator.flow.estimate_flow.
 """
 # Nothing below is imported at `import GtGenerator` (PEP 562): a name or a submodule is imported when it is first asked for (`GtGenerator.generate`, `GtGenerator.versions`, `from GtGenerator import GtKey`),
-# so the package imports without numpy. The job runner reads `GtGenerator.JOBS` in its own interpreter (plain python3), and `import GtGenerator` costs nothing for the tools that only need a name.
+# so the package imports without numpy and `import GtGenerator` costs nothing for the tools that only need a name.
 _NAMES = {"flow": ("Config", "FlowGT", "ObjectFlow", "Track", "estimate_flow"), "pipeline": ("generate",), "grid": ("GridSpec",),
           "suite": ("AutoGT", "GtGenerator", "current_signature", "current_version", "load", "missing", "scene_tokens"),
-          "gt_api": ("GtKey", "generate_bev_gt", "generate_lane_gt", "gt_key", "key_of"),      # one function per system and the key it returns: GtGenerator/gt_api.py
-          "jobs": ("JOBS",)}                                                                  # the calls a job file can name (GtGenerator/jobs.py)
+          "gt_api": ("GtKey", "generate_bev_gt", "generate_lane_gt", "gt_key", "key_of")}      # one function per system and the key it returns: GtGenerator/gt_api.py
 _OWNER = {name: module for module, names in _NAMES.items() for name in names}
 
 

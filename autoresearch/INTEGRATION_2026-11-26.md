@@ -287,3 +287,39 @@ About a sixth of the lane code and a quarter of the BEV code moves; the rest sta
 | 8 | a frozen rule script counts as a rule written before the run (hard rule 4) | proposed |
 | 9 | one decision row for the switch: the hook looks at `problems/*/` and `champions/`, the TEST check also in the core reader, the protected lists, the rule texts that name `run.py` and `package.py` | at S6, when S1 is green |
 | 10 | if WSL reads D: too slowly: a Linux disk file on D: mounted into WSL | after the speed check |
+
+## 13. Measured, kept, deleted (2026-11-27, D155)
+**Measured through the research system** (VAL; the records are in `problems/lane_center/experiments/`):
+| what | result |
+|---|---|
+| lane E396 (kind measure): the champion E372 S4, seeds 0 and 1, `research start` from its snapshot (dump step + evaluation step) | topo F1 0.668172 / 0.681281, junction F1 0.2538 / 0.2481, Q 0.6796 / 0.6808: the numbers of its v1 cards to the last digit; registered as the champion under D120 (`champions/lane_center/`) |
+| lane E397 (compare): keep threshold 0.5 against 0.6, the control reused from E396 (`from`) | TIE: gain -0.0026, paired scene bootstrap [-0.0039, -0.0017], band 0.01; the guard lanes_found breaks (-0.0123); the champion's decode stays |
+| BEV `t21_ctl_s0` through the new evaluation (a diagnostic, no card; warm, ground truth v13, `spread:1000:val`) | board7 0.4631; the older 0.4549 is a cold read on ground truth v8 and not comparable |
+
+**Kept.** Raw nuScenes (`D:\Auto-research\NuScenes`, 121 GB, never deleted). In the data root `D:\Auto-research\data`: `lane_center/b123`
+(30.1 GB: the B' features of train and val, the val rows hold the 833 TEST rows too, graph GT, poses, PCA), `groundtruth/lane/{9ad1d4ce30,
+8a04143278}` (the l6 stores), `groundtruth/a107e0b4e8` (front v13, from C:), `groundtruth/cache` (the reader's tables), `bev_fusion/` (the
+caches the BEV champion reads: GT v13, camera features, BEVFusion features, radar, front images, the annotation table; the pretrained DualBEV
+and BEVFusion weights), `nuscenes/` (the view: links to the raw data and the CRN info files). In the runs root `D:\Auto-research\runs`:
+`lane_center/` (the champion chain E292 a, E273 p, E271 a, E373, E372 S4 with seeds 0 and 1, the caches E365 and E357, the refiner
+statistics, 6.9 GB; the runs of E396 and E397) and `bev_fusion/` (`t21_ctl_s0`, `t21_ctl_s1`, `t20_base_s0`). In WSL: `~/work`
+(GaussianCaR code and weights, the BEV comparison network) and the conda environments. `D:\Auto-research\archive\lcr_local_tags_2026-11-24.bundle`
+(25 MB, the code of the old run tags).
+
+**Deleted** (listed here before; nothing of it is read by the code of `v2`):
+| where | what | size | why |
+|---|---|---|---|
+| WSL `~/exp_gcar_b123` | the old lane pipeline's features, datasets and failure series; the 30 GB the chain reads were copied to `data/lane_center/b123` first | 164.8 GB | old experiment data |
+| WSL `~/exp_gcar_b456`, `~/exp_crn_b123`, `~/exp_crn_mini`, `~/exp_gcar_mini`, `~/exp_gcar_b123x` | old feature extractions (GaussianCaR, CRN) | 80.4 GB | old experiment data |
+| WSL `~/mutk`, `~/mutk2`, `~/head_check`, `~/exp_gcar_gtchk`, `~/_verify_v4` - `_v7`, `~/_review_v6_b`, `_c`, `~/critic_fixes_tmp` | scratch of old checks | 6.9 GB | scratch |
+| D: `lane_archive_2026-11-01` | the heavy files of the lane runs E19 - E72 | 19.9 GB | old experiment data |
+| D: `NuScenes_checkpoints/bev_fusion` | superseded BEV checkpoints | 6.7 GB | no champion chain |
+| D: `NuScenes_cache/bev_fusion/cam_feats_parts7_10` | feature shards of the 340 scenes of parts 7 - 10 (only 700-scene runs read them) | 10.4 GB | a cache nothing kept reads |
+| D: `backup_best_network_2026-11-10/t21_ctl_s0` | a copy of `runs/bev_fusion/t21_ctl_s0` (the shared files checked identical; its code snapshot and notes moved into the kept run as `backup_2026-11-10/`) | 0.4 GB | duplicate |
+| D: `NuScenesAdditionalGt/c643a7539d`, `lane/{0702a065c6,3576fa1f7e,db288acca5}`, `examples`, `reports` | front GT v8, older lane GT, generated pictures | 3.8 GB | older GT versions (D40) |
+| C: `bev_fusion/`, `bev_fusion_lane_center/` (untracked rest), `data/autogt` (links; v13 moved first), `temp/` | the old problems' data, runs, results and scratch | about 178 GB | after the merge into `main`: the folders leave the tree with the merge, their untracked rest after it |
+
+Done on 2026-11-27 for WSL and D: (`D:\Auto-research` now holds `NuScenes`, `data`, `runs`, `archive`; D: 271 -> 311 GB free); the
+reader's table cache moved to `data/groundtruth/cache`, the front store v13 was copied to `data/groundtruth/a107e0b4e8` (34,150 files, bytes
+equal). The rows on C: wait for the merge. The WSL disk image does not shrink by itself after a deletion: compacting it (`wsl --shutdown`, then `Optimize-VHD` or `diskpart compact vdisk`
+on `wsl\ext4.vhdx`) is the owner's step.

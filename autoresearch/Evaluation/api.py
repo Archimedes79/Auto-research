@@ -1,5 +1,5 @@
-"""The interface of the evaluation: one class, `Evaluation(project)`, plain data in and out, every method also a command (`python -m Evaluation Evaluation.run ...`, apicli.py; the pattern of
-the rules at the end of autoresearch/README.md).
+"""The interface of the evaluation: one class, `Evaluation(project)`, plain data in and out, every method also a command (`python -m Evaluation Evaluation.run ...`, apicli.py on
+suitecli.py).
 
     ev = Evaluation()                                              # the project is AR_PROJECT (default); its adapter says what a network and its data are (below)
     r = ev.run("runs/t23_C_s1", "large.val", gt_key="v8")         # predict (the network runs once on what is missing), then score: a dict with the id and what was done
@@ -11,14 +11,14 @@ One network per process: a project's network code (its modules) is imported once
 refuse it). Run each network in its own process and compare the two evaluations by their ids, which only reads what was stored.
 
 Layers: command line / caller -> Evaluation -> Runner. `Evaluation.run` is `Runner.predict` + `score`. The class that executes a network is the Runner (D72: it reads no ground truth); the
-Evaluation is the one front door and ALWAYS includes the Runner of its project: the class it names in `evaluation/evaluation.json` ("runner": "module:Class", BEV: runner.runner:Runner, whose
-command line is `python -m runner`), built with (project, adapter); Evaluation has none of its own (a project that names none is an error; `Evaluation(runner=...)` injects one, the toy selftest does).
+Evaluation is the one front door and ALWAYS includes the Runner of its project: the class it names in `evaluation/evaluation.json` ("runner": "module:Class"), built with (project,
+adapter); a project that names none gets the default Runner (netrunner.py: networks are run folders with checkpoints); `Evaluation(runner=...)` injects one, the toy selftest does.
 `tap`, `time` and `probe` are the Runner's, passed through. Everything else here reads what was stored (only `draw_frame`, which draws a frame, runs the network on it again). D70: a network with a memory always
 runs warm: whole scenes in time order from the network's own start; the frames you ask for decide which results are kept and scored, a frame already stored is not predicted again (a subset
 of an earlier selection costs no network). What was predicted is a ResultSet (results.py), one per identity of the question "this network on this data"; scoring it again with another
 ground truth or metric needs the Source (for the ground truth) but not the network. Ids: `<network>@r<hash>` (predictions), `<network>@e<hash>` (a scored evaluation of chosen frames, a ground
-truth and metrics); the same question gives the same id. `run` here is not `autoresearch/tools/run.py`: it books no ledger row and takes no GPU slot; a number that feeds a verdict is made
-with `run.py ... -- python -m Evaluation Evaluation.run ...`, this direct call is a diagnostic.
+truth and metrics); the same question gives the same id. `run` here is not `research start`: it writes no record and takes no GPU slot; a number that feeds a verdict comes from
+the evaluation step of a registered run (research/evaluate.py), this direct call is a diagnostic.
 
 Frames: a text (`Frames.parse`). `val`, `small.val` = every frame of a set; `spread:1000:large.val` = 1000 frames evenly spaced over all its frames (the scenes they lie in run up to
 the last of them); `random:3[:SEED]:val` = 3 random scenes (seed 0 when none is named); `scenes:scene-0061,scene-0103:val` = those scenes; `frames:scene-0061/12,scene-0003/5:val` = those frames
@@ -169,7 +169,7 @@ def load_adapter(spec: Any, project: Optional[str]):
 
 def load_runner(project: Optional[str], adapter: Any):
     """the Runner of a project: the class named by the key "runner" ("module:Class", the module relative to the project root like the adapter) in <project>/evaluation/evaluation.json,
-    built with (project, adapter). The Evaluation always includes it: Evaluation has no Runner of its own, a project that names none is an error (`Evaluation(runner=...)` injects one)"""
+    built with (project, adapter); a project that names none gets the default Runner of netrunner.py (`Evaluation(runner=...)` injects another)"""
     root = os.path.abspath(project or os.environ.get("AR_PROJECT") or ".")
     try:
         with open(os.path.join(root, "evaluation", "evaluation.json"), encoding="utf-8") as f:
@@ -513,8 +513,8 @@ class Evaluation(Helpers):
         return q.report(store, render=0)
 
     def make_card(self, id: str, out: str = "") -> Dict[str, Any]:
-        """the metric card in the project's contract, WRITTEN as a file (what the decision tool reads: name it in the experiment card's `arm.cards`; `python autoresearch/tools/card.py check FILE`
-        checks it): `out` = the file (a folder: the file `card_<e-id>.json` in it), default `<the network's eval folder>/card_<e-id>.json`, atomic. -> {"path", "card"}. Refused when the
+        """the metric card in the project's contract (the adapter's `card`), WRITTEN as a file (nothing in `research` reads it: a verdict comes from the evaluation step of a run):
+        `out` = the file (a folder: the file `card_<e-id>.json` in it), default `<the network's eval folder>/card_<e-id>.json`, atomic. -> {"path", "card"}. Refused when the
         checkpoint changed since the predictions"""
         if not hasattr(self.ad, "card"):
             raise EvaluationError("this project's adapter defines no card")

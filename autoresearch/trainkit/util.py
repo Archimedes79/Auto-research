@@ -14,9 +14,9 @@ def seed_all(seed):
 
 def resolve_device(device):
     """the configured device; "cuda" without CUDA raises (it used to fall back to "cpu" without a word: a failed CUDA initialisation reads as 'not available', and the trainer then
-    trained on the CPU for hours holding a GPU slot). The message carries the text run.py retries on (CUDA error: unknown error)"""
+    trained on the CPU for hours holding a GPU slot). The message names the CUDA text of a failed initialisation (CUDA error: unknown error)"""
     if device == "cuda" and not torch.cuda.is_available():
-        raise RuntimeError("device cuda was asked for and CUDA is not available (a failed CUDA initialisation reads the same: CUDA error: unknown error; run.py retries it)")
+        raise RuntimeError("device cuda was asked for and CUDA is not available (a failed CUDA initialisation reads the same: CUDA error: unknown error)")
     return device
 
 
