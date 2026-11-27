@@ -321,5 +321,6 @@ statistics, 6.9 GB; the runs of E396 and E397) and `bev_fusion/` (`t21_ctl_s0`, 
 
 Done on 2026-11-27 for WSL and D: (`D:\Auto-research` now holds `NuScenes`, `data`, `runs`, `archive`; D: 271 -> 311 GB free); the
 reader's table cache moved to `data/groundtruth/cache`, the front store v13 was copied to `data/groundtruth/a107e0b4e8` (34,150 files, bytes
-equal). The rows on C: wait for the merge. The WSL disk image does not shrink by itself after a deletion: compacting it (`wsl --shutdown`, then `Optimize-VHD` or `diskpart compact vdisk`
+equal). `temp/` (all but the worktree of `v2`: the scratch of this round and older sessions' scratch, 1,250 files) was packed into
+`D:\Auto-research\archive\temp_scratch_2026-11-27.tar.gz` (35 MB) and removed. The other rows on C: wait for the merge. The WSL disk image does not shrink by itself after a deletion: compacting it (`wsl --shutdown`, then `Optimize-VHD` or `diskpart compact vdisk`
 on `wsl\ext4.vhdx`) is the owner's step.
