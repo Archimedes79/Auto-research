@@ -3,10 +3,11 @@
     pred = predict(model, batch)            # list of B dicts, the format of qformat.py ("nodes", "links", "assign", "maps")
     pred = predict_from_out(out, batch)     # the same from an `out` of QGraph.forward(batch, upto="assign", gt=False)
 
-Nodes = the active nodes (existence above 0.05 are kept: the read-out threshold e >= 0.5 is the scorer's, an OUTPUT step); `section` = the argmax of the section membership M (the active index of the
-first node of the section), links = the candidate pairs with their probability and handle scales, `assign.P` = the probabilities over the map pieces (batch `map_ids`) and the dustbin.
-The model runs under no_grad with gt=False (no ground truth enters the forward path).
-`make_pred_fn(run)` gives a token -> pred callable for the pictures. Run the self-test: python -P -m lane_center.net.model.qpredict (needs a trained or smoke model: `--run runs/e273_smoke2`)
+Nodes = the active nodes (existence above 0.05 are kept: the read-out threshold e >= 0.5 is the scorer's, an OUTPUT step); `section` = the argmax of the section
+membership M (the active index of the first node of the section), links = the candidate pairs with their probability and handle scales, `assign.P` = the
+probabilities over the map pieces (batch `map_ids`) and the dustbin. The model runs under no_grad with gt=False (no ground truth enters the forward path).
+`make_pred_fn(run)` gives a token -> pred callable for the pictures. Run the self-test: python -P -m lane_center.net.model.qpredict (needs a trained or smoke
+model: `--run runs/e273_smoke2`)
 """
 import argparse
 import os
@@ -30,11 +31,13 @@ def predict_from_out(out, batch, keep_maps=False, min_p=0.02):
         new = -torch.ones(K, dtype=torch.long, device=v.device)
         new[idx] = torch.arange(len(idx), device=v.device)
         cell = L["act"][b][idx]
-        sec = new[M[b].argmax(-1)[idx]]                                                                  # the section = the node index (in the kept list) of its start
+        # the section = the node index (in the kept list) of its start
+        sec = new[M[b].argmax(-1)[idx]]
         sec = torch.where(sec >= 0, sec, torch.arange(len(idx), device=v.device))
         nodes = dict(pos=L["pos"][b][idx].float().cpu().numpy(), dirv=L["dirv"][b][idx].float().cpu().numpy(), e=ex[b][idx].cpu().numpy(), flags=flags[b][:, cell].T.cpu().numpy(),
                      s=sprob[b][cell].cpu().numpy(), cell=torch.stack([cell // 50, cell % 50], -1).cpu().numpy(), section=sec.cpu().numpy())
-        sel = (L["pb"] == b) & v[L["pa"]] & v[L["pc"]] & (L["logit"].float().sigmoid() >= min_p)          # links below min_p are dropped (memory); the read-out threshold is 0.5
+        # links below min_p are dropped (memory); the read-out threshold is 0.5
+        sel = (L["pb"] == b) & v[L["pa"]] & v[L["pc"]] & (L["logit"].float().sigmoid() >= min_p)
         links = dict(src=new[L["pa"][sel]].cpu().numpy(), dst=new[L["pc"][sel]].cpu().numpy(), p=L["logit"][sel].float().sigmoid().cpu().numpy(), long=L["is_long"][sel].cpu().numpy(),
                      a=L["sa"][sel].float().cpu().numpy(), b=L["sb"][sel].float().cpu().numpy(), curves=None)
         k = len(batch["map_ids"][b])
@@ -47,7 +50,8 @@ def predict_from_out(out, batch, keep_maps=False, min_p=0.02):
             lines = P["lines05"][b].float()
             c1 = P["centre1"][b].float()
             maps = dict(lines05=torch.cat([lines[:3].sigmoid(), 2.0 * lines[3:].sigmoid()]).cpu().numpy(), centre1=torch.cat([c1[:1].sigmoid(), c1[1:5], c1[5:6].sigmoid()]).cpu().numpy(),
-                        events1=c1[6:].sigmoid().cpu().numpy(), road2=P["road2"][b].float().sigmoid().cpu().numpy())            # probabilities (sigmoid applied), distances in metres
+                        # probabilities (sigmoid applied), distances in metres
+                        events1=c1[6:].sigmoid().cpu().numpy(), road2=P["road2"][b].float().sigmoid().cpu().numpy())
         preds.append(dict(nodes=nodes, links=links, assign=assign, maps=maps, token=batch["token"][b]))
     return preds
 
@@ -80,7 +84,8 @@ if __name__ == "__main__":
 
 
 def make_pred_fn(run, map_mode="error", device="cuda", keep_maps=True):
-    """a callable token -> pred dict (with the dense maps for the pictures) for the VAL frames, from a trained run (`runs/<run>/model.pt`): `qgraph_view.py` takes it as its prediction source"""
+    """a callable token -> pred dict (with the dense maps for the pictures) for the VAL frames, from a trained run (`runs/<run>/model.pt`): `qgraph_view.py`
+    takes it as its prediction source"""
     from lane_center.net.prep import lane_gt_data as LD
     m = LN.load_b(os.path.join(BP.RUNS, run) if not os.path.isabs(run) else run, device)
     ds = LD.QData("val_clean", map_mode=map_mode, pixels=False)

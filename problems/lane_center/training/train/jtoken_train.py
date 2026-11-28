@@ -1,23 +1,17 @@
-"""Trainer of the token head on the predicted-node cache of the frozen lane head B' (stage 1); a run starts it through the research worker (`training/train/lane_train.py stage1`).
+"""Stage 1: the token head trained on the token cache of the frozen lane head B'; a run starts it through the research worker
+(`training/train/lane_train.py stage1`).
 
-    python -P -m lane_center.training.train.jtoken_train --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--none-weight 0.25] [--head-seed 2] [--smoke]
+    python -P -m lane_center.training.train.jtoken_train --name R --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 \
+        [--none-weight 0.25] [--head-seed 2] [--smoke]
 
-The model is `net/model/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `loss_jtoken.jtoken_loss`. Batches come from `net/prep/lane_ptok_data.loader("train", seed, bs, workers, ident=)`
-(imported only when the loop starts): the ONE finished cache of the frozen head `--ident` (`e292_a` = B') and the seed under `runs/e365_cache`, or a run's own cache (`--ident runs/<run>/tokens`). `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache,
-no loader): the plumbing test and the memory check.
-The loop, the run-directory contract, the checkpoint every 500 steps with resume, the roll-back guard and the `clock` line are those of `trainer.fit`; AdamW lr 1e-3, 5 % warm-up, cosine to 0.
-The architecture is the champion's, a constant (`lane_net.ARCH`: d 64, heads 4, layers 3, ffn 128; built by `lane_net.build_head`, `lane_net.load_head` rebuilds it).
-`--none-weight W` (default 1) multiplies the loss of the sources whose GT successor set is empty (target: the none slot) and the type cross-entropy of the none class (`loss_jtoken.jtoken_loss`).
-`live_inputs` (the head keeps the graph of its inputs, `jtoken.JTokenHead(live_inputs=)`) has no flag here (the cached inputs carry no graph): `lane_net.build_head` reads it from a run's args (absent = False), so a stage-2 run's
-model.pt rebuilds with it; not in `arch` and not in the recipe. `--head-seed N` (default: --seed): the head's initialisation and the data order use N, `--seed` keeps choosing the B' cache (args['seed'] stays the cache
-seed, so the read-outs open the same cache); in the recipe.
-Options that no longer exist (`lane_net.REMOVED`: the tag that keeps the code -> option -> the value a stored run must hold): a run's args that hold that value (or nothing) load and resume as before, another value is refused with the
-option's name and the tag (`check_removed`). D117: the c-rule `prior` / `teacher`, `init`, the sizes d / heads / layers / ffn, `token_drop`, `none_weight_near`. The closed experiments (2026-11-28, tag v1): `pos_loss` max
-(E376), distillation (E379), input noise (E381), a cache root / K of one's own (E383), message rounds and early reads (E392), the position head and its curve loss (E395).
-The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
-A folder that holds another recipe is refused; the same recipe is resumed. `main` needs a GPU unless `--smoke`; `train(args, runs, ckpt_every, smoke_k)` is the loop without that check, and `ckpt_every` / `smoke_k`
-are TEST-ONLY arguments (a run uses 500 / 384).
-"""
+The model is `jtoken.JTokenHead` with the champion's sizes (`lane_net.build_head`), the loss `loss_jtoken.jtoken_loss`; nothing of B' runs. Batches:
+`lane_ptok_data.loader` on the cache of `--ident` (e292_a = B') and `--seed` (or a run's own cache, `--ident runs/<run>/tokens`); `--smoke` = 20 steps
+on synthetic batches (K 384, no cache). The loop is `trainer.fit` (checkpoint every 500 steps with resume, the roll-back guard, the clock line); AdamW
+lr 1e-3, 5 % warm-up, cosine to 0. `--none-weight W` multiplies the loss of the sources without a GT successor and the type loss of the none class.
+`--head-seed N` (default --seed) seeds the initialisation and the data order; --seed keeps choosing the cache. The head counts its own training
+forwards (a buffer in the checkpoint), so a resume keeps the switch of its key weights. A folder that holds another recipe is refused, the same recipe
+is resumed; a stored run of a removed option is refused (`lane_net.check_removed`). `main` needs a GPU unless `--smoke`; `train(a, runs, ckpt_every,
+smoke_k)` is the loop without that check (`ckpt_every` / `smoke_k` for the tests). Tests: net/tests/test_jtoken.py"""
 import argparse
 import json
 import os
@@ -43,14 +37,16 @@ def parse_args(argv=None):
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--none-weight", type=float, default=LN.ARCH_DEFAULTS["none_weight"], dest="none_weight", help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
+    ap.add_argument("--none-weight", type=float, default=LN.ARCH_DEFAULTS["none_weight"], dest="none_weight",
+                    help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
     ap.add_argument("--head-seed", type=int, default=None, dest="head_seed", help="the seed of the head's initialisation and the data order (default: --seed); --seed keeps choosing the B' cache")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
     return ap.parse_args(argv)
 
 
 def check_start(args, folder):
-    """before anything is written: a folder that already holds a run is only RESUMED (the same recipe), never another run's; a run of a removed option is refused (`lane_net.check_removed`)"""
+    """before anything is written: a folder that already holds a run is only RESUMED (the same recipe), never another run's; a run of a removed option is
+    refused (`lane_net.check_removed`)"""
     held = [f for f in ("config.json", "ckpt.pt", "model.pt") if os.path.exists(os.path.join(folder, f))]
     if held:
         c = json.load(open(os.path.join(folder, "config.json"))) if "config.json" in held else {}
@@ -60,7 +56,8 @@ def check_start(args, folder):
 
 
 def make_loss(run, none_weight=1.0):
-    """`loss_jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at the first call the loss of the start weights; at call 50 and every 100 calls a clock line (seconds per step since the last line)"""
+    """`loss_jtoken.jtoken_loss` + what the log needs: every step the peak GPU memory; at the first call the loss of the start weights; at call 50 and every 100
+    calls a clock line (seconds per step since the last line)"""
     n, mark = [0], [time.time(), 0]
     gb = lambda f: f() / 1e9 if torch.cuda.is_available() else 0.0  # noqa: E731
 
@@ -84,7 +81,8 @@ def make_loss(run, none_weight=1.0):
 
 
 def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
-    """the loop of the parsed arguments `a` (no GPU check: `main` has it); --seed chooses the B' cache (the loader's seed), the head seed (--head-seed, default --seed) the initialisation and the data order"""
+    """the loop of the parsed arguments `a` (no GPU check: `main` has it); --seed chooses the B' cache (the loader's seed), the head seed (--head-seed, default
+    --seed) the initialisation and the data order"""
     hs = a.seed if getattr(a, "head_seed", None) is None else a.head_seed
     T.seed_all(hs)
     args = dict(vars(a), steps=20 if a.smoke else a.steps)

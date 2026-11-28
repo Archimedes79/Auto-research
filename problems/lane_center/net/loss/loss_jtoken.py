@@ -6,8 +6,8 @@ from lane_center.net.model.jtoken import NEG, SHORT  # noqa: E402,I001
 
 
 def _frame_mean(x, m, w=None):
-    """per frame the mean of x (B, N) over the entries of m, then the mean over the frames that have one (0 when none); w (B, N): the weight of every entry, the mean is then sum(w x) / sum(w) as torch's class-weighted cross-entropy
-    (x is the already weighted term); w None = the plain mean"""
+    """per frame the mean of x (B, N) over the entries of m, then the mean over the frames that have one (0 when none); w (B, N): the weight of every entry, the
+    mean is then sum(w x) / sum(w) as torch's class-weighted cross-entropy (x is the already weighted term); w None = the plain mean"""
     per = (x * m).sum(1) / (m.sum(1).clamp_min(1) if w is None else (w * m).sum(1).clamp_min(1e-12))
     has = m.any(1)
     return per[has].mean() if has.any() else x.sum() * 0.0
@@ -15,8 +15,9 @@ def _frame_mean(x, m, w=None):
 
 # ------------------------------------------------------------------------------------------------------------------------------ loss
 def _source_nll(lp, G, none_weight):
-    """per source and class: lp (B, 2, K, K + 1) the log-probabilities of the per-source softmax (the none slot last), G (B, 2, K, K) the in-class GT successor groups -> (B, 2, K). G(i) non-empty: the likelihood of
-    its GT successors, -log sum_{G(i)} p; G(i) empty: `none_weight` x -log p(none|i) (the sources with a GT successor are not touched by the weight)"""
+    """per source and class: lp (B, 2, K, K + 1) the log-probabilities of the per-source softmax (the none slot last), G (B, 2, K, K) the in-class GT successor
+    groups -> (B, 2, K). G(i) non-empty: the likelihood of its GT successors, -log sum_{G(i)} p; G(i) empty: `none_weight` x -log p(none|i) (the sources with a
+    GT successor are not touched by the weight)"""
     K = G.shape[-1]
     g = lp[..., :K].masked_fill(~G, NEG)
     return torch.where(G.any(-1), -torch.logsumexp(g, -1), -lp[..., K] * none_weight)
@@ -28,14 +29,17 @@ def source_rows(out):
 
 
 def jtoken_loss(out, batch, type_w=0.5, scale_w=0.5, none_weight=1.0):
-    """the likelihood of the module docstring -> (loss, info); batch: y (B, K, K), ylong (B, K, K), yscale (B, K, K, 2), ytype (B, K). info: nll_s, nll_l, ce1, ce3, scale_l1 and the counts gt_links, pos_pairs (in-gate GT
-    links), gt_outside (links with no gate), gt_class (in the gate, but `ylong` disagrees with the token chord: a statistic, the class of a link is the token chord's). The long scale target is the fitted yscale
-    of the long-class links (finite where the cache fitted one). none_weight W (default 1): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes, and (ii) the type
-    cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid tokens of the frame, as torch's weighted mean).
+    """the likelihood of the module docstring -> (loss, info); batch: y (B, K, K), ylong (B, K, K), yscale (B, K, K, 2), ytype (B, K). info: nll_s, nll_l, ce1,
+    ce3, scale_l1 and the counts gt_links, pos_pairs (in-gate GT links), gt_outside (links with no gate), gt_class (in the gate, but `ylong` disagrees with the
+    token chord: a statistic, the class of a link is the token chord's). The long scale target is the fitted yscale of the long-class links (finite where the
+    cache fitted one). none_weight W (default 1): multiplies (i) the loss of the sources whose G(i) is empty (their target is the none slot), in both classes,
+    and (ii) the type cross-entropy of the tokens whose type is none (class 0 weight W, the six others 1, normalised by the sum of the weights of the valid
+    tokens of the frame, as torch's weighted mean).
     scale_w = 0: no scale term, `yscale` is not read"""
     dev, cand, lp, valid = out["logp"].device, out["cand"], out["logp"], out["valid"]
     y, yl = batch["y"].to(dev) > 0, batch["ylong"].to(dev).bool()
-    G = y[:, None] & cand                                                  # (B, 2, K, K): the in-gate GT successors of each class (the class of a pair = its token chord)
+    # (B, 2, K, K): the in-gate GT successors of each class (the class of a pair = its token chord)
+    G = y[:, None] & cand
     yt = batch["ytype"].to(dev).long()
     nll = _source_nll(lp, G, none_weight)
     rows = source_rows(out)

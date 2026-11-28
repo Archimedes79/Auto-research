@@ -1,11 +1,14 @@
-"""The pair geometry of the token designs (E357, stage T0 of the token design E355, D105): the features and the candidate gate of every pair of nodes, read by the
-champion's head (`jtoken.py`), the token cache and the live tokens; the lattice of the targets.
+"""The pair geometry of the token designs (E357, stage T0 of the token design E355, D105): the features and the candidate gate of every pair of nodes, read by
+the champion's head (`jtoken.py`), the token cache and the live tokens; the lattice of the targets.
 
-    with lattice(2.5): ...                                   # `qtargets` on a 2.5 m lattice for the block (N, RES are module constants read at call time; restored after); check_lattice(2.5)
-    g, allowed = pair_geometry(pos, dirv, valid)             # (B, N, N, 13) the geometric pair features, (B, N, N) the candidate gate; [b, i, j] = the link i -> j
+    with lattice(2.5): ...                                   # `qtargets` on a 2.5 m lattice for the block (N, RES are module constants read at call time;
+                                                             # restored after); check_lattice(2.5)
+    g, allowed = pair_geometry(pos, dirv, valid)             # (B, N, N, 13) the geometric pair features, (B, N, N) the candidate gate; [b, i, j] = the link i
+                                                             # -> j
 
-The allowed gate (a candidate selection by geometry, named in the card): both headings point forward along the chord, turn at most 130 degrees (`COS_TURN`), chord MIN_CHORD .. MAX_CHORD m, both nodes valid, i != j.
-E357's own pair head on B's frozen pyramid (JTok, JTokModel, its loss and read-out dump) is in the tag v1. Tests: net/tests/test_jtoken.py (pair_geometry)
+The allowed gate (a candidate selection by geometry, named in the card): both headings point forward along the chord, turn at most 130 degrees (`COS_TURN`),
+chord MIN_CHORD .. MAX_CHORD m, both nodes valid, i != j. E357's own pair head on B's frozen pyramid (JTok, JTokModel, its loss and read-out dump) is in the tag
+v1. Tests: net/tests/test_jtoken.py (pair_geometry)
 """
 import math
 
@@ -24,9 +27,9 @@ HALF = QT.HALF
 # ------------------------------------------------------------------------------------------------------------------------------ pairs
 def pair_geometry(pos, dirv, valid=None, e=None, min_chord=MIN_CHORD, max_chord=MAX_CHORD):
     """pos, dirv (B, N, 2) metres / unit headings, valid (B, N) bool (None = all), e (B, N) existence probability of the nodes (None = 1: GT nodes)
-    -> g (B, N, N, 13), allowed (B, N, N) bool; [b, i, j] = the link i -> j. The 13 features (those of the E287 junction pair head): cos and sin of the turn, chord / 20, the chord in the frame of
-    heading i and of heading j (along, across; / 20), cos and sin of the chord direction against each heading, e_i, e_j. allowed: both headings forward along the chord, cos(turn) >= cos(130 degrees),
-    min_chord <= chord <= max_chord, both valid, i != j."""
+    -> g (B, N, N, 13), allowed (B, N, N) bool; [b, i, j] = the link i -> j. The 13 features (those of the E287 junction pair head): cos and sin of the turn,
+    chord / 20, the chord in the frame of heading i and of heading j (along, across; / 20), cos and sin of the chord direction against each heading, e_i, e_j.
+    allowed: both headings forward along the chord, cos(turn) >= cos(130 degrees), min_chord <= chord <= max_chord, both valid, i != j."""
     B, N = pos.shape[:2]
     ch = pos[:, None, :, :] - pos[:, :, None, :]
     L = ch.norm(dim=-1)

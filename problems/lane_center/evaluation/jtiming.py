@@ -4,7 +4,8 @@ its marker, kernel and CUDA-graph commands, which need the junction system that 
 
     from lane_center.evaluation import jtiming as JTG
     out, ms = JTG.timed(lambda: model(batch), cuda)
-    quiet, line = JTG.quiet_verdict(JTG.load1(), load_after, JTG.gpu_state(), gpu_after)     # QUIET: both loads below QUIET_LOAD and the GPU idle before and after
+    quiet, line = JTG.quiet_verdict(JTG.load1(), load_after, JTG.gpu_state(), gpu_after)     # QUIET: both loads below QUIET_LOAD and the GPU idle before and
+                                                                                             # after
 
 Test: `python -P -m lane_center.evaluation.jtiming` (selftest, CPU).
 """
@@ -15,11 +16,13 @@ import time
 import numpy as np
 import torch
 
-QUIET_LOAD = 3.0                                                                                           # E351: the 1-minute load average (12 cores) below which the host is quiet
+# E351: the 1-minute load average (12 cores) below which the host is quiet
+QUIET_LOAD = 3.0
 
 
 def timed(fn, cuda):
-    """-> (fn(), ms): two CUDA events with a sync in front and behind (the protocol of this module), or `perf_counter` on the CPU (moved here from `jrecur_time.py`, archive tag archive/jtok2-jrecur-2026-11-18)"""
+    """-> (fn(), ms): two CUDA events with a sync in front and behind (the protocol of this module), or `perf_counter` on the CPU (moved here from
+    `jrecur_time.py`, archive tag archive/jtok2-jrecur-2026-11-18)"""
     if not cuda:
         t = time.perf_counter()
         r = fn()
@@ -47,8 +50,8 @@ def gpu_idle(state):
 
 
 def quiet_verdict(load_before, load_after, gpu_before, gpu_after, limit=QUIET_LOAD):
-    """-> (quiet, line): QUIET when both load averages are below `limit` AND the GPU was idle before and after (`gpu_idle`), else NOT QUIET (an unreadable value is not quiet; a run forced onto a busy GPU is never quiet): the speed half of E351
-    is then INCONCLUSIVE"""
+    """-> (quiet, line): QUIET when both load averages are below `limit` AND the GPU was idle before and after (`gpu_idle`), else NOT QUIET (an unreadable value
+    is not quiet; a run forced onto a busy GPU is never quiet): the speed half of E351 is then INCONCLUSIVE"""
     quiet = load_before is not None and load_after is not None and load_before < limit and load_after < limit and gpu_idle(gpu_before) and gpu_idle(gpu_after)
     txt = lambda s: "unreadable" if s is None or "error" in s else f"util max {s['util_max']:.0f} %"  # noqa: E731
     return quiet, f"host load (1 min) before {load_before} after {load_after}, limit {limit}; GPU before {txt(gpu_before)}, after {txt(gpu_after)} (idle: at most 5 %): {'QUIET' if quiet else 'NOT QUIET'}"
@@ -67,15 +70,17 @@ def ancestors():
 
 
 def gpu_others(apps, own):
-    """the compute processes on the GPU that are not ours: apps = the lines `pid, MiB` of `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits` (MiB may be [N/A]),
+    """the compute processes on the GPU that are not ours: apps = the lines `pid, MiB` of `nvidia-smi --query-compute-apps=pid,used_memory
+    --format=csv,noheader,nounits` (MiB may be [N/A]),
     own = the pids of this process and its parents -> [pid]"""
     pids = [int(ln.split(",")[0]) for ln in apps.splitlines() if ln.split(",")[0].strip().isdigit()]
     return [p for p in pids if p not in own]
 
 
 def gpu_free(limit_mib=2000):
-    """(ok, why): the rule of a timing by hand: nvidia-smi shows less than `limit_mib` used and no compute process on the GPU but this process and its parents (a step of a research worker that runs a
-    network is such a process, whoever started it). The utilisation before and after the timing is `quiet_verdict`'s (the after-sample waits 2.5 s for our own kernels)"""
+    """(ok, why): the rule of a timing by hand: nvidia-smi shows less than `limit_mib` used and no compute process on the GPU but this process and its parents
+    (a step of a research worker that runs a network is such a process, whoever started it). The utilisation before and after the timing is `quiet_verdict`'s
+    (the after-sample waits 2.5 s for our own kernels)"""
     try:
         smi = lambda q: subprocess.run(["nvidia-smi", q, "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20).stdout  # noqa: E731
         used = float(smi("--query-gpu=memory.used").strip().split("\n")[0])
@@ -92,7 +97,8 @@ def gpu_state():
     try:
         out = []
         for _ in range(5):
-            r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,temperature.gpu,clocks.sm", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20)
+            r = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu,memory.used,temperature.gpu,clocks.sm", "--format=csv,noheader,nounits"],
+                               capture_output=True, text=True, timeout=20)
             u, m, t, c = [float(x) for x in r.stdout.strip().split("\n")[0].split(",")]
             out.append((u, m, t, c))
             time.sleep(1.0)
@@ -107,7 +113,8 @@ def selftest():
     idle, busy, broken = dict(util_max=0.0, mem_mib=1000.0), dict(util_max=60.0, mem_mib=9000.0), dict(error="no nvidia-smi")
     assert quiet_verdict(2.9, 2.9, idle, idle)[0] and not quiet_verdict(2.9, 3.0, idle, idle)[0] and not quiet_verdict(3.5, 1.0, idle, idle)[0] and not quiet_verdict(None, 1.0, idle, idle)[0]
     assert quiet_verdict(1.0, 1.0, idle, idle)[1].endswith(": QUIET") and quiet_verdict(3.0, 1.0, idle, idle)[1].endswith(": NOT QUIET")
-    for g in ((busy, idle), (idle, busy), (idle, broken), (None, idle)):                                      # the GPU counts as much as the load: a busy, unreadable or missing state is not quiet
+    # the GPU counts as much as the load: a busy, unreadable or missing state is not quiet
+    for g in ((busy, idle), (idle, busy), (idle, broken), (None, idle)):
         assert not quiet_verdict(1.0, 1.0, *g)[0], g
     assert gpu_idle(dict(util_max=5.0)) and not gpu_idle(dict(util_max=5.1)) and not gpu_idle(broken) and not gpu_idle(None)
     assert "util max 60 %" in quiet_verdict(1.0, 1.0, busy, idle)[1]

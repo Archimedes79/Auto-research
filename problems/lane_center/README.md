@@ -50,7 +50,7 @@ python3 -m research start lane_center E<n>               # steps predict + evalu
 python3 -m research judge lane_center E<n> --write
 ```
 Tests: `python3 -m research tests lane_center` (the list in `problem.json`), among them `net/tests/test_net_layering.py`: the layers `net/prep` <
-`net/model` < `net/loss` < `training/` | `evaluation/` for every import (DESIGN.md R13) and the style of a package, and `net/tests/test_lane_net.py`: the network as one module, `evaluation/tests/test_evaluator_hash.py`: the scored path is the evaluator hash. By
+`net/model` < `net/loss` < `training/` | `evaluation/` for every import (DESIGN.md R13) and the style of a package, and `net/tests/test_lane_net.py`: the network as one module, `net/tests/test_e2e_reach.py`: the output loss reaches every trained module (DESIGN.md R1), `evaluation/tests/test_evaluator_hash.py`: the scored path is the evaluator hash. By
 hand on the GPU: `-m lane_center.net.tests.test_lane_net fixture --gpu` (features -> tokens equals the cache bit for bit) and `-m lane_center.evaluation.tests.test_champion_gpu`
 (the champion's files give the stored dump and its graphs).
 

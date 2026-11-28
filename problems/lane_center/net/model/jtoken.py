@@ -1,27 +1,23 @@
-"""E365 (stage S1 of the token champion, D113): the E2E token head on the PREDICTED nodes of the frozen lane head B'; the wiring is the per-source successor softmax with a none slot.
+"""The token head: self-attention among the K tokens of the lane head B' (its predicted nodes); the wiring is a per-source successor softmax with a none
+slot, the node type a seven-way softmax. Its loss is `net/loss/loss_jtoken.py`; `lane_net.build_head` builds it with the champion's sizes.
 
-    head = JTokenHead()                                       # 0.127 M parameters; the buffer `step` counts the training forwards (the switch of the key weights, below)
-    out = head(batch)                                         # batch of `net/prep/lane_ptok_data.loader` (section 2a of the card); only the INPUT keys are read, never a key that carries GT
-    loss, info = jtoken_loss(out, batch)                      # the exact likelihood below + type CE + scale L1 (reads y, ylong, yscale, ytype)
-    pr = probs(out); links = decode(out, thr=0.3)             # decode of record
-    batch = synthetic_batch(B, K, seed)                       # a random batch that follows the batch dict (tests and the trainer's --smoke)
+    head = JTokenHead()                       # the buffer `step` counts the training forwards (the switch of the key weights, below)
+    out = head(batch)                         # reads only the INPUTS keys of a batch (`lane_ptok_data` / `lane_live_data`), never a key that carries GT
+    pr = probs(out); links = decode(out)      # link probabilities and a plain decode (the delivered read-out is `lane_readout.py`)
+    batch = synthetic_batch(B, K, seed)       # a random batch of the batch dict (tests, the trainer's --smoke)
 
-Input keys (B frames, K tokens): tok (B,K,64), pos (B,K,2) m, dirv (B,K,2) unit, e / e_raw (B,K) logits, flags (B,K,8) logits, s / uout / uin (B,K) logits, valid (B,K) bool. All of them are constants (the cached B' is
-frozen: the forward cuts the graph at them, no gradient reaches B' and none goes through the hard top-K). S4 (E372) `JTokenHead(live_inputs=True)`: the forward keeps their graph (a live B' in the training step gets the gradient
-of the head's loss); the values, and so every output, are the same.
-Embedding: x0 = LN(Linear(tok) + MLP[Fourier(pos), dirv, e, e_raw, flags, s, uout, uin]). 3 pre-norm self-attention layers (4 heads, FFN 128): the logit of head h = q.k / 4 + bias_h(g_ij) + log(w_j + 1e-3), bias = an MLP
-13 -> 32 -> H of the 13 `jtok.pair_geometry` features (the existence enters them as sigmoid(e)), padding tokens masked as keys.
-Soft pruning: the key weight w_j is sigmoid(e_j) (input) in layer 1 and for the first SWITCH training steps in every layer; afterwards w_j = 1 - p_none(j) of the head's OWN type softmax (7 types, type 0 = none), read by
-the SAME Linear (after a shared LayerNorm) after layer 1 (keys of layers 2 and 3) and after layer 3 (keys of the wiring layer); both readings get the type CE, and the key-bias path carries gradient into them.
-Wiring layer (on top of layer 3, attention weights only): class c in {short: chord <= 8 m, long: chord > 8 m}, z^c_ij = q^c_i.k^c_j / sqrt(32) + bias^c(g_ij) + log(w_j + 1e-3) + b^c_j on the allowed gate of `jtok.pair_geometry`
-(padding masked as key and source) + ONE learned none slot per class (key k^c_none and a bias): p^c(.|i) = softmax over {allowed keys} + {none}. Two handle scales per pair from an MLP of (x_i, x_j, g_ij).
-Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
-when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
-+ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. The forward never reads a GT key. Tests: test_jtoken.py
-Soft output layers (off by default; no parameter; a run's args turn them on, `lane_net.build_head`), applied in this order after the wiring: `skip_suppress` (a jump over a node is damped), `close_gaps` (a weak link that is the only way
-on is delivered), `fork_gate` (a second successor only at a node the type softmax calls a fork); `refine_positions` writes the delivered node positions `pos` (the cell offset scaled, neighbours moved onto a common arc: no zig-zag).
-The switches of the closed experiments E376 (pos_loss max, the argmax decode), E379 (distillation), E392 (message rounds, early reads) and E395 (the position head and its curve loss) are in the tag v1.
-"""
+Inputs (B frames, K tokens): tok (B, K, 64), pos (B, K, 2) m, dirv (B, K, 2) unit, e / e_raw (B, K) logits, flags (B, K, 8) logits, s / uout / uin
+(B, K) logits, valid (B, K) bool. `live_inputs` False: the forward cuts their graph (`_const`: cached tokens); True: it keeps it (stage 2 trains B''s
+node head through the head's loss); the values, and so every output, are the same.
+Embedding: x0 = LN(Linear(tok) + MLP[Fourier(pos), dirv, e, e_raw, flags, s, uout, uin]). Three pre-norm self-attention layers (4 heads, FFN 128): the
+logit of head h = q.k / 4 + bias_h(g_ij) + log(w_j + 1e-3), bias an MLP of the 13 pair features of `jtok.pair_geometry`, padding masked as keys.
+Key weight w_j: sigmoid(e_j) in layer 1, and in every layer for the first SWITCH training steps; afterwards 1 - p_none(j) of the head's own type
+softmax, read by one Linear after layer 1 and after layer 3 (both readings get the type loss).
+Wiring (on top of layer 3): class c in {short: chord <= 8 m, long: chord > 8 m}, z^c_ij = q^c_i.k^c_j / sqrt(32) + bias^c(g_ij) + log(w_j + 1e-3)
++ b^c_j on the allowed pairs of `jtok.pair_geometry`, plus one learned none slot per class: p^c(.|i) = softmax over {allowed keys} + {none}. Two
+handle scales per pair from an MLP of (x_i, x_j, g_ij).
+Soft output layers (no parameter; off unless a run's args name them, `OUTPUT_LAYERS`), in this order after the wiring: `skip_suppress`, `close_gaps`,
+`fork_gate`; `refine_positions` writes the delivered node positions `pos`. Tests: net/tests/test_jtoken.py"""
 import math
 
 import numpy as np
@@ -36,19 +32,25 @@ NEG = -1e4                                                                  # th
 SKIP_KEYS = ("sigma", "hops", "m", "t_short", "t_long", "keep")             # E399: the settings of the soft skip-link layer (`skip_suppress`)
 GAP_KEYS = ("sigma", "sigma_lo", "gamma", "lo", "lo_long", "t_short", "t_long", "keep")    # E420: the settings of the soft gap-closing layer (`close_gaps`)
 FORK_KEYS = ("sigma", "sigma_rel", "tau", "sigma_f", "t_short", "t_long", "keep")          # E423: the settings of the soft fork gate (`fork_gate`)
-SKIP_FLOOR = 1e-3                                                            # the share a fully covered link keeps in `skip_suppress`: the loss of a head that trains with the layer stays finite
-GAP_ROOM = 0.5                                                               # the largest share of a source's old mass `close_gaps` moves to its lifted links: at least half of the none slot stays
+# the share a fully covered link keeps in `skip_suppress`: the loss of a head that trains with the layer stays finite
+SKIP_FLOOR = 1e-3
+# the largest share of a source's old mass `close_gaps` moves to its lifted links: at least half of the none slot stays
+GAP_ROOM = 0.5
 POS_KEYS = ("gain", "lam", "sigma", "t_short", "keep")                      # E424: the settings of the soft position layer (`refine_positions`)
-CELL = 2.0                                                                   # the side of B''s node cells (m): a node is its cell's centre plus an offset inside the cell
-# named sets of the soft output layers as a run's args hold them (`lane_net.build_head`), at the champion's read-out thresholds (0.3 / 0.2 / 0.6); the settings were chosen on the TRAIN sample (cards E399, E420, E423, E424)
+# the side of B''s node cells (m): a node is its cell's centre plus an offset inside the cell
+CELL = 2.0
+# named sets of the soft output layers as a run's args hold them (`lane_net.build_head`), at the champion's read-out thresholds (0.3 / 0.2 / 0.6); the settings
+# were chosen on the TRAIN sample (cards E399, E420, E423, E424)
 OUTPUT_LAYERS = {"soft_output": dict(
     skip_suppress=dict(sigma=0.03, hops=5, m=8, t_short=0.3, t_long=0.2, keep=0.6),
     close_gaps=dict(sigma=0.01, sigma_lo=0.01, gamma=16.0, lo=0.03, lo_long=0.02, t_short=0.3, t_long=0.2, keep=0.6),
     fork_gate=dict(sigma=0.01, sigma_rel=0.02, tau=0.05, sigma_f=0.01, t_short=0.3, t_long=0.2, keep=0.6),
     refine_positions=dict(gain=1.2, lam=0.5, sigma=0.03, t_short=0.3, keep=0.6))}
-TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
+# B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
+TOK, D, NTYPE = 64, 64, 7
 FORK = 2
-SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
+# training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
+SWITCH = 1000
 BANDS = 4
 NIN = 2 + 4 * BANDS + 2 + 1 + 1 + 8 + 3                                     # pos / HALF, its Fourier features, dirv, e, e_raw, 8 flags, s, uout, uin
 INPUTS = ("tok", "pos", "dirv", "e", "e_raw", "flags", "s", "uout", "uin", "valid")      # the only batch keys the forward reads
@@ -89,21 +91,26 @@ class SelfLayer(nn.Module):
 
 
 def wiring_logp(z, zn, cand):
-    """z (B, 2, K, K) key logits, zn (B, 2, K) none logits, cand (B, 2, K, K) bool -> (B, 2, K, K + 1) float32 log-probabilities of the per-source softmax over {the candidates} + {none} (the LAST column); a key outside
+    """z (B, 2, K, K) key logits, zn (B, 2, K) none logits, cand (B, 2, K, K) bool -> (B, 2, K, K + 1) float32 log-probabilities of the per-source softmax over
+    {the candidates} + {none} (the LAST column); a key outside
     `cand` has probability exactly 0 and a source without a candidate has p(none) = 1"""
     return torch.cat([z.float().masked_fill(~cand, NEG), zn.float()[..., None]], -1).log_softmax(-1)
 
 
 def link_prob(logp, cand):
-    """logp (B, 2, K, K + 1) of `wiring_logp`, cand (B, 2, K, K) -> (B, K, K) the probability of the link i -> j in the class of the pair (0 outside the gate)"""
+    """logp (B, 2, K, K + 1) of `wiring_logp`, cand (B, 2, K, K) -> (B, K, K) the probability of the link i -> j in the class of the pair (0 outside the
+    gate)"""
     return (logp[..., :cand.shape[-1]].exp() * cand).sum(1)
 
 
 def skip_suppress(logp, cand, pnone, chord, cfg):
-    """E399: the soft skip-link layer (no parameter, differentiable). logp (B, 2, K, K + 1) of `wiring_logp`, cand (B, 2, K, K), pnone (B, K) the none probability of the node type, chord (B, K, K) in m; cfg: sigma, hops, m, t_short,
-    t_long, keep (the thresholds of the read-out). The soft "delivered" strength of a link is q = sigmoid((p - t) / sigma) x k_i x k_j with k = sigmoid((keep - pnone) / sigma) and t the threshold of the pair's class (chord above 8 m: long);
-    R(i, j) = the largest product of q along a path i -> .. -> j of 2 .. hops links over every node's m strongest links; p'(i -> j) = p x (1 - (1 - SKIP_FLOOR) R) and the removed mass goes to the source's none slot of the class, so every row stays a
-    probability distribution. A link that another path of the same graph already covers (a jump ahead on its own lane) is thus damped"""
+    """E399: the soft skip-link layer (no parameter, differentiable). logp (B, 2, K, K + 1) of `wiring_logp`, cand (B, 2, K, K), pnone (B, K) the none
+    probability of the node type, chord (B, K, K) in m; cfg: sigma, hops, m, t_short, t_long, keep (the thresholds of the read-out). The soft "delivered"
+    strength of a link is q = sigmoid((p - t) / sigma) x k_i x k_j with k = sigmoid((keep - pnone) / sigma) and t the threshold of the pair's class (chord above
+    8 m: long);
+    R(i, j) = the largest product of q along a path i -> .. -> j of 2 .. hops links over every node's m strongest links; p'(i -> j) = p x (1 - (1 - SKIP_FLOOR)
+    R) and the removed mass goes to the source's none slot of the class, so every row stays a probability distribution. A link that another path of the same
+    graph already covers (a jump ahead on its own lane) is thus damped"""
     B, K = cand.shape[0], cand.shape[-1]
     p = logp[..., :K].exp() * cand
     t = torch.where(chord > SHORT, float(cfg["t_long"]), float(cfg["t_short"])).to(p.dtype)
@@ -130,13 +137,16 @@ def _max_of_others(q, dim):
 
 
 def close_gaps(logp, cand, pnone, chord, cfg):
-    """E420: the soft gap-closing layer (no parameter, differentiable, never decreasing in a pair's own probability). Arguments as `skip_suppress`; cfg: sigma, sigma_lo, gamma, lo, lo_long, t_short, t_long, keep. With P the probability
-    of a pair, t its class threshold, k the soft "kept" of a node and q = sigmoid((P - t) / sigma) x k_i x k_j the soft "delivered" strength of a link: a pair is OPEN by (1 - max_j' q(i, j')) x (1 - max_i' q(i', j)) over the OTHER pairs
-    j' != j and i' != i (no other delivered link leaves its source or reaches its target), ELIGIBLE by sigmoid((P - lo) / sigma_lo) x k_i x k_j (lo_long for the long class) and BEST by (m / max over the source's pairs)^gamma x
-    (m / max over the target's pairs)^gamma with m = P x open x eligible (1 for the strongest such pair of both its ends, near 0 for a clearly weaker one). With w = open x eligible x best, P is lifted by w x t x (1 - P): at w = 1 to
-    at least t, above the threshold and still ordered by P. A pair's own P enters neither its openness nor anything that falls with it, so the output never falls when P rises. A row (source, class) whose lifts sum to L makes room by
-    scaling ALL its old mass, the none slot included, by 1 - L' with L' = min(L, GAP_ROOM) and adds the lifts (scaled to the sum L'): every row stays a probability distribution and the none slot never empties (at least half of it
-    stays: the loss of a head that trains with the layer stays finite). A weak link that is the only way to continue an open end is thus delivered"""
+    """E420: the soft gap-closing layer (no parameter, differentiable, never decreasing in a pair's own probability). Arguments as `skip_suppress`; cfg: sigma,
+    sigma_lo, gamma, lo, lo_long, t_short, t_long, keep. With P the probability of a pair, t its class threshold, k the soft "kept" of a node and q = sigmoid((P
+    - t) / sigma) x k_i x k_j the soft "delivered" strength of a link: a pair is OPEN by (1 - max_j' q(i, j')) x (1 - max_i' q(i', j)) over the OTHER pairs j'
+    != j and i' != i (no other delivered link leaves its source or reaches its target), ELIGIBLE by sigmoid((P - lo) / sigma_lo) x k_i x k_j (lo_long for the
+    long class) and BEST by (m / max over the source's pairs)^gamma x (m / max over the target's pairs)^gamma with m = P x open x eligible (1 for the strongest
+    such pair of both its ends, near 0 for a clearly weaker one). With w = open x eligible x best, P is lifted by w x t x (1 - P): at w = 1 to at least t, above
+    the threshold and still ordered by P. A pair's own P enters neither its openness nor anything that falls with it, so the output never falls when P rises. A
+    row (source, class) whose lifts sum to L makes room by scaling ALL its old mass, the none slot included, by 1 - L' with L' = min(L, GAP_ROOM) and adds the
+    lifts (scaled to the sum L'): every row stays a probability distribution and the none slot never empties (at least half of it stays: the loss of a head that
+    trains with the layer stays finite). A weak link that is the only way to continue an open end is thus delivered"""
     K = cand.shape[-1]
     p = logp[..., :K].exp() * cand
     P = p.sum(1)
@@ -160,10 +170,13 @@ def close_gaps(logp, cand, pnone, chord, cfg):
 
 
 def fork_gate(logp, cand, ptype, chord, cfg):
-    """E423: the soft fork gate (no parameter, differentiable, never decreasing in a pair's own probability): a source takes a SECOND successor only as far as the head's own type softmax calls it a fork. ptype (B, K, 7); cfg: sigma, sigma_rel, tau,
-    sigma_f, t_short, t_long, keep. With s_ij = P_ij / t (the probability over its class threshold, 0 unless both ends are kept) and m_ij = the largest s of the source's OTHER links, the link is a further link by w_ij =
-    sigmoid((m_ij - s_ij) / sigma_rel) x sigmoid((m_ij - 1) / sigma_rel) (another link is stronger, and delivered); the source is a fork by f_i = sigmoid((p_fork(i) - tau) / sigma_f). p'(i -> j) = p x (1 - (1 - f_i) w_ij); the removed
-    mass goes to the source's none slot of the class. The strongest link of a source and every link of a fork stay as they are"""
+    """E423: the soft fork gate (no parameter, differentiable, never decreasing in a pair's own probability): a source takes a SECOND successor only as far as
+    the head's own type softmax calls it a fork. ptype (B, K, 7); cfg: sigma, sigma_rel, tau, sigma_f, t_short, t_long, keep. With s_ij = P_ij / t (the
+    probability over its class threshold, 0 unless both ends are kept) and m_ij = the largest s of the source's OTHER links, the link is a further link by w_ij
+    =
+    sigmoid((m_ij - s_ij) / sigma_rel) x sigmoid((m_ij - 1) / sigma_rel) (another link is stronger, and delivered); the source is a fork by f_i =
+    sigmoid((p_fork(i) - tau) / sigma_f). p'(i -> j) = p x (1 - (1 - f_i) w_ij); the removed mass goes to the source's none slot of the class. The strongest
+    link of a source and every link of a fork stay as they are"""
     K = cand.shape[-1]
     p = logp[..., :K].exp() * cand
     P = p.sum(1)
@@ -181,11 +194,13 @@ def fork_gate(logp, cand, ptype, chord, cfg):
 
 
 def refine_positions(pos, dirv, valid, logp, cand, pnone, cfg):
-    """E424: the soft position layer (no parameter, differentiable) against the zig-zag of the delivered lines -> positions (B, K, 2). cfg: gain, lam, sigma, t_short, keep.
+    """E424: the soft position layer (no parameter, differentiable) against the zig-zag of the delivered lines -> positions (B, K, 2). cfg: gain, lam, sigma,
+    t_short, keep.
     1. The node head's offset from its 2 m cell centre is shrunk toward the centre; it is scaled by `gain` and held inside the cell (+- 1 m).
-    2. Along every short link, a pair of neighbours on one lane lies on a circular arc when the chord has the mean of the two headings: h = (d_i + d_j) / |d_i + d_j|, n = h turned left, r_ij = n . (pos_j - pos_i) is the sideways miss.
-       Both ends move toward each other by half of it, weighted by the soft delivered strength q_ij = sigmoid((p - t_short) / sigma) k_i k_j, averaged over a node's links (not divided by a weight below 1), times `lam`.
-       Straight lanes and circular arcs are fixed points: curves are not pulled straight"""
+    2. Along every short link, a pair of neighbours on one lane lies on a circular arc when the chord has the mean of the two headings: h = (d_i + d_j) /
+       |d_i + d_j|, n = h turned left, r_ij = n . (pos_j - pos_i) is the sideways miss. Both ends move toward each other by half of it, weighted by the soft
+       delivered strength q_ij = sigmoid((p - t_short) / sigma) k_i k_j, averaged over a node's links (not divided by a weight below 1), times `lam`. Straight
+       lanes and circular arcs are fixed points: curves are not pulled straight"""
     half = float(JT.HALF)
     centre = (torch.floor((pos.detach() + half) / CELL) + 0.5) * CELL - half
     pos = torch.where(valid[..., None], centre + (float(cfg["gain"]) * (pos - centre)).clamp(-CELL / 2, CELL / 2), pos)
@@ -224,9 +239,11 @@ class JTokenHead(nn.Module):
         self.wq, self.wk = nn.Linear(d, 2 * dq), nn.Linear(d, 2 * dq)       # the two classes (short, long)
         self.wbias, self.dest = pair_mlp(2), nn.Linear(d, 2)                # bias^c(g_ij), the destination evidence b^c_j
         self.none_k, self.none_b = nn.Parameter(torch.randn(2, dq) * 0.1), nn.Parameter(torch.zeros(2))
-        self.sc_i, self.sc_j, self.sc_g, self.sc_o = nn.Linear(d, 32), nn.Linear(d, 32, bias=False), nn.Linear(NG, 32, bias=False), nn.Linear(32, 2)      # the first Linear of (x_i, x_j, g_ij) split into three
+        # the first Linear of (x_i, x_j, g_ij) split into three
+        self.sc_i, self.sc_j, self.sc_g, self.sc_o = nn.Linear(d, 32), nn.Linear(d, 32, bias=False), nn.Linear(NG, 32, bias=False), nn.Linear(32, 2)
         self.register_buffer("step", torch.zeros((), dtype=torch.long))
-        self._step_py = 0                                                   # the Python mirror of `step` (no device sync per forward); kept by forward, set_step and load_state_dict
+        # the Python mirror of `step` (no device sync per forward); kept by forward, set_step and load_state_dict
+        self._step_py = 0
         self.live_inputs = live_inputs
 
     def set_step(self, n):
@@ -243,7 +260,8 @@ class JTokenHead(nn.Module):
         return t, 1.0 - t.softmax(-1)[..., 0]                               # logits, 1 - p_none
 
     def read_wiring(self, x, wb, logw, cand):
-        """the wiring read of the module docstring on the features x (B, K, d): wb (B, 2, K, K) = bias^c(g_ij), logw (B, K) = the log key weight, cand the gate -> (the log-probabilities of `wiring_logp`, LayerNorm(x))"""
+        """the wiring read of the module docstring on the features x (B, K, d): wb (B, 2, K, K) = bias^c(g_ij), logw (B, K) = the log key weight, cand the gate
+        -> (the log-probabilities of `wiring_logp`, LayerNorm(x))"""
         B, K, _ = x.shape
         xn = self.lnw(x)
         q, k = (m(xn).view(B, K, 2, self.dq) for m in (self.wq, self.wk))
@@ -260,7 +278,8 @@ class JTokenHead(nn.Module):
         learned = self._step_py >= SWITCH
         chord = g[..., 2] * 20.0
         cand = torch.stack([allowed & (chord <= SHORT), allowed & (chord > SHORT)], 1)
-        feat = torch.cat([pos / JT.HALF, fourier(pos), dirv, b["e"][..., None], b["e_raw"][..., None], b["flags"], b["s"][..., None], b["uout"][..., None], b["uin"][..., None]], -1).float()
+        feat = torch.cat([pos / JT.HALF, fourier(pos), dirv, b["e"][..., None], b["e_raw"][..., None], b["flags"], b["s"][..., None], b["uout"][..., None],
+                          b["uin"][..., None]], -1).float()
         x = self.ln0(self.proj(b["tok"].float()) + self.mlp(feat))
         x = self.layers[0](x, g, lw(w_in), valid)
         types1, w1 = self.read_types(x)
@@ -288,8 +307,9 @@ class JTokenHead(nn.Module):
 
 # ------------------------------------------------------------------------------------------------------------------------------ probabilities and decodes
 def probs(out):
-    """-> p (B, K, K) the probability of the link i -> j in the class of the pair (0 outside the gate), pnone (B, K, K) the none probability of the source i in the class of the pair, pt (B, K, 7) the type probabilities,
-    keep (B, K) the kept nodes (valid and p_none < 0.5, the output rule), cand (B, K, K) the allowed gate, longm (B, K, K) chord above 8 m"""
+    """-> p (B, K, K) the probability of the link i -> j in the class of the pair (0 outside the gate), pnone (B, K, K) the none probability of the source i in
+    the class of the pair, pt (B, K, 7) the type probabilities, keep (B, K) the kept nodes (valid and p_none < 0.5, the output rule), cand (B, K, K) the allowed
+    gate, longm (B, K, K) chord above 8 m"""
     K = out["cand"].shape[-1]
     cand = out["cand"]
     p = link_prob(out["logp"], cand)
@@ -304,7 +324,8 @@ def _links(pr, link):
 
 
 def decode(out, thr=0.3):
-    """the decode of record (output only): link i -> j when p^c(j|i) >= thr and p^c(j|i) >= p^c(none|i) and both ends are kept nodes (a fork source keeps both branches) -> keep (B, K), link / long (B, K, K) bool, p"""
+    """the decode of record (output only): link i -> j when p^c(j|i) >= thr and p^c(j|i) >= p^c(none|i) and both ends are kept nodes (a fork source keeps both
+    branches) -> keep (B, K), link / long (B, K, K) bool, p"""
     pr = probs(out)
     return _links(pr, (pr["p"] >= thr) & (pr["p"] >= pr["pnone"]))
 
@@ -315,8 +336,9 @@ def count_params(model):
 
 # ------------------------------------------------------------------------------------------------------------------------------ a synthetic batch
 def synthetic_batch(B=8, K=48, seed=0):
-    """random frames that follow the batch dict of the card (2a): per frame a lane of 10 tokens 2 m apart, a second lane 12 m behind its end (one long link), a third lane elsewhere, 4 duplicate tokens 0.5 m beside
-    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them"""
+    """random frames that follow the batch dict of the card (2a): per frame a lane of 10 tokens 2 m apart, a second lane 12 m behind its end (one long link), a
+    third lane elsewhere, 4 duplicate tokens 0.5 m beside a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and
+    flags follow the token role, so a head can fit them"""
     rng = np.random.RandomState(seed)
     f = lambda *s: np.zeros(s, np.float32)  # noqa: E731
     pos, dirv, valid, ytype, y, ylong = f(B, K, 2), f(B, K, 2), np.zeros((B, K), bool), np.zeros((B, K), np.int64), np.zeros((B, K, K), np.uint8), np.zeros((B, K, K), bool)

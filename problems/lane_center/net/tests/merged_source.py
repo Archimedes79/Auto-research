@@ -7,7 +7,8 @@ import ast
 import os
 import tempfile
 
-NET = "lane_center.net"                                         # the package of the model and loss modules: they import each other as NET.model.<m> / NET.loss.loss_<m>
+# the package of the model and loss modules: they import each other as NET.model.<m> / NET.loss.loss_<m>
+NET = "lane_center.net"
 
 
 def must_fail(fn, *a, **k):

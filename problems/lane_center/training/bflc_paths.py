@@ -16,7 +16,8 @@ import os
 
 import lane_center
 
-ROOT = os.path.dirname(os.path.abspath(lane_center.__file__))          # the package, not this file: a mutated copy of a module elsewhere still finds the problem
+# the package, not this file: a mutated copy of a module elsewhere still finds the problem
+ROOT = os.path.dirname(os.path.abspath(lane_center.__file__))
 REPO = os.path.dirname(os.path.dirname(ROOT))
 
 

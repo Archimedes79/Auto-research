@@ -1,11 +1,14 @@
-"""Maneuver coverage of a delivered lane graph (E310): the number that asks what the planner needs and what the pictures show; `jtoken_eval.py graphs` writes it per frame.
+"""Maneuver coverage of a delivered lane graph (E310): the number that asks what the planner needs and what the pictures show; `jtoken_eval.py graphs` writes it
+per frame.
 
     mans = maneuvers(lane_gt, qends.cluster); n_ok, n, hit, near, real = frame_counts(raw, mans, ref_tree)
     python -P -m lane_center.evaluation.jmaneuver      # the selftest (the E310 command `score` on the junction pair head's dumps is in the tag v1)
 
-A GT MANEUVER is one entry -> exit connection of a junction: the connector runs of the lane GT grouped by their entry / exit cluster (`qends.cluster`, as `qends.end_table`), the longest run per (entry, exit). It is REALISED in a delivered graph when at least 90 % of the
-points of its GT run (the GT points, spacing 0.5 m, inside the 100 m box; at least 3 points) have a delivered polyline point within 1.5 m whose direction differs by at most 40 degrees: 'is the lane drawn there, in that direction', no pairing and no tolerance at the ends. The junction PRECISION is the share of the
-delivered points within 8 m of a GT connector run that lie within 1.5 m of a GT lane point. The maneuver denominator (826 frames, 10991 maneuvers on VAL) is smaller than the 11083 GT pairs of the
+A GT MANEUVER is one entry -> exit connection of a junction: the connector runs of the lane GT grouped by their entry / exit cluster (`qends.cluster`, as
+`qends.end_table`), the longest run per (entry, exit). It is REALISED in a delivered graph when at least 90 % of the points of its GT run (the GT points,
+spacing 0.5 m, inside the 100 m box; at least 3 points) have a delivered polyline point within 1.5 m whose direction differs by at most 40 degrees: 'is the lane
+drawn there, in that direction', no pairing and no tolerance at the ends. The junction PRECISION is the share of the delivered points within 8 m of a GT
+connector run that lie within 1.5 m of a GT lane point. The maneuver denominator (826 frames, 10991 maneuvers on VAL) is smaller than the 11083 GT pairs of the
 junction pair numbers: the box and the 3-point rule drop 0.8 %.
 """
 import numpy as np
@@ -39,7 +42,8 @@ def _tangents(p):
 
 
 def maneuvers(g, cluster):
-    """[(entry cluster, exit cluster, run points every 1 m inside the box (n, 2), tangents (n, 2))] of the connector runs of a lane GT graph, the longest run per (entry, exit); `cluster` = `qends.cluster`"""
+    """[(entry cluster, exit cluster, run points every 1 m inside the box (n, 2), tangents (n, 2))] of the connector runs of a lane GT graph, the longest run
+    per (entry, exit); `cluster` = `qends.cluster`"""
     runs = []
     for pc in g.get("pieces", []):
         q = np.asarray(pc["pts"], float).reshape(-1, 2)
@@ -93,7 +97,8 @@ def delivered(raw):
 
 
 def realised_share(tree, tang, run_pts, run_tan):
-    """share of the GT run points that have a delivered point within TOL (ALL of them, not the nearest few: a crowded graph must not hide the right line) whose direction differs by at most ANG"""
+    """share of the GT run points that have a delivered point within TOL (ALL of them, not the nearest few: a crowded graph must not hide the right line) whose
+    direction differs by at most ANG"""
     if tree is None:
         return 0.0
     ok = np.zeros(len(run_pts), bool)
@@ -104,7 +109,8 @@ def realised_share(tree, tang, run_pts, run_tan):
 
 
 def frame_counts(raw, mans, ref_tree):
-    """(maneuvers realised, maneuvers, delivered points near the junction that are on a GT lane, delivered points near the junction, realised flags) of one delivered graph"""
+    """(maneuvers realised, maneuvers, delivered points near the junction that are on a GT lane, delivered points near the junction, realised flags) of one
+    delivered graph"""
     P, T = delivered(raw)
     tree = cKDTree(P) if len(P) else None
     real = [realised_share(tree, T, m[2], m[3]) >= NEED for m in mans]
@@ -125,7 +131,8 @@ def selftest():
     assert len(mans) == 1 and len(mans[0][2]) >= 20, mans
     ref_tree = cKDTree(arc)
     ok = dict(pts=[arc])
-    c = np.array([-15.0, -15.0])                                                       # the centre of the circle: radial offsets keep the direction and move the lane sideways everywhere
+    # the centre of the circle: radial offsets keep the direction and move the lane sideways everywhere
+    c = np.array([-15.0, -15.0])
     shifted = dict(pts=[c + (arc - c) * (19.0 / 15.0)])                               # 4 m aside: not realised
     reverse = dict(pts=[arc[::-1]])                                                    # the same lane the other way round: the direction rule rejects it
     half = dict(pts=[arc[: len(arc) // 2]])                                            # half of it: 50 % < 90 %
@@ -155,17 +162,20 @@ def selftest():
     for x1, want in ((19.0, 1), (17.0, 0)):                                               # NEED = 0.9: 92 % of the run covered, 87 % covered
         assert frame_counts(dict(pts=[line(0.0, -25.0, x1)]), ms, tr)[0] == want, x1
     t = _tangents(run)
-    rot = lambda deg: np.stack([np.cos(np.radians(deg)) * t[:, 0] - np.sin(np.radians(deg)) * t[:, 1], np.sin(np.radians(deg)) * t[:, 0] + np.cos(np.radians(deg)) * t[:, 1]], 1)
+    rot = lambda deg: np.stack([np.cos(np.radians(deg)) * t[:, 0] - np.sin(np.radians(deg)) * t[:, 1],
+                                np.sin(np.radians(deg)) * t[:, 0] + np.cos(np.radians(deg)) * t[:, 1]], 1)
     for deg, want in ((35, 1.0), (45, 0.0)):                                              # ANG = 40 degrees
         assert realised_share(tr, rot(deg), run, t) == want, deg
     # a crowded graph does not hide the right line: the correct line 1.2 m aside plus eight reversed duplicates and a crossing line
-    crowd = [line(0.05 * k, rev=True) for k in range(1, 9)] + [np.stack([np.zeros(41), np.linspace(-10, 10, 41)], 1)] + [line(1.2)]          # the right line comes LAST in the point order
+    # the right line comes LAST in the point order
+    crowd = [line(0.05 * k, rev=True) for k in range(1, 9)] + [np.stack([np.zeros(41), np.linspace(-10, 10, 41)], 1)] + [line(1.2)]
     assert frame_counts(dict(pts=crowd), ms, tr)[0] == 1
     # the junction precision looks only at delivered points within 8 m of a GT run: a far line is not counted
     assert frame_counts(dict(pts=[line(30.0)]), ms, tr)[3] == 0 and frame_counts(dict(pts=[line(5.0)]), ms, tr)[3] > 0
     # two runs of one (entry, exit) pair: the longer one is the maneuver, a second pair is a second maneuver
     short, long_ = run[40:61], run
-    g2 = dict(pieces=[dict(pts=short, segments=[dict(kind="connector", i0=0, i1=len(short) - 1)]), dict(pts=long_, segments=[dict(kind="connector", i0=0, i1=len(long_) - 1)])])
+    g2 = dict(pieces=[dict(pts=short, segments=[dict(kind="connector", i0=0, i1=len(short) - 1)]),
+                      dict(pts=long_, segments=[dict(kind="connector", i0=0, i1=len(long_) - 1)])])
     m2 = maneuvers(g2, QE.cluster)
     assert len(m2) <= 2 and max(len(m[2]) for m in m2) == 101, [len(m[2]) for m in m2]
     print("jmaneuver selftest ok")

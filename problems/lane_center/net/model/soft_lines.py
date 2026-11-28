@@ -2,15 +2,18 @@
 
 Conventions as the BEV system (bev_fusion/net/model/extract.py): arrays (B, C, X, Y), x forward (rows), y left (columns), heading as (cos, sin) in (x, y).
 
-head output per cell (6 channels, `HEAD_CH`): p (centre-lane logit), cos, sin (heading, raw), ox, oy (sub-cell offset of the line in cells, tanh * 0.5), s (keep-gate logit)
+head output per cell (6 channels, `HEAD_CH`): p (centre-lane logit), cos, sin (heading, raw), ox, oy (sub-cell offset of the line in cells, tanh * 0.5), s
+(keep-gate logit)
 
 sparsify(out) -> sparse map (B, 5, X, Y) = [w, cos, sin, ox, oy]
-    w = sigmoid(p) * ridge * keep   ridge: soft maximum across the line (the two neighbours along the normal, bilinear), so a 3 m wide ridge becomes one cell wide;
+    w = sigmoid(p) * ridge * keep   ridge: soft maximum across the line (the two neighbours along the normal, bilinear), so a 3 m wide ridge becomes one
+        cell wide;
                                     keep : sigmoid(s), the learned gate that lets a cell stay as a vertex (trained under the vertex budget `budget_loss`)
-    no top-k and no threshold on the training path: w is a weight per cell, a vertex is a cell with weight; the delivered list is a read-out (`vertices`) at inference only.
+    no top-k and no threshold on the training path: w is a weight per cell, a vertex is a cell with weight; the delivered list is a read-out (`vertices`) at
+        inference only.
 
-Copied from bev_fusion/net/model/extract.py: `soft_line_map` (distance field -> line probability, used for the loss against the GT line cells). The rest is new and small.
-Run the self-test: python -P -m lane_center.net.model.soft_lines
+Copied from bev_fusion/net/model/extract.py: `soft_line_map` (distance field -> line probability, used for the loss against the GT line cells). The rest is new
+and small. Run the self-test: python -P -m lane_center.net.model.soft_lines
 """
 import math
 

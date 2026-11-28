@@ -1,5 +1,6 @@
 """Spec test of stage 0 (`training/train/qgraph_train.py`, its gates `qgates.py`, the steps stage0 and tokens of `lane_train.py`) on real TRAIN / VAL frames,
-CPU (forced: CUDA_VISIBLE_DEVICES is emptied before torch is imported), a small B' (width 16), a few steps; everything is written below a temporary run root (BP.RUNS of this process), nothing under the real one.
+CPU (forced: CUDA_VISIBLE_DEVICES is emptied before torch is imported), a small B' (width 16), a few steps; everything is written below a temporary run root
+(BP.RUNS of this process), nothing under the real one.
 
     python -P -m lane_center.net.tests.test_qgraph_train          (with the module path: README.md; `research tests lane_center` runs it)
 
@@ -21,7 +22,8 @@ import json
 import os
 import tempfile
 
-os.environ["CUDA_VISIBLE_DEVICES"] = ""                                     # the CPU, also where a GPU is visible: the bit-exact resume holds on the CPU (GPU kernels may sum in another order)
+# the CPU, also where a GPU is visible: the bit-exact resume holds on the CPU (GPU kernels may sum in another order)
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 import torch  # noqa: E402
 
 from trainkit import control
@@ -43,7 +45,8 @@ BASE = json.load(open(os.path.join(BP.ROOT, "training", "configs", "base.json"),
 SMALL = dict(gate_n=2, fit_n=4, workers=0)                                  # the VAL frames of a gate, the TRAIN frames of the E271 threshold, loader workers
 GRID = ("stem", "e1", "e2", "e3", "d2", "d1", "d0", "out")                  # the modules of the E271 grid head
 # v1's phase table (bev_fusion_lane_center/net/model/qgraph.py of the tag v1): the modules a phase trains, the stages it runs frozen
-V1_TRAIN = {1: GRID, 2: ("pyr",), 3: ("nodes",), 4: ("links",), 5: ("nodes",), 6: ("menc", "asg"), 7: ("pyr", "nodes", "links", "menc", "asg"), 9: ("nodes", "links", "menc", "asg")}
+V1_TRAIN = {1: GRID, 2: ("pyr",), 3: ("nodes",), 4: ("links",), 5: ("nodes",), 6: ("menc", "asg"), 7: ("pyr", "nodes", "links", "menc", "asg"),
+            9: ("nodes", "links", "menc", "asg")}
 V1_FROZEN = {2: (), 3: ("pyr",), 4: ("pyr", "nodes"), 5: ("pyr", "links"), 6: ("pyr", "nodes", "links"), 7: (), 9: ("pyr",)}
 
 
@@ -106,7 +109,8 @@ def test_stage0(tmp):
         trained.append(a.name)
         out = QT.train(a, BP.RUNS, step_dir, **SMALL)
         if a.name.endswith(f"/{stop_after[0]}"):
-            control.request_stop(step_dir, "test: between two parts")                     # as the worker writes it while a part ends (its gate, the next part's build)
+            # as the worker writes it while a part ends (its gate, the next part's build)
+            control.request_stop(step_dir, "test: between two parts")
         return out
     try:
         QT.main = small_main

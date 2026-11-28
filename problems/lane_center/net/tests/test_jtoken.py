@@ -1,20 +1,27 @@
-"""Tests of the token head on predicted nodes (`jtoken.py`, `loss_jtoken.py`, `train/jtoken_train.py`); CPU only (the GPU is hidden), 2 threads, SYNTHETIC batches that follow the batch dict of the card (2a): no cache needed.
+"""Tests of the token head on predicted nodes (`jtoken.py`, `loss_jtoken.py`, `train/jtoken_train.py`); CPU only (the GPU is hidden), 2 threads, SYNTHETIC
+batches that follow the batch dict of the card (2a): no cache needed.
 
     python -P -m lane_center.net.tests.test_jtoken [name ...]         # all tests, or the named ones (with or without the `test_` prefix)
 
-likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT successors (one of them with `ylong` against the token
-chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over
-the sources, no valid mask; the none slot trains the empty sources), none_weight (W by hand, mutants), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept ends, a padded source and destination;
-mutants: other thresholds / ends / no valid mask), head (shapes, every parameter gets gradient, the gate and the chord classes against an independent distance, order and padding invariance with a padding mutant),
-key_bias (the head's own p_none gets gradient from layer 2 on after the switch and not before; the step mirror survives load_state_dict; no gradient reaches the cached inputs), writer_free (the forward reads no GT
-key), overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches, kill, resume, another recipe refused, no loader
-import; a non-smoke run through a fake loader that returns (None, batches) with the ident argument), arch_options (defaults bit for bit; a stored run's removed options (`jtoken_train.REMOVED`: D117 and the closed experiments of
-the tag v1) at their off value resume and load, another value is refused with the option's name and its tag), live_inputs (S4: the default = the forward of before bit for bit, outputs and parameter gradients, no input gradient; live: the same values, a gradient on every float
-input, the full gradient against float64 central differences; textual mutants; build_head / load_model read it, absent = False).
-head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises (the trainer's step-0 head = build_head after seed_all(2)) and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
-champion (the default path against RECORDED numbers: the forward, the loss and the gradient sums of a seeded head at two head steps and of the stored E373 head; the 20 smoke steps of the champion recipe; one step on the real
-TRAIN cache starts as E373 did); the soft output layers, each against a brute-force or hand case (skip_suppress, close_gaps, fork_gate, refine_positions: off = the head bit for bit, build_head) and layers_train (the loss
-behind the wiring layers and every gradient finite, the none slot never emptied). The tests of the removed switches (E376 pos_loss max, E379 distillation, E381 noise, E392 rounds, E395 position head) are in the tag v1.
+likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT
+successors (one of them with `ylong` against the token chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate
+masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over the sources, no valid mask; the none slot
+trains the empty sources), none_weight (W by hand, mutants), wiring_logp (a gate and padding mask, sums to 1), decode (the thresholds, the none rule, the kept
+ends, a padded source and destination; mutants: other thresholds / ends / no valid mask), head (shapes, every parameter gets gradient, the gate and the chord
+classes against an independent distance, order and padding invariance with a padding mutant), key_bias (the head's own p_none gets gradient from layer 2 on
+after the switch and not before; the step mirror survives load_state_dict; no gradient reaches the cached inputs), writer_free (the forward reads no GT key),
+overfit (8 fixed frames, <= 300 steps, loss below 0.5 x its start, the decode of record reproduces the GT links), trainer (the smoke run on synthetic batches,
+kill, resume, another recipe refused, no loader import; a non-smoke run through a fake loader that returns (None, batches) with the ident argument),
+arch_options (defaults bit for bit; a stored run's removed options (`jtoken_train.REMOVED`: D117 and the closed experiments of the tag v1) at their off value
+resume and load, another value is refused with the option's name and its tag), live_inputs (S4: the default = the forward of before bit for bit, outputs and
+parameter gradients, no input gradient; live: the same values, a gradient on every float input, the full gradient against float64 central differences; textual
+mutants; build_head / load_model read it, absent = False). head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises (the trainer's step-0 head =
+build_head after seed_all(2)) and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
+champion (the default path against RECORDED numbers: the forward, the loss and the gradient sums of a seeded head at two head steps and of the stored E373 head;
+the 20 smoke steps of the champion recipe; one step on the real TRAIN cache starts as E373 did); the soft output layers, each against a brute-force or hand case
+(skip_suppress, close_gaps, fork_gate, refine_positions: off = the head bit for bit, build_head) and layers_train (the loss behind the wiring layers and every
+gradient finite, the none slot never emptied). The tests of the removed switches (E376 pos_loss max, E379 distillation, E381 noise, E392 rounds, E395 position
+head) are in the tag v1.
 """
 import contextlib
 import json
@@ -80,11 +87,13 @@ def loader_as(fake):
 
 # ------------------------------------------------------------------------------------------------------------------------------ hand frames
 def _frame(K, short, long, gt, ylong, ytype, valid, scale=None):
-    """one hand frame: the candidates {source: [destinations]} of the two classes (chord 3 m / 12 m), the GT links [(i, j)], the pairs flagged in `ylong`, `ytype`, `valid`, `scale` {(i, j): (a, b)} -> a spec dict"""
+    """one hand frame: the candidates {source: [destinations]} of the two classes (chord 3 m / 12 m), the GT links [(i, j)], the pairs flagged in `ylong`,
+    `ytype`, `valid`, `scale` {(i, j): (a, b)} -> a spec dict"""
     return dict(K=K, short=short, long=long, gt=gt, ylong=ylong, ytype=ytype, valid=valid, scale=scale or {})
 
 
-F1 = _frame(5, {0: [1, 2, 3], 1: [2], 3: [4]}, {0: [4], 1: [4]}, [(0, 1), (0, 2), (0, 3), (0, 4), (3, 0)], [(0, 3), (0, 4)], [1, 0, 1, 3, 0], [True] * 5, {(0, 4): (0.3, 0.5)})
+F1 = _frame(5, {0: [1, 2, 3], 1: [2], 3: [4]}, {0: [4], 1: [4]}, [(0, 1), (0, 2), (0, 3), (0, 4), (3, 0)], [(0, 3), (0, 4)], [1, 0, 1, 3, 0], [True] * 5,
+            {(0, 4): (0.3, 0.5)})
 F2 = _frame(5, {0: [1], 1: [2]}, {}, [(0, 1)], [], [1, 1, 0, 0, 0], [True] * 3 + [False] * 2)       # other source counts, two padded tokens, no long source
 
 
@@ -114,7 +123,8 @@ def _hand(frames=(F1, F2)):
     g = torch.Generator().manual_seed(1)
     B = len(frames)
     z, zn, ty = torch.randn(B, 2, K, K, generator=g), torch.randn(B, 2, K, generator=g), torch.randn(B, K, 7, generator=g)
-    out = dict(z=z.requires_grad_(), zn=zn.requires_grad_(), cand=st("cand"), chord=st("chord"), valid=st("valid"), scale=torch.full((B, K, K, 2), 0.4), types=ty, types1=ty.flip(-1))
+    out = dict(z=z.requires_grad_(), zn=zn.requires_grad_(), cand=st("cand"), chord=st("chord"), valid=st("valid"), scale=torch.full((B, K, K, 2), 0.4),
+               types=ty, types1=ty.flip(-1))
     return out, dict(y=st("y"), ylong=st("ylong"), yscale=st("yscale"), ytype=st("ytype")), frames
 
 
@@ -124,8 +134,9 @@ def _with_logp(out, cand=None):
 
 
 def _hand_loss(f, z, zn, t1, t3, w=1.0):
-    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by the sum of the weights);
-    the likelihood of a source with GT successors is -log sum of p over G(i). G(i) = the GT successors of i among its candidates of the class (the class of a pair = its candidate list, i.e. the token chord)"""
+    """the per-frame numbers by hand: (nll_s, nll_l or None, ce1, ce3); w = the none weight (empty-G sources x w, the none class of the CE x w, normalised by
+    the sum of the weights); the likelihood of a source with GT successors is -log sum of p over G(i). G(i) = the GT successors of i among its candidates of the
+    class (the class of a pair = its candidate list, i.e. the token chord)"""
     res = []
     for c, cs in enumerate((f["short"], f["long"])):
         rows = []
@@ -157,13 +168,16 @@ def test_likelihood():
     out, b, frames = _hand()
     out = _with_logp(out)
     loss = _check_hand(out, b, frames)
-    # the second frame has another source count, padding and no long source: nll_l is the value of frame 1 alone (not halved), the CE averages 5 and 3 valid tokens per frame; the GT link 0 -> 3 has `ylong` = True
-    # against its token chord (3 m): it stays a positive of the short class (G(0) = {1, 2, 3}, checked by the hand value)
+    # the second frame has another source count, padding and no long source: nll_l is the value of frame 1 alone (not halved), the CE averages 5 and 3 valid
+    # tokens per frame; the GT link 0 -> 3 has `ylong` = True against its token chord (3 m): it stays a positive of the short class (G(0) = {1, 2, 3}, checked
+    # by the hand value)
     must_fail(_check_hand, _with_logp(dict(out, zn=torch.full_like(out["zn"], -1e4))), b, frames)                       # no none slot
     must_fail(_check_hand, out, dict(b, y=b["y"].transpose(1, 2), ylong=b["ylong"].transpose(1, 2)), frames)            # a swapped link direction
     must_fail(_check_hand, _with_logp(out, torch.ones_like(out["cand"])), b, frames)                                    # no gate
-    must_fail(patched, LJK, "_frame_mean", lambda x, m, w=None: (x * m).sum() / m.sum().clamp_min(1), _check_hand, out, b, frames)   # a global mean over the sources / tokens instead of per frame
-    must_fail(_check_hand, dict(out, valid=torch.ones_like(out["valid"])), b, frames)                                    # no valid mask (the padded tokens of frame 2 in the type CE)
+    # a global mean over the sources / tokens instead of per frame
+    must_fail(patched, LJK, "_frame_mean", lambda x, m, w=None: (x * m).sum() / m.sum().clamp_min(1), _check_hand, out, b, frames)
+    # no valid mask (the padded tokens of frame 2 in the type CE)
+    must_fail(_check_hand, dict(out, valid=torch.ones_like(out["valid"])), b, frames)
     # sources without a candidate are masked: their none logit changes nothing; the empty sources are trained by the none slot (and push their candidates down)
     out2 = dict(out, zn=out["zn"].detach().clone())
     out2["zn"][0, 0, (2, 4)] = out2["zn"][0, 1, (2, 3, 4)] = out2["zn"][1, 0, (2, 3, 4)] = out2["zn"][1, 1] = 9.0
@@ -182,17 +196,23 @@ def test_none_weight():
     out, b, frames = _hand()
     out = _with_logp(out)
     l1 = _check_hand(out, b, frames, 1.0)
-    l5 = _check_hand(out, b, frames, 0.5)                                                       # W = 0.5 by hand: the empty-G sources x 0.5 in both classes, the none class of the CE x 0.5, normalised by the weights
+    # W = 0.5 by hand: the empty-G sources x 0.5 in both classes, the none class of the CE x 0.5, normalised by the weights
+    l5 = _check_hand(out, b, frames, 0.5)
     assert abs(float(l1) - float(l5)) > 1e-3 and float(LJK.jtoken_loss(out, b)[0]) == float(LJK.jtoken_loss(out, b, none_weight=1.0)[0]), "W changes the loss, W = 1 is the loss of before"
     assert any(not [j for a, j in f["gt"] if a == i and j in js] for f in frames for i, js in f["short"].items()) and any(f["ytype"][n] == 0 and f["valid"][n] for f in frames for n in range(f["K"])), "the frames have empty-G sources and none tokens"
     orig = LJK._source_nll
-    must_fail(patched, LJK, "_source_nll", lambda lp, G, w: w * orig(lp, G, 1.0), _check_hand, out, b, frames, 0.5)                      # the weight on the sources WITH a GT successor too
-    must_fail(patched, LJK, "_source_nll", lambda lp, G, w: orig(lp, G, 1.0), _check_hand, out, b, frames, 0.5)                          # no weight on the none sources
-    x, mk, wk = torch.full((1, 2), 0.1), torch.ones(1, 2, dtype=torch.bool), torch.full((1, 2), 0.1)       # weights summing below 1: sum(w x) / sum(w) = 0.2 / 0.2 = 1, not 0.2 / 1
+    # the weight on the sources WITH a GT successor too
+    must_fail(patched, LJK, "_source_nll", lambda lp, G, w: w * orig(lp, G, 1.0), _check_hand, out, b, frames, 0.5)
+    # no weight on the none sources
+    must_fail(patched, LJK, "_source_nll", lambda lp, G, w: orig(lp, G, 1.0), _check_hand, out, b, frames, 0.5)
+    # weights summing below 1: sum(w x) / sum(w) = 0.2 / 0.2 = 1, not 0.2 / 1
+    x, mk, wk = torch.full((1, 2), 0.1), torch.ones(1, 2, dtype=torch.bool), torch.full((1, 2), 0.1)
     assert abs(float(LJK._frame_mean(x, mk, wk)) - 1.0) < 1e-6 and abs(float(LJK._frame_mean(x, mk)) - 0.1) < 1e-6 and float(LJK._frame_mean(x, torch.zeros_like(mk), wk)) == 0.0
     orig_fm = LJK._frame_mean
-    must_fail(patched, LJK, "_frame_mean", lambda x, m, w=None: orig_fm(x, m), _check_hand, out, b, frames, 0.5)                                     # weighted terms divided by the token count instead of the sum of the weights
-    # the sources with a GT successor are not touched by W: the gradient of the row of frame 0, source 0 (G non-empty) is identical, the none logit of source 1 (G empty) moves
+    # weighted terms divided by the token count instead of the sum of the weights
+    must_fail(patched, LJK, "_frame_mean", lambda x, m, w=None: orig_fm(x, m), _check_hand, out, b, frames, 0.5)
+    # the sources with a GT successor are not touched by W: the gradient of the row of frame 0, source 0 (G non-empty) is identical, the none logit of source 1
+    # (G empty) moves
     for w_ in (0.5, 2.0):
         o2 = _with_logp(dict(out, z=out["z"].detach().clone().requires_grad_(), zn=out["zn"].detach().clone().requires_grad_()))
         LJK.jtoken_loss(o2, b, none_weight=w_)[0].backward()
@@ -215,8 +235,9 @@ def _skip_brute(q, hops):
 
 
 def test_skip_suppress():
-    """E399 the soft skip-link layer: off (the default) = the head bit for bit and no new parameter or state key; on a chain 0 -> 1 -> 2 with the jump 0 -> 2 only the jump loses its mass, to the none slot; rows stay distributions;
-    against a brute-force walk enumeration on a random graph; the gradient reaches the input log-probabilities; the head builds it from its args"""
+    """E399 the soft skip-link layer: off (the default) = the head bit for bit and no new parameter or state key; on a chain 0 -> 1 -> 2 with the jump 0 -> 2
+    only the jump loses its mass, to the none slot; rows stay distributions; against a brute-force walk enumeration on a random graph; the gradient reaches the
+    input log-probabilities; the head builds it from its args"""
     cfg = dict(sigma=0.03, hops=5, m=8, t_short=0.3, t_long=0.2, keep=0.6)
     K = 4
     cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
@@ -298,8 +319,8 @@ def _gap_brute(p, cand, pnone, chord, cfg):
 
 
 def test_layers_train():
-    """E425 a head that trains with the layers: on a source whose none probability is smaller than its lift the none slot keeps at least half of its mass; the token loss behind all three wiring layers is finite and so is every
-    gradient, also with a source that has no true successor"""
+    """E425 a head that trains with the layers: on a source whose none probability is smaller than its lift the none slot keeps at least half of its mass; the
+    token loss behind all three wiring layers is finite and so is every gradient, also with a source that has no true successor"""
     cfg = dict(sigma=0.01, sigma_lo=0.01, gamma=16.0, lo=0.03, lo_long=0.02, t_short=0.3, t_long=0.2, keep=0.6)
     K = 4
     p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
@@ -308,7 +329,8 @@ def test_layers_train():
     logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1).requires_grad_(True)
     out = JK.close_gaps(logp, cand, torch.zeros(1, K), torch.full((1, K, K), 2.0), cfg)
     none = float(out.exp()[0, 0, 0, K])
-    assert 0.065 - 1e-4 <= none <= 0.13 and float(out.exp()[0, 0, 0, 1]) >= 0.3, ("the none slot keeps half of its mass and the links are delivered", none, out.exp()[0, 0, 0])
+    assert 0.065 - 1e-4 <= none <= 0.13 and float(out.exp()[0, 0, 0, 1]) >= 0.3, ("the none slot keeps half of its mass and the links are delivered", none,
+                                                                                  out.exp()[0, 0, 0])
     (-out[0, 0, 0, K]).backward()
     assert torch.isfinite(logp.grad).all(), "a finite gradient through the none slot of a lifted source"
     layers = JK.OUTPUT_LAYERS["soft_output"]
@@ -325,9 +347,10 @@ def test_layers_train():
 
 
 def test_close_gaps():
-    """E420 the soft gap-closing layer: off (the default) = the head bit for bit and no new state key; a weak link between an open end and an open start is delivered (only the best one), none when its probability is below the lower
-    threshold, when an end already has another delivered link or when a node is not kept; rows stay distributions; the output never falls when the pair's own probability rises (both classes, below, at and above the thresholds);
-    against a brute-force form on a random graph; the head builds it from its args"""
+    """E420 the soft gap-closing layer: off (the default) = the head bit for bit and no new state key; a weak link between an open end and an open start is
+    delivered (only the best one), none when its probability is below the lower threshold, when an end already has another delivered link or when a node is not
+    kept; rows stay distributions; the output never falls when the pair's own probability rises (both classes, below, at and above the thresholds); against a
+    brute-force form on a random graph; the head builds it from its args"""
     cfg = dict(sigma=0.03, sigma_lo=0.01, gamma=16.0, lo=0.05, lo_long=0.05, t_short=0.3, t_long=0.2, keep=0.6)
     K = 4
     pairs = ((0, 1), (1, 2), (1, 3), (2, 3))
@@ -373,7 +396,8 @@ def test_close_gaps():
                 logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1)
                 got = JK.close_gaps(logp, cand, kept, ch, cfg).exp()[0, int(far > 8), 1, 2]
                 got.backward()
-                assert float(leaf.grad) >= -1e-9 and float(got) >= last - 1e-9, ("the output falls when the pair's own probability rises", far, others, x, float(got), float(leaf.grad))
+                assert float(leaf.grad) >= -1e-9 and float(got) >= last - 1e-9, ("the output falls when the pair's own probability rises", far, others, x,
+                                                                                 float(got), float(leaf.grad))
                 last = float(got)
     rng = np.random.RandomState(5)
     K = 7
@@ -396,7 +420,8 @@ def test_close_gaps():
     closed = JK.JTokenHead(gap=cfg).eval()
     torch.manual_seed(13)
     both = JK.JTokenHead(gap=cfg, skip={k: v for k, v in dict(cfg, hops=5, m=8).items() if k in JK.SKIP_KEYS}).eval()
-    assert list(plain.state_dict()) == list(closed.state_dict()) and all(torch.equal(a, b) for a, b in zip(plain.state_dict().values(), closed.state_dict().values()))
+    assert list(plain.state_dict()) == list(closed.state_dict()) and all(torch.equal(a, b) for a,
+                                                                         b in zip(plain.state_dict().values(), closed.state_dict().values()))
     b = JK.synthetic_batch(2, 64, seed=5)
     with torch.no_grad():
         o0, o1, o2 = plain(b), closed(b), both(b)
@@ -427,8 +452,9 @@ def _fork_brute(p, cand, pt, chord, cfg):
 
 
 def test_fork_gate():
-    """E423 the soft fork gate: a source that is no fork keeps its strongest successor and loses a further delivered one (its mass to none); a fork keeps both; one successor is never touched; rows stay distributions; never
-    falling in a pair's own probability; the type softmax gets the gradient; brute force on a random graph; the head applies it after the other layers and builds it from its args"""
+    """E423 the soft fork gate: a source that is no fork keeps its strongest successor and loses a further delivered one (its mass to none); a fork keeps both;
+    one successor is never touched; rows stay distributions; never falling in a pair's own probability; the type softmax gets the gradient; brute force on a
+    random graph; the head applies it after the other layers and builds it from its args"""
     cfg = dict(sigma=0.03, sigma_rel=0.05, tau=0.05, sigma_f=0.01, t_short=0.3, t_long=0.2, keep=0.6)
     K = 4
     p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
@@ -487,8 +513,9 @@ def test_fork_gate():
 
 
 def test_refine_positions():
-    """E424 the soft position layer: straight lanes and circular arcs are fixed points; a zig-zag shrinks; only delivered short links move nodes; the offset is scaled by `gain` inside the cell; padding stays; gradients reach positions and
-    the wiring; the head writes `pos`, the dump record carries it and the delivered graph is written from it"""
+    """E424 the soft position layer: straight lanes and circular arcs are fixed points; a zig-zag shrinks; only delivered short links move nodes; the offset is
+    scaled by `gain` inside the cell; padding stays; gradients reach positions and the wiring; the head writes `pos`, the dump record carries it and the
+    delivered graph is written from it"""
     cfg = dict(gain=1.0, lam=1.0, sigma=0.03, t_short=0.3, keep=0.6)
     K = 8
 
@@ -535,7 +562,8 @@ def test_refine_positions():
     assert torch.equal(o0["logp"], o1["logp"]) and "pos" not in o0 and o1["pos"].shape == b["pos"].shape and torch.isfinite(o1["pos"]).all() and (o1["pos"] - b["pos"])[b["valid"]].abs().max() > 1e-3
     assert torch.equal(o1["pos"][~b["valid"]], b["pos"][~b["valid"]])
     cell = lambda q: (((q[:, 0] + 50) // 2) * 50 + (q[:, 1] + 50) // 2).astype(np.int64)  # noqa: E731
-    toks = [dict(pos=b["pos"][i].numpy(), dirv=b["dirv"][i].numpy(), e_p=b["e"][i].numpy(), flags_p=b["flags"][i].numpy(), s_p=b["s"][i].numpy(), cell=cell(b["pos"][i].numpy()), valid=b["valid"][i].numpy()) for i in range(2)]
+    toks = [dict(pos=b["pos"][i].numpy(), dirv=b["dirv"][i].numpy(), e_p=b["e"][i].numpy(), flags_p=b["flags"][i].numpy(), s_p=b["s"][i].numpy(),
+                 cell=cell(b["pos"][i].numpy()), valid=b["valid"][i].numpy()) for i in range(2)]
     recs = RO.batch_dump(o1, dict(token=["a", "b"], row=[0, 1], tokens_np=toks))
     graph = RO.graph(toks[0], recs[0], toks[0]["valid"], RO.Decode(link_thr=0.05, keep_thr=0.99, none_gate=False))
     want = np.asarray(recs[0]["pos"], float)[toks[0]["valid"] & (recs[0]["pnone"] < np.float32(0.99))]
@@ -561,8 +589,9 @@ def test_wiring_logp():
 
 # ------------------------------------------------------------------------------------------------------------------------------ decode
 def _decode_out(p_none4):
-    """6 tokens (5 is padding), short candidates 0->1 0->2 1->2 1->3 1->4 2->3 3->4 4->5 5->3, long 0->4: the per-source probabilities of `test_decode`; token 4 has p_none = p_none4. The padded token 5 is
-    given probability mass as a source and as a destination (and a p_none of 0.1) on purpose: the decode must still never link it"""
+    """6 tokens (5 is padding), short candidates 0->1 0->2 1->2 1->3 1->4 2->3 3->4 4->5 5->3, long 0->4: the per-source probabilities of `test_decode`; token 4
+    has p_none = p_none4. The padded token 5 is given probability mass as a source and as a destination (and a p_none of 0.1) on purpose: the decode must still
+    never link it"""
     K = 6
     cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
     P = torch.zeros(1, 2, K, K + 1)
@@ -586,8 +615,8 @@ def _pairs(d, key="link"):
 def test_decode():
     a, bk = _decode_out(0.49), _decode_out(0.5)
     rec = lambda o, **k: _pairs(JK.decode(o, **k))  # noqa: E731
-    # 0 -> 1 (.36) and 0 -> 2 (.34): both kept (a fork source), >= 0.3 and above p_none .30; source 1: .27 / .26 / .25 against p_none .22: all below 0.3; 2 -> 3 (.31): >= 0.3 but p_none .69 wins; 3 -> 4 (.55);
-    # long 0 -> 4 (.6); 4 -> 5 (.9) ends in the padded token and 5 -> 3 (.9) starts in it: never a link
+    # 0 -> 1 (.36) and 0 -> 2 (.34): both kept (a fork source), >= 0.3 and above p_none .30; source 1: .27 / .26 / .25 against p_none .22: all below 0.3; 2 -> 3
+    # (.31): >= 0.3 but p_none .69 wins; 3 -> 4 (.55); long 0 -> 4 (.6); 4 -> 5 (.9) ends in the padded token and 5 -> 3 (.9) starts in it: never a link
     exp = [(0, 1), (0, 2), (0, 4), (3, 4)]
     assert rec(a) == exp and _pairs(JK.decode(a), "long") == [(0, 4)]
     assert rec(bk) == [(0, 1), (0, 2)], "a link into a node with p_none >= 0.5 must be dropped (p_none 0.49 keeps it)"
@@ -595,7 +624,8 @@ def test_decode():
     open_ = dict(a, valid=torch.ones_like(a["valid"]))                                                         # mutant: no valid mask
     assert rec(open_) == sorted(exp + [(4, 5), (5, 3)])
     for mut in (rec(a, thr=0.2), rec(bk), rec(open_)):
-        must_fail(holds, mut == exp)                                                                        # each mutant (threshold, kept ends, no valid mask) differs from the record
+        # each mutant (threshold, kept ends, no valid mask) differs from the record
+        must_fail(holds, mut == exp)
     pr = JK.probs(a)
     assert abs(float(pr["p"][0, 0, 2]) - 0.34) < 1e-6 and abs(float(pr["pnone"][0, 0, 2]) - 0.30) < 1e-6 and bool(pr["keep"][0, 4]) and not bool(pr["keep"][0, 5]) and not bool(JK.probs(bk)["keep"][0, 4])
     print("decode: p >= 0.3 and p >= p(none), both ends kept (p_none < 0.5, 0.5 itself dropped), forks keep both branches, a padded source / destination never forms a link; "
@@ -619,7 +649,8 @@ def test_head():
     assert float((out["logp"].exp().sum(-1) - 1).abs().max()) < 1e-5
     _, al = JT.pair_geometry(b["pos"], b["dirv"], b["valid"], e=b["e"].sigmoid())
     cd = torch.cdist(b["pos"].double(), b["pos"].double()).float()          # an independent chord length (the head reads it from the pair features)
-    off = (cd - JK.SHORT).abs() > 1e-4                                      # tokens 4 apart on a lane are exactly 8 m: the class of such a pair is a float tie (the head reads L / 20 * 20)
+    # tokens 4 apart on a lane are exactly 8 m: the class of such a pair is a float tie (the head reads L / 20 * 20)
+    off = (cd - JK.SHORT).abs() > 1e-4
     assert torch.equal(out["cand"][:, 0][off], (al & (cd <= JK.SHORT))[off]) and torch.equal(out["cand"][:, 1][off], (al & (cd > JK.SHORT))[off]), "the chord classes of the candidates are <= 8 m / > 8 m of the token distance"
     assert float((out["chord"][al] - cd[al]).abs().max()) < 1e-3 and bool((out["cand"][:, 1]).any()) and bool((out["cand"][:, 0]).any()), "the chord of the head is the token distance"
     assert float((pr["p"] * ~al).abs().max()) == 0.0, "the candidates are the allowed gate of `jtok.pair_geometry`"
@@ -653,9 +684,10 @@ def test_head():
 
 
 def test_key_bias():
-    """what it proves: (1) after the switch the head's own p_none read after layer 1 AND after the last layer receives gradient from a loss on the links only (type CE off), i.e. through the key bias of layers 2, 3 and the
-    wiring layer; before the switch it receives none (the keys use sigmoid(e)); patching SWITCH to 0 (a head that is always in the learned mode) breaks the second half. (2) The Python mirror of the step follows
-    load_state_dict. (3) no gradient reaches any cached input (e, e_raw, flags, tok, ...): B' is frozen and the hard top-K is cut"""
+    """what it proves: (1) after the switch the head's own p_none read after layer 1 AND after the last layer receives gradient from a loss on the links only
+    (type CE off), i.e. through the key bias of layers 2, 3 and the wiring layer; before the switch it receives none (the keys use sigmoid(e)); patching SWITCH
+    to 0 (a head that is always in the learned mode) breaks the second half. (2) The Python mirror of the step follows load_state_dict. (3) no gradient reaches
+    any cached input (e, e_raw, flags, tok, ...): B' is frozen and the hard top-K is cut"""
     torch.manual_seed(0)
     b = _batch(2)
 
@@ -718,7 +750,8 @@ def test_writer_free():
     clean = {k: v for k, v in b.items() if k in JK.INPUTS}
     with torch.no_grad():
         o_min = m(NoGT(clean))
-        poison = dict(b, y=torch.full_like(b["y"], 1), ylong=~b["ylong"], yscale=torch.full_like(b["yscale"], 7.0), ytype=torch.full_like(b["ytype"], 3), gt_out=torch.ones(2))
+        poison = dict(b, y=torch.full_like(b["y"], 1), ylong=~b["ylong"], yscale=torch.full_like(b["yscale"], 7.0), ytype=torch.full_like(b["ytype"], 3),
+                      gt_out=torch.ones(2))
         assert torch.equal(m(NoGT(poison))["logp"], o_min["logp"]) and torch.equal(m(poison)["types"], o_min["types"]), "the forward depends on a GT key"
 
         def leaky(bb):                                                       # mutant: a forward that reads a GT key
@@ -800,7 +833,8 @@ def test_trainer():
         for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--none-weight", "0.5"]):
             must_fail(JKT.train, JKT.parse_args(argv + other), runs=runs, ckpt_every=5, **kw)                # another recipe in the same folder
         assert "t_s0" in argv
-        with loader_as(types.SimpleNamespace()):                                                             # --smoke must not read the loader: a module without one stands in its place
+        # --smoke must not read the loader: a module without one stands in its place
+        with loader_as(types.SimpleNamespace()):
             JKT.train(JKT.parse_args(["t_noload" if x == "t_s0" else x for x in argv]), runs=runs, ckpt_every=5, **kw)
         # a non-smoke run through a fake loader that returns (None, batches) like `lane_ptok_data.loader`
         seen = {}
@@ -809,14 +843,16 @@ def test_trainer():
             seen.update(split=split, seed=seed, bs=bs, workers=workers, **k)
             return None, [JK.synthetic_batch(bs, 48, seed=s) for s in range(3)]
         with loader_as(types.SimpleNamespace(loader=fake_loader)):
-            JKT.train(JKT.parse_args(["--name", "t_real", "--seed", "1", "--steps", "6", "--bs", "2", "--workers", "0", "--ident", "e273_p"]), runs=runs, ckpt_every=3)
+            JKT.train(JKT.parse_args(["--name", "t_real", "--seed", "1", "--steps", "6", "--bs", "2", "--workers", "0", "--ident", "e273_p"]), runs=runs,
+                      ckpt_every=3)
         assert seen == dict(split="train", seed=1, bs=2, workers=0, ident="e273_p"), seen
         m2, a2 = LN.load_head("t_real", "cpu", runs)
         assert a2["steps"] == 6 and a2["ident"] == "e273_p" and m2._step_py == 6 and os.path.exists(os.path.join(runs, "t_real", ".done"))
         seen.clear()
         with loader_as(types.SimpleNamespace(loader=fake_loader)):
             JKT.train(JKT.parse_args(["--name", "t_def", "--steps", "2", "--bs", "2", "--workers", "0"]), runs=runs, ckpt_every=3)
-        assert seen == dict(split="train", seed=0, bs=2, workers=0, ident="e292_a"), seen                      # the default: the one cache of the lane head of the seed
+        # the default: the one cache of the lane head of the seed
+        assert seen == dict(split="train", seed=0, bs=2, workers=0, ident="e292_a"), seen
     print("trainer: smoke on synthetic batches (20 steps, kill at 12, resume from the checkpoint of step 10, the step buffer = 20), run-directory files, loss parts logged, another recipe (lr / ident / none weight) refused, "
           "no loader import; a non-smoke run through a fake loader (ident passed, (None, batches) unpacked): ok")
 
@@ -833,8 +869,9 @@ def test_arch_options():
     for h in (new, expl):
         assert list(h.state_dict()) == list(old.state_dict()) and all(torch.equal(v, old.state_dict()[k]) for k, v in h.state_dict().items()), "default options must build the old head"
     assert JK.count_params(new) == 127131 and LN.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
-    # 20 synthetic steps with the defaults reproduce what the committed code did (recorded from the committed code before the changes, 2 threads: seed 0, bs 2, K 48). THESE CONSTANTS HOLD IN THIS TEST'S PROCESS ONLY (this file
-    # sets 2 threads; a fresh process with another thread count / BLAS order gives 2.8011269 for the same run): the portable check is the same-process one below (defaults against the explicit default arguments)
+    # 20 synthetic steps with the defaults reproduce what the committed code did (recorded from the committed code before the changes, 2 threads: seed 0, bs 2,
+    # K 48). THESE CONSTANTS HOLD IN THIS TEST'S PROCESS ONLY (this file sets 2 threads; a fresh process with another thread count / BLAS order gives 2.8011269
+    # for the same run): the portable check is the same-process one below (defaults against the explicit default arguments)
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         JKT.train(JKT.parse_args(["--name", "r", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0"]), runs, 500, 48)
         row = [json.loads(r) for r in open(os.path.join(runs, "r", "log.jsonl"))][-1]
@@ -847,11 +884,14 @@ def test_arch_options():
         assert [r["total"] for r in rows2] == [json.loads(r)["total"] for r in open(os.path.join(runs, "r", "log.jsonl"))] and list(sd2) == list(sd) and all(torch.equal(v, sd[k]) for k, v in sd2.items()), "explicit default arguments = the defaults, same process, bit for bit"
         assert LN.arch({}) == (64, 4, 3, 128), "the champion's architecture"
         os.makedirs(os.path.join(runs, "old"))
-        json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3)), open(os.path.join(runs, "old", "config.json"), "w"))     # a config of before the options
+        # a config of before the options
+        json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3)),
+                  open(os.path.join(runs, "old", "config.json"), "w"))
         a_old = vars(JKT.parse_args(["--name", "old", "--bs", "2", "--steps", "20"]))
         JKT.check_start(a_old, os.path.join(runs, "old"))
         must_fail(JKT.check_start, dict(a_old, none_weight=0.5), os.path.join(runs, "old"))
-        ck = torch.load(os.path.join(runs, "r", "model.pt"), map_location="cpu", weights_only=False)       # `check_removed`: a stored run's removed options at their off value resume and load as before, another value is refused by name
+        # `check_removed`: a stored run's removed options at their off value resume and load as before, another value is refused by name
+        ck = torch.load(os.path.join(runs, "r", "model.pt"), map_location="cpu", weights_only=False)
         bad = dict(prior="rule", teacher="rule", init="runs/x/model.pt", token_drop=0.1, none_weight_near=0.73, d=96, heads=2, layers=4, ffn=512,
                    pos_loss="max", distill_from="runs/a,runs/b", distill_weight=0.5, distill_sha256=["0"], noise_pos=0.2, noise_e=0.5, cache="runs/k384", K=384,
                    rounds=2, wire_weight=0.5, msg="uniform", pos_head=True, curve_w=0.5, node_w=0.5, min_e=0.2)
@@ -871,14 +911,16 @@ def test_arch_options():
                     fn()
                 except AssertionError as e:
                     (k,) = extra
-                    assert f"'{k}'" in str(e) and f"the tag {tag[k]} keeps them" in str(e), e                 # the message names the option and the tag that keeps its code
+                    # the message names the option and the tag that keeps its code
+                    assert f"'{k}'" in str(e) and f"the tag {tag[k]} keeps them" in str(e), e
                 else:
                     raise RuntimeError(f"a run with the removed option {extra} was accepted")
     print("arch_options: defaults = the old head (127131 parameters, 20 smoke steps reproduce the recorded loss 2.8015905 and the weights, also with --none-weight 1), the architecture is the constant (64, 4, 3, 128); "
           f"an old config resumes with the defaults and another recipe is refused; a stored run's removed options ({', '.join(off)}) at their off value resume and load, another value is refused with its name and tag: ok")
 
 
-# ------------------------------------------------------------------------------------------------------------------------------ the head seed, the live inputs (S4)
+# ------------------------------------------------------------------------------------------------------------------------------ the head seed, the live inputs
+# (S4)
 def _cache_batch(n=3):
     """the first n VAL frames of the predicted-node cache of B' seed 0, or None when it is not there"""
     from lane_center.net.prep import lane_ptok_data as LP
@@ -892,8 +934,8 @@ def _cache_batch(n=3):
 
 
 def _mutant(*edits, double=False, of=JK):
-    """jtoken.py (of=JKT: jtoken_train.py) with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual mutant; double: then every `.float()` becomes `.double()` (the float64
-    copy of `_live_fd_ok`)"""
+    """jtoken.py (of=JKT: jtoken_train.py) with each (old, new) text replaced (old found exactly once), loaded in this process as its own module: a textual
+    mutant; double: then every `.float()` becomes `.double()` (the float64 copy of `_live_fd_ok`)"""
     src = merged(of.__file__)                                                    # jtoken: with its losses (D152)
     for old, new in edits:
         assert src.count(old) == 1, old
@@ -907,9 +949,10 @@ def _mutant(*edits, double=False, of=JK):
 
 
 def _live_ok(mod, before):
-    """S4 (E372) `live_inputs` of `mod.JTokenHead` (jtoken itself or a textual mutant): a synthetic batch, the head after the switch (the champion's state), the champion's loss (none weight 0.25), the float INPUTS as leaves
-    with requires_grad. `before` = the module with the forward's input line of before (`_const` on every input). The default = before bit for bit (every output, every parameter gradient), no gradient into an input;
-    live_inputs=True: the same outputs and parameter gradients, a nonzero gradient on every float input -> {input: the sum of |grad|} of the live head"""
+    """S4 (E372) `live_inputs` of `mod.JTokenHead` (jtoken itself or a textual mutant): a synthetic batch, the head after the switch (the champion's state), the
+    champion's loss (none weight 0.25), the float INPUTS as leaves with requires_grad. `before` = the module with the forward's input line of before (`_const`
+    on every input). The default = before bit for bit (every output, every parameter gradient), no gradient into an input; live_inputs=True: the same outputs
+    and parameter gradients, a nonzero gradient on every float input -> {input: the sum of |grad|} of the live head"""
     b = _batch(2)
 
     def run(m_mod, **kw):
@@ -927,13 +970,16 @@ def _live_ok(mod, before):
     return {k: float(g.abs().sum()) for k, g in live[2].items()}
 
 
-FD_H, FD_TOL = 1e-6, 1e-4                                                     # `_live_fd_ok`: the step of the central difference, the tolerance relative to the analytic directional derivative
+# `_live_fd_ok`: the step of the central difference, the tolerance relative to the analytic directional derivative
+FD_H, FD_TOL = 1e-6, 1e-4
 
 
 def _live_fd_ok(mod):
-    """the FULL live gradient of `mod` (the float64 copy of jtoken, `_mutant(..., double=True)`, or a mutant of it): a synthetic batch of 2 frames x 64 tokens with the valid positions jittered by about 1 cm (the synthetic lanes
-    have pairs at exactly 8.0 m = SHORT, where the class flips with rounding, and duplicates exactly beside their token), the live head at step 0 and after the switch, the champion's loss; per float input a central difference
-    with h = FD_H along a random direction on the valid tokens against the analytic directional derivative (|fd - an| <= FD_TOL |an|: a zero analytic derivative fails too) -> the largest relative error"""
+    """the FULL live gradient of `mod` (the float64 copy of jtoken, `_mutant(..., double=True)`, or a mutant of it): a synthetic batch of 2 frames x 64 tokens
+    with the valid positions jittered by about 1 cm (the synthetic lanes have pairs at exactly 8.0 m = SHORT, where the class flips with rounding, and
+    duplicates exactly beside their token), the live head at step 0 and after the switch, the champion's loss; per float input a central difference with h =
+    FD_H along a random direction on the valid tokens against the analytic directional derivative (|fd - an| <= FD_TOL |an|: a zero analytic derivative fails
+    too) -> the largest relative error"""
     b = {k: (v.double() if v.is_floating_point() else v) for k, v in JK.synthetic_batch(2, 64, seed=0).items()}
     gen, vm = torch.Generator().manual_seed(7), b["valid"].double()
     b["pos"] = b["pos"] + 0.01 * torch.randn(b["pos"].shape, generator=gen, dtype=torch.float64) * vm[..., None]
@@ -956,9 +1002,10 @@ def _live_fd_ok(mod):
 
 
 def test_live_inputs():
-    """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach dropped under the default); `_live_fd_ok` (the full gradient of
-    every float input, float64 finite differences) on jtoken and two textual mutants (the geometry path cut, the key weight of layers 2 - 3 cut before the switch); `build_head` reads it from a run's args (absent = False,
-    also through `load_model`); `arch` and the state keys do not hold it"""
+    """S4 (E372) `JTokenHead(live_inputs=)`: `_live_ok` on jtoken and three textual mutants (the detach kept under live_inputs, the option ignored, the detach
+    dropped under the default); `_live_fd_ok` (the full gradient of every float input, float64 finite differences) on jtoken and two textual mutants (the
+    geometry path cut, the key weight of layers 2 - 3 cut before the switch); `build_head` reads it from a run's args (absent = False, also through
+    `load_model`); `arch` and the state keys do not hold it"""
     line = "b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}"
     before = _mutant((line, "b = {k: _const(batch[k]) for k in INPUTS}"))
     g = _live_ok(JK, before)
@@ -984,7 +1031,8 @@ def test_live_inputs():
 
 
 def test_head_seed():
-    """--head-seed N: the head's initialisation and the data order use N, --seed keeps choosing the cache (the loader's seed); head_seed in the recipe; --head-seed equal to --seed (and none) = the default run bit for bit"""
+    """--head-seed N: the head's initialisation and the data order use N, --seed keeps choosing the cache (the loader's seed); head_seed in the recipe;
+    --head-seed equal to --seed (and none) = the default run bit for bit"""
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         base = ["--smoke", "--bs", "2", "--workers", "0"]
         step0, real_bh = {}, LN.build_head
@@ -1009,7 +1057,8 @@ def test_head_seed():
 
         def fake_loader(split, seed, bs, workers, **k):
             seen[now[0]] = dict(seed=seed, **k)
-            return None, torch.utils.data.DataLoader([dict(JK.synthetic_batch(bs, 48, seed=s), token=[f"batch{s}"] * bs) for s in range(16)], batch_size=None, shuffle=True)
+            return None, torch.utils.data.DataLoader([dict(JK.synthetic_batch(bs, 48, seed=s), token=[f"batch{s}"] * bs) for s in range(16)], batch_size=None,
+                                                     shuffle=True)
 
         def first_batch(out, batch, **k):
             order.setdefault(now[0], batch["token"][0])
@@ -1017,7 +1066,8 @@ def test_head_seed():
         with loader_as(types.SimpleNamespace(loader=fake_loader)):
             for name, extra in (("f0", []), ("f0h0", ["--head-seed", "0"]), ("f0h2", ["--head-seed", "2"])):
                 now[0] = name
-                patched(LJK, "jtoken_loss", first_batch, JKT.train, JKT.parse_args(["--name", name, "--seed", "0", "--steps", "1", "--bs", "2", "--workers", "0"] + extra), runs, 3)
+                patched(LJK, "jtoken_loss", first_batch, JKT.train,
+                        JKT.parse_args(["--name", name, "--seed", "0", "--steps", "1", "--bs", "2", "--workers", "0"] + extra), runs, 3)
         assert all(s["seed"] == 0 and s["ident"] == "e292_a" for s in seen.values()) and len(seen) == 3, "--seed chooses the cache of B' seed 0"
         assert order["f0h0"] == order["f0"] != order["f0h2"], f"the batch order follows the head seed, --head-seed 0 = the default: {order}"
         log = open(os.path.join(runs, "s0h2", "train.log"), encoding="utf-8").read()
@@ -1049,8 +1099,10 @@ def test_head_seed():
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the champion's recorded numbers
-# Recorded in this test's process (2 threads, CPU; another process may differ in the last digits, as `arch_options`) from the code before the switches of E379 / E392 / E395 existed (commit 866ba519 and git HEAD before E392).
-CHAMP = (4.647189617156982, 1.6313660144805908, 2.20220827460289, 8251.217476223794)        # the champion recipe (--none-weight 0.25, seed 0, smoke bs 2, K 48): the first and the last of the 20 losses, the log row, the sum of |weights|
+# Recorded in this test's process (2 threads, CPU; another process may differ in the last digits, as `arch_options`) from the code before the switches of E379 /
+# E392 / E395 existed (commit 866ba519 and git HEAD before E392).
+# the champion recipe (--none-weight 0.25, seed 0, smoke bs 2, K 48): the first and the last of the 20 losses, the log row, the sum of |weights|
+CHAMP = (4.647189617156982, 1.6313660144805908, 2.20220827460289, 8251.217476223794)
 # `_champ_numbers` of a seeded head (torch seed 0) at head step 0 and SWITCH + 5, and of the stored E373 head `runs/e373_cb_s0` (train mode)
 CHAMP_HEAD = {0: (118588089.77677026, 9123.041142880917, 503.1498308633454, 525.4964824039489, 4.633667469024658, 928.3080354075339),
               JK.SWITCH + 5: (118588330.5475591, 9126.07040989399, 496.1637700991705, 525.4964824039489, 4.695507526397705, 921.0818347715707),
@@ -1059,7 +1111,8 @@ E373 = "e373_cb_s0"                                                           # 
 
 
 def _champ_numbers(head):
-    """forward + loss (none weight 0.25) + backward of `head` (a `JTokenHead` in train mode, its step as set) on a synthetic batch (3 frames, K 48) -> (sum |x| in float64 of logp, scale, types, types1; the loss; sum |grad| of every parameter)"""
+    """forward + loss (none weight 0.25) + backward of `head` (a `JTokenHead` in train mode, its step as set) on a synthetic batch (3 frames, K 48) -> (sum |x|
+    in float64 of logp, scale, types, types1; the loss; sum |grad| of every parameter)"""
     b = JK.synthetic_batch(3, 48, seed=0)
     out = head(b)
     loss = LJK.jtoken_loss(out, b, none_weight=0.25)[0]
@@ -1069,8 +1122,9 @@ def _champ_numbers(head):
 
 
 def _twin_step():
-    """one step of the champion's stage-1 recipe of seed 0 on the real TRAIN cache (CPU): the head's init is E373's rebuilt (seed_all(2), build_head of its args), the first batch is the first of E373's order and the first loss is
-    E373's logged one (the GPU in bf16 there: to 2e-3) -> a note; skipped where the run or the cache is not on this machine"""
+    """one step of the champion's stage-1 recipe of seed 0 on the real TRAIN cache (CPU): the head's init is E373's rebuilt (seed_all(2), build_head of its
+    args), the first batch is the first of E373's order and the first loss is E373's logged one (the GPU in bf16 there: to 2e-3) -> a note; skipped where the
+    run or the cache is not on this machine"""
     import re
     from lane_center.net.prep import lane_ptok_data as LP
     e373 = os.path.join(JKT.T.RUNS, E373)
@@ -1108,8 +1162,9 @@ def _twin_step():
 
 
 def test_champion():
-    """the default path against RECORDED numbers (the known answer of every change of the head, its loss and the stage-1 trainer): a seeded head at two head steps and the stored E373 head (`load_model`; skipped when the run is not
-    there) give the forward, the loss and the gradient sums of `CHAMP_HEAD`; 127131 parameters, the champion's output keys; the 20 smoke steps of the champion recipe give `CHAMP`; `_twin_step` on the real cache"""
+    """the default path against RECORDED numbers (the known answer of every change of the head, its loss and the stage-1 trainer): a seeded head at two head
+    steps and the stored E373 head (`load_model`; skipped when the run is not there) give the forward, the loss and the gradient sums of `CHAMP_HEAD`; 127131
+    parameters, the champion's output keys; the 20 smoke steps of the champion recipe give `CHAMP`; `_twin_step` on the real cache"""
     keys = ["chord", "cand", "logp", "scale", "types", "types1", "valid"]
     for step in (0, JK.SWITCH + 5):
         torch.manual_seed(0)
@@ -1138,7 +1193,8 @@ def test_champion():
             return r
         return g
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
-        patched(JKT, "make_loss", recording, JKT.train, JKT.parse_args(["--name", "champ", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25"]), runs, 500, 48)
+        patched(JKT, "make_loss", recording, JKT.train,
+                JKT.parse_args(["--name", "champ", "--seed", "0", "--smoke", "--bs", "2", "--workers", "0", "--none-weight", "0.25"]), runs, 500, 48)
         sd = torch.load(os.path.join(runs, "champ", "model.pt"), map_location="cpu", weights_only=False)["state"]
         row = [json.loads(x) for x in open(os.path.join(runs, "champ", "log.jsonl"))][-1]
     got = (steps[0], steps[-1], row["total"], sum(float(v.double().abs().sum()) for v in sd.values() if v.dtype.is_floating_point))

@@ -59,7 +59,8 @@ def train_rows(gt):
 
 
 class Frames:
-    """the rows of a split in the cached files: `part` ("train" | "val"), `rows` (the rows of the part, in the split's order), `ks` (the chosen indices into rows)"""
+    """the rows of a split in the cached files: `part` ("train" | "val"), `rows` (the rows of the part, in the split's order), `ks` (the chosen indices into
+    rows)"""
 
     def __init__(self, split="train", ks=None):
         assert split in SPLITS, (split, SPLITS)

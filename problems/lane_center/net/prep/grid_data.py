@@ -53,4 +53,5 @@ def collate(b):
 def loader(ds, bs=8, workers=3, batches=None):
     """the batches of `ds` in order (`batches`: a batch sampler, e.g. the trainer's step order, else the frames in order, batch `bs`)"""
     kw = dict(batch_sampler=batches) if batches is not None else dict(batch_size=bs, shuffle=False)
-    return torch.utils.data.DataLoader(ds, num_workers=workers, collate_fn=collate, persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None, **kw)
+    return torch.utils.data.DataLoader(ds, num_workers=workers, collate_fn=collate, persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None,
+                                       **kw)

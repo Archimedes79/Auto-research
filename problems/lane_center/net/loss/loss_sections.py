@@ -5,7 +5,8 @@ from lane_center.net.model.qnodes import N
 
 
 def start_targets(gt, links):
-    """for every active node: the active index of the first node of its piece (-1: not a GT node / the start is not among the active nodes) -> (B, K) long, and the piece id (B, K) (-1 none)"""
+    """for every active node: the active index of the first node of its piece (-1: not a GT node / the start is not among the active nodes) -> (B, K) long, and
+    the piece id (B, K) (-1 none)"""
     idx = links["act"]
     B, K = idx.shape
     dev = idx.device

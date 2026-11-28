@@ -1,8 +1,11 @@
-"""Stage A of the lane head (E273): the pixel maps, one shared encoder-decoder with three taps (0.5 m lines, 1 m centres + event heats, 2 m road + intersection).
+"""Stage A of the lane head (E273): the pixel maps, one shared encoder-decoder with three taps (0.5 m lines, 1 m centres + event heats, 2 m road +
+intersection).
 
     PyramidHead(width=48)(x (B, 39, 200, 200)) -> dict
-        centre1  (B, 12, 100, 100)  E271's six channels (p logit, cos, sin, ox, oy, keep gate; `soft_lines.sparsify` reads them) + six event-heat logits (split, merge, stop, exit, start, end)
-        lines05  (B, 6, 200, 200)   logits of lane divider, road divider, road boundary (0-2) and their truncated distances in metres x 1 (3-5, raw: 2 m x sigmoid is applied by the loss)
+        centre1  (B, 12, 100, 100)  E271's six channels (p logit, cos, sin, ox, oy, keep gate; `soft_lines.sparsify` reads them) + six event-heat logits
+            (split, merge, stop, exit, start, end)
+        lines05  (B, 6, 200, 200)   logits of lane divider, road divider, road boundary (0-2) and their truncated distances in metres x 1 (3-5, raw: 2 m x
+            sigmoid is applied by the loss)
         road2    (B, 2, 50, 50)     logits of road (drivable area) and intersection
         feat2    (B, 144, 50, 50)   the 2 m feature map of the node grid (decoder level at 2 m + the pooled 1 m level)
         feat1    (B, w, 100, 100)   the 1 m features, feat05 (B, 32, 200, 200) the 0.5 m features (the nodes sample them at their positions)
@@ -52,7 +55,8 @@ class PyramidHead(nn.Module):
         d1 = self.d1(torch.cat([up(d, a), a], 1))
         d0 = self.d0(torch.cat([up(d1, s), s], 1))
         f05 = self.m05(torch.cat([up(d0, x), self.s05(x)], 1))
-        return dict(centre1=self.centre1(d0), lines05=self.lines05(f05), road2=self.road2(d1), feat2=torch.cat([d1, F.avg_pool2d(d0, 2)], 1), feat1=d0, feat05=f05)
+        return dict(centre1=self.centre1(d0), lines05=self.lines05(f05), road2=self.road2(d1), feat2=torch.cat([d1, F.avg_pool2d(d0, 2)], 1), feat1=d0,
+                    feat05=f05)
 
     def load_e271(self, path):
         """the body and the six centre channels from a trained E271 head (`runs/e271_a_s<seed>/model.pt`)"""
@@ -75,7 +79,8 @@ def _selftest():
     x = torch.randn(2, 42, 200, 200)
     y = m(x)
     shapes = {k: tuple(v.shape) for k, v in y.items()}
-    assert shapes == dict(centre1=(2, 12, 100, 100), lines05=(2, 6, 200, 200), road2=(2, 2, 50, 50), feat2=(2, 48, 50, 50), feat1=(2, 16, 100, 100), feat05=(2, 16, 200, 200)), shapes
+    assert shapes == dict(centre1=(2, 12, 100, 100), lines05=(2, 6, 200, 200), road2=(2, 2, 50, 50), feat2=(2, 48, 50, 50), feat1=(2, 16, 100, 100),
+                          feat05=(2, 16, 200, 200)), shapes
     loss = sum(v.square().mean() for v in y.values())
     loss.backward()
     dead = [n for n, p in m.named_parameters() if p.grad is None or float(p.grad.abs().sum()) == 0.0]

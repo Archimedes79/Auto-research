@@ -1,7 +1,7 @@
 """qual_frames: the qualitative picture of chosen VAL frames, several systems side by side (promoted 2026-11-23 from the report scratch of 2026-11-17, D140).
-One picture per frame: the front camera with the GT lane graph projected (GtGenerator's camera view through `qgraph_view`), a number table per system, and one BEV
-panel per system: its delivered graph against the lane GT (GT grey with travel arrows, own lane = a pale band, delivered points green <= 1 m / orange <= 2 m / red
-beyond, GT not covered within 2 m blue). CPU only. The frames are chosen OUTSIDE this tool by a written rule (`--spec`), never by eye.
+One picture per frame: the front camera with the GT lane graph projected (GtGenerator's camera view through `qgraph_view`), a number table per system, and one
+BEV panel per system: its delivered graph against the lane GT (GT grey with travel arrows, own lane = a pale band, delivered points green <= 1 m / orange <= 2 m
+/ red beyond, GT not covered within 2 m blue). CPU only. The frames are chosen OUTSIDE this tool by a written rule (`--spec`), never by eye.
 
     python -P -m lane_center.tools.viz.qual_frames --frames F.pkl --spec S.json --systems "B=plain lane head B,champ=token champion" --out DIR [--table T.json]
     python -P -m lane_center.tools.viz.qual_frames --selftest
@@ -164,7 +164,8 @@ def selftest():
     assert list(bands([[0, 0]], np.zeros((0, 2)))) == [2], "no GT: every point beyond"
     assert parse_systems("a=first,b") == [("a", "first"), ("b", "b")]
     with tempfile.TemporaryDirectory() as td:
-        p = render({"name": "t", "k": 0, "title": "selftest"}, data, parse_systems("a=system A,b=system B"), {"a": {"topo F1": [0.9]}, "b": {"topo F1": [0.4]}}, td)
+        p = render({"name": "t", "k": 0, "title": "selftest"}, data, parse_systems("a=system A,b=system B"), {"a": {"topo F1": [0.9]}, "b": {"topo F1": [0.4]}},
+                   td)
         assert os.path.getsize(p) > 10_000, "a picture is written"
         fp, sp = os.path.join(td, "f.pkl"), os.path.join(td, "s.json")
         pickle.dump(data, open(fp, "wb"))

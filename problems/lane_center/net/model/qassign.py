@@ -1,18 +1,19 @@
 """Stage E of the lane head (E273): the map encoder and the assignment of the nodes to the map pieces.
 
     MapEncoder(d)(map_pos, map_tan, map_frac, map_pidx, map_pfeat, map_adj, kmask, tmask) -> dict(piece (B, K, d), tok (B, T, d))
-    Assigner(d)(node_tok, node_pos, node_dir, node_w, node_valid, map, enc, rounds=2) -> dict(P_tok (B, A, T + 1), P_piece (B, A, K + 1), P_road (B, A, R + 1), shift (B, 2), yaw (B,))
+    Assigner(d)(node_tok, node_pos, node_dir, node_w, node_valid, map, enc, rounds=2) -> dict(P_tok (B, A, T + 1), P_piece (B, A, K + 1), P_road (B, A, R +
+        1), shift (B, 2), yaw (B,))
 
-The map = the lane GT pieces of the frame with simulated errors (`map_sim.make_map`): tokens every 2 m (position, tangent, arclength fraction), piece features (kind, lane count, lane index,
-numbers of successors / predecessors, length, open ends) and the five relations succ / pred / left / right / opposite. The encoder is a 3-layer graph transformer over the PIECES whose attention
-runs along those relations (relation bias per head), the token embedding = a token MLP + its piece embedding.
-The assignment is a cross-attention from the nodes (rows: the perception structure is kept) to the map tokens plus a dustbin:
+The map = the lane GT pieces of the frame with simulated errors (`map_sim.make_map`): tokens every 2 m (position, tangent, arclength fraction), piece features
+(kind, lane count, lane index, numbers of successors / predecessors, length, open ends) and the five relations succ / pred / left / right / opposite. The
+encoder is a 3-layer graph transformer over the PIECES whose attention runs along those relations (relation bias per head), the token embedding = a token MLP +
+its piece embedding. The assignment is a cross-attention from the nodes (rows: the perception structure is kept) to the map tokens plus a dustbin:
     logit(i, t) = - [ |p_i - q_t|^2 / sigma^2 + lam (1 - h_i . tau_t) ] + (W_q tok_i) . (W_k emb_t) / sqrt(d),   dustbin: - (c_bin + MLP(tok_i))
-the first part is E272's geometric assigner (sigma 1.5, lam 2, c_bin 4: the start equals the control g, the learned part starts near zero); P(piece) = sum of P(token) over the tokens of the piece.
-`rounds` rounds of soft registration: a weighted Procrustes (rotation + translation of the map tokens, weights = node weight x P(token)) moves the map towards the nodes and the logits are
-recomputed (the shift is clamped to +-5 m, the rotation to +-6 degrees). Road level: P(road) = sum of P(piece) over the pieces of the road.
-Frame: lane frame (x right, y forward) for nodes and map alike; nothing is converted.
-Run the self-test: python -P -m lane_center.net.model.qassign
+the first part is E272's geometric assigner (sigma 1.5, lam 2, c_bin 4: the start equals the control g, the learned part starts near zero); P(piece) = sum of
+P(token) over the tokens of the piece.
+`rounds` rounds of soft registration: a weighted Procrustes (rotation + translation of the map tokens, weights = node weight x P(token)) moves the map towards
+the nodes and the logits are recomputed (the shift is clamped to +-5 m, the rotation to +-6 degrees). Road level: P(road) = sum of P(piece) over the pieces of
+the road. Frame: lane frame (x right, y forward) for nodes and map alike; nothing is converted. Run the self-test: python -P -m lane_center.net.model.qassign
 """
 import math
 
@@ -165,7 +166,8 @@ def _selftest():
     out0 = asg(ntok, npos, ndir, torch.ones(B, A), torch.ones(B, A, dtype=torch.bool), shifted, enc, rounds=0)
     out2 = asg(ntok, npos, ndir, torch.ones(B, A), torch.ones(B, A, dtype=torch.bool), shifted, enc, rounds=2)
     a0, a2 = float(out0["P_piece"][..., 1].mean()), float(out2["P_piece"][..., 1].mean())
-    print("mass on the right piece without / with registration:", round(a0, 3), round(a2, 3), "| shift", out2["shift"][0].tolist(), "yaw deg", float(out2["yaw"][0]) * 57.3)
+    print("mass on the right piece without / with registration:", round(a0, 3), round(a2, 3), "| shift", out2["shift"][0].tolist(), "yaw deg",
+          float(out2["yaw"][0]) * 57.3)
     assert a2 >= a0 - 1e-3 and abs(float(out2["P_piece"].sum(-1).mean()) - 1) < 1e-4
     assert out2["P_road"].shape[-1] == 3 and out2["P_piece"].shape == (B, A, K + 1)
     loss = -torch.log(out2["P_piece"][..., 1].clamp_min(1e-6)).mean()

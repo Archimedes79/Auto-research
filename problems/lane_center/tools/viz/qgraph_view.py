@@ -1,25 +1,29 @@
-"""Pictures of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels on the
-same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of `net/model/qformat.py` (the contract) and the
-lane GT of the frame (`GtGenerator.load_lane`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
-dict through `pred_fn(token)`.
+"""Pictures of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels
+on the same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of
+`net/model/qformat.py` (the contract) and the lane GT of the frame (`GtGenerator.load_lane`); today the prediction is the ORACLE (`qformat.oracle_prediction`)
+or a DEGRADED oracle made here to check the error tints, later the network's dict through `pred_fn(token)`.
 
     python -P -m lane_center.tools.viz.qgraph_view frame <token | scene-0221:12> --out DIR [--pred oracle|degraded] [--no-cams]
-    python -P -m lane_center.tools.viz.qgraph_view scene <VAL scene id | scene name> --out DIR [--pred ...] [--frames N] [--every K]     (the mp4 of a scene left with tools/video, tag v1)
+    python -P -m lane_center.tools.viz.qgraph_view scene <VAL scene id | scene name> --out DIR [--pred ...] [--frames N] [--every K]     (the mp4 of a scene
+        left with tools/video, tag v1)
     python -P -m lane_center.tools.viz.qgraph_view list                    the VAL scenes (id as in `grid_view.py --scene`, name, location, frames, description)
     python -P -m lane_center.tools.viz.qgraph_view --selftest              a synthetic frame (needs no stored GT; imports the scorer)
 
 Panels (1920 x 1080 with the six cameras; metres, x right, y forward, ego at the origin):
-  cameras   the GT lane graph projected into the six cameras (front large; the projection is `GtGenerator.lane_graph_view.camera_image`; a camera that is not on disk is a grey tile)
-  1 m       centre-lane cells: GT faint grey, correct dark, false positive light red, miss light blue (a cell counts when the other map has a cell within 1 cell); without
+  cameras   the GT lane graph projected into the six cameras (front large; the projection is `GtGenerator.lane_graph_view.camera_image`; a camera that is not on
+  disk is a grey tile) 1 m       centre-lane cells: GT faint grey, correct dark, false positive light red, miss light blue (a cell counts when the other map has
+  a cell within 1 cell); without
             `pred["maps"]` the cells of the delivered nodes are drawn instead
   2 m, 0.5 m  road and intersection cells (exact), dividers and boundary (one hue per class), the same scheme
-  nodes     a marker per flag (stop, exit, split, merge, start, end, window) and the Hermite links over the GT graph in thin grey; a node is false when no GT node lies within 2 m
-            (red halo), a GT node is missed when no delivered node lies within 2 m (blue halo); false links red, missed GT links blue; GT junctions circled faintly
-  ids       left the GT pieces (one stable colour per piece id), right the delivered nodes and curves in the expected colour sum_j P(j | node) colour_j (dustbin grey; an unsure
-            assignment blends), a black diamond where the section changes along a link
-Title and numbers panel: the scorer's numbers (`evaluation/qgraph_eval.py`; the graph numbers only for VAL frames, against the old graph GT of the lane suite). The counts of false / missed nodes and links behind the tints are the picture's own rule (nearest node within 2 m).
-Read-out: the scorer's rule (`qgraph_eval.kept`: e >= 0.5, p >= 0.5 between kept nodes). Map layers of `pred["maps"]` as `qraster` makes them: lines05 = mask (3) + distance (3),
-centre1 channel 0, road2 = road, intersection; values inside [0, 1] are probabilities (on at > 0.5), others logits (on at > 0).
+  nodes     a marker per flag (stop, exit, split, merge, start, end, window) and the Hermite links over the GT graph in thin grey; a node is false
+            when no GT node lies within 2 m (red halo), a GT node is missed when no delivered node lies within 2 m (blue halo); false links red, missed GT links
+            blue; GT junctions circled faintly
+  ids       left the GT pieces (one stable colour per piece id), right the delivered nodes and curves in the expected colour sum_j P(j | node)
+            colour_j (dustbin grey; an unsure assignment blends), a black diamond where the section changes along a link
+Title and numbers panel: the scorer's numbers (`evaluation/qgraph_eval.py`; the graph numbers only for VAL frames, against the old graph GT of the lane suite).
+The counts of false / missed nodes and links behind the tints are the picture's own rule (nearest node within 2 m). Read-out: the scorer's rule
+(`qgraph_eval.kept`: e >= 0.5, p >= 0.5 between kept nodes). Map layers of `pred["maps"]` as `qraster` makes them: lines05 = mask (3) + distance (3), centre1
+channel 0, road2 = road, intersection; values inside [0, 1] are probabilities (on at > 0.5), others logits (on at > 0).
 
 Minimal example (python):
     from lane_center.tools.viz import qgraph_view as QV
@@ -122,11 +126,13 @@ class _Nusc:
 
     def get(self, table, key):
         c = self.c[key]
-        return {"sample_data": dict(calibrated_sensor_token=key, ego_pose_token=key, filename=c["filename"]), "calibrated_sensor": c["calibrated_sensor"], "ego_pose": c["ego_pose"]}[table]
+        return {"sample_data": dict(calibrated_sensor_token=key, ego_pose_token=key, filename=c["filename"]), "calibrated_sensor": c["calibrated_sensor"],
+                "ego_pose": c["ego_pose"]}[table]
 
 
 def camera_tiles(token, g, sizes, log=print):
-    """-> {camera: RGB tile} with the GT graph projected (the GT chat's code); grey tiles with a note when the token has no camera info or an image is missing"""
+    """-> {camera: RGB tile} with the GT graph projected (the GT chat's code); grey tiles with a note when the token has no camera info or an image is
+    missing"""
     import cv2
     info = _infos().get(token)
     tiles = {}
@@ -293,9 +299,10 @@ def curves_of(pred):
 
 
 def degrade(pred, seed=0):
-    """the oracle with known faults, so that the tints can be checked: 5 % spurious nodes and 3 % spurious links (red), 15 % of the nodes dropped and 10 % of the links cut (blue),
-    10 % of the nodes shifted by 1.5 m, the section ids (and the map piece) of the two biggest pieces swapped, the assignment of 20 % of the nodes blurred; curves recomputed from the nodes.
-    A frame with fewer than two pieces (a map hole, a lone piece) has nothing to swap and is returned as it is"""
+    """the oracle with known faults, so that the tints can be checked: 5 % spurious nodes and 3 % spurious links (red), 15 % of the nodes dropped and 10 % of
+    the links cut (blue), 10 % of the nodes shifted by 1.5 m, the section ids (and the map piece) of the two biggest pieces swapped, the assignment of 20 % of
+    the nodes blurred; curves recomputed from the nodes. A frame with fewer than two pieces (a map hole, a lone piece) has nothing to swap and is returned as it
+    is"""
     rng = np.random.RandomState(seed)
     n = {k: v.copy() for k, v in pred["nodes"].items()}
     l = {k: v.copy() for k, v in pred["links"].items() if k != "curves"}
@@ -343,7 +350,8 @@ def degrade(pred, seed=0):
     sh = rng.rand(M2) < 0.10
     t = rng.uniform(0, 2 * np.pi, int(sh.sum()))
     n["pos"][sh] += 1.5 * np.stack([np.cos(t), np.sin(t)], 1)
-    for i in rng.randint(0, M, max(int(0.15 * M / 3), 1)):                  # 15 % of the nodes dropped, in runs of three along a lane (a lone node leaves no gap at the 2 m rule)
+    # 15 % of the nodes dropped, in runs of three along a lane (a lone node leaves no gap at the 2 m rule)
+    for i in rng.randint(0, M, max(int(0.15 * M / 3), 1)):
         n["e"][i:i + 3] = 0.2
     l["p"][rng.rand(len(l["src"])) < 0.10] = 0.2
     # swap the two biggest pieces; blur the assignment of 20 % of the nodes
@@ -397,8 +405,10 @@ def make_pred(g, kind="oracle", token=""):
 
 # ------------------------------------------------------------------------------------------------------------------------------------ analysis
 def compare_graph(d, nt, tol=2.0):
-    """the delivered graph `d` against the GT node table `nt` (card section 4): a node is false when no GT node lies within `tol`, a GT node is missed when no delivered node lies within
-    `tol`; a link is true when its two nodes match the two nodes of a GT link, a GT link is missed when no delivered link matches it. -> dict of bool arrays + the matching"""
+    """the delivered graph `d` against the GT node table `nt` (card section 4): a node is false when no GT node lies within `tol`, a GT node is missed when no
+    delivered node lies within
+    `tol`; a link is true when its two nodes match the two nodes of a GT link, a GT link is missed when no delivered link matches it. -> dict of bool arrays +
+    the matching"""
     pos, gpos = d["nodes"]["pos"], nt["pos"]
     dn, ig = cKDTree(gpos).query(pos) if len(pos) and len(gpos) else (np.full(len(pos), np.inf), np.zeros(len(pos), int))
     dm = cKDTree(pos).query(gpos)[0] if len(pos) and len(gpos) else np.full(len(gpos), np.inf)
@@ -412,7 +422,8 @@ def compare_graph(d, nt, tol=2.0):
 
 
 def scorer_numbers(pred, g, token):
-    """the numbers of the scorer (`qgraph_eval`: node, assignment and, for a VAL frame, graph metrics against the old graph GT of the lane suite); the graph keys are missing for other tokens"""
+    """the numbers of the scorer (`qgraph_eval`: node, assignment and, for a VAL frame, graph metrics against the old graph GT of the lane suite); the graph
+    keys are missing for other tokens"""
     from lane_center.evaluation import qgraph_eval as QE
     out = dict(QE.node_metrics(pred, g), **QE.assign_metrics(pred, g))
     if "frames" not in _CACHE:
@@ -423,7 +434,8 @@ def scorer_numbers(pred, g, token):
 
 
 def piece_rgb(key):
-    """the colour of a piece id: the hue of `GtGenerator.lane_graph_view` (so the camera panels and the ids panels agree), a little darker for a light background"""
+    """the colour of a piece id: the hue of `GtGenerator.lane_graph_view` (so the camera panels and the ids panels agree), a little darker for a light
+    background"""
     return np.array(colorsys.hsv_to_rgb(((zlib.crc32(str(key).encode()) * 2654435761) % 180) / 180.0, 0.78, 0.80))
 
 
@@ -436,10 +448,12 @@ def expected_rgb(assign):
 
 # ------------------------------------------------------------------------------------------------------------------------------------- drawing
 def layout(cams):
-    """pixel rectangles (x, y, w, h; origin top left) of the panels; the BEV panels are S x S with S a multiple of 200, so that a 0.5 m canvas pixel is S / 200 whole screen pixels"""
+    """pixel rectangles (x, y, w, h; origin top left) of the panels; the BEV panels are S x S with S a multiple of 200, so that a 0.5 m canvas pixel is S / 200
+    whole screen pixels"""
     S = 400 if cams else 600
     x0, y0, row_h, col_w = (640 if cams else 0), 66, S + 38, S + 24
-    rects = {name: (x0 + (i % 3) * col_w + 24, y0 + (i // 3) * row_h, S, S) for i, name in enumerate(("centre", "areas", "nodes", "ids_gt", "ids_pred", "numbers"))}
+    rects = {name: (x0 + (i % 3) * col_w + 24, y0 + (i // 3) * row_h, S, S) for i,
+             name in enumerate(("centre", "areas", "nodes", "ids_gt", "ids_pred", "numbers"))}
     W, H = (1920, 1080) if cams else (x0 + 3 * col_w + 12, y0 + 2 * row_h + 150)
     ly = y0 + 2 * row_h - 14
     lay = dict(size=(W, H), bev=rects, legend=(x0 + 24, ly, 3 * col_w - 24, H - ly - 6))
@@ -572,9 +586,11 @@ def draw_legend(ax):
         x = 0.01 + i * 0.16
         ax.plot([x, x + 0.02], [0.32, 0.32], color=h, lw=3, transform=ax.transAxes)
         ax.text(x + 0.025, 0.32, k, fontsize=7, va="center", transform=ax.transAxes)
-    ax.plot([0.52, 0.54], [0.32, 0.32], color="#26324d", lw=1.4, transform=ax.transAxes), ax.text(0.545, 0.32, "short link", fontsize=7, va="center", transform=ax.transAxes)
+    ax.plot([0.52, 0.54], [0.32, 0.32], color="#26324d", lw=1.4, transform=ax.transAxes), ax.text(0.545, 0.32, "short link", fontsize=7, va="center",
+                                                                                                  transform=ax.transAxes)
     ax.plot([0.62, 0.64], [0.32, 0.32], color="#7a1fa2", lw=1.4, ls="--", transform=ax.transAxes), ax.text(0.645, 0.32, "long link", fontsize=7, va="center", transform=ax.transAxes)
-    ax.scatter([0.73], [0.32], marker="D", s=18, c="k", transform=ax.transAxes), ax.text(0.742, 0.32, "section changes", fontsize=7, va="center", transform=ax.transAxes)
+    ax.scatter([0.73], [0.32], marker="D", s=18, c="k", transform=ax.transAxes), ax.text(0.742, 0.32, "section changes", fontsize=7, va="center",
+                                                                                         transform=ax.transAxes)
     ax.text(0.01, 0.08, "ids: left the GT pieces (colour = hash of the piece id, as in the cameras); right the delivered nodes in the expected colour sum_j P(j | node) colour_j, dustbin grey.  "
             "junctions (GT split / merge): faint dotted circles.  1 m and 0.5 m cells: tolerance of one cell.", fontsize=6.5, transform=ax.transAxes)
 
@@ -623,7 +639,8 @@ def render_frame(token, pred, out_png, cams=True, g=None, note="", log=print):
 
 
 def render_scene(scene, out_dir, pred_fn=None, kind="oracle", frames=None, every=1, cams=True, log=print):
-    """the keyframes of a VAL scene in time order -> PNGs in out_dir; `pred_fn(token)` gives the prediction (default: `make_pred(load_gt(token), kind, token)`); `kind` also labels the files"""
+    """the keyframes of a VAL scene in time order -> PNGs in out_dir; `pred_fn(token)` gives the prediction (default: `make_pred(load_gt(token), kind, token)`);
+    `kind` also labels the files"""
     _, name, toks = resolve_scene(scene)
     toks = toks[::every][:frames]
     pred_fn = pred_fn or (lambda t: make_pred(load_gt(t), kind, t))
@@ -638,11 +655,13 @@ def render_scene(scene, out_dir, pred_fn=None, kind="oracle", frames=None, every
 
 # ------------------------------------------------------------------------------------------------------------------------------------- selftest
 def _synthetic():
-    """a small lane GT graph: a lane that splits into a straight piece and a connector through an intersection, a lane of its own beside them, dividers, a boundary, a road and an intersection polygon"""
+    """a small lane GT graph: a lane that splits into a straight piece and a connector through an intersection, a lane of its own beside them, dividers, a
+    boundary, a road and an intersection polygon"""
     ys = lambda a, b: np.stack([np.zeros(int((b - a) / 0.5) + 1), np.arange(a, b + 1e-9, 0.5)], 1)
     A = QT._piece("A", ys(-48, 0), succ=["B", "C"], start_open=True)
     B = QT._piece("B", ys(0, 30), end_open=True, pred=["A"])
-    D = QT._piece("D", np.stack([np.full(81, 10.0), np.arange(-30, 10.1, 0.5)], 1))                  # a lane of its own, off the axis in x and y: a flipped image shows
+    # a lane of its own, off the axis in x and y: a flipped image shows
+    D = QT._piece("D", np.stack([np.full(81, 10.0), np.arange(-30, 10.1, 0.5)], 1))
     s = np.linspace(0, 1, 61)
     C = QT._piece("C", np.stack([22 * s ** 2, 30 * s], 1), kind="connector", pred=["A"], end_open=True, inter=True)
     ev = [dict(type="window", io="in", pos=[0.0, -48.0], **{"in": [], "out": ["A"]}, dirs_in=[], dirs_out=[[0, 1]], partial=False),
@@ -676,8 +695,10 @@ def _selftest():
     cmp = compare_graph(d, nt)
     sn = scorer_numbers(pred, g, "synthetic")
     assert not cmp["false_n"].any() and not cmp["missed_n"].any() and not cmp["false_l"].any() and not cmp["missed_l"].any(), "the oracle has no error"
-    assert sn["node_F1"] == 1 and sn["lane_acc"] == 1 and "F1@1.0" not in sn, sn                  # the scorer's numbers; no graph numbers for a token that is no VAL frame
-    # three GT nodes in a row, the middle delivered node 3.5 m off: it is false, the GT node is missed, both links are false and both GT links missed; within 2 m is a match
+    # the scorer's numbers; no graph numbers for a token that is no VAL frame
+    assert sn["node_F1"] == 1 and sn["lane_acc"] == 1 and "F1@1.0" not in sn, sn
+    # three GT nodes in a row, the middle delivered node 3.5 m off: it is false, the GT node is missed, both links are false and both GT links missed; within 2
+    # m is a match
     gt3 = dict(pos=np.array([[0.0, 0.0], [10.0, 0.0], [20.0, 0.0]]), src=np.array([0, 1]), dst=np.array([1, 2]))
     d3 = dict(nodes=dict(pos=np.array([[0.0, 0.0], [10.0, 3.5], [20.0, 0.0]])), links=dict(src=np.array([0, 1]), dst=np.array([1, 2])))
     c3 = compare_graph(d3, gt3)
@@ -692,8 +713,8 @@ def _selftest():
     cmp = compare_graph(d, nt)
     sn = scorer_numbers(bad, g, "synthetic")
     assert cmp["false_n"].sum() >= 1 and cmp["missed_n"].any() and cmp["false_l"].any() and cmp["missed_l"].any() and sn["node_F1"] < 1 and sn["lane_acc"] < 1, (cmp, sn)
-    # the pictures (a synthetic token has no camera info and is no VAL frame: nothing is read from the data); no panel is blank, the tints are where the rules put them
-    # (red pixels = false positives, blue = misses: the oracle has neither in the centre panel, which holds only greys and the two tints)
+    # the pictures (a synthetic token has no camera info and is no VAL frame: nothing is read from the data); no panel is blank, the tints are where the rules
+    # put them (red pixels = false positives, blue = misses: the oracle has neither in the centre panel, which holds only greys and the two tints)
     _CACHE["infos"], _CACHE["frames"] = {}, {}
     empty = dict(pred, nodes=dict(pred["nodes"], e=np.zeros(len(pred["nodes"]["e"]))))
     out, logs = tempfile.mkdtemp(), []
@@ -708,10 +729,11 @@ def _selftest():
         red, blue = int(((a[..., 0] - a[..., 2] > 40) & (a[..., 0] - a[..., 1] > 40)).sum()), int(((a[..., 2] - a[..., 0] > 40) & (a[..., 2] - a[..., 1] > 40)).sum())
         if kind in ("oracle", "cams"):
             assert red == 0 and blue == 0, (kind, red, blue)
-            # alignment: the pixel under every delivered node is a dark (correct) cell of the centre panel (the points beyond 48 m have no cell) and a node marker (not the pale
-            # underlay) in the nodes panel: an image that is flipped or transposed against the vectors fails
+            # alignment: the pixel under every delivered node is a dark (correct) cell of the centre panel (the points beyond 48 m have no cell) and a node
+            # marker (not the pale underlay) in the nodes panel: an image that is flipped or transposed against the vectors fails
             pos = readout(pr)["nodes"]["pos"]
-            pix = lambda name, q: arr[int(lay["bev"][name][1] + (50 - q[1]) / 100 * lay["bev"][name][3]), int(lay["bev"][name][0] + (q[0] + 50) / 100 * lay["bev"][name][2])].astype(int)
+            pix = lambda name, q: arr[int(lay["bev"][name][1] + (50 - q[1]) / 100 * lay["bev"][name][3]),
+                                      int(lay["bev"][name][0] + (q[0] + 50) / 100 * lay["bev"][name][2])].astype(int)
             dark = np.mean([pix("centre", q).sum() < 200 for q in pos if np.abs(q).max() < 47.5])
             marked = np.mean([pix("nodes", q).sum() < 500 for q in pos])
             assert dark > 0.97 and marked > 0.97, (kind, dark, marked)

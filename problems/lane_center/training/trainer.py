@@ -5,18 +5,27 @@
     T.fit(model, loss_fn, run, steps=4800, batch_fn=make_batch, lr=6e-4)
 
   loss_fn(model, batch) -> (loss tensor, dict of floats for the log)
-  batch source: batch_fn(step) -> batch   (deterministic in `step`: a resumed run sees exactly the same batches)   or   loader (any re-iterable, e.g. a DataLoader; resume then reshuffles)
+  batch source: batch_fn(step) -> batch   (deterministic in `step`: a resumed run sees exactly the same batches)   or   loader (any re-iterable, e.g. a
+      DataLoader; resume then reshuffles)
 What it adds to a plain loop (each of these was missing in a run that was lost):
-  * checkpoint every `ckpt_every` steps (model, optimiser, scaler, schedule, step, RNG states, loss history), written atomically; `resume=True` continues from it after a crash or a kill
-  * `model.pt` + status.json + the `.done` flag only after the last step succeeded; an exception writes status "failed" with the traceback and leaves the checkpoint for the next start
-  * AMP (bf16 or fp16 with GradScaler), gradient clipping, AdamW with warm-up + one-cycle / cosine schedule; `params` may be AdamW's groups, a group's key `lr_mult` multiplies the schedule's rate for that group in every step (default 1.0)
-  * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of optimizer steps made
-  * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7 (the rule of dense_head.py)
+  * checkpoint every `ckpt_every` steps (model, optimiser, scaler, schedule, step, RNG states, loss history), written atomically; `resume=True` continues
+      from it after a crash or a kill
+  * `model.pt` + status.json + the `.done` flag only after the last step succeeded; an exception writes status "failed" with the traceback and leaves the
+      checkpoint for the next start
+  * AMP (bf16 or fp16 with GradScaler), gradient clipping, AdamW with warm-up + one-cycle / cosine schedule; `params` may be AdamW's groups, a group's key
+      `lr_mult` multiplies the schedule's rate for that group in every step (default 1.0)
+  * non-finite steps (loss or gradient, also the steps the fp16 scaler skips) are skipped and counted; `max_bad` of them in a row, or a run in which no step
+      ever updated the weights, FAIL (no .done flag, status "failed"); a skipped step still counts toward `steps`, `updates` in status.json is the number of
+      optimizer steps made
+  * guard against loss spikes: a moving average above `guard_ratio` x best triggers a rollback to the last checkpoint with fresh Adam moments and lr x 0.7
+      (the rule of dense_head.py)
   * periodic `eval_fn(model, step) -> dict` written to status.json
-  * the run-directory contract of the research worker: `config.json` ({"steps": N, ...}), `log.jsonl` (one row per logged step: step, t, total, lr, grad_norm, s_per_step, gpu_gb, the
-    scalars of the loss's info dict, and with `probe=True` the keys grad.<module> / upd.<module> / t_data / t_step; an eval row {"step", "val": {...}}), `train.log` (the text output, also
-    `log.txt`), the stop protocol of `trainkit.control` (`research stop`: the worker writes CONTROL, looked at before every step; the trainer saves a checkpoint, writes STOPPED and exits
-    with code 75, never 0, so no `.done` and nobody evaluates a half-trained model), an `incident_<step>.json` for a skipped non-finite step (`trainkit.probe`)
+  * the run-directory contract of the research worker: `config.json` ({"steps": N, ...}), `log.jsonl` (one row per logged step: step, t, total, lr, grad_norm,
+    s_per_step, gpu_gb, the scalars of the loss's info dict, and with `probe=True` the keys grad.<module> / upd.<module> / t_data / t_step; an eval row {"step",
+    "val": {...}}), `train.log` (the text output, also
+    `log.txt`), the stop protocol of `trainkit.control` (`research stop`: the worker writes CONTROL, looked at before every step; the trainer saves a
+    checkpoint, writes STOPPED and exits with code 75, never 0, so no `.done` and nobody evaluates a half-trained model), an `incident_<step>.json` for a
+    skipped non-finite step (`trainkit.probe`)
 """
 from lane_center.training import bflc_paths as BP  # project paths from the location of this checkout
 import json
@@ -58,7 +67,8 @@ class Run:
                 f.write(line + "\n")
 
     def jsonl(self, row):
-        """one row of log.jsonl (the metrics stream the research worker's kill rules read); a reader on the Windows side may hold the file open: a failed write is printed, not raised"""
+        """one row of log.jsonl (the metrics stream the research worker's kill rules read); a reader on the Windows side may hold the file open: a failed write
+        is printed, not raised"""
         try:
             with open(os.path.join(self.dir, "log.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps(row, default=float) + "\n")
@@ -86,13 +96,15 @@ def seed_all(seed):
 
 
 def _rng_state():
-    return dict(py=random.getstate(), np=np.random.get_state(), torch=torch.get_rng_state(), cuda=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None)
+    return dict(py=random.getstate(), np=np.random.get_state(), torch=torch.get_rng_state(),
+                cuda=torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None)
 
 
 def _set_rng(s):
     random.setstate(s["py"])
     np.random.set_state(s["np"])
-    torch.set_rng_state(s["torch"].cpu())                                # a checkpoint loaded with map_location=cuda holds the RNG states on the GPU; set_rng_state wants CPU ByteTensors
+    # a checkpoint loaded with map_location=cuda holds the RNG states on the GPU; set_rng_state wants CPU ByteTensors
+    torch.set_rng_state(s["torch"].cpu())
     if s.get("cuda") is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all([t.cpu() for t in s["cuda"]])
 
@@ -124,8 +136,9 @@ def _endless(loader):
 def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1e-4, betas=(0.9, 0.98), eps=1e-6, warmup=0.05, sched="onecycle", amp="bf16", clip=3.0,
         ckpt_every=500, resume=True, eval_fn=None, eval_every=0, guard=True, guard_ratio=1.2, max_rollbacks=6, log_every=100, seed=0, device="cuda", args=None, params=None, max_bad=20, probe=False, probe_depth=1, config=None,
         control_dir=None):
-    """control_dir: the folder whose CONTROL stops the fit (default the run's own, cleared at the start); a trainer of several fits in one process (stage 0: one per phase) passes the
-    folder of its step, which it clears once itself at its start (`control.clear_stale`), so that a stop request between two fits is not taken for a stale one"""
+    """control_dir: the folder whose CONTROL stops the fit (default the run's own, cleared at the start); a trainer of several fits in one process (stage 0: one
+    per phase) passes the folder of its step, which it clears once itself at its start (`control.clear_stale`), so that a stop request between two fits is not
+    taken for a stale one"""
     assert (batch_fn is None) != (loader is None), "give batch_fn(step) or loader"
     cdir = control_dir or run.dir
     seed_all(seed)
@@ -155,7 +168,8 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
 
     def save_ckpt():
         tmp = ck + ".tmp"
-        torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), scaler=scaler.state_dict(), step=step, hist=hist, n_skip=n_skip, n_roll=n_roll, lr_scale=lr_scale, best=best, rng=_rng_state()), tmp)
+        torch.save(dict(model=model.state_dict(), opt=opt.state_dict(), scaler=scaler.state_dict(), step=step, hist=hist, n_skip=n_skip, n_roll=n_roll,
+                        lr_scale=lr_scale, best=best, rng=_rng_state()), tmp)
         os.replace(tmp, ck)
 
     def skipped_step(what):                                              # one non-finite step: counted, no update; too many in a row = diverged
@@ -186,12 +200,14 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                     batch = batch_fn(step) if batch_fn else next(it)
             else:
                 batch = batch_fn(step) if batch_fn else next(it)
-            for g in opt.param_groups:                                   # a group's `lr_mult` (default 1.0: a run without it is unchanged bit for bit) scales its rate (E393: the pyramid at 0.1 x)
+            # a group's `lr_mult` (default 1.0: a run without it is unchanged bit for bit) scales its rate (E393: the pyramid at 0.1 x)
+            for g in opt.param_groups:
                 g["lr"] = _lr_at(step, steps, lr, warmup, sched) * lr_scale * g.get("lr_mult", 1.0)
             with torch.autocast(device_type="cuda", dtype=dtype, enabled=use_amp):
                 loss, info = loss_fn(model, batch)
             last_info = info or {}
-            sp = mprobe.begin(step + 1) if mprobe is not None else None         # a StepProbe on the logged steps (the count after this step is a multiple of log_every)
+            # a StepProbe on the logged steps (the count after this step is a multiple of log_every)
+            sp = mprobe.begin(step + 1) if mprobe is not None else None
             updated = False
             if not torch.isfinite(loss):
                 skipped_step("loss")
@@ -200,7 +216,8 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
                 scaler.scale(loss).backward()
                 scaler.unscale_(opt)                                     # (a no-op without the fp16 scaler)
                 if sp is not None:
-                    sp.grads()                                           # gradient norm per module BEFORE clipping (and a copy of the weights for the update ratio)
+                    # gradient norm per module BEFORE clipping (and a copy of the weights for the update ratio)
+                    sp.grads()
                 gn = torch.nn.utils.clip_grad_norm_(model.parameters(), clip if clip else float("inf"))     # (inf: only measures)
                 gn_last = float(gn)
                 if not scaler.is_enabled() and not torch.isfinite(gn):   # a finite loss can have a non-finite gradient (sqrt at 0): no update

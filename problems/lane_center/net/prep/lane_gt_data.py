@@ -1,16 +1,20 @@
-"""Data of the lane head (E273): the 39 frozen BEV channels of a frame + everything the heads are trained on, drawn from the lane GT of GtGenerator (`GtGenerator.load_lane`) in the data loader.
+"""Data of the lane head (E273): the 39 frozen BEV channels of a frame + everything the heads are trained on, drawn from the lane GT of GtGenerator
+(`GtGenerator.load_lane`) in the data loader.
 
     ds, dl = loader("train" | "val_clean", bs=4, workers=3, map_mode="train" | "error" | "exact")
 
-Frames = the project's splits through `frames.Frames` (TRAIN 8414, VAL 873 via its rows: the stored feature files also hold the TEST rows, which are never iterated); the sample token of
-a row is `<data>/lane_center/b123/feats/{train,val}_tokens.json[row]` (`bflc_paths.B123`); the lane GT of the token comes from the store of the lane GT of this checkout (`GtGenerator.load_lane`). A frame whose graph is not
-stored (yet) is left out of the dataset (`missing` says how many; `strict=True` raises instead).
-Item (numpy -> torch): x (39, 200, 200) float16 (normalised as `GridData`); node targets `qtargets.grid_targets` on the 50 x 50 grid of 2 m cells: exists, flags (8), offset (m), dirv, sstart,
-piece (int, index into the GT pieces of the frame, -1 none), uout, uin; links `lk` (L, 4) int cells (iu, ju, iv, jv) + `lk_long` + `lk_scale` (L, 2) the fitted Hermite handle scales of the long links (NaN for short ones); pixel targets `qraster.pixel_targets` (lines_mask / lines_dist
-(3, 200, 200), g05 / t05 for the 1 m centre loss, events1 (6, 100, 100), road2 (2, 50, 50); the intersection polygons are grown by `dilate` = 2 m (the owner: slightly enlarged; the GT itself is undilated: stop / exit events lie 1-3 m before the polygon edge)); the map `map_sim.make_map` with its piece targets (`piece_map`: GT piece -> map pieces,
+Frames = the project's splits through `frames.Frames` (TRAIN 8414, VAL 873 via its rows: the stored feature files also hold the TEST rows, which are never
+iterated); the sample token of a row is `<data>/lane_center/b123/feats/{train,val}_tokens.json[row]` (`bflc_paths.B123`); the lane GT of the token comes from
+the store of the lane GT of this checkout (`GtGenerator.load_lane`). A frame whose graph is not stored (yet) is left out of the dataset (`missing` says how
+many; `strict=True` raises instead). Item (numpy -> torch): x (39, 200, 200) float16 (normalised as `GridData`); node targets `qtargets.grid_targets` on the 50
+x 50 grid of 2 m cells: exists, flags (8), offset (m), dirv, sstart, piece (int, index into the GT pieces of the frame, -1 none), uout, uin; links `lk` (L, 4)
+int cells (iu, ju, iv, jv) + `lk_long` + `lk_scale` (L, 2) the fitted Hermite handle scales of the long links (NaN for short ones); pixel targets
+`qraster.pixel_targets` (lines_mask / lines_dist (3, 200, 200), g05 / t05 for the 1 m centre loss, events1 (6, 100, 100), road2 (2, 50, 50); the intersection
+polygons are grown by `dilate` = 2 m (the owner: slightly enlarged; the GT itself is undilated: stop / exit events lie 1-3 m before the polygon edge)); the map
+`map_sim.make_map` with its piece targets (`piece_map`: GT piece -> map pieces,
 `piece_road`).
-`collate` stacks the fixed arrays and pads the variable ones (links with -1, g05 with 1e4, the map to the largest K / T of the batch, with masks `kmask`, `tmask`).
-Run the self-test: python -P -m lane_center.net.prep.lane_gt_data
+`collate` stacks the fixed arrays and pads the variable ones (links with -1, g05 with 1e4, the map to the largest K / T of the batch, with masks `kmask`,
+`tmask`). Run the self-test: python -P -m lane_center.net.prep.lane_gt_data
 """
 import json
 
@@ -28,7 +32,8 @@ BOX = 48.0
 class QData(torch.utils.data.Dataset):
     def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, map_seed=None):
         """map_seed (map_mode train): None = the simulated map of an item from OS entropy; a number = the item is asked as (key, i) and its map is drawn from
-        RandomState([map_seed, key, i]) (the stage-0 trainer: map_seed from the seed and the phase, key = the step), so a run and its resume see the same maps"""
+        RandomState([map_seed, key, i]) (the stage-0 trainer: map_seed from the seed and the phase, key = the step), so a run and its resume see the same
+        maps"""
         self.bd = FR.Frames(split, ks=ks)
         self.map_mode, self.pixels, self.dilate, self.map_seed = map_mode, pixels, dilate, map_seed
         part = "train" if split == "train" else "val"

@@ -1,7 +1,7 @@
 """Training targets of the grid head from the ground-truth lane points: what the head must output in every 1 m cell (shared by the losses and the oracle test).
 
-Frame: the feature raster of the project, rows = x (right), columns = y (forward), 0.5 m cells on the input (200 x 200), 1 m cells on the head (100 x 100), origin -50 m;
-GT lane points as `p16_data.gt_tensors`: g05 (B, G, 2) metres every 0.5 m, padded with 1e4, t05 (B, G, 2) the travel tangent.
+Frame: the feature raster of the project, rows = x (right), columns = y (forward), 0.5 m cells on the input (200 x 200), 1 m cells on the head (100 x 100),
+origin -50 m; GT lane points as `p16_data.gt_tensors`: g05 (B, G, 2) metres every 0.5 m, padded with 1e4, t05 (B, G, 2) the travel tangent.
 
 cell_targets -> d (B, n, n) distance of the cell centre to the nearest lane point (m), off (B, 2, n, n) nearest point minus cell centre in cells,
                 head (B, 2, n, n) tangent of that nearest point (unit), idx (B, n, n) index of that point.
@@ -21,7 +21,8 @@ def cell_targets(g05, t05, n=100, res=1.0, origin=-50.0):
     c = centres(n, res, origin, g05.device)
     d, off, head, idx = [], [], [], []
     for b in range(B):                                                   # one frame at a time: (n * n, G) floats, not (B, n * n, G)
-        dist = torch.cdist(c, g05[b], compute_mode="donot_use_mm_for_euclid_dist")  # exact (the matrix product is off by 1e-3 m); padded points (1e4) are never the nearest
+        # exact (the matrix product is off by 1e-3 m); padded points (1e4) are never the nearest
+        dist = torch.cdist(c, g05[b], compute_mode="donot_use_mm_for_euclid_dist")
         dm, im = dist.min(1)
         d.append(dm.view(n, n))
         off.append(((g05[b][im] - c) / res).T.reshape(2, n, n))

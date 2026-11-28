@@ -5,9 +5,10 @@ starts it through the research worker (`lane_train.py stage0`: the three parts o
         --resume-from runs/e273_p_s0/model.pt --soft-nms-mnms 1.75 0.1 --gate-phases 3 --gate-node-prec 0.75 --gate-node-rec 0.5 [--smoke]
 
 Phases (the parameter groups: `qgraph.PHASE_TRAIN`; the frozen stages run under no_grad: `qgraph.PHASE_FROZEN`; learning rates `LR`, default steps `STEPS`):
-1 the E271 grid head (`head.GridHead`, its own network on `grid_data`, batch 8, `losses.grid_loss`; alone: `--phases 1`), 2 pixel maps (the pyramid starts from the
-E271 head `--head`, `pyramid.load_e271`), 3 nodes, 4 links + Hermite scales, 5 sections (the node head), 6 map encoder + assignment, 7 everything jointly at a lower
-rate, 9 nodes, links, map encoder and assigner jointly on a frozen pyramid (E292). The champion's B' = E271 a (`--phases 1 --steps 4000 --bs 8`) -> E273 p (phases 2 - 7,
+1 the E271 grid head (`head.GridHead`, its own network on `grid_data`, batch 8, `losses.grid_loss`; alone: `--phases 1`), 2 pixel maps (the pyramid starts from
+the E271 head `--head`, `pyramid.load_e271`), 3 nodes, 4 links + Hermite scales, 5 sections (the node head), 6 map encoder + assignment, 7 everything jointly at
+a lower rate, 9 nodes, links, map encoder and assigner jointly on a frozen pyramid (E292). The champion's B' = E271 a (`--phases 1 --steps 4000 --bs 8`) -> E273
+p (phases 2 - 7,
 `STEPS`, no gate stops) -> E292 a (the command above, from E273's model.pt, with the Matrix-NMS layer; only the gate of phase 3 stops): the blocks of
 `configs/base.json` stage0. `--soft-nms-mnms R SIGMA` puts the Matrix-NMS layer (`qmnms.py`) after the node head; it travels with the checkpoint as
 args['soft_nms'] = ['mnms', R, sigma] (`qgraph.from_args`). `--resume-from` loads the tensors of an earlier model.pt whose shapes fit.
@@ -47,7 +48,8 @@ STEPS = {1: 4000, 2: 3000, 3: 6000, 4: 5000, 5: 2000, 6: 1500, 7: 2000, 9: 1000}
 LR = {1: 1e-3, 2: 1e-3, 3: 1e-3, 4: 1e-3, 5: 5e-4, 6: 1e-3, 7: 2e-4, 9: 2e-4}
 CKPT_EVERY = {1: 400}                                                       # the other phases: 500
 GATE_EXIT = 3                                                               # the exit code of a failed gate
-RECIPE = ("seed", "phases", "steps", "bs", "width", "head", "resume_from", "soft_nms", "smoke")       # what makes the weights (the gates may change on a resume, as E273 did)
+# what makes the weights (the gates may change on a resume, as E273 did)
+RECIPE = ("seed", "phases", "steps", "bs", "width", "head", "resume_from", "soft_nms", "smoke")
 
 
 def parse_args(argv=None):
@@ -61,7 +63,8 @@ def parse_args(argv=None):
     ap.add_argument("--width", type=int, default=48)
     ap.add_argument("--head", default=None, help="the E271 grid head (model.pt) the pyramid starts from and the gates of phases 2 and 3 compare with (default runs/e271_a_s<seed>/model.pt)")
     ap.add_argument("--resume-from", default=None, dest="resume_from", help="a model.pt of an earlier part to start from (its tensors whose shapes fit)")
-    ap.add_argument("--soft-nms-mnms", type=float, nargs=2, default=None, dest="soft_nms_mnms", metavar=("RADIUS", "SIGMA"), help="the Matrix-NMS layer after the node head (E292)")
+    ap.add_argument("--soft-nms-mnms", type=float, nargs=2, default=None, dest="soft_nms_mnms", metavar=("RADIUS", "SIGMA"),
+                    help="the Matrix-NMS layer after the node head (E292)")
     ap.add_argument("--gate-phases", type=int, nargs="*", default=None, dest="gate_phases", help="only a failed gate of these phases stops the stage (default: every phase; an empty list: none)")
     ap.add_argument("--gate-node-prec", type=float, default=None, dest="gate_node_prec", help="the node gate also needs this node precision within 2 m")
     ap.add_argument("--gate-node-rec", type=float, default=None, dest="gate_node_rec", help="the node gate also needs this node recall within 2 m")
@@ -76,9 +79,10 @@ def parse_args(argv=None):
 
 
 class StepBatches(torch.utils.data.Sampler):
-    """the batches of a phase by step, from step `start` on, without end: epoch e = the frames in the order of a permutation drawn from (seed, e), `bs` of them per
-    step, the incomplete last batch of an epoch dropped; a resumed phase continues with the batch of its step (after a roll-back of the loss guard the batches run
-    on: the step of the batches is then ahead of the trainer's). keyed: an item is (step, frame), the key of its simulated map (`lane_gt_data.QData(map_seed=)`)"""
+    """the batches of a phase by step, from step `start` on, without end: epoch e = the frames in the order of a permutation drawn from (seed, e), `bs` of them
+    per step, the incomplete last batch of an epoch dropped; a resumed phase continues with the batch of its step (after a roll-back of the loss guard the
+    batches run on: the step of the batches is then ahead of the trainer's). keyed: an item is (step, frame), the key of its simulated map
+    (`lane_gt_data.QData(map_seed=)`)"""
 
     def __init__(self, n, bs, seed, start=0, keyed=False):
         self.n, self.bs, self.seed, self.start, self.keyed = n, bs, seed, start, keyed
@@ -98,8 +102,8 @@ class StepBatches(torch.utils.data.Sampler):
 
 
 class PhaseRun(T.Run):
-    """the folder of one phase (<name>/p<k>); its log.jsonl rows go also to the log.jsonl of the step (the kill rules of the research worker read that one), their
-    numbers keyed <part>.p<phase>.<key> (module docstring)"""
+    """the folder of one phase (<name>/p<k>); its log.jsonl rows go also to the log.jsonl of the step (the kill rules of the research worker read that one),
+    their numbers keyed <part>.p<phase>.<key> (module docstring)"""
 
     def __init__(self, name, root, step, part, phase):
         super().__init__(name, root)
@@ -168,9 +172,9 @@ def stopped(step, where):
 
 
 def train(a, runs=T.RUNS, step_dir=None, gate_n=None, fit_n=None, workers=None):
-    """the phases of the parsed arguments `a` (no GPU check: `main` has it) -> 0, or SystemExit(GATE_EXIT) / SystemExit(75). step_dir = the folder whose CONTROL stops
-    the stage and whose log.jsonl gets every row (default the part's own folder); gate_n / fit_n / workers: the VAL frames of a gate, the TRAIN frames of the E271
-    threshold, the loader workers (default 150 (smoke 8) / 300 (smoke 16) / --workers; a test sets them)"""
+    """the phases of the parsed arguments `a` (no GPU check: `main` has it) -> 0, or SystemExit(GATE_EXIT) / SystemExit(75). step_dir = the folder whose CONTROL
+    stops the stage and whose log.jsonl gets every row (default the part's own folder); gate_n / fit_n / workers: the VAL frames of a gate, the TRAIN frames of
+    the E271 threshold, the loader workers (default 150 (smoke 8) / 300 (smoke 16) / --workers; a test sets them)"""
     args = dict(vars(a))
     folder = os.path.join(runs, a.name)
     check_start(args, folder)
@@ -181,7 +185,8 @@ def train(a, runs=T.RUNS, step_dir=None, gate_n=None, fit_n=None, workers=None):
     with open(part.path("recipe.json"), "w", encoding="utf-8") as fh:
         json.dump({k: args[k] for k in RECIPE}, fh)
     if step_dir is None:
-        control.clear_stale(step.dir)                                                       # by hand: once per process (a caller with a step folder clears it once itself)
+        # by hand: once per process (a caller with a step folder clears it once itself)
+        control.clear_stale(step.dir)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     gate_n, fit_n = gate_n or (8 if a.smoke else 150), fit_n or (16 if a.smoke else QGt.FIT_FRAMES)
     workers = a.workers if workers is None else workers
@@ -196,7 +201,8 @@ def train(a, runs=T.RUNS, step_dir=None, gate_n=None, fit_n=None, workers=None):
         if os.path.exists(run.path(".done")):
             model.load_state_dict(LN.load_checkpoint(run.path("model.pt"))["state"])
             res = run._status.get("gate")
-            if res is None or str(res.get("why", "")).startswith(QGt.UNREAD):                 # never read, or not readable then (an OOM in the gate): read again
+            # never read, or not readable then (an OOM in the gate): read again
+            if res is None or str(res.get("why", "")).startswith(QGt.UNREAD):
                 res = gate(k, run.log)
                 run.status(gate=res)
             run.log(f"phase {k} is complete: loaded")
@@ -206,7 +212,8 @@ def train(a, runs=T.RUNS, step_dir=None, gate_n=None, fit_n=None, workers=None):
             start = LN.load_checkpoint(ck)["step"] if os.path.exists(ck) else 0                  # a resumed phase: the batches from its step on
             order = StepBatches(len(ds), a.bs, a.seed * 10 + k, start, keyed=k != 1)
             if k != 1:
-                ds.map_seed = a.seed * 10 + k                                                   # the simulated maps of the phase: a function of (seed, phase, step, frame)
+                # the simulated maps of the phase: a function of (seed, phase, step, frame)
+                ds.map_seed = a.seed * 10 + k
             dl = (GD.loader(ds, workers=workers, batches=order) if k == 1 else
                   torch.utils.data.DataLoader(ds, batch_sampler=order, num_workers=workers, collate_fn=LD.collate, persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None))
             run.log(f"phase {k}: {sk} steps from step {start}, lr {LR[k]}, batch {a.bs}, trainable {sum(p.numel() for p in ps) / 1e6:.3f} M, seed {a.seed}")

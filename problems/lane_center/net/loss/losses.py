@@ -6,9 +6,11 @@ out:   head output (B, 6, 100, 100) (`head.GridHead`); sparse = `soft_lines.spar
 L_p     BCE against the soft centre-lane target exp(-d^2 / 2 sigma^2) (sigma 1 m, d = cell centre to the nearest lane point) + soft Dice
 L_dir   (1 - cos) between the heading and the tangent of the nearest lane point, weighted by the target
 L_off   L1 of the sub-cell offset against nearest point - cell centre (cells, clipped to +-0.5), weighted by the target
-L_cov   coverage of the GT points by the vertex weights, noisy-or: C(g) = 1 - prod_c (1 - w_c K(g, c)), K = exp(-across^2 / 2 (1 m)^2 - along^2 / 2 (4 m)^2) in the
-        frame of the GT tangent, cell position = centre + offset; loss = mean(1 - C): a vertex pays for itself where it covers lane that nobody else covers
-L_prec  mean over the vertex weight of the clipped distance (2 m) of the CELL CENTRE to the nearest lane point (the offset gets its gradient from L_off and L_cov): weight off the lane is punished
+L_cov   coverage of the GT points by the vertex weights, noisy-or: C(g) = 1 - prod_c (1 - w_c K(g, c)), K = exp(-across^2 / 2 (1 m)^2 - along^2 / 2 (4
+        m)^2) in the frame of the GT tangent, cell position = centre + offset; loss = mean(1 - C): a vertex pays for itself where it covers lane that nobody
+        else covers
+L_prec  mean over the vertex weight of the clipped distance (2 m) of the CELL CENTRE to the nearest lane point (the offset gets its gradient from L_off and
+L_cov): weight off the lane is punished
 L_bud   the vertex budget (`soft_lines.budget`), only the excess over `per100` vertices per 100 m of GT lane
 Run the self-test: python -P -m lane_center.net.loss.losses
 """
@@ -24,8 +26,9 @@ PER100 = 12.0           # the budget the loss asks for (vertices per 100 m of GT
 
 
 def sparse_terms(sp, d, off_t, g05, t05, m05, per100=PER100, k_along=4.0, k_across=1.0):
-    """the terms that act on a SPARSE map sp (B, 5, n, n) [w, cos, sin, ox, oy]: the head's own, or the fused map of the hold: offset, coverage (noisy-or), precision, vertex budget.
-    d (B, n, n) distance of the cell centres to the nearest GT point, off_t the offset target (cells), g05 / t05 / m05 the padded GT points, tangents and mask -> dict of tensors"""
+    """the terms that act on a SPARSE map sp (B, 5, n, n) [w, cos, sin, ox, oy]: the head's own, or the fused map of the hold: offset, coverage (noisy-or),
+    precision, vertex budget. d (B, n, n) distance of the cell centres to the nearest GT point, off_t the offset target (cells), g05 / t05 / m05 the padded GT
+    points, tangents and mask -> dict of tensors"""
     B = sp.shape[0]
     wt = TG.heat(d, SIGMA)
     wt = wt / (wt.sum((1, 2), keepdim=True) + 1e-6)
@@ -80,7 +83,8 @@ def _selftest():
     torch.manual_seed(0)
     B, n = 2, 100
     ys = torch.linspace(-40, 39.5, 160)
-    g = torch.stack([torch.full((160,), 0.2), ys], 1)                                    # a lane along y at x = 0.2 (not between two cells: that is a tie of the ridge)
+    # a lane along y at x = 0.2 (not between two cells: that is a tie of the ridge)
+    g = torch.stack([torch.full((160,), 0.2), ys], 1)
     t = torch.tensor([0.0, 1.0]).expand(160, 2)
     batch = dict(g05=g[None].repeat(B, 1, 1), t05=t[None].repeat(B, 1, 1), m05=torch.ones(B, 160))
     # the perfect output must have a lower loss than the zero output and the shifted one

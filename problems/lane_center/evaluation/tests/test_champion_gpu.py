@@ -2,12 +2,12 @@
 
     python -P -m lane_center.evaluation.tests.test_champion_gpu [--run E396.champ_s0] [--n 16]      (with the module path: README.md)
 
-1. The network built from the run's files (`lane_predict.live_source` -> `LaneNet.from_checkpoint`) gives on the first --n VAL frames (a multiple of 8), in the predict step's
-   batching (B' at 4, the head at 8: `lane_predict.live_dump`), exactly the records that the stored live dump of the run holds: every field of every record bit for bit (the
-   frame's own tokens among them; a cache-trained run's also equal the cache). So the delivered graphs at the run's decode (`lane_readout.graph`, as evaluation/adapter.py
-   decodes them) are the stored ones.
-2. `LaneNet.graph(x, decode)`, features -> graph in one forward at batch 4, delivers the same nodes (the tokens' own fields bit for bit) and the same links; the written
-   existence 1 - p_none is compared to 1e-4 (the head runs at batch 4 there, at 8 in the dump: float noise of the batch size, reported).
+1. The network built from the run's files (`lane_predict.live_source` -> `LaneNet.from_checkpoint`) gives on the first --n VAL frames (a multiple of 8), in
+   the predict step's batching (B' at 4, the head at 8: `lane_predict.live_dump`), exactly the records that the stored live dump of the run holds: every field
+   of every record bit for bit (the frame's own tokens among them; a cache-trained run's also equal the cache). So the delivered graphs at the run's decode
+   (`lane_readout.graph`, as evaluation/adapter.py decodes them) are the stored ones.
+2. `LaneNet.graph(x, decode)`, features -> graph in one forward at batch 4, delivers the same nodes (the tokens' own fields bit for bit) and the same links;
+   the written existence 1 - p_none is compared to 1e-4 (the head runs at batch 4 there, at 8 in the dump: float noise of the batch size, reported).
 Exit 1 on a difference. A diagnostic of the code, never a record."""
 import argparse
 import json
@@ -47,7 +47,8 @@ def main(argv=None):
     assert (r["meta"]["bs_b"], r["meta"]["bs_head"], r["meta"]["device"]) == (PR.LIVE_BS, PR.HEAD_BS, "cuda"), r["meta"]
     idx = r["idx"][:a.n]
     frames, meta = PR.live_dump(ns, r["ck"], r["kw"], r["ds"], idx, "cuda", BP.RUNS)
-    assert all(np.isfinite(f.pop("ms")) for f in frames) and meta["cost"]["peak_MB"] > 0 and meta["cost"]["params_M"] > 2, meta.get("cost")     # the measurement of the step: a time per frame (never equal), memory, parameters
+    # the measurement of the step: a time per frame (never equal), memory, parameters
+    assert all(np.isfinite(f.pop("ms")) for f in frames) and meta["cost"]["peak_MB"] > 0 and meta["cost"]["params_M"] > 2, meta.get("cost")
     older = sorted({k for old in r["fr"][:a.n] for k in old} - set(frames[0]) - {"ms"})         # fields of removed diagnostics that an older dump still holds
     assert all(set(f) <= set(old) for f, old in zip(frames, r["fr"])), "a record holds a field the stored dump lacks"
     bad = [j for j, (f, old) in enumerate(zip(frames, r["fr"])) if not all(same(f[k], old[k]) for k in f)]

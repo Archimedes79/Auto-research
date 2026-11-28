@@ -1,10 +1,13 @@
-"""pmap.py - an order-keeping parallel map over a fork pool, for CPU scoring (the scorer's cells and frame chunks are independent; measured 2.5x with 3 processes on a loaded host, numbers identical).
+"""pmap.py - an order-keeping parallel map over a fork pool, for CPU scoring (the scorer's cells and frame chunks are independent; measured 2.5x with 3
+processes on a loaded host, numbers identical).
 
     from lane_center.evaluation.pmap import pmap
     rows = pmap(lambda cell: score(cell), cells, jobs=3)        # jobs <= 1: a plain loop in this process (the code path of before)
 
-`fn` may be a closure over big data (the dump, the frames): the pool is forked after `fn` and the items are put into module globals, so nothing but the index goes to a worker and only the result comes back (it must be picklable).
-Order = the order of `items`; an exception in a worker is raised here; a call inside a worker runs serially (no nested pools). Linux (fork) only: elsewhere it falls back to the serial loop. Test: `python -P -m lane_center.evaluation.pmap` (selftest).
+`fn` may be a closure over big data (the dump, the frames): the pool is forked after `fn` and the items are put into module globals, so nothing but the index
+goes to a worker and only the result comes back (it must be picklable).
+Order = the order of `items`; an exception in a worker is raised here; a call inside a worker runs serially (no nested pools). Linux (fork) only: elsewhere it
+falls back to the serial loop. Test: `python -P -m lane_center.evaluation.pmap` (selftest).
 """
 import multiprocessing as mp
 import os

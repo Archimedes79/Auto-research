@@ -1,5 +1,5 @@
-"""Test of the section stage of the lane head (`net/model/sections.section_membership`) with its loss (`net/loss/loss_sections.section_loss`): two chains get their own section starts, a false link does
-not join them, the gradient reaches the link logits and the section-start logits. CPU, seconds."""
+"""Test of the section stage of the lane head (`net/model/sections.section_membership`) with its loss (`net/loss/loss_sections.section_loss`): two chains get
+their own section starts, a false link does not join them, the gradient reaches the link logits and the section-start logits. CPU, seconds."""
 import torch
 
 from lane_center.net.loss.loss_sections import section_loss

@@ -716,6 +716,7 @@
   "net/tests/test_qmnms.py": "test of the Matrix-NMS layer against its hard numpy reference (qmnms.py)",
   "net/tests/test_sections.py": "test of the section stage of B' with its loss (sections.py, loss_sections.py)",
   "net/tests/test_lane_tokcache.py": "test of the token cache and its loader",
+  "net/tests/test_e2e_reach.py": "test of DESIGN R1: the output loss reaches the token head, the node head and the pyramid of the champion; the hard steps carry no gradient",
   "net/tests/test_lane_train.py": "test of the stage entry (lane_train.py) and the base config: every trainer setting is a key a card can set",
   "net/tests/test_net_layering.py": "test of the layers: net/prep < net/model < net/loss < training | evaluation, every import (DESIGN R13)",
   "net/tests/test_foundation.py": "test of the foundation extraction and its check (net/prep/foundation)",

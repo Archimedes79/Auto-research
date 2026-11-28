@@ -19,7 +19,8 @@ Phase 7 / 9  the numbers of phases 2 - 6 / 3 - 6 (phase 9 has a frozen pyramid),
 A gate that cannot be read fails (closed; its reason starts with UNREAD). The gates of phases 4 and 5 hold no condition on the delivered graph (junction
 F1, F1@1.0, pieces per GT piece: the tag v1 has them): that needs the scorer, which lives in evaluation/ (protected), and training/ does not import
 evaluation/ (DESIGN R13), nor may a second copy of a metric exist; the champion's B' comes from runs that went on past those gates (`--gate-phases`).
-The node part of the network runs through the forward path (`model(batch, upto=...)`), never through the node head alone. Test: net/tests/test_qgraph_train.py"""
+The node part of the network runs through the forward path (`model(batch, upto=...)`), never through the node head alone. Test:
+net/tests/test_qgraph_train.py"""
 import traceback
 
 import numpy as np
@@ -97,7 +98,8 @@ def fit_threshold(head, budget=E271_BUDGET, n=FIT_FRAMES, seed=0, workers=2):
 
 
 def reference(path, dev, with_thr, fit_n=FIT_FRAMES, workers=2):
-    """-> (the E271 grid head of `path` in eval mode on dev, its read-out threshold (`fit_threshold`; None until a gate needs it)), each made once per process"""
+    """-> (the E271 grid head of `path` in eval mode on dev, its read-out threshold (`fit_threshold`; None until a gate needs it)), each made once per
+    process"""
     if path not in _REF:
         ck = LN.load_checkpoint(path)
         h = GH.GridHead(width=int((ck.get("args") or {}).get("width", 48)))
@@ -139,7 +141,8 @@ def gate_pixels(model, ref, n, workers):
                 pr, gt = P["road2"][:, c].sigmoid() > 0.5, b["road2"][:, c].to(dev) > 0.5
                 store.append(((pr & gt).sum() / ((pr | gt).sum().clamp_min(1))).item())
     fm, fr = float(np.mean(f_m)), float(np.mean(f_r))
-    return dict(centre_f1=fm, e271_centre_f1=fr, road_iou=float(np.mean(iou_road)), inter_iou=float(np.mean(iou_int)), **{"pass": fm >= fr - 0.02, "why": f"centre F1 {fm:.3f} vs E271 {fr:.3f} - 0.02"})
+    return dict(centre_f1=fm, e271_centre_f1=fr, road_iou=float(np.mean(iou_road)), inter_iou=float(np.mean(iou_int)),
+                **{"pass": fm >= fr - 0.02, "why": f"centre F1 {fm:.3f} vs E271 {fr:.3f} - 0.02"})
 
 
 def e271_vertex_f1(ref, n, workers):
@@ -165,7 +168,8 @@ def gate_nodes(model, ref, n, workers, prec_min=None, rec_min=None):
     centres = QN.cell_centres("cpu")[0]
     with torch.no_grad():
         for b in val_batches("exact", n, workers=workers):
-            no = model(b, upto="nodes")["no"]                                                   # the forward path: the node head and the Matrix-NMS layer when the model has it
+            # the forward path: the node head and the Matrix-NMS layer when the model has it
+            no = model(b, upto="nodes")["no"]
             for i in range(b["x"].shape[0]):
                 m = no["e"][i].sigmoid() > 0.5
                 pos = no["pos"][i].permute(1, 2, 0)[m].cpu().numpy()
@@ -198,7 +202,8 @@ def gate_nodes(model, ref, n, workers, prec_min=None, rec_min=None):
     if rec_min is not None:
         ok, why = ok and r2 >= rec_min, why + f"; node recall within 2 m {r2:.3f} >= {rec_min}"
     flags = {k: float(rec_flag[i] / max(n_flag[i], 1)) for i, k in enumerate(("stop", "exit", "split", "merge", "start", "end", "win_in", "win_out"))}
-    return dict(node_f1=f, node_prec=p, node_rec=r, node_prec_2m=p2, node_rec_2m=r2, e271_f1=f_ref, pos_err_med=pos_err, flag_recall=flags, **{"pass": bool(ok), "why": why})
+    return dict(node_f1=f, node_prec=p, node_rec=r, node_prec_2m=p2, node_rec_2m=r2, e271_f1=f_ref, pos_err_med=pos_err, flag_recall=flags,
+                **{"pass": bool(ok), "why": why})
 
 
 def gate_links(model, ref, n, workers):
@@ -216,7 +221,8 @@ def gate_links(model, ref, n, workers):
             hit = torch.isin(key, gk)
             tp, fp, fn = tp + int((pr & hit).sum()), fp + int((pr & ~hit).sum()), fn + int(len(gk)) - int((pr & hit).sum())
     p, r = tp / max(tp + fp, 1), tp / max(tp + fn, 1)
-    return {"link_prec": p, "link_rec": r, "link_f1": _f1(p, r), "pass": True, "why": "phase 4: numbers only (the graph conditions need the scorer of evaluation/)"}
+    return {"link_prec": p, "link_rec": r, "link_f1": _f1(p, r), "pass": True,
+            "why": "phase 4: numbers only (the graph conditions need the scorer of evaluation/)"}
 
 
 def gate_sections(model, ref, n, workers):
@@ -247,7 +253,8 @@ def lane_acc(model, loader, geometric=False):
             L = out["L"]
             if geometric:
                 with torch.autocast(device_type="cuda", enabled=False):
-                    A = asg0(L["tok"].float(), L["pos"].float(), L["dirv"].float(), torch.ones_like(L["valid"], dtype=torch.float), L["valid"], out["mp"], out["enc"], rounds=0)
+                    A = asg0(L["tok"].float(), L["pos"].float(), L["dirv"].float(), torch.ones_like(L["valid"], dtype=torch.float), L["valid"], out["mp"],
+                             out["enc"], rounds=0)
             else:
                 A = out["A"]
             piece = b["piece"].to(dev).flatten(1).gather(1, L["act"])
@@ -275,8 +282,8 @@ GATES = {1: gate_grid, 2: gate_pixels, 3: gate_nodes, 4: gate_links, 5: gate_sec
 
 
 def gate(model, phase, ref, n=150, prec_min=None, rec_min=None, log=print, workers=2, fit_n=FIT_FRAMES):
-    """the gate of `phase` on the model in eval mode (its mode is restored afterwards) -> dict(pass, why, numbers); ref = the path of the E271 head, fit_n = the TRAIN
-    frames of its threshold"""
+    """the gate of `phase` on the model in eval mode (its mode is restored afterwards) -> dict(pass, why, numbers); ref = the path of the E271 head, fit_n = the
+    TRAIN frames of its threshold"""
     was = model.training
     model.eval()
     try:

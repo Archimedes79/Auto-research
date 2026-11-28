@@ -1,4 +1,5 @@
-"""Losses of the lane head (pixel, node, link and assignment stages): the loss side of net/model/qgraph.py (D152; `qgraph` holds the network). The loss switches of E274 / E276 / E282 and the end head's loss (E284) are in the tag v1."""
+"""Losses of the lane head (pixel, node, link and assignment stages): the loss side of net/model/qgraph.py (D152; `qgraph` holds the network). The loss switches
+of E274 / E276 / E282 and the end head's loss (E284) are in the tag v1."""
 import torch
 import torch.nn.functional as F
 
@@ -74,7 +75,8 @@ def link_loss(L, batch):
     sh = ~lg
     l_b = focal_bce(L["logit"].float()[sh], y[sh], norm=y[sh].sum().clamp_min(1.0))               # short links: focal BCE over all candidate pairs
     l_long = torch.zeros((), device=dev)
-    if lg.any():                                                                                  # long links: their positives are ~5 % of all positives and ~0.3 % of their own candidates: a balanced BCE of their own
+    # long links: their positives are ~5 % of all positives and ~0.3 % of their own candidates: a balanced BCE of their own
+    if lg.any():
         yl = y[lg]
         npl, nnl = yl.sum(), (1 - yl).sum()
         wgt = torch.where(yl > 0.5, (nnl / npl.clamp_min(1.0)).clamp(1.0, 15.0), torch.ones_like(yl))
@@ -106,7 +108,8 @@ def link_loss(L, batch):
             tgt = sg[j][hit]
             l_sc = ((L["sa"][pos][hit] - tgt[:, 0]).abs() + (L["sb"][pos][hit] - tgt[:, 1]).abs()).mean()
     info.update(link=float(l_b), long=float(l_long), deg=float(l_deg), scale=float(l_sc), pos=int(npos), pairs=len(y), miss=int(L.get("gt_missing", 0)))
-    return l_b + 2.0 * l_long + 2.0 * l_sc, info                                  # the degree term is logged, not trained: with one-to-many labels a node has several true successors
+    # the degree term is logged, not trained: with one-to-many labels a node has several true successors
+    return l_b + 2.0 * l_long + 2.0 * l_sc, info
 
 
 def assign_loss(A, L, batch):
@@ -139,7 +142,8 @@ def assign_loss(A, L, batch):
         Pa, Pc = Pp[pb, pa], Pp[pb, pc]
         C = torch.eye(K1, device=dev)[None].repeat(len(pb), 1, 1)
         A1 = batch["map_adj"].to(dev)[pb, 0].float()
-        C[:, :K, :K] += A1 + A1 @ A1                                                           # a long link crosses a suppressed connector piece: two successor steps
+        # a long link crosses a suppressed connector piece: two successor steps
+        C[:, :K, :K] += A1 + A1 @ A1
         C.clamp_(max=1.0)
         s = torch.einsum("pi,pij,pj->p", Pa, C, Pc)
         l_st = -torch.log(s.clamp_min(1e-6)).mean()

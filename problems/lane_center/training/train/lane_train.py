@@ -56,7 +56,8 @@ def stage_args(cfg, stage):
     own = ["--name", f"{cfg['name']}/{stage}", "--seed", str(cfg["seed"])]
     if stage == "stage1":
         own += ["--head-seed", str(cfg["seed"] + int(block.pop("head_seed_offset")))]
-        if enabled(cfg, "tokens"):                                                   # the run's own token cache (the step `tokens`) in place of the stored one of `ident`
+        # the run's own token cache (the step `tokens`) in place of the stored one of `ident`
+        if enabled(cfg, "tokens"):
             block["ident"] = own_tokens(cfg)
     elif block["head_run"] is None:
         block["head_run"] = f"{source(cfg)}/stage1"
@@ -99,7 +100,8 @@ def main(argv):
     if os.path.normpath(cfg["out_root"]) != os.path.normpath(BP.RUNS):
         raise SystemExit(f"the run's out_root {cfg['out_root']} is not the problem's run root {BP.RUNS}")
     run_dir = os.path.join(BP.RUNS, cfg["name"])
-    complete = lambda run, s: os.path.isfile(os.path.join(BP.RUNS, run, s, ".done"))    # the trainer's flag: a model.pt alone may be unchecked (a failed export)
+    # the trainer's flag: a model.pt alone may be unchecked (a failed export)
+    complete = lambda run, s: os.path.isfile(os.path.join(BP.RUNS, run, s, ".done"))
     if stage == "stage0":
         if not enabled(cfg, "stage0"):
             raise SystemExit("stage0.enabled is 0: the run uses the stored B' (set it to 1 to train one)")
@@ -107,7 +109,8 @@ def main(argv):
         from lane_center.training.train import qgraph_train
         step_dir = os.path.join(run_dir, "stage0")
         os.makedirs(step_dir, exist_ok=True)
-        control.clear_stale(step_dir)                                                  # once, before the parts: a stop request during one of them is obeyed by the next
+        # once, before the parts: a stop request during one of them is obeyed by the next
+        control.clear_stale(step_dir)
         for part in STAGE0:
             if not complete(cfg["name"], f"stage0/{part}"):
                 qgraph_train.main(stage0_args(cfg, part), step_dir=step_dir)

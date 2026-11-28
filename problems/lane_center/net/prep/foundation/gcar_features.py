@@ -99,12 +99,9 @@ def need_weights(path, expect=WEIGHTS):
         raise Missing(f"no weights at {path}: {expect['name']} ({expect['bytes']} bytes, sha256 {expect['sha256']}) comes from {expect['url']}")
     if os.path.getsize(path) != expect["bytes"]:
         raise Missing(f"{path} has {os.path.getsize(path)} bytes, {expect['name']} has {expect['bytes']} (sha256 {expect['sha256']}, from {expect['url']})")
-    h = hashlib.sha256()
-    with open(path, "rb") as f:
-        for block in iter(lambda: f.read(1 << 24), b""):
-            h.update(block)
-    if h.hexdigest() != expect["sha256"]:
-        raise Missing(f"{path} has sha256 {h.hexdigest()}, {expect['name']} has {expect['sha256']} (from {expect['url']})")
+    sha = BP.file_sha256(path)
+    if sha != expect["sha256"]:
+        raise Missing(f"{path} has sha256 {sha}, {expect['name']} has {expect['sha256']} (from {expect['url']})")
     return path
 
 

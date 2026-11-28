@@ -2,16 +2,18 @@
 
     mp = make_map(g, mode="exact" | "error" | "train", rng=None, token=None)
 
-The map is what a lane-level navigation map would deliver around the ego: the pieces of the lane GT (ids that change only at splits and merges, successor / predecessor / left / right /
-opposite ids, lane index and count, road) with errors (the correct correspondence is known by construction: a node's map piece is its own GT piece):
+The map is what a lane-level navigation map would deliver around the ego: the pieces of the lane GT (ids that change only at splits and merges, successor /
+predecessor / left / right / opposite ids, lane index and count, road) with errors (the correct correspondence is known by construction: a node's map piece is
+its own GT piece):
   exact   no error
-  error   a FIXED perturbation per frame (seeded by the sample token, so every evaluation sees the same map): translation 1-2 m in a random direction, yaw N(0, 1 deg), shape points thinned by
-          Douglas-Peucker (0.5-1.5 m), 5 % of the pieces dropped, 5 % of the lane counts off by one
+  error   a FIXED perturbation per frame (seeded by the sample token, so every evaluation sees the same map): translation 1-2 m in a random direction,
+          yaw N(0, 1 deg), shape points thinned by Douglas-Peucker (0.5-1.5 m), 5 % of the pieces dropped, 5 % of the lane counts off by one
   train   random: with p = 0.25 exact, else translation U(0, 2) m, yaw N(0, 1 deg), thinning 0.3-1.5 m, drop 5 %, lane count wrong 5 %
 mp (dict): K pieces, T tokens (every 2 m along the pieces):
-  pos (T, 2) float32, tan (T, 2), frac (T,) arclength fraction in the piece, pidx (T,) piece index, K, ids (K,) piece ids (list of str), part ids (K,), road (K,) int index of the road,
-  pfeat (K, 12) piece features (kind one-hot lane / connector / mixed, lane count, lane index, number of successors / predecessors, length / 100, start_open, end_open, 0, 0),
-  adj (5, K, K) bool: succ, pred, left, right, opposite among the kept pieces, dropped (list of ids), shift (2,), yaw (float, rad), n_roads
+  pos (T, 2) float32, tan (T, 2), frac (T,) arclength fraction in the piece, pidx (T,) piece index, K, ids (K,) piece ids (list of str), part ids (K,), road
+  (K,) int index of the road, pfeat (K, 12) piece features (kind one-hot lane / connector / mixed, lane count, lane index, number of successors / predecessors,
+  length / 100, start_open, end_open, 0, 0), adj (5, K, K) bool: succ, pred, left, right, opposite among the kept pieces, dropped (list of ids), shift (2,), yaw
+  (float, rad), n_roads
 `piece_targets(g, mp)` -> for every GT piece of `g` the list of map piece indices with the same `piece` id (empty = dropped from the map: the dustbin).
 Run the self-test: python -P -m lane_center.net.prep.map_sim
 """

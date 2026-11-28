@@ -1,6 +1,8 @@
-"""The entry / exit clusters of the junction ends of the lane GT and the Hermite curve of a pair (what stays of the junction end table of E284, whose head is in the tag v1).
+"""The entry / exit clusters of the junction ends of the lane GT and the Hermite curve of a pair (what stays of the junction end table of E284, whose head is in
+the tag v1).
 
-    reps, ids = cluster(items)     # items = [(point (2,), unit heading (2,))]: ends within 1.5 m and 40 degrees of a cluster's first member are one end; read by evaluation/jmaneuver.py
+    reps, ids = cluster(items)     # items = [(point (2,), unit heading (2,))]: ends within 1.5 m and 40 degrees of a cluster's first member are one end; read
+                                   # by evaluation/jmaneuver.py
     curve(pa, ta, pb, tb)          # the cubic Hermite curve of a pair (tangent length = k x chord); curve_s: the same with handle scales in units of the chord
 
 Nothing here uses the image, the map or the network. Run the self-test: python -P -m lane_center.net.prep.qends
@@ -33,8 +35,9 @@ def curve(a, ta, b, tb, k=1.0, step=0.25):
 
 
 def curve_s(a, ta, b, tb, sa=1.0 / 3.0, sb=1.0 / 3.0, step=0.25):
-    """the cubic Bezier / Hermite curve from a (heading ta) to b (heading tb) with the handle scales sa, sb in units of the chord (the control points a + sa x chord x ta and b - sb x chord x tb; sa = sb = 1/3 is `curve` with k = 1;
-    the scales of `qtargets.fit_long_scales` / E303 are these), points about `step` metres apart"""
+    """the cubic Bezier / Hermite curve from a (heading ta) to b (heading tb) with the handle scales sa, sb in units of the chord (the control points a + sa x
+    chord x ta and b - sb x chord x tb; sa = sb = 1/3 is `curve` with k = 1; the scales of `qtargets.fit_long_scales` / E303 are these), points about `step`
+    metres apart"""
     L = float(np.linalg.norm(b - a))
     n = max(8, int(1.6 * L / step))
     s = np.linspace(0, 1, n)[:, None]

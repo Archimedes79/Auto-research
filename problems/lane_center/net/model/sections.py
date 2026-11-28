@@ -1,19 +1,21 @@
-"""Stage D of the lane head (E273): sections = lane pieces = ids (one id per lane, new ids only at splits and merges), as a soft absorbing walk on the link matrix.
+"""Stage D of the lane head (E273): sections = lane pieces = ids (one id per lane, new ids only at splits and merges), as a soft absorbing walk on the link
+matrix.
 
     section_membership(links, s_prob) -> M (B, K, K): M[b, n, k] = the probability that the section of active node n starts at active node k
 
-Walk BACKWARDS from node n: with probability s(m) the node m is the first node of its section (the walk is absorbed, the section's id = m), otherwise it steps to a predecessor m' drawn from
-Pb[m, .] = softmax over the incoming link logits of m and a "no predecessor" option (logit 0). With Q = diag(1 - s) Pb and R = diag(s):  M = (I - Q)^-1 R, rows normalised. A linear solve:
-differentiable, no loop over the chain length. Nodes that are not active are absorbing (s = 1).
-`section_loss(M, ...)`: the cross entropy of the true section start of every GT node + the same-section probability sum_k M[i, k] M[j, k] of sampled node pairs against the GT pieces.
-Test: net/tests/test_sections.py
+Walk BACKWARDS from node n: with probability s(m) the node m is the first node of its section (the walk is absorbed, the section's id = m), otherwise it steps
+to a predecessor m' drawn from Pb[m, .] = softmax over the incoming link logits of m and a "no predecessor" option (logit 0). With Q = diag(1 - s) Pb and R =
+diag(s):  M = (I - Q)^-1 R, rows normalised. A linear solve: differentiable, no loop over the chain length. Nodes that are not active are absorbing (s = 1).
+`section_loss(M, ...)`: the cross entropy of the true section start of every GT node + the same-section probability sum_k M[i, k] M[j, k] of sampled node pairs
+against the GT pieces. Test: net/tests/test_sections.py
 """
 import torch
 
 
 
 def section_membership(links, s_logit, ridge=1e-3):
-    """links: the dict of `qlinks.LinkHead` (act, valid, pb, pa, pc, logit); s_logit (B, N, N) the node head's section-start logits -> M (B, K, K), Pb (B, K, K)"""
+    """links: the dict of `qlinks.LinkHead` (act, valid, pb, pa, pc, logit); s_logit (B, N, N) the node head's section-start logits -> M (B, K, K), Pb (B, K,
+    K)"""
     idx, valid = links["act"], links["valid"]
     B, K = valid.shape
     dev = idx.device

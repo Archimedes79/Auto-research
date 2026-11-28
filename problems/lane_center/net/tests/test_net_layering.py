@@ -31,14 +31,16 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), 
 NAME = os.path.basename(ROOT)                                         # lane_center: every module is NAME.<folders>.<module>
 ORDER = ["prep", "model", "loss"]                                     # the layers of net/, the lowest first
 SIDE = ("training", "evaluation")                                     # on top of net/, side by side
-TOOLING = ("Evaluation", "trainkit", "research")                       # packages of autoresearch/: none for net/, Evaluation for evaluation/, trainkit for training/
+# packages of autoresearch/: none for net/, Evaluation for evaluation/, trainkit for training/
+TOOLING = ("Evaluation", "trainkit", "research")
 TOOL_OF = dict(training=("trainkit",), evaluation=("Evaluation",))
 # (module, imported module, the function the import must be inside ("__main__": an `if __name__` block), or None for anywhere)
-KNOWN = {(f"{NAME}.net.prep.lane_tokcache", f"{NAME}.net.model.{m}", "__main__") for m in ("jtok", "lane_net")}      # the cache build's command line runs the stored network
+# the cache build's command line runs the stored network
+KNOWN = {(f"{NAME}.net.prep.lane_tokcache", f"{NAME}.net.model.{m}", "__main__") for m in ("jtok", "lane_net")}
 PATHS = f"{NAME}.training.bflc_paths"                                  # the paths module: below every layer (it imports nothing of the lane, checked)
 NOT_LOADED = pkgcheck.SKIP + ("net/tests", "evaluation/tests")         # the identity check imports the rest (a test sets its environment when it is imported)
-# The network is built, loaded and run from features to tokens in one place. A name of the network's construction -> the files that may NAME it (its definition and
-# net/model/lane_net.py): any reference counts, so an alias (`H = JK.JTokenHead`, `from ...jtoken import JTokenHead as H`) is found like a call
+# The network is built, loaded and run from features to tokens in one place. A name of the network's construction -> the files that may NAME it (its definition
+# and net/model/lane_net.py): any reference counts, so an alias (`H = JK.JTokenHead`, `from ...jtoken import JTokenHead as H`) is found like a call
 ONE_PLACE = {"JTokenHead": ("net/model/jtoken.py", "net/model/lane_net.py"), "QGraph": ("net/model/qgraph.py",), "from_args": ("net/model/qgraph.py", "net/model/lane_net.py"),
              "node_stage": ("net/model/qgraph.py", "net/model/lane_net.py"), "select_tokens": ("net/prep/lane_tokcache.py", "net/model/lane_net.py")}
 # `torch.load`: the files that may read a stored file with it, each with what it reads
@@ -149,7 +151,8 @@ def through_model(paths, moved):
 
 
 def built_elsewhere(paths, root=ROOT):
-    """the references to a name of ONE_PLACE (a name, an attribute, a from-import) and the uses of `torch.load` in the files `paths` outside the files that may hold them"""
+    """the references to a name of ONE_PLACE (a name, an attribute, a from-import) and the uses of `torch.load` in the files `paths` outside the files that may
+    hold them"""
     bad = []
     for path in paths:
         rel = os.path.relpath(path, root).replace(os.sep, "/")
@@ -196,7 +199,8 @@ def main():
     own = [t for t, _, _ in imports(open(mods[PATHS][1], encoding="utf-8").read()) if resolve(t, mods)]
     assert not own, f"{PATHS} is the paths module below every layer: it imports nothing of the lane, but imports {own}"
     model = f"{NAME}.net.model."
-    moved = {model + n.rsplit(".loss_", 1)[1]: defined(p) - defined(mods[model + n.rsplit(".loss_", 1)[1]][1]) for n, (layer, p) in mods.items() if ".net.loss.loss_" in n}
+    moved = {model + n.rsplit(".loss_", 1)[1]: defined(p) - defined(mods[model + n.rsplit(".loss_", 1)[1]][1]) for n,
+             (layer, p) in mods.items() if ".net.loss.loss_" in n}
     code = [os.path.join(dp, f) for top in ("net", "training", "evaluation", "tools") for dp, dn, fn in os.walk(os.path.join(ROOT, top))
             if os.path.basename(dp) != "tests" for f in fn if f.endswith(".py")]
     stale = through_model(code, moved)
@@ -210,9 +214,12 @@ def main():
             fh.write(f"from {n}.net.model import jtoken as JK\nloss = JK.jtoken_loss\n")
         assert through_model([planted_file], moved), "a planted loss read through the model module was not found"
         for source, what in ((f"from {n}.net.model import jtoken as JK\nhead = JK.JTokenHead()\n", "names JTokenHead"), (f"from {n}.net.model import qgraph as QG\nb = QG.QGraph()\n", "names QGraph"),
-                             (f"from {n}.net.model import jtoken as JK\nmake = JK.JTokenHead\nhead = make()\n", "names JTokenHead"),                 # an aliased constructor
-                             (f"from {n}.net.model.jtoken import JTokenHead as H\nhead = H()\n", "names JTokenHead"),                           # a from-import alias
-                             (f"from {n}.net.model import qgraph as QG\nb = QG.from_args({{}})\n", "names from_args"),                          # a second copy of features -> tokens ...
+                             # an aliased constructor
+                             (f"from {n}.net.model import jtoken as JK\nmake = JK.JTokenHead\nhead = make()\n", "names JTokenHead"),
+                             # a from-import alias
+                             (f"from {n}.net.model.jtoken import JTokenHead as H\nhead = H()\n", "names JTokenHead"),
+                             # a second copy of features -> tokens ...
+                             (f"from {n}.net.model import qgraph as QG\nb = QG.from_args({{}})\n", "names from_args"),
                              ("def tokens(b, x):\n    return b.node_stage(b.pyr(x))\n", "names node_stage"),
                              (f"from {n}.net.prep import lane_tokcache as LC\ntk = LC.select_tokens(None, None, 8)\n", "names select_tokens"),
                              ("import torch\nck = torch.load('model.pt')\n", "torch.load"), ("from torch import load\nck = load('model.pt')\n", "torch.load")):
@@ -227,10 +234,12 @@ def main():
                (f"{prep}.map_sim", f"from {tr} import trainer", "outside net/"), (f"{prep}.qtargets", f"from {ev}.sparse_lanes import graph_eval", "outside net/"),
                (f"{mdl}.jtoken", "from Evaluation import stats", "outside net/"), (f"{prep}.lane_gt_data", "import research", "outside net/"),
                (f"{prep}.lane_tok_data", f"from {mdl} import jtok", "a higher layer"),
-               (f"{mdl}.qmnms", f"def _selftest():\n    from {ev} import qgraph_eval", "outside net/"),                              # a self-test is no exemption
+               # a self-test is no exemption
+               (f"{mdl}.qmnms", f"def _selftest():\n    from {ev} import qgraph_eval", "outside net/"),
                (f"{mdl}.sections", f"def _selftest():\n    from {loss}.loss_sections import section_loss", "a higher layer"),
                (f"{prep}.lane_ptok_data", f"if __name__ == '__main__':\n    from {mdl} import lane_net", "a higher layer"),          # nor is a main block
-               (f"{prep}.lane_tokcache", f"from {mdl} import lane_net", "a higher layer"),                                            # the named exception holds inside its main block only
+               # the named exception holds inside its main block only
+               (f"{prep}.lane_tokcache", f"from {mdl} import lane_net", "a higher layer"),
                (f"{ev}.adapter", f"from {tr}.train import jtoken_train", "side by side"), (f"{ev}.lane_predict", f"def dump():\n    from {tr}.train import jlive_train", "side by side"),
                (f"{ev}.jtoken_eval", f"if __name__ == '__main__':\n    from {tr} import trainer", "side by side"), (f"{tr}.train.jlive_train", f"from {ev} import jtoken_eval", "side by side"),
                (f"{tr}.train.lane_train", f"def main():\n    from {ev} import adapter", "side by side"), (f"{tr}.train.jtoken_train", f"from {ev}.qgraph_eval import score_frames", "side by side"),

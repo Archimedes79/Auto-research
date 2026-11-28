@@ -1,33 +1,21 @@
-"""Diagnostics of the read-out of the token head on the predicted nodes of the lane head B': the cards of a dump, the decode sweep, the cell rule, the delivered graphs for the pictures, the timing.
-The read-out itself is `net/model/lane_readout.py` (records, decode, writer), the dump (cache or live) and its checks `evaluation/lane_predict.py`; the evaluation of a run (`evaluation/adapter.py`) reads those two and not this file.
+"""Diagnostics of the token head's read-out: the cards of a dump, the decode sweep, the cell rule, the delivered graphs for the pictures, the timing.
+Not on the scored path: the evaluation of a run (`evaluation/adapter.py`) reads the dump of `lane_predict.py` and the read-out `net/model/lane_readout.py`.
 
-    python -P -m lane_center.evaluation.jtoken_eval dump  --run R --seed S [--split val|train] [--every N] [--cpu] [--max N]   # GPU: the head on the cache tokens -> runs/R/token_<split>.pkl
-    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S [--split val|train] [--every N] [--max N]                     # CPU -> runs/R/token_card_rec[_train].json (never overwritten)
-    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
-    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S [a decode variant] --ref-run R2 [--ref-run-cell S,L,K,on|off]   # CPU: + R2's dump of the same read-out at the same decode or that cell, paired R - R2 -> token_card_.._vs_<R2>[_rc<cell>].json
-    python -P -m lane_center.evaluation.jtoken_eval choose-cell --runs R1[,R2] [--ref-cell 0.3,0.2,0.6,off] [--split train --every 3] [--out-dir D]   # CPU: E375's cell rule (E377 / E378) on the per-class table(s) -> prints S,L,K,on|off, runs/R1/token_cell_perclass..json
-    python -P -m lane_center.evaluation.jtoken_eval sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the per-class grid of decode variants on the TRAIN sample -> runs/R/token_sweep_perclass_train.json
-    python -P -m lane_center.evaluation.jtoken_eval graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --link-thr-long T_L --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
-    python -P -m lane_center.evaluation.jtoken_eval dump --live --run R --seed S [--bs 4] [--split val|train] [--every N] [--cpu] [--max N]   # GPU: B' + the head on the LIVE tokens -> runs/R/token_<split>_live.pkl
-    python -P -m lane_center.evaluation.jtoken_eval score|sweep --live ...                                                                    # CPU: a live dump read with its own tokens (its B' checked: `check_b`); every file name carries _live
-    python -P -m lane_center.evaluation.jtoken_eval score --live --run R --seed S [a decode] --ref-run R2 [--ref-cache]                       # CPU: paired BY FRAME with R2's live dump, or (--ref-cache) with R2's CACHE dump (the parity read) -> .._live_vs_<R2>[_cache]..json
-    python -P -m lane_center.evaluation.jtoken_eval timing --run R [--b-run runs/e292_a_s<S>] [--K 384] [--cpu]                               # parameters, GMACs, ms (GPU only when idle: < 2 GB used and no run.py job)
+    python -P -m lane_center.evaluation.jtoken_eval dump --run R --seed S [--live [--bs 4]] [--split val|train] [--every N] [--max N] [--cpu]
+    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S [--live] [VARIANT [--ref-cell C]] [--ref-run R2 [--ref-run-cell C] [--ref-cache]]
+    python -P -m lane_center.evaluation.jtoken_eval sweep --run R --seed S --split train [--every N] [--live] [--jobs N]
+    python -P -m lane_center.evaluation.jtoken_eval choose-cell --runs R1[,R2] [--ref-cell C] [--split train --every 3] [--out-dir D]
+    python -P -m lane_center.evaluation.jtoken_eval graphs --run R --seed S --name SYSTEM --out FILE.pkl [VARIANT]
+    python -P -m lane_center.evaluation.jtoken_eval timing --run R [--b-run runs/e292_a_s<S>] [--K K] [--cpu]
 
-Read-out of record (named before the run, on the output only): a node is kept when p_none < 0.5 (e = 1 - p_none); decode `rec`: a link i -> j of class c when p^c(j|i) >= 0.3, p^c(j|i) >= p^c(none|i) and both ends are kept (a fork keeps both
-branches). The prediction is written by `lane_ptok_data.to_pred` from the cached TOKENS only (pos, dirv, B''s flags and s; every node in
-section 0): no field of the GT table enters (the real guarantee: the head reads only `jtoken.INPUTS`, test_jtoken.py; `check_writer` / `frame_prediction` assert on every frame that the nodes are the kept tokens' own, e = 1 - p_none and the links are the dump's) and the scorer is the standard one (`qgraph_eval.readout` -> `graph_counts` -> `graph_numbers` through `score_frames`, inside the `jtok.lattice(2.0)` block because
-`LaneRef` builds a node table at score time; the headline graph numbers use the old graph GT and do not depend on it). Handle scales: the head's for the long links, 1/3 for the short ones. p = 1 is written for every kept link (the
-decode is the selection); the probability stays in the dump. A TRAIN read-out is 873 frames spaced evenly over the cache (`sample`). Tests: evaluation/tests/test_jtoken_eval.py
-Live read-out (`dump --live`): B' runs with the head (`lane_net.LaneNet`, frozen, no_grad; `live_source`: the run's own trained B' `b_state` (a joint run), else runs/<ident>_s<S>; a run that trained the node head
-without a b_state is refused) on the cache's frames in its order: B' in batches of --bs (default 4, the cache build's), the head in batches of 8 (the cache dump's); the labels as the cache makes them (gate on, no token drop). Each record
-of the dump also holds the frame's own `tokens_np` (the read-out writes the nodes from them, not from the cache); meta LIVE_META: live, bs_b, bs_head, device, env, b_source (the sha256 of the B' state that ran, of its node head and of the rest), tokens_exact (every frame's token fields bit-equal to the
-cache's: the parity read of a cache-trained run) and tokens_exact_frames; its cards and sweeps carry them. Every read of a live dump checks its B' (`check_b`: runs/<ident>_s<S> is the file the run started from (args
-b_sha256) and everything outside the node head is its; a run with train_nodes ran its own b_state, whose node head differs from runs/<ident>_s<S>'s; any other run that node head). A joint run (b_state or train_nodes) is read only
-with --live (dump and the reads of a dump refuse it). Two live dumps hold other tokens of the same frames: `--ref-run` pairs them by frame (both of one B' batch and device); `--ref-cache` pairs the live read-out with the
-reference's cache dump (the parity read: the topo / junction F1 difference in `paired_vs_ref_run`).
-The diagnostics of closed cards are in the tag v1: the argmax decode (E376), the degraded read-out `--drop` (E357), `ensemble` (E379), `anatomy` (E376), `live-diff` (E372), `check-layer1` with the plain-B pairing of `score` (E365).
-A stored dump still reads when it holds their fields; one made with --drop is refused (`read_dump`).
-"""
+dump: the head on the cached tokens (`--live`: B' with the head, `lane_predict.live_dump`) -> runs/R/token_<split>[_live].pkl. score: a card of a dump
+(`qgraph_eval.score_frames` inside the 2 m lattice block, against the old graph GT; the nodes are written from the tokens alone, no GT field enters).
+VARIANT = --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate], a decode other than the dump's own; a cell C = 'short,long,keep,on|off'.
+--ref-cell scores a cell on the same dump, --ref-run another run's dump of the same frames; both are paired by the scene bootstrap of
+`qgraph_eval.paired`. sweep: the per-class grid of decode cells; choose-cell: the cell rule (`pick_cell`) on one or two sweep tables. graphs: the
+delivered VAL graphs in the schema of the qualitative report. timing: parameters, GMACs and ms per frame (`jtiming`; the GPU only when `gpu_free`).
+A read of a live dump checks the B' that ran (`lane_dump.check_b`); a run with a trained B' is read only with --live. A TRAIN read-out takes 873 frames
+spaced evenly over the cache. Cards, tables and timings are new files, never overwritten. Test: evaluation/tests/test_jtoken_eval.py"""
 import argparse
 import functools
 import json
@@ -56,7 +44,8 @@ from lane_center.evaluation import qgraph_eval as QE
 from lane_center.evaluation.pmap import pmap
 
 ROOT = BP.ROOT
-ST = QE.TM.ST                                                              # the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
+# the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
+ST = QE.TM.ST
 RUNS = BP.RUNS
 SEC_VOID = ("pieces_per_gt_piece", "id_switches_per_100m")                  # the scorer's section numbers: meaningless when every node carries section 0
 SCRATCH = os.path.join(BP.SCRATCH, "e365")
@@ -138,13 +127,15 @@ def frames_of(split, ds):
 
 
 def score_preds(preds, frames, log=print):
-    """the standard scorer on a list of predictions (qformat dicts) inside the lattice block -> dict(graph, nodes: the flat numbers, rec: the per-frame records for the paired bootstrap, lane_missing)"""
+    """the standard scorer on a list of predictions (qformat dicts) inside the lattice block -> dict(graph, nodes: the flat numbers, rec: the per-frame records
+    for the paired bootstrap, lane_missing)"""
     rec, miss = dict(graph=[], node=[], assign=[]), 0
     t0 = time.time()
     with JT.lattice(LATTICE):
         JT.check_lattice(LATTICE)
         for a in range(0, len(frames), 100):
-            out, r = QE.score_frames(preds[a:a + 100], frames[a:a + 100], records=True, lean=True)       # lean: no tier / section numbers, no topo marbles (nothing below reads them)
+            # lean: no tier / section numbers, no topo marbles (nothing below reads them)
+            out, r = QE.score_frames(preds[a:a + 100], frames[a:a + 100], records=True, lean=True)
             miss += out["lane_missing"]
             for k in rec:
                 rec[k] += r[k]
@@ -157,15 +148,17 @@ JUNCTION_KEYS = ("junction_F1", "junction_P", "junction_R")
 
 
 def junction_numbers(graph_recs, idx=None):
-    """junction F1 / P / R of the per-frame graph records (`score_preds` rec['graph']) of the frames idx (None: all; a frame drawn twice counts twice) from the pooled counts lane['junc'] (predicted, GT, matched within 3 m: the scorer's
-    junction points of degree >= 3), as `qgraph_eval.graph_numbers`"""
+    """junction F1 / P / R of the per-frame graph records (`score_preds` rec['graph']) of the frames idx (None: all; a frame drawn twice counts twice) from the
+    pooled counts lane['junc'] (predicted, GT, matched within 3 m: the scorer's junction points of degree >= 3), as `qgraph_eval.graph_numbers`"""
     sel = graph_recs if idx is None else [graph_recs[i] for i in idx]
     return {k: float(v) for k, v in QE.MS.topo_numbers(dict(marb=np.zeros(4), junc=np.sum([c["lane"]["junc"] for c in sel], 0))).items() if k in JUNCTION_KEYS}
 
 
 def paired_junction(rec_a, rec_b, frames, B=1000, seed=0):
-    """a - b of junction F1 / P / R (`junction_numbers`, pooled per draw) with the 95 % interval over the scene draws of `qgraph_eval.paired` (the same stream, B and seed: the same draws as its topo F1) -> key -> a, b, diff, lo, hi, p_a_better"""
-    res = ST.paired_draws(lambda idx: junction_numbers(rec_a["graph"], idx), lambda idx: junction_numbers(rec_b["graph"], idx), ST.scene_draws(np.array([f.scene for f in frames]), B, seed), JUNCTION_KEYS)
+    """a - b of junction F1 / P / R (`junction_numbers`, pooled per draw) with the 95 % interval over the scene draws of `qgraph_eval.paired` (the same stream,
+    B and seed: the same draws as its topo F1) -> key -> a, b, diff, lo, hi, p_a_better"""
+    res = ST.paired_draws(lambda idx: junction_numbers(rec_a["graph"], idx), lambda idx: junction_numbers(rec_b["graph"], idx),
+                          ST.scene_draws(np.array([f.scene for f in frames]), B, seed), JUNCTION_KEYS)
     return {k: dict(a=v["a"], b=v["b"], diff=v["diff"], lo=v["lo"], hi=v["hi"], p_a_better=v["p_gt0"]) for k, v in res.items()}
 
 
@@ -219,8 +212,9 @@ def live_meta(r):
 
 
 def same_tokens(r, rr):
-    """two read-outs (`read_dump`) hold the same frames in the same order; two cache read-outs also per frame the same tokens (cells) and the same valid tokens (one cache: a paired comparison of their heads). A live read-out on
-    either side (each B' makes its own tokens) is paired by frame only; two live read-outs must have run B' at the same batch on the same device (meta bs_b, device)"""
+    """two read-outs (`read_dump`) hold the same frames in the same order; two cache read-outs also per frame the same tokens (cells) and the same valid tokens
+    (one cache: a paired comparison of their heads). A live read-out on either side (each B' makes its own tokens) is paired by frame only; two live read-outs
+    must have run B' at the same batch on the same device (meta bs_b, device)"""
     assert r["idx"].tolist() == rr["idx"].tolist() and [f["token"] for f in r["fr"]] == [f["token"] for f in rr["fr"]], "the reference run's dump holds other frames"
     if not (r.get("live") or rr.get("live")):
         assert all(np.array_equal(x["cell"], y["cell"]) and np.array_equal(u, w) for x, y, u, w in zip(r["fr"], rr["fr"], r["valid"], rr["valid"])), "the reference run's dump holds other tokens (another cache)"
@@ -229,15 +223,17 @@ def same_tokens(r, rr):
 
 
 def read_ref(a, r, runs, n_max):
-    """--ref-run: the dump of the SAME read-out (split, every, --max, live) of another run, of its model.pt (`read_dump`), refused unless its frames (and, two cache read-outs, its tokens) are those of this read-out `r`
-    (`same_tokens`); --ref-cache: the reference's CACHE dump against this live read-out (the parity read)"""
+    """--ref-run: the dump of the SAME read-out (split, every, --max, live) of another run, of its model.pt (`read_dump`), refused unless its frames (and, two
+    cache read-outs, its tokens) are those of this read-out `r` (`same_tokens`); --ref-cache: the reference's CACHE dump against this live read-out (the parity
+    read)"""
     rr = read_dump(argparse.Namespace(**dict(vars(a), run=a.ref_run, live=a.live and not a.ref_cache)), runs, n_max)
     same_tokens(r, rr)
     return rr
 
 
 def decode_frames(r, a):
-    """the dump frames of `r` (`read_dump`) at the decode of the read-out `a`: the dump's own (the record) or the variant of --link-thr / --link-thr-long / --keep-thr / --no-none-gate (`decode_variant`)"""
+    """the dump frames of `r` (`read_dump`) at the decode of the read-out `a`: the dump's own (the record) or the variant of --link-thr / --link-thr-long /
+    --keep-thr / --no-none-gate (`decode_variant`)"""
     if variant_suffix(a):
         return [RO.decode_variant(f, v, a.link_thr, a.keep_thr, not a.no_none_gate, a.link_thr_long) for f, v in zip(r["fr"], r["valid"])]
     return r["fr"]
@@ -257,7 +253,8 @@ def score_dump(r, a, frames, log=print):
 def score_cell(r, cell, frames, log=print):
     """the standard scorer on the dump `r` at a threshold cell (link short, link long, keep, none gate) of `decode_variant`"""
     lt, ltl, kt, gate = cell
-    return score_preds([RO.frame_prediction(t, RO.decode_variant(f, v, lt, kt, gate, ltl), "rec", kt) for t, f, v in zip(r["toks"], r["fr"], r["valid"])], frames, log=log)
+    return score_preds([RO.frame_prediction(t, RO.decode_variant(f, v, lt, kt, gate, ltl), "rec", kt) for t, f, v in zip(r["toks"], r["fr"], r["valid"])],
+                       frames, log=log)
 
 
 def ref_run_cell(a):
@@ -272,14 +269,16 @@ def cell_sfx(cell):
 
 
 def score(a, runs=RUNS, out_dir=None):
-    """the card of one dump (module docstring). --max N reads the dump of `dump --max N`, scores its N frames and writes the card to `out_dir` (default temp/e365/out) as ..._n<N>.json.
-    --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] re-score the dump with another decode (`decode_variant`, after `check_record`; the card's name carries the variant), the decode of record scored beside it
-    on the same dump (`paired_vs_record`; its numbers against the stored record card are reported, not asserted: a re-dump may differ); the defaults are the decode of record. A variant with --ref-cell S,L,K,on|off
-    also scores that cell on the same dump: its numbers (`ref_cell`) and the paired scene-bootstrap interval of the variant against it (`paired_vs_ref_cell`: the keys of `qgraph_eval.paired` + junction F1 / P / R, `paired_junction`).
-    --ref-run R2 also scores R2's dump of the same read-out (`read_ref`: its model.pt, the same frames and tokens) at the same decode, or at --ref-run-cell S,L,K,on|off: its numbers and cell (`ref_run`) and the paired interval of
-    this run minus R2 (`paired_vs_ref_run`, the keys of `paired_vs_ref_cell`, the same draws); the card's name ends in _vs_<R2>[_rc<cell>, only when R2 is read at another cell].
-    --live: the live dump (`dump --live`) with its own tokens (`check_b` first), the names carry _live, the card info the dump's PR.LIVE_META; --ref-run then reads R2's live dump paired
-    by frame, or with --ref-cache R2's CACHE dump (the parity read; the name ends in _vs_<R2>_cache[_rc<cell>])"""
+    """the card of one dump (module docstring). --max N reads the dump of `dump --max N`, scores its N frames and writes the card to `out_dir` (default
+    temp/e365/out) as ..._n<N>.json. --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] re-score the dump with another decode (`decode_variant`,
+    after `check_record`; the card's name carries the variant), the decode of record scored beside it on the same dump (`paired_vs_record`; its numbers against
+    the stored record card are reported, not asserted: a re-dump may differ); the defaults are the decode of record. A variant with --ref-cell S,L,K,on|off also
+    scores that cell on the same dump: its numbers (`ref_cell`) and the paired scene-bootstrap interval of the variant against it (`paired_vs_ref_cell`: the
+    keys of `qgraph_eval.paired` + junction F1 / P / R, `paired_junction`). --ref-run R2 also scores R2's dump of the same read-out (`read_ref`: its model.pt,
+    the same frames and tokens) at the same decode, or at --ref-run-cell S,L,K,on|off: its numbers and cell (`ref_run`) and the paired interval of this run
+    minus R2 (`paired_vs_ref_run`, the keys of `paired_vs_ref_cell`, the same draws); the card's name ends in _vs_<R2>[_rc<cell>, only when R2 is read at
+    another cell]. --live: the live dump (`dump --live`) with its own tokens (`check_b` first), the names carry _live, the card info the dump's PR.LIVE_META;
+    --ref-run then reads R2's live dump paired by frame, or with --ref-cache R2's CACHE dump (the parity read; the name ends in _vs_<R2>_cache[_rc<cell>])"""
     n_max = a.max
     assert a.ref_run or a.ref_run_cell is None, "--ref-run-cell is the cell of --ref-run"
     assert not a.ref_cache or (a.live and a.ref_run), "--ref-cache reads --ref-run's cache dump against this live read-out: give --live and --ref-run"
@@ -325,7 +324,8 @@ def score(a, runs=RUNS, out_dir=None):
         if a.ref_cell is not None:
             lt0, ltl0, kt0, g0 = a.ref_cell
             res0 = score_cell(r, a.ref_cell, frames, log=quiet)
-            extra["ref_cell"] = dict(link_thr=lt0, link_thr_long=ltl0, keep_thr=kt0, none_gate=g0, **{k: res0["graph"][k] for k in KEYS + ("junction_P", "junction_R")})
+            extra["ref_cell"] = dict(link_thr=lt0, link_thr_long=ltl0, keep_thr=kt0, none_gate=g0,
+                                     **{k: res0["graph"][k] for k in KEYS + ("junction_P", "junction_R")})
             extra["paired_vs_ref_cell"] = dict(QE.paired(res["rec"], res0["rec"], frames), **paired_junction(res["rec"], res0["rec"], frames))
     rule = "the variant of `decode_variant`" if vsfx else "rec: p >= 0.3 and p >= p(none), both ends kept (p_none < 0.5)"
     return write_card(path, f"{a.run}_token_rec{vsfx}{sfx}{nsfx}{rsfx}", res, len(frames), a.split, run=a.run, model="model.pt", seed=a.seed, decode="rec", steps=ck.get("steps"), head_params=params,
@@ -335,17 +335,20 @@ def score(a, runs=RUNS, out_dir=None):
 SWEEP_KEEP = (0.5, 0.6, 0.7)
 SWEEP_KEYS = ("topo_F1", "topo_P", "topo_R", "F1@1.0", "lanes_found", "dup_frac")
 PERCLASS_SHORT, PERCLASS_LONG = (0.3, 0.2, 0.1), (0.3, 0.2, 0.1, 0.05)                  # E375: the link thresholds of the short and of the long class
-SWEEP_GRIDS = dict(perclass=[(lt, ltl, kt, False) for lt in PERCLASS_SHORT for ltl in PERCLASS_LONG for kt in SWEEP_KEEP])      # cells (link thr, long link thr, keep thr, none gate)
+# cells (link thr, long link thr, keep thr, none gate)
+SWEEP_GRIDS = dict(perclass=[(lt, ltl, kt, False) for lt in PERCLASS_SHORT for ltl in PERCLASS_LONG for kt in SWEEP_KEEP])
 
 
 def sweep(a, runs=RUNS, out_dir=None):
-    """the decode variants of one dump on its read-out frames -> one table runs/R/token_sweep_perclass_<split>.json (--max N: temp/e365/out/..._n<N>.json), never overwritten. The grid (E375, `--grid perclass`,
-    the only one): link threshold short {0.3, 0.2, 0.1} x long {0.3, 0.2, 0.1, 0.05} x keep threshold {0.5, 0.6, 0.7}, none gate off; the rows carry junction F1 / P / R and the predicted junction points per frame (the scorer's,
-    degree >= 3), the delivered long links per frame and the scorer's long-link precision / recall (node_link_long_P / _R: GT long links between matched nodes). For choosing a decode on TRAIN frames (the head was trained on them: the
-    table says what the output could deliver, not what it does on VAL)"""
+    """the decode variants of one dump on its read-out frames -> one table runs/R/token_sweep_perclass_<split>.json (--max N: temp/e365/out/..._n<N>.json),
+    never overwritten. The grid (E375, `--grid perclass`, the only one): link threshold short {0.3, 0.2, 0.1} x long {0.3, 0.2, 0.1, 0.05} x keep threshold
+    {0.5, 0.6, 0.7}, none gate off; the rows carry junction F1 / P / R and the predicted junction points per frame (the scorer's, degree >= 3), the delivered
+    long links per frame and the scorer's long-link precision / recall (node_link_long_P / _R: GT long links between matched nodes). For choosing a decode on
+    TRAIN frames (the head was trained on them: the table says what the output could deliver, not what it does on VAL)"""
     n_max = a.max
     sfx = "_perclass" + card_sfx(a)
-    path = os.path.join((out_dir or os.path.join(SCRATCH, "out")) if n_max else os.path.join(runs, a.run), f"{a.run + '_' if n_max else ''}token_sweep{sfx}{f'_n{n_max}' if n_max else ''}.json")
+    path = os.path.join((out_dir or os.path.join(SCRATCH, "out")) if n_max else os.path.join(runs, a.run),
+                        f"{a.run + '_' if n_max else ''}token_sweep{sfx}{f'_n{n_max}' if n_max else ''}.json")
     assert not os.path.exists(path), f"a stored table is never overwritten: {path}"
     r = read_dump(a, runs, n_max)
     RO.check_record(r["fr"], r["valid"])
@@ -359,10 +362,12 @@ def sweep(a, runs=RUNS, out_dir=None):
         row.update({k: res["graph"][k] for k in JUNCTION_KEYS}, junction_points_per_frame=float(np.mean([c["lane"]["junc"][0] for c in res["rec"]["graph"]])), long_links_per_frame=float(np.mean([f["rec"]["long"].sum() for f in fr])),
                    **{f"node_link_long_{k}": res["nodes"].get(f"link_long_{k}") for k in ("P", "R")})
         print(f"link {lt:<5g} long {ltl:<5g} keep {kt:<4g} gate {'on ' if gate else 'off'}  " + "  ".join(f"{k} {row[k]:.4f}" for k in SWEEP_KEYS + JUNCTION_KEYS)
-              + f"  links/frame {row['links_per_frame']:.1f}", flush=True)                   # the progress line of the cell (with --jobs N the lines of different cells interleave; the table is in grid order)
+              # the progress line of the cell (with --jobs N the lines of different cells interleave; the table is in grid order)
+              + f"  links/frame {row['links_per_frame']:.1f}", flush=True)
         return row
 
-    rows = pmap(cell_row, SWEEP_GRIDS[a.grid], getattr(a, "jobs", 1))                          # --jobs N: the cells are independent, N forked processes, the same numbers in the same order
+    # --jobs N: the cells are independent, N forked processes, the same numbers in the same order
+    rows = pmap(cell_row, SWEEP_GRIDS[a.grid], getattr(a, "jobs", 1))
     write_json(path, _jsonable(dict(run=a.run, model="model.pt", seed=a.seed, split=a.split, every=a.every, max=a.max, steps=r["ck"].get("steps"), dump=DU.file_id(r["path"]), frames=len(r["frames"]), rows=rows, K=r["ds"].K,
                                        grid="perclass", **live_meta(r), note="decode variants of one dump (`decode_variant`, the head's scales); e written = min(1 - p_none + keep_thr - 0.5, 1): a later read-out must not rank nodes by it")))
     print(f"written {os.path.relpath(path, ROOT)}")
@@ -370,7 +375,8 @@ def sweep(a, runs=RUNS, out_dir=None):
 
 
 D115 = tuple(RO.D115)                                                     # the champion's cell (link short, link long, keep, none gate)
-CHOOSE_DUP, CHOOSE_LANES, CHOOSE_WINDOW = 0.05, 0.010, 0.005                       # E375's rule as pinned in E377 / E378: dup_frac bound, lanes-found loss to the reference cell, topo F1 window
+# E375's rule as pinned in E377 / E378: dup_frac bound, lanes-found loss to the reference cell, topo F1 window
+CHOOSE_DUP, CHOOSE_LANES, CHOOSE_WINDOW = 0.05, 0.010, 0.005
 CHOOSE_KEYS = ("topo_F1", "junction_F1", "lanes_found", "dup_frac")
 
 
@@ -380,9 +386,11 @@ def table_cell(row):
 
 
 def pick_cell(tables, ref=D115):
-    """E375's cell rule as pinned in E377 / E378 (promoted from temp/e377/choose377.py and temp/e378/choose378.py): tables = the rows of one or two sweep tables of the same cells, averaged row by row; eligible = mean dup_frac <=
-    CHOOSE_DUP and mean lanes found >= the mean at the reference cell - CHOOSE_LANES; T = the highest mean topo F1 of the eligible cells; the window = the eligible cells with topo F1 >= T - CHOOSE_WINDOW; the chosen cell = the highest
-    mean junction F1 of the window, ties by |short - ref short|, |long - ref long|, |keep - ref keep|, then the higher thresholds; no eligible cell: the reference cell -> dict(cell, rows, eligible, T, window)"""
+    """E375's cell rule as pinned in E377 / E378 (promoted from temp/e377/choose377.py and temp/e378/choose378.py): tables = the rows of one or two sweep tables
+    of the same cells, averaged row by row; eligible = mean dup_frac <= CHOOSE_DUP and mean lanes found >= the mean at the reference cell - CHOOSE_LANES; T =
+    the highest mean topo F1 of the eligible cells; the window = the eligible cells with topo F1 >= T - CHOOSE_WINDOW; the chosen cell = the highest mean
+    junction F1 of the window, ties by |short - ref short|, |long - ref long|, |keep - ref keep|, then the higher thresholds; no eligible cell: the reference
+    cell -> dict(cell, rows, eligible, T, window)"""
     cells = [{table_cell(r): r for r in t} for t in tables]
     assert all(c.keys() == cells[0].keys() and len(c) == len(t) for c, t in zip(cells, tables)) and ref in cells[0], "the tables hold other cells (or a cell twice, or not the reference cell)"
     rows = {c: {k: sum(t[c][k] for t in cells) / len(cells) for k in CHOOSE_KEYS} for c in cells[0]}
@@ -390,7 +398,8 @@ def pick_cell(tables, ref=D115):
     if not ok:
         return dict(cell=ref, rows=rows, eligible=[], T=None, window=[])
     T = max(rows[c]["topo_F1"] for c in ok)
-    win = sorted((c for c in ok if rows[c]["topo_F1"] >= T - CHOOSE_WINDOW), key=lambda c: (-rows[c]["junction_F1"], abs(c[0] - ref[0]), abs(c[1] - ref[1]), abs(c[2] - ref[2]), -c[0], -c[1], -c[2]))
+    win = sorted((c for c in ok if rows[c]["topo_F1"] >= T - CHOOSE_WINDOW),
+                 key=lambda c: (-rows[c]["junction_F1"], abs(c[0] - ref[0]), abs(c[1] - ref[1]), abs(c[2] - ref[2]), -c[0], -c[1], -c[2]))
     return dict(cell=win[0], rows=rows, eligible=ok, T=T, window=win)
 
 
@@ -400,9 +409,10 @@ def cell_str(c):
 
 
 def choose_cell(a, runs=RUNS):
-    """the decode cell of one run (its own per-class sweep table, `sweep --grid perclass`) or of a recipe of two runs (the mean of their tables row by row) by `pick_cell` against --ref-cell (default D115) -> prints the cell as
-    S,L,K,on|off (the last line) and writes runs/R1/token_cell_perclass[_<split>][_every<N>][_mean_<R2>][_ref<cell>].json (the reference only when not D115; --out-dir D: <D>/R1_token_cell_..json). Never overwritten: a
-    stored choice is recomputed, must be the same cell, and is printed"""
+    """the decode cell of one run (its own per-class sweep table, `sweep --grid perclass`) or of a recipe of two runs (the mean of their tables row by row) by
+    `pick_cell` against --ref-cell (default D115) -> prints the cell as S,L,K,on|off (the last line) and writes
+    runs/R1/token_cell_perclass[_<split>][_every<N>][_mean_<R2>][_ref<cell>].json (the reference only when not D115; --out-dir D: <D>/R1_token_cell_..json).
+    Never overwritten: a stored choice is recomputed, must be the same cell, and is printed"""
     rs = [r.strip() for r in a.runs.split(",")]
     assert 1 <= len(rs) <= 2 and all(rs) and len(set(rs)) == len(rs), f"--runs {a.runs}: one run or two different runs"
     ref = a.ref_cell or D115
@@ -426,13 +436,15 @@ def choose_cell(a, runs=RUNS):
     return doc
 
 
-# ------------------------------------------------------------------------------------------------------------------------------ delivered graphs for the qualitative report (the schema of temp/qual_report_1115/pass1.pkl)
+# ------------------------------------------------------------------------------------------------------------------------------ delivered graphs for the
+# qualitative report (the schema of temp/qual_report_1115/pass1.pkl)
 SYS_KEYS = ("lines", "man_ok", "man_n", "man_real", "junc_hit", "junc_near")
 
 
 def frame_record(f):
-    """the GT side of a frame as `temp/qual_report_1115/pass1_q1115.py` wrote it (re-implemented here, that script is scratch): k, token, row, scene, gt = the lane GT pieces with more than one point (pts float32, tier int8,
-    vis bool, kinds), n_man / man_pts = the maneuvers of `jmaneuver.maneuvers(lane GT, qends.cluster)`, sys = {}"""
+    """the GT side of a frame as `temp/qual_report_1115/pass1_q1115.py` wrote it (re-implemented here, that script is scratch): k, token, row, scene, gt = the
+    lane GT pieces with more than one point (pts float32, tier int8, vis bool, kinds), n_man / man_pts = the maneuvers of `jmaneuver.maneuvers(lane GT,
+    qends.cluster)`, sys = {}"""
     from lane_center.evaluation import jmaneuver as JM
     from lane_center.net.prep import qends as QENDS
     g = f.lane()
@@ -444,7 +456,8 @@ def frame_record(f):
 
 
 def sys_record(raw, mans, f):
-    """one system's delivered graph of a frame as pass1 wrote it: lines (float32 polylines), man_ok / man_n / man_real / junc_hit / junc_near of `jmaneuver.frame_counts(raw, maneuvers, lane GT tree)`"""
+    """one system's delivered graph of a frame as pass1 wrote it: lines (float32 polylines), man_ok / man_n / man_real / junc_hit / junc_near of
+    `jmaneuver.frame_counts(raw, maneuvers, lane GT tree)`"""
     from lane_center.evaluation import jmaneuver as JM
     n_ok, n, hit, near, real = JM.frame_counts(raw, mans, f.ref().tree) if mans else (0, 0, 0, 0, [])
     return dict(lines=[np.asarray(p, np.float32) for p in raw["pts"]], man_ok=n_ok, man_n=n, man_real=[bool(x) for x in real], junc_hit=hit, junc_near=near)
@@ -460,11 +473,13 @@ def check_graphs(doc, frames):
 
 
 def graphs(a, runs=RUNS):
-    """the DELIVERED graphs of the run's VAL dump (the decode of record, or the variant of --link-thr / --link-thr-long / --keep-thr / --no-none-gate) in the schema of temp/qual_report_1115/pass1.pkl, as system `--name`: a new file, or one
-    more system in an existing --out (its frames must be the VAL frames in order); per frame the topo F1 / P / R (`qgraph_eval.graph_counts` inside the 2 m lattice block, as the cards) into perframe_table.json next to --out (merged
-    the same way). The pooled topo F1 is compared with the stored card of the same model and decode: a difference goes into `mismatch` as ('pooled_topo_F1', name, pooled, card), one pooled entry per system (pass1's entries are per
-    frame). Writes only derived data: both files to temp names, then the table renamed first and the pickle last, so a name in the pickle is a finished write (or a system of another tool) and is refused, never overwritten;
-    a name in the table only is the rest of an interrupted write and is written again"""
+    """the DELIVERED graphs of the run's VAL dump (the decode of record, or the variant of --link-thr / --link-thr-long / --keep-thr / --no-none-gate) in the
+    schema of temp/qual_report_1115/pass1.pkl, as system `--name`: a new file, or one more system in an existing --out (its frames must be the VAL frames in
+    order); per frame the topo F1 / P / R (`qgraph_eval.graph_counts` inside the 2 m lattice block, as the cards) into perframe_table.json next to --out (merged
+    the same way). The pooled topo F1 is compared with the stored card of the same model and decode: a difference goes into `mismatch` as ('pooled_topo_F1',
+    name, pooled, card), one pooled entry per system (pass1's entries are per frame). Writes only derived data: both files to temp names, then the table renamed
+    first and the pickle last, so a name in the pickle is a finished write (or a system of another tool) and is refused, never overwritten; a name in the table
+    only is the rest of an interrupted write and is written again"""
     TM = QE.TM
     out_path = _abs(a.out)
     table_path = os.path.join(os.path.dirname(out_path), "perframe_table.json")
@@ -486,7 +501,8 @@ def graphs(a, runs=RUNS):
         pred = RO.frame_prediction(t, f, "rec", a.keep_thr)
         graph, _ = QE.readout(pred, 0.5, 0.5)
         with JT.lattice(LATTICE):
-            topo.append(QE.graph_counts(graph, fm, lean=True)["topo"])                                # lean: loads no lane GT (frame_record below loads it once)
+            # lean: loads no lane GT (frame_record below loads it once)
+            topo.append(QE.graph_counts(graph, fm, lean=True)["topo"])
         base, mans = frame_record(fm)
         recs.append((base, sys_record(QE.to_raw(graph), mans, fm)))
         fm._lane = fm._ref = None
@@ -512,7 +528,8 @@ def graphs(a, runs=RUNS):
     tab = tab or dict(tokens=[f.token for f in frames], rows=[f.row for f in frames], scenes=[f.scene for f in frames], sys={})
     tab["sys"][a.name] = dict(run=a.run, model="model.pt", seed=a.seed, decode="rec" + vsfx, dump=DU.file_id(r["path"]), pooled_topo_F1=pooled, card_topo_F1=ref,
                               topo_F1=[x["topo_F1"] for x in per], topo_P=[x["topo_P"] for x in per], topo_R=[x["topo_R"] for x in per])
-    files = ((table_path, lambda fh: fh.write(json.dumps(_jsonable(tab)).encode())), (out_path, lambda fh: pickle.dump(doc, fh)))      # the table first, the pickle last
+    # the table first, the pickle last
+    files = ((table_path, lambda fh: fh.write(json.dumps(_jsonable(tab)).encode())), (out_path, lambda fh: pickle.dump(doc, fh)))
     for path, write in files:
         with open(path + ".tmp", "wb") as fh:
             write(fh)
@@ -532,9 +549,11 @@ def head_macs(m, K=384):
 
 
 def timing(a, runs=RUNS):
-    """parameters, GMACs and ms per frame of the head (batch 1, bf16 autocast on the GPU, CUDA events, `--frames` cached VAL frames, `--repeats` passes after one untimed pass) and, with --b-run, of B' alone (pyramid + node head + top-K gather) and of
-    the whole path (B' + head in one timed region; B' inside the bf16 autocast like the head: the protocol of the recorded 16.2 ms, written as `b_dtype`). K = --K or the K of the cache the run was trained on (at most that). The GPU only when `gpu_free`; --cpu times the code path on the CPU. Writes runs/R/token_timing[_cpu]_<UTC>.json (a new
-    file every time) with `quiet` (host load < 3 and an idle GPU before and after) and `usable_for_gcost` (true only for a quiet GPU result)"""
+    """parameters, GMACs and ms per frame of the head (batch 1, bf16 autocast on the GPU, CUDA events, `--frames` cached VAL frames, `--repeats` passes after
+    one untimed pass) and, with --b-run, of B' alone (pyramid + node head + top-K gather) and of the whole path (B' + head in one timed region; B' inside the
+    bf16 autocast like the head: the protocol of the recorded 16.2 ms, written as `b_dtype`). K = --K or the K of the cache the run was trained on (at most
+    that). The GPU only when `gpu_free`; --cpu times the code path on the CPU. Writes runs/R/token_timing[_cpu]_<UTC>.json (a new file every time) with `quiet`
+    (host load < 3 and an idle GPU before and after) and `usable_for_gcost` (true only for a quiet GPU result)"""
     from lane_center.evaluation import jtiming as JTG
     m, args = LN.load_head(a.run, "cpu", runs)
     ok, why = (False, "--cpu") if a.cpu else gpu_free()
@@ -572,13 +591,15 @@ def timing(a, runs=RUNS):
                     ms[k].append(row[k])
     if not a.cpu:
         torch.cuda.synchronize()
-        time.sleep(2.5)                                                                   # as jtiming's protocol: our own last kernels age out of nvidia-smi's averaging window before the after-sample
+        # as jtiming's protocol: our own last kernels age out of nvidia-smi's averaging window before the after-sample
+        time.sleep(2.5)
     load1, gpu1 = JTG.load1(), (None if a.cpu else JTG.gpu_state())
     quiet, line = JTG.quiet_verdict(load0, load1, dict(util_max=0.0) if a.cpu else gpu0, dict(util_max=0.0) if a.cpu else gpu1)
     res = dict(run=a.run, device=dev, K=K, frames=a.frames, repeats=a.repeats, params=JK.count_params(m), gmacs_head=gmacs, host=line, quiet=bool(quiet), usable_for_gcost=bool(quiet and dev == "cuda"), gpu_rule=why, bf16=dev == "cuda", b_dtype="bf16 autocast" if dev == "cuda" else "float32",
                median_ms={k: float(np.median(v)) for k, v in ms.items() if v}, p90_ms={k: float(np.percentile(v, 90)) for k, v in ms.items() if v}, macs_note=MACS_NOTE)
     if net is not None:
-        res["params_bprime"] = JK.count_params(net.b.pyr) + JK.count_params(net.b.nodes)           # the path of the tokens: pyramid + node head (the link, map and assign heads of the checkpoint are not on it)
+        # the path of the tokens: pyramid + node head (the link, map and assign heads of the checkpoint are not on it)
+        res["params_bprime"] = JK.count_params(net.b.pyr) + JK.count_params(net.b.nodes)
         res["params_whole_path"] = res["params_bprime"] + res["params"]
     print(json.dumps(res, indent=1))
     print(f"written {os.path.relpath(_write_stamped(os.path.join(runs, a.run), 'token_timing' + ('_cpu' if a.cpu else ''), res), ROOT)}")
@@ -612,11 +633,13 @@ def parse_args(argv=None):
             s.add_argument("--ref-run-cell", type=parse_cell, default=None, help="S,L,K,on|off: --ref-run read at this cell instead of this read-out's decode; the name gets _rc<cell> when it is not the card's own cell")
             s.add_argument("--ref-cache", action="store_true", help="with --live: --ref-run's CACHE dump instead of its live dump (the parity read); the name ends in _vs_<run>_cache")
         if name == "sweep":
-            s.add_argument("--grid", default="perclass", choices=tuple(SWEEP_GRIDS), help="perclass (E375, the only grid): link short x link long x keep, none gate off (36 cells)")
+            s.add_argument("--grid", default="perclass", choices=tuple(SWEEP_GRIDS),
+                           help="perclass (E375, the only grid): link short x link long x keep, none gate off (36 cells)")
             s.add_argument("--jobs", type=int, default=1, help="N forked processes score the cells (the same numbers in the same order; about 2.5x at 3); default 1 = the loop of before")
     s = sub.add_parser("choose-cell")
     s.add_argument("--runs", required=True, help="R1[,R2]: one run (its own per-class table) or the two runs of a recipe (the mean of the two tables); the json goes to runs/R1/")
-    s.add_argument("--ref-cell", type=parse_cell, default=None, help="S,L,K,on|off: the reference cell (default D115 0.3,0.2,0.6,off): the lanes-found bound, the tie-break and the fall-back")
+    s.add_argument("--ref-cell", type=parse_cell, default=None,
+                   help="S,L,K,on|off: the reference cell (default D115 0.3,0.2,0.6,off): the lanes-found bound, the tie-break and the fall-back")
     s.add_argument("--split", choices=("val", "train"), default="train")
     s.add_argument("--every", type=int, default=3, help="the table of `sweep --grid perclass --every N` (default 3: the TRAIN every-3 table)")
     s.add_argument("--out-dir", default=None, help="the json goes to <D>/R1_token_cell_..json instead of runs/R1/")

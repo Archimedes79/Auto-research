@@ -1,13 +1,16 @@
-"""Stage B of the lane head (E273): one node slot per 2 m cell, with existence, type flags, an offset that pulls the node onto the line, a direction and the section / long-link scores.
+"""Stage B of the lane head (E273): one node slot per 2 m cell, with existence, type flags, an offset that pulls the node onto the line, a direction and the
+section / long-link scores.
 
     NodeHead()(feat2, feat1, feat05, road2, centre1) -> dict
-        e (B, 50, 50) existence logit; flags (B, 8, 50, 50) logits in the order of `qtargets.FLAGS`; off (B, 2, 50, 50) offset in metres inside the cell (tanh, +-1 m); dir_raw (B, 2, 50, 50)
-        (normalise with `unit`); s (B, 50, 50) section-start logit; uout, uin (B, 50, 50) logits: the node is the start / the end of a LONG link; tok (B, d, 50, 50) the node token; pos (B, 2, 50, 50)
-        the node position in metres (cell centre + off), rows = x (right), columns = y (forward)
-The token of a cell = the 2 m feature + the pooled 1 m / 0.5 m features + road and intersection probabilities + the pooled centre-lane and event probabilities of the pixel stage (8 channels) + a Fourier code of the cell centre; two layers of neighbourhood attention
-(7 x 7 cells = +-6 m, a relative-position bias; the card says 9 x 9: smaller for memory, `k=9` is a parameter) give it the context (a split is only a split if the lane diverges ahead);
-then the REFINEMENT: the 1 m and 0.5 m feature maps are sampled bilinearly at the pulled position (differentiable), the token is updated and offset, direction and flags are re-read.
-Run the self-test: python -P -m lane_center.net.model.qnodes
+        e (B, 50, 50) existence logit; flags (B, 8, 50, 50) logits in the order of `qtargets.FLAGS`; off (B, 2, 50, 50) offset in metres inside the cell (tanh,
+        +-1 m); dir_raw (B, 2, 50, 50) (normalise with `unit`); s (B, 50, 50) section-start logit; uout, uin (B, 50, 50) logits: the node is the start / the end
+        of a LONG link; tok (B, d, 50, 50) the node token; pos (B, 2, 50, 50) the node position in metres (cell centre + off), rows = x (right), columns = y
+        (forward)
+The token of a cell = the 2 m feature + the pooled 1 m / 0.5 m features + road and intersection probabilities + the pooled centre-lane and event probabilities
+of the pixel stage (8 channels) + a Fourier code of the cell centre; two layers of neighbourhood attention (7 x 7 cells = +-6 m, a relative-position bias; the
+card says 9 x 9: smaller for memory, `k=9` is a parameter) give it the context (a split is only a split if the lane diverges ahead); then the REFINEMENT: the 1
+m and 0.5 m feature maps are sampled bilinearly at the pulled position (differentiable), the token is updated and offset, direction and flags are re-read. Run
+the self-test: python -P -m lane_center.net.model.qnodes
 """
 import math
 
@@ -16,7 +19,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 N, RES, HALF = 50, 2.0, 50.0
-NF = 8
 CH = dict(e=0, flags=slice(1, 9), off=slice(9, 11), dir=slice(11, 13), s=13, uout=14, uin=15)
 
 
@@ -32,8 +34,10 @@ def fourier(c, nf=4):
 
 
 def sample(feat, xy):
-    """bilinear sample of a map (B, C, H, W) that spans +-50 m (rows = x, columns = y) at xy (B, 2, h, w) metres -> (B, C, h, w); positions outside are clamped to the border"""
-    grid = torch.stack([xy[:, 1] / HALF, xy[:, 0] / HALF], -1).float()                         # float32 even under bf16 autocast (a bf16 grid has 0.2 m steps beyond 25 m)
+    """bilinear sample of a map (B, C, H, W) that spans +-50 m (rows = x, columns = y) at xy (B, 2, h, w) metres -> (B, C, h, w); positions outside are clamped
+    to the border"""
+    # float32 even under bf16 autocast (a bf16 grid has 0.2 m steps beyond 25 m)
+    grid = torch.stack([xy[:, 1] / HALF, xy[:, 0] / HALF], -1).float()
     return F.grid_sample(feat.float(), grid, mode="bilinear", padding_mode="border", align_corners=False).to(feat.dtype)
 
 
@@ -88,9 +92,11 @@ class NodeHead(nn.Module):
     def forward(self, feat2, feat1, feat05, road2, centre1):
         B = feat2.shape[0]
         c = cell_centres(feat2.device).expand(B, -1, -1, -1)
-        cen, ev = centre1[:, :1].float().sigmoid(), centre1[:, 6:12].float().sigmoid()           # the pixel stage's own centre-lane and event probabilities, pooled to the 2 m grid
+        # the pixel stage's own centre-lane and event probabilities, pooled to the 2 m grid
+        cen, ev = centre1[:, :1].float().sigmoid(), centre1[:, 6:12].float().sigmoid()
         pm = torch.cat([F.avg_pool2d(cen, 2), F.max_pool2d(cen, 2), F.avg_pool2d(ev, 2)], 1)
-        t = self.inp(torch.cat([feat2, F.avg_pool2d(feat1, 2), F.avg_pool2d(feat05, 4), road2.sigmoid(), fourier(c[:1]).expand(B, -1, -1, -1), pm.to(feat2.dtype)], 1))
+        t = self.inp(torch.cat([feat2, F.avg_pool2d(feat1, 2), F.avg_pool2d(feat05, 4), road2.sigmoid(), fourier(c[:1]).expand(B, -1, -1, -1),
+                                pm.to(feat2.dtype)], 1))
         for a in self.att:
             t = a(t)
         o1 = self.head1(t)
@@ -99,13 +105,15 @@ class NodeHead(nn.Module):
         t2 = t + self.fine(torch.cat([t, sample(feat1, p1), sample(feat05, p1), off1, unit(o1[:, CH["dir"]])], 1))
         o = o1 + self.head2(t2)
         off = torch.tanh(o[:, CH["off"]])
-        return dict(e=o[:, CH["e"]], flags=o[:, CH["flags"]], off=off, dir_raw=o[:, CH["dir"]], s=o[:, CH["s"]], uout=o[:, CH["uout"]], uin=o[:, CH["uin"]], tok=t2, pos=c + off)
+        return dict(e=o[:, CH["e"]], flags=o[:, CH["flags"]], off=off, dir_raw=o[:, CH["dir"]], s=o[:, CH["s"]], uout=o[:, CH["uout"]], uin=o[:, CH["uin"]],
+                    tok=t2, pos=c + off)
 
 
 def _selftest():
     torch.manual_seed(0)
     B = 2
-    f2, f1, f05 = (torch.randn(B, 24, 50, 50, requires_grad=True), torch.randn(B, 16, 100, 100, requires_grad=True), torch.randn(B, 8, 200, 200, requires_grad=True))
+    f2, f1, f05 = (torch.randn(B, 24, 50, 50, requires_grad=True), torch.randn(B, 16, 100, 100, requires_grad=True),
+                   torch.randn(B, 8, 200, 200, requires_grad=True))
     road = torch.randn(B, 2, 50, 50)
     cen1 = torch.randn(B, 12, 100, 100)
     m = NodeHead(c2=24, c1=16, c05=8, d=32, heads=4, layers=2, k=7)

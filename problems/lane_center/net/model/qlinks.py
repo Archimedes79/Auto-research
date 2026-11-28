@@ -2,19 +2,21 @@
 
     LinkHead(d)(no, cen, gt=None, K=512, KL=32) -> dict
 
-no   the node outputs of `qnodes.NodeHead` (e, flags, dir_raw, uout, uin, tok, pos); cen (B, 1, 100, 100) the centre-lane probability (the evidence the curves are checked against);
-gt   in training the targets `exists` (B, 50, 50), `uout`, `uin`, `lk` (B, L, 4) cells of the GT links (-1 padded): the true nodes and links are always among the candidates.
-Candidates (index choices with the gradient through the values, named in the card):
+no   the node outputs of `qnodes.NodeHead` (e, flags, dir_raw, uout, uin, tok, pos); cen (B, 1, 100, 100) the centre-lane probability (the evidence the curves
+are checked against);
+gt   in training the targets `exists` (B, 50, 50), `uout`, `uin`, `lk` (B, L, 4) cells of the GT links (-1 padded): the true nodes and links are always among
+the candidates. Candidates (index choices with the gradient through the values, named in the card):
   active nodes   the K cells with the largest existence (and above 0.05, or a GT node in training)
   short links    pairs of active nodes within 4 cells (+-8 m) in each axis, not behind the node (the offset of j in i's frame along > -1 m)
-  long links     the top-KL nodes by `uout` x the top-KL nodes by `uin`, 8 m < distance <= 100 m, inside a 75 degree forward cone (through intersections: the stop -> exit connectors)
-The tokens first pass 2 layers of self-attention over the active nodes of the frame (with the node's position, direction and scores e / flags / u as extra input: which entry joins which exit is a question about the whole junction).
-Link logit = MLP([token i, token j, geometry (offset of j in i's frame along / across / distance at two scales, heading change cos / sin, long flag), evidence along the curve (mean, minimum,
-gap share of the centre probability at 16 points of the Hermite curve)]); the curve is a cubic Hermite segment from (pos i, dir i) to (pos j, dir j) with handles a, b x chord: 1/3 for short
-links, 0.9 x sigmoid(MLP) for long links (the learned scales; the targets are the fitted scales of `qtargets.fit_long_scales`).
-Output (dict): act (B, K) flat cell indices, valid (B, K), pos (B, K, 2), dirv (B, K, 2), pb / pa / pc (P,) batch element, source and target index in the active list, is_long (P,), logit (P,),
-sa / sb (P,) handle scales, label (P,) float (when gt is given), cell (B, K, 2).
-Run the self-test: python -P -m lane_center.net.model.qlinks
+  long links     the top-KL nodes by `uout` x the top-KL nodes by `uin`, 8 m < distance <= 100 m, inside a 75 degree forward cone (through intersections:
+      the stop -> exit connectors)
+The tokens first pass 2 layers of self-attention over the active nodes of the frame (with the node's position, direction and scores e / flags / u as extra
+input: which entry joins which exit is a question about the whole junction). Link logit = MLP([token i, token j, geometry (offset of j in i's frame along /
+across / distance at two scales, heading change cos / sin, long flag), evidence along the curve (mean, minimum, gap share of the centre probability at 16 points
+of the Hermite curve)]); the curve is a cubic Hermite segment from (pos i, dir i) to (pos j, dir j) with handles a, b x chord: 1/3 for short links, 0.9 x
+sigmoid(MLP) for long links (the learned scales; the targets are the fitted scales of `qtargets.fit_long_scales`). Output (dict): act (B, K) flat cell indices,
+valid (B, K), pos (B, K, 2), dirv (B, K, 2), pb / pa / pc (P,) batch element, source and target index in the active list, is_long (P,), logit (P,), sa / sb (P,)
+handle scales, label (P,) float (when gt is given), cell (B, K, 2). Run the self-test: python -P -m lane_center.net.model.qlinks
 """
 import math
 
@@ -84,7 +86,8 @@ class LinkHead(nn.Module):
         ci, cj = idx // N, idx % N
         pos = gather(no["pos"], idx)
         dirv = unit(gather(no["dir_raw"], idx), dim=-1)
-        sc11 = torch.cat([no["e"][:, None], no["flags"], no["uout"][:, None], no["uin"][:, None]], 1).float().sigmoid()                 # the node scores of the cell: e, 8 flags, uout, uin
+        # the node scores of the cell: e, 8 flags, uout, uin
+        sc11 = torch.cat([no["e"][:, None], no["flags"], no["uout"][:, None], no["uin"][:, None]], 1).float().sigmoid()
         tok = gather(no["tok"], idx) + self.nin(torch.cat([fourier_pts(pos.float()), dirv.float(), gather(sc11, idx)], -1)).to(no["tok"].dtype)
         for blk in self.ctx:                                                                    # context: every active node attends to all others of its frame
             tok = blk(tok, ~valid)
@@ -144,11 +147,13 @@ class LinkHead(nn.Module):
                 ev[sel] = sample(cen[b: b + 1], xy)[0, 0].to(ev.dtype)
         evf = torch.stack([ev.mean(1), ev.min(1)[0], torch.sigmoid((0.2 - ev) * 20).mean(1)], -1)
         logit = self.mlp(torch.cat([x0, sa[:, None], sb[:, None], evf], -1))[:, 0]
-        out = dict(act=idx, valid=valid, pos=pos, dirv=dirv, tok=tok, cell=torch.stack([ci, cj], -1), pb=pb, pa=pa, pc=pc, is_long=is_long, logit=logit, sa=sa, sb=sb, evidence=evf)
+        out = dict(act=idx, valid=valid, pos=pos, dirv=dirv, tok=tok, cell=torch.stack([ci, cj], -1), pb=pb, pa=pa, pc=pc, is_long=is_long, logit=logit, sa=sa,
+                   sb=sb, evidence=evf)
         if gt is not None:
             key = (pb * N * N + fa[pb, pa]) * (N * N) + fa[pb, pc]
             lab = torch.isin(key, pair_key)
-            if "offset" in gt:                                                                  # one-to-many: a node counts for the GT node nearest to it (within 1.5 m)
+            # one-to-many: a node counts for the GT node nearest to it (within 1.5 m)
+            if "offset" in gt:
                 gx = gt["exists"].flatten(1) > 0.5
                 gp = cell_centres(dev).flatten(2).transpose(1, 2) + gt["offset"].flatten(2).transpose(1, 2)           # (B, N*N, 2) GT node positions
                 dist_g = torch.cdist(pos.float(), gp.float()).masked_fill(~gx[:, None, :], float("inf"))
@@ -158,7 +163,8 @@ class LinkHead(nn.Module):
                 kgeo = (pb * N * N + ga_.clamp_min(0)) * (N * N) + gc_.clamp_min(0)
                 lab = lab | (torch.isin(kgeo, pair_key) & (ga_ >= 0) & (gc_ >= 0) & (ga_ != gc_))
             out["label"] = lab.float()
-            out["gt_missing"] = int(okl.sum()) - int(torch.isin(pair_key, key).sum())          # GT links that did not make it into the candidate list (trimmed or outside K)
+            # GT links that did not make it into the candidate list (trimmed or outside K)
+            out["gt_missing"] = int(okl.sum()) - int(torch.isin(pair_key, key).sum())
         return out
 
 
@@ -189,7 +195,8 @@ def _selftest():
     m = LinkHead(d=d, hidden=32)
     o = m(no, cen, gt=gt, K=128, KL=8)
     assert o["gt_missing"] == 0, o["gt_missing"]
-    assert o["label"].sum() >= 2 * 30 - 1, o["label"].sum()                                   # every GT link (and nothing but GT pairs that are GT links) is labelled
+    # every GT link (and nothing but GT pairs that are GT links) is labelled
+    assert o["label"].sum() >= 2 * 30 - 1, o["label"].sum()
     assert o["is_long"].any() and (o["sa"][~o["is_long"]] == 1 / 3).all()
     loss = torch.nn.functional.binary_cross_entropy_with_logits(o["logit"], o["label"]) + o["sa"].mean()
     loss.backward()

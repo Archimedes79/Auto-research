@@ -1,7 +1,7 @@
 """Grid stage 1: the 1 m centre-lane head on the frozen camera + radar BEV features (a small U-Net, stride-2 stem, GroupNorm).
 
-input   x (B, 39, 200, 200): the cached GaussianCaR channels (dec32 PCA + 7 map logits, 0.5 m cells, normalised as `BuilderData`); the old dense head's 3 channels
-        (heat, direction) are NOT an input: `x[:, :39]` is sliced here, so the chain does not inherit the old pipeline
+input   x (B, 39, 200, 200): the cached GaussianCaR channels (dec32 PCA + 7 map logits, 0.5 m cells, normalised as `BuilderData`); the old dense head's
+        3 channels (heat, direction) are NOT an input: `x[:, :39]` is sliced here, so the chain does not inherit the old pipeline
 output  (B, 6, 100, 100) at 1 m: p logit, cos, sin (raw heading), ox, oy (offset logits, `soft_lines.sparsify` squashes them to +-0.5 cell), s (keep-gate logit)
 Axes as the feature raster: rows = x (right), columns = y (forward). The deliverable of stage 2 is `soft_lines.sparsify(head(x))`.
 Run the self-test: python -P -m lane_center.net.model.head
@@ -33,7 +33,8 @@ class GridHead(nn.Module):
         self.out = nn.Conv2d(w, 6, 1)
         nn.init.normal_(self.out.weight, std=0.01)                       # not zero: with a zero output layer no gradient reaches the body at step 0 (G1)
         with torch.no_grad():
-            self.out.bias.copy_(torch.tensor([p_bias, 1.0, 0.0, 0.0, 0.0, keep_bias]))   # few lane cells at the start, heading +x, gate mostly open (the budget closes it)
+            # few lane cells at the start, heading +x, gate mostly open (the budget closes it)
+            self.out.bias.copy_(torch.tensor([p_bias, 1.0, 0.0, 0.0, 0.0, keep_bias]))
 
     def forward(self, x):
         x = x[:, : self.c_in]

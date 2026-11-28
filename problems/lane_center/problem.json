@@ -30,6 +30,6 @@
  "tests": ["lane_center.net.tests.test_net_layering", "lane_center.evaluation.tests.test_evaluator_hash", "lane_center.evaluation.sparse_lanes.selftest", "lane_center.evaluation.jtiming",
            "lane_center.net.tests.merged_source", "lane_center.net.tests.mutant selftest", "lane_center.net.tests.test_qmnms", "lane_center.net.tests.test_sections",
            "lane_center.net.tests.test_qgraph", "lane_center.net.tests.test_jtoken", "lane_center.net.tests.test_lane_tokcache", "lane_center.net.tests.test_lane_net",
-           "lane_center.net.tests.test_jlive_train", "lane_center.net.tests.test_lane_train", "lane_center.net.tests.test_qgraph_train", "lane_center.net.tests.test_foundation", "lane_center.evaluation.tests.test_jtoken_eval"],
+           "lane_center.net.tests.test_e2e_reach", "lane_center.net.tests.test_jlive_train", "lane_center.net.tests.test_lane_train", "lane_center.net.tests.test_qgraph_train", "lane_center.net.tests.test_foundation", "lane_center.evaluation.tests.test_jtoken_eval"],
  "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
 }

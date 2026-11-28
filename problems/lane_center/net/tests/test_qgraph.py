@@ -1,6 +1,6 @@
-"""Test of the lane head as one module (`net/model/qgraph.QGraph`) with its loss (`net/loss/loss_qgraph.qgraph_loss`) on a toy batch of the real shapes: every phase gives a finite loss, the gradient reaches
-the trainable groups of the phase and none of its frozen stages, with and without the Matrix-NMS layer; a stored run's args with a removed option at its off value build the head, another value is refused
-(`from_args`). CPU, about a minute."""
+"""Test of the lane head as one module (`net/model/qgraph.QGraph`) with its loss (`net/loss/loss_qgraph.qgraph_loss`) on a toy batch of the real shapes: every
+phase gives a finite loss, the gradient reaches the trainable groups of the phase and none of its frozen stages, with and without the Matrix-NMS layer; a stored
+run's args with a removed option at its off value build the head, another value is refused (`from_args`). CPU, about a minute."""
 import numpy as np
 import torch
 
@@ -54,7 +54,8 @@ def main():
     # E292: the Matrix-NMS layer: no new parameters, every phase finite, the gradient reaches the trainable groups, none the frozen ones (phase 9 included)
     mm = QGraph(width=16, f05=16, d=32, soft_nms=["mnms", 1.75, 0.1])
     assert mm.mnms == (1.75, 0.1) and set(mm.state_dict()) == set(m.state_dict())
-    stored = dict(REMOVED, width=16, soft_nms=["mnms", 1.75, 0.1], phases=[3, 4, 5, 6, 9])            # a stored run's args: removed options at their off values load, another value is refused by name
+    # a stored run's args: removed options at their off values load, another value is refused by name
+    stored = dict(REMOVED, width=16, soft_nms=["mnms", 1.75, 0.1], phases=[3, 4, 5, 6, 9])
     assert from_args(stored).mnms == (1.75, 0.1) and from_args({}).mnms is None
     for bad in (dict(ends=True), dict(node_loss="zone"), dict(tier_w=[1.0, 0.5, 0.2]), dict(long_match=0.5), dict(sparse=[0.3, 7.5])):
         try:
