@@ -321,6 +321,101 @@ def test_min_e():
     print("min_e: off = the head bit for bit and the same state keys, on = the head with the weak tokens invalid (same wiring and types of the others), thinned tokens are no source and read as none, build_head: ok")
 
 
+def _gap_brute(p, cand, pnone, chord, cfg):
+    """`close_gaps` on one frame by hand: p (2, K, K) link probabilities per class, loops over every pair -> (2, K, K)"""
+    K = cand.shape[-1]
+    sg = lambda x: 1 / (1 + np.exp(-x))  # noqa: E731
+    P, any_ = (p * cand).sum(0), cand.any(0)
+    k = sg((cfg["keep"] - pnone) / cfg["sigma"])
+    ends = [[any_[i, j] * k[i] * k[j] for j in range(K)] for i in range(K)]
+    t = lambda i, j: cfg["t_long"] if chord[i, j] > 8 else cfg["t_short"]  # noqa: E731
+    lo = lambda i, j: cfg["lo_long"] if chord[i, j] > 8 else cfg["lo"]  # noqa: E731
+    q = [[sg((P[i, j] - t(i, j)) / cfg["sigma"]) * ends[i][j] for j in range(K)] for i in range(K)]
+    gate = np.array([[(1 - max(q[i])) * (1 - max(q[n][j] for n in range(K))) * sg((P[i, j] - lo(i, j)) / cfg["sigma_lo"]) * ends[i][j] for j in range(K)] for i in range(K)])
+    m = P * gate
+    lift = np.zeros_like(p)
+    for i in range(K):
+        for j in range(K):
+            rel = (m[i, j] / max(m[i].max(), 1e-12)) ** cfg["gamma"] * (m[i, j] / max(m[:, j].max(), 1e-12)) ** cfg["gamma"]
+            lift[:, i, j] = cand[:, i, j] * gate[i, j] * rel * max(t(i, j) + cfg["delta"] - P[i, j], 0.0)
+    out = np.zeros_like(p)
+    for c in range(2):
+        for i in range(K):
+            total = (p[c, i] * cand[c, i]).sum()
+            f = min(max(1 - lift[c, i].sum(), 0.0) / max(total, 1e-30), 1.0)
+            out[c, i] = p[c, i] * cand[c, i] * f + lift[c, i]
+    return out
+
+
+def test_close_gaps():
+    """E420 the soft gap-closing layer: off (the default) = the head bit for bit and no new state key; a weak link between an open end and an open start is delivered (only the best one), none when its probability is below the lower
+    threshold, when an end already has a delivered link or when a node is not kept; rows stay distributions; against a brute-force form on a random graph; the gradient reaches the input; the head builds it from its args"""
+    cfg = dict(sigma=0.03, sigma_lo=0.01, gamma=16.0, delta=0.05, lo=0.05, lo_long=0.05, t_short=0.3, t_long=0.2, keep=0.6)
+    K = 4
+    pairs = ((0, 1), (1, 2), (1, 3), (2, 3))
+
+    def logp_of(vals):
+        p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
+        for (i, j), v in zip(pairs, vals):
+            p[0, 0, i, j], cand[0, 0, i, j] = v, True
+        return torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1), cand
+
+    chord, kept = torch.full((1, K, K), 2.0), torch.zeros(1, K)
+
+    def run(vals, pnone=kept):
+        logp, cand = logp_of(vals)
+        out = JK.close_gaps(logp, cand, pnone, chord, cfg).exp()[0, 0]
+        assert torch.allclose(out.sum(-1), torch.ones(K), atol=1e-5), "every row stays a distribution"
+        return out
+
+    out = run((0.8, 0.10, 0.07, 0.8))
+    assert float(out[1, 2]) >= 0.3, ("the gap 1 -> 2 is closed", float(out[1, 2]))
+    assert float(out[1, 3]) < 0.1, ("the weaker candidate of the same source stays", float(out[1, 3]))
+    assert abs(float(out[0, 1]) - 0.8) < 1e-3 and abs(float(out[2, 3]) - 0.8) < 1e-3, "delivered links are not changed"
+    assert abs(float(out[1, K]) - (1 - float(out[1, :K].sum()))) < 1e-5 and float(out[1, K]) < 1 - 0.17, "the lifted mass comes from the none slot"
+    assert float(run((0.8, 0.03, 0.02, 0.8))[1, 2]) < 0.1, "below the lower threshold nothing is lifted"
+    assert float(run((0.8, 0.10, 0.60, 0.1))[1, 2]) < 0.12, "a source with a delivered successor is not open"
+    assert float(run((0.8, 0.10, 0.07, 0.8), torch.tensor([[0.0, 0.99, 0.0, 0.0]]))[1, 2]) < 0.12, "a node that is not kept opens no gap"
+    full = run((0.8, 0.22, 0.22, 0.1))                                       # a row whose mass is nearly used up
+    assert float(full[1, :K].sum()) <= 1.0 + 1e-5 and float(full[1, 2:4].max()) >= 0.3
+    logp, cand = logp_of((0.8, 0.28, 0.07, 0.8))
+    logp.requires_grad_()
+    JK.close_gaps(logp, cand, kept, chord, cfg).exp()[0, 0, 1, 2].backward()
+    assert float(logp.grad[0, 0, 1, 2].abs()) > 0, "the gradient reaches the input log-probabilities"
+    rng = np.random.RandomState(5)
+    K = 7
+    cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
+    pick = rng.rand(K, K)
+    cand[0, 0] = torch.from_numpy((pick < 0.3) & ~np.eye(K, dtype=bool))
+    cand[0, 1] = torch.from_numpy((pick > 0.8) & ~np.eye(K, dtype=bool))
+    chord = torch.from_numpy(np.where(pick > 0.8, 12.0, 3.0).astype(np.float32))[None]
+    soft = dict(cfg, sigma=0.2, sigma_lo=0.1, gamma=3.0, lo_long=0.03)
+    logp = JK.wiring_logp(torch.from_numpy(rng.randn(1, 2, K, K).astype(np.float32) * 2), torch.from_numpy(rng.randn(1, 2, K).astype(np.float32) + 1.0), cand)
+    pn = torch.from_numpy(rng.rand(1, K).astype(np.float32) * 0.8)
+    got = JK.close_gaps(logp, cand, pn, chord, soft).exp()[0, :, :, :K].numpy()
+    p = (logp.exp()[0, :, :, :K] * cand[0]).numpy().astype(np.float64)
+    want = _gap_brute(p, cand[0].numpy(), pn[0].numpy().astype(np.float64), chord[0].numpy(), soft)
+    assert np.abs(got - want)[cand[0].numpy()].max() < 1e-5, np.abs(got - want).max()
+    assert np.abs(want - p).max() > 1e-3, "the random graph exercises the layer"
+    torch.manual_seed(13)
+    plain = JK.JTokenHead().eval()
+    torch.manual_seed(13)
+    closed = JK.JTokenHead(gap=cfg).eval()
+    torch.manual_seed(13)
+    both = JK.JTokenHead(gap=cfg, skip={k: v for k, v in dict(cfg, hops=5, m=8).items() if k in JK.SKIP_KEYS}).eval()
+    assert list(plain.state_dict()) == list(closed.state_dict()) and all(torch.equal(a, b) for a, b in zip(plain.state_dict().values(), closed.state_dict().values()))
+    b = JK.synthetic_batch(2, 64, seed=5)
+    with torch.no_grad():
+        o0, o1, o2 = plain(b), closed(b), both(b)
+    pnone = o0["types"].softmax(-1)[..., 0]
+    assert torch.equal(o0["types"], o1["types"])
+    assert torch.allclose(o1["logp"], JK.close_gaps(o0["logp"], o0["cand"], pnone, o0["chord"], cfg)), "the head applies the layer to its final wiring"
+    assert torch.allclose(o2["logp"], JK.close_gaps(JK.skip_suppress(o0["logp"], o0["cand"], pnone, o0["chord"], both.skip), o0["cand"], pnone, o0["chord"], cfg)), "the skip layer first, then the gaps"
+    assert JKT.build_head(dict(close_gaps=cfg)).gap == cfg and JKT.build_head({}).gap is None
+    must_fail(JK.JTokenHead, gap=dict(lo=0.05))
+    print("close_gaps: a gap between an open end and an open start is closed (best candidate only; not below the lower threshold, not at a source with a successor, not over a dropped node), rows stay distributions, brute force on a random graph, head off = bit for bit, skip then gaps, build_head: ok")
+
+
 def test_pos_loss():
     """E376 --pos-loss: -log sum (default) and -log max over G(i) by hand on a toy batch with duplicates and a fork in both classes (none weight 0.25: the empty-G sources keep it); one member in every group: max = sum bit
     for bit; under max the gradient raises the winning member only (the other member of a duplicate pair or of a fork is pushed down: the max keeps one branch); textual mutants fail"""
@@ -2483,7 +2578,7 @@ def test_pos_mean():
           f"in the log rows of the smoke runs; mutants ({', '.join(muts)}) fail: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_min_e, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
+TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_min_e, test_close_gaps,test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
          test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise,
          test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none, test_msg_self,
          test_pos_head, test_curve_loss, test_pos_loss_weights, test_dump_dpos, test_pos_head_trainer, test_pos_mean]

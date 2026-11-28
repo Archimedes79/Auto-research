@@ -50,6 +50,7 @@ import jtok as JT  # noqa: E402
 SHORT, NG = JT.SHORT, JT.NG
 NEG = -1e4                                                                  # the fill of a masked logit
 SKIP_KEYS = ("sigma", "hops", "m", "t_short", "t_long", "keep")             # E399: the settings of the soft skip-link layer (`skip_suppress`)
+GAP_KEYS = ("sigma", "sigma_lo", "gamma", "delta", "lo", "lo_long", "t_short", "t_long", "keep")    # E420: the settings of the soft gap-closing layer (`close_gaps`)
 TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
 SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
 BANDS = 4
@@ -129,6 +130,33 @@ def skip_suppress(logp, cand, pnone, chord, cfg):
     return torch.cat([lp, none[..., None]], -1)
 
 
+def close_gaps(logp, cand, pnone, chord, cfg):
+    """E420: the soft gap-closing layer (no parameter, differentiable). Arguments as `skip_suppress`; cfg: sigma, sigma_lo, gamma, delta, lo, lo_long, t_short, t_long, keep. With P the probability of a pair, t its class threshold, k the soft
+    "kept" of a node and q = sigmoid((P - t) / sigma) x k_i x k_j the soft "delivered" strength of a link: a pair is OPEN by (1 - max_j' q(i, j')) x (1 - max_i' q(i', j)) (its source has no delivered successor and its target no
+    delivered predecessor), ELIGIBLE by sigmoid((P - lo) / sigma_lo) x k_i x k_j (lo_long for the long class) and BEST by (m / max over the source's pairs)^gamma x (m / max over the target's pairs)^gamma with m = P x open x eligible
+    (near 1 for the strongest such pair of both its ends, near 0 for any weaker one). P is lifted by open x eligible x best x max(t + delta - P, 0), the lifted mass is taken from the source's none slot of the class and, where that
+    does not suffice, from its other links in proportion; every row stays a probability distribution. A weak link that is the only way to continue an open end is thus delivered"""
+    K = cand.shape[-1]
+    p = logp[..., :K].exp() * cand
+    P = p.sum(1)
+    is_long = chord > SHORT
+    t = torch.where(is_long, float(cfg["t_long"]), float(cfg["t_short"])).to(P.dtype)
+    lo = torch.where(is_long, float(cfg["lo_long"]), float(cfg["lo"])).to(P.dtype)
+    s, gamma = float(cfg["sigma"]), float(cfg["gamma"])
+    k = torch.sigmoid((float(cfg["keep"]) - pnone.to(P.dtype)) / s)
+    ends = cand.any(1) * k[:, :, None] * k[:, None, :]
+    q = torch.sigmoid((P - t) / s) * ends
+    gate = (1.0 - q.amax(2))[:, :, None] * (1.0 - q.amax(1))[:, None, :] * torch.sigmoid((P - lo) / float(cfg["sigma_lo"])) * ends
+    m = P * gate
+    rel = lambda dim: (m / m.amax(dim, keepdim=True).clamp_min(1e-12)) ** gamma  # noqa: E731
+    lift = (gate * rel(2) * rel(1) * (t + float(cfg["delta"]) - P).clamp_min(0.0))[:, None] * cand
+    room = (1.0 - lift.sum(-1, keepdim=True)).clamp_min(0.0)
+    p2 = p * (room / p.sum(-1, keepdim=True).clamp_min(1e-30)).clamp(max=1.0) + lift
+    lp = torch.where(cand, p2.clamp_min(1e-30).log(), logp[..., :K])
+    none = (1.0 - p2.sum(-1)).clamp_min(1e-30).log()
+    return torch.cat([lp, none[..., None]], -1)
+
+
 def message_weights(p, cand, msg="real"):
     """E392: the weights of one message round from p (B, K, K) = the early probability of the link i -> j (`link_prob`) and the gate cand (B, 2, K, K) -> (w_fwd, w_bwd) (B, K, K): token j gets the forward message sum_i w_fwd[i, j] W_v x_i (its likely
     predecessors), token i the backward message sum_j w_bwd[i, j] W_u x_j (its likely successors). 'real': both are p. 'uniform' (the content null): each token keeps its soft degree (indeg_j = sum_i p[i, j], outdeg_i = sum_j p[i, j]) but spreads it
@@ -162,14 +190,16 @@ class JTokenHead(nn.Module):
     """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4); rounds / msg: E392 (module docstring), the round modules are built LAST (a seeded init of the head's other parameters is the same as without them);
     `n_early` = the early reads after layer 1 .. rounds, `rounds` = the Round modules (none for msg 'none'); pos_head: E395, the position head `posh` is built after everything else (the same rule)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real", pos_head=False, skip=None, min_e=None):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real", pos_head=False, skip=None, min_e=None, gap=None):
         super().__init__()
         assert 0 <= rounds < layers and msg in MSG, (rounds, layers, msg)
         assert skip is None or sorted(skip) == sorted(SKIP_KEYS), (skip, SKIP_KEYS)
+        assert gap is None or sorted(gap) == sorted(GAP_KEYS), (gap, GAP_KEYS)
         assert min_e is None or 0.0 <= min_e < 1.0, min_e
         self.min_e = min_e                                                   # E399: only the tokens with existence sigmoid(e) above this take part (None = every valid token)
         self.dq = dq
         self.skip = None if skip is None else dict(skip)                     # E399: the soft skip-link layer on the final wiring (no parameter); None = off
+        self.gap = None if gap is None else dict(gap)                        # E420: the soft gap-closing layer, after the skip layer (no parameter); None = off
         self.proj = nn.Linear(TOK, d)
         self.mlp = nn.Sequential(nn.Linear(NIN, d), nn.GELU(), nn.Linear(d, d))
         self.ln0 = nn.LayerNorm(d)
@@ -261,6 +291,8 @@ class JTokenHead(nn.Module):
         logp, xn = self.read_wiring(x, wb, lw(w3 if learned else w_in), cand)          # the wiring layer
         if self.skip is not None:                                           # E399
             logp = skip_suppress(logp, cand, types3.softmax(-1)[..., 0], chord, self.skip)
+        if self.gap is not None:                                            # E420
+            logp = close_gaps(logp, cand, types3.softmax(-1)[..., 0], chord, self.gap)
         scale = 0.05 + 1.2 * self.sc_o(F.gelu(self.sc_i(xn)[:, :, None] + self.sc_j(xn)[:, None] + self.sc_g(g))).float().sigmoid()
         if self.training:
             self.step += 1

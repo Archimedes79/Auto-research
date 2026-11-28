@@ -13,10 +13,13 @@ FOLDER=$(ls -d "$PROBLEM/experiments/${EXP}_"* | head -n 1)
 cd "$CORE"
 $PY -m research check lane_center "$EXP"
 $PY -m research start lane_center "$EXP"
-while true; do
-  states=$(for f in "$FOLDER"/runs/*/run.json; do sed -n 's/^ "status": "\([a-z]*\)".*/\1/p' "$f"; done)
-  echo "$states" | grep -qE 'failed|stopped' && { echo "a run failed or stopped"; $PY -m research status lane_center | grep "$EXP"; exit 2; }
-  echo "$states" | grep -qvE '^ok$' || break
+while true; do                      # a run.json being rewritten can be unreadable for a moment: count the ok runs, never the unread ones
+  if grep -qsE '^ "status": "(failed|stopped)"' "$FOLDER"/runs/*/run.json; then
+    echo "a run failed or stopped"; $PY -m research status lane_center | grep "$EXP"; exit 2
+  fi
+  runs=$(ls -d "$FOLDER"/runs/*/ | wc -l)
+  ok=$(grep -lsE '^ "status": "ok"' "$FOLDER"/runs/*/run.json | wc -l)
+  [ "$ok" -eq "$runs" ] && break
   sleep 30
 done
 $PY -m research judge lane_center "$EXP" --write --no-commit > /dev/null
