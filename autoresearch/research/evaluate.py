@@ -8,12 +8,46 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from research import gates, spec
 from research.paths import ResearchError, read_json, write_json
+
+SHARED = ("Evaluation", "trainkit", "research", "GtGenerator")     # the packages a run imports besides its problem's own
+
+
+def outside_snapshot(code: str, problem: str) -> List[str]:
+    """the files of the loaded modules of the problem's package and the shared packages that do not lie below `code`, the run's snapshot
+    (hard rule 3: a module path that reaches another tree, or an install, would score with code that no commit holds)"""
+    root = os.path.realpath(code) + os.sep
+    out = []
+    for name, mod in sorted(sys.modules.items()):
+        if name.split(".")[0] in SHARED + (problem,):
+            files = [mod.__file__] if getattr(mod, "__file__", None) else list(getattr(mod, "__path__", []))     # a namespace package: its folders
+            out += [f for f in files if not os.path.realpath(f).startswith(root)]
+    return out
+
+
+def refuse_foreign(code: str, problem: str) -> None:
+    foreign = outside_snapshot(code, problem)
+    if foreign:
+        raise ResearchError(f"the run imported code outside its snapshot: {', '.join(foreign[:5])}")
+
+
+def drop_stored(base: str, done: Dict[str, Any]) -> List[str]:
+    """removes what one evaluation stored below `base` (the run's evaluation folder): its counts and the predictions they were made from.
+    After a hit of the guard they are not the snapshot's work, and a resumed run would reuse them under the snapshot's identity"""
+    gone = []
+    for folder, key in (("suite/quant", "id"), ("results", "results")):
+        name = str(done.get(key) or "").partition("@")[2]
+        path = os.path.join(base, *folder.split("/"), name)
+        if name and os.sep not in name and name not in (".", "..") and os.path.isdir(path):
+            shutil.rmtree(path)
+            gone.append(path)
+    return gone
 
 
 def snapshot_card(project: str, rec: str) -> Dict[str, Any]:
@@ -27,7 +61,8 @@ def snapshot_card(project: str, rec: str) -> Dict[str, Any]:
 
 def main(problem: str, rid: str, test: bool = False) -> int:
     rec, out, project = os.environ.get("RESEARCH_RECORD", ""), os.environ.get("RESEARCH_RUN_DIR", ""), os.getcwd()
-    if not rec or os.environ.get("RESEARCH_RUN") != rid or not out:
+    code = os.environ.get("RESEARCH_CODE", "")
+    if not rec or os.environ.get("RESEARCH_RUN") != rid or not out or not code:
         raise ResearchError("the evaluation step writes records and runs only inside a worker; by hand use `python -m Evaluation`")
     p = read_json(os.path.join(project, "problem.json"))
     card = snapshot_card(project, rec)
@@ -43,9 +78,15 @@ def main(problem: str, rid: str, test: bool = False) -> int:
     frames = split if test else spec.frames_of(card, p)
     from Evaluation import Evaluation
     ev = Evaluation(project=project)
+    refuse_foreign(code, problem)                               # the adapter and the core are loaded: asked before anything is predicted or stored
     e = p["evaluate"]
     t0 = time.time()
     done = ev.run(out, frames, metrics=tuple(e["metrics"]), device=e.get("device", "cuda"), workers=0, progress=0)
+    try:
+        refuse_foreign(code, problem)                           # and again: what the evaluation itself loaded shaped what it stored
+    except ResearchError:
+        drop_stored(ev.ad.out(ev.resolve(out)), done)
+        raise
     nums = ev.show_numbers(done["id"])
     per_scene = ev.split_numbers(done["id"], "scene")
     score = p["score"]["metric"]

@@ -15,7 +15,7 @@ import subprocess
 from typing import Any, Dict
 
 from research.launch import load_problem
-from research.paths import CORE, ResearchError, child_env, interpreter, module_path, problem_dir, read_json, repo, runs_root, write_json
+from research.paths import CORE, ResearchError, child_env, core_step, interpreter, module_path, problem_dir, read_json, repo, runs_root, write_json
 
 REPORTER = os.path.join(CORE, "reporter", "reporter.py")
 
@@ -34,7 +34,7 @@ def build(problem: str, folder: str, strict: bool = False) -> Dict[str, Any]:
     draw = [{"run": d["run"], "frame": d["frame"], "view": d.get("view", "overview"), "out": os.path.join(out, d["as"])} for d in spec.pop("draw", [])]
     env = child_env(RESEARCH_REPO=repo(), RESEARCH_RUNS=runs_root(problem), PYTHONPATH=module_path(repo(), problem))
     if draw:
-        r = subprocess.run([interpreter(p["python"]), "-m", "research.draw", problem], cwd=problem_dir(problem), env=env,
+        r = subprocess.run(core_step(p["python"], "research.draw", problem), cwd=problem_dir(problem), env=env,
                            input=json.dumps(draw).encode(), capture_output=True)
         if r.returncode != 0:
             raise ResearchError(f"drawing the pictures failed: {r.stderr.decode('utf-8', 'replace')[-1500:]}")

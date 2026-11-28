@@ -1,0 +1,3 @@
+# For an editor only (go to definition, the import check). Nothing here builds or installs: code is linked per process (autoresearch/research/README.md).
+[tool.pyright]
+extraPaths = ["problems", "autoresearch"]      # the roots of the packages; the repository itself is the workspace root (GtGenerator)

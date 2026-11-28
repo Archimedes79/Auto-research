@@ -6,6 +6,7 @@
 !/CLAUDE.md
 !/README.md
 !/DECISIONS.md
+!/pyproject.toml
 !/.claude/
 /.claude/*
 !/.claude/settings.json

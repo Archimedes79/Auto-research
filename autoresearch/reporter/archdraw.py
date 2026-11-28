@@ -405,6 +405,8 @@ def covered_files(spec):
             if not c.get("recursive", True):
                 dirs[:] = []
             for f in sorted(files):
+                if f == "__init__.py" and os.path.getsize(os.path.join(dirpath, f)) == 0:
+                    continue                                                                  # the mark of a package: no code to draw
                 if fnmatch.fnmatch(f, c.get("glob", "*.py")):
                     found.append(os.path.relpath(os.path.join(dirpath, f), spec["_root"]).replace(os.sep, "/"))
     return found
@@ -495,6 +497,7 @@ def selftest():
         open(f"{t}/code/a.py", "w").write("class Lift:\n    def forward(self): pass\n\ndef decode(): pass\n")
         open(f"{t}/code/b.py", "w").write("def f(): pass\n")
         open(f"{t}/code/c.py", "w").write("x = 1\n")
+        open(f"{t}/code/__init__.py", "w").close()                                        # an empty __init__.py needs no box
         spec = {"title": "t", "root": ".", "nodes": [
             {"id": "i", "label": "in", "kind": "input", "col": 0, "row": 0, "code": ["code/b.py"]},
             {"id": "l", "label": "lift", "kind": "learned", "col": 1, "row": 0, "code": ["code/a.py::Lift.forward"]},
@@ -562,8 +565,9 @@ def selftest():
         bad["not_drawn"] = {}                                                             # c.py in no box
         bad["nodes"].append({"id": "o2", "label": "x", "kind": "output", "col": 3, "row": 0})
         json.dump(bad, open(p, "w"))
+        open(f"{t}/code/__init__.py", "w").write("from code import a\n")                  # one with code in it is code
         errs = " | ".join(check(p)[1])
-        for want in ("has no Missing", "nope.py does not exist", "c.py: in no box", "overlaps o"):
+        for want in ("has no Missing", "nope.py does not exist", "c.py: in no box", "__init__.py: in no box", "overlaps o"):
             assert want in errs, (want, errs)
         src = "class A:\n    def x(self): pass\nclass B:\n    def forward(self): pass\n    n: int = 3\nif True:\n    def late(): pass\nfor i in range(2):\n    def looped(): pass\nDEFAULT = 1\n"
         assert has_symbol(src, "B.forward") and has_symbol(src, "late") and has_symbol(src, "DEFAULT") and has_symbol(src, "B.n") and has_symbol(src, "looped")

@@ -169,7 +169,9 @@ def build() -> argparse.ArgumentParser:
     s = sub.add_parser("report", help="build a report again from the records and the stored predictions (into the run root)")
     s.add_argument("problem"), s.add_argument("folder"), s.add_argument("--strict", action="store_true")
     s = sub.add_parser("tests", help="the problem's own tests (problem.json \"tests\") with its interpreter and module path; exit 1 when one fails")
-    s.add_argument("problem"), s.add_argument("--only", default="", help="only the tests whose path contains this text")
+    s.add_argument("problem"), s.add_argument("--only", default="", help="only the tests whose name contains this text")
+    s = sub.add_parser("py", help="python by hand with the problem's interpreter and module path, e.g. `py toy -m toy.tests.test_toy --quick`")
+    s.add_argument("problem"), s.add_argument("args", nargs=argparse.REMAINDER, help="the arguments of python")
     s = sub.add_parser("anchor", help="evaluate a finished run again with the working tree's code: do its numbers still come out?")
     s.add_argument("problem"), s.add_argument("run"), s.add_argument("--tolerance", type=float, default=None)
     s = sub.add_parser("compare", help="two finished runs side by side (a diagnostic, never a verdict)")
@@ -232,8 +234,10 @@ def run(a: argparse.Namespace) -> Any:
     if v == "report":
         from research import report
         return report.build(a.problem, a.folder, a.strict)
-    if v in ("tests", "anchor", "compare", "clean"):
+    if v in ("tests", "py", "anchor", "compare", "clean"):
         from research import upkeep
+        if v == "py":
+            sys.exit(upkeep.py(a.problem, a.args))
         if v == "tests":
             res = upkeep.tests(a.problem, a.only)
             if not res["passed"]:

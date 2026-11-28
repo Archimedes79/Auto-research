@@ -9,16 +9,22 @@ starts with the owner: a decided row `D<n>` in the root `DECISIONS.md`, then the
 does not copy protected files around the edit hook):
 ```
 rsync -a --exclude experiments --exclude ledger.csv --exclude reports ../problems/toy/ ../problems/<name>/     # the owner: code, not records
+grep -rlE '\btoy\.' --include='*.py' --include='*.json' ../problems/<name> | xargs sed -i -E 's/\btoy\./<name>./g'    # the owner: the package's name
 python3 -m research grant problems/<name>/ --decision D<n> --note "new problem <name>"
 ```
-The folder name is lower-case letters, digits and `_`, starting with a letter. Change:
+The folder name is lower-case letters, digits and `_`, starting with a letter. It is also the name of the problem's package: its modules
+import each other absolutely (`from <name>.net.model.net import DiscNet`), every code folder holds an empty `__init__.py`, nothing edits
+`sys.path`, and steps and tests start as modules (`{python} -P -m <name>.<module>`). The module path is the roots `research` gives a
+process (`problems/`, `autoresearch/`, the repository; for a run those of its snapshot): nothing is installed, and by hand
+`python3 -m research py <name> ...` is python with that path. `research tests <name>` checks the style (`research/pkgcheck.py`, called by
+the toy's test). Change:
 
 | file | what |
 |---|---|
 | `problem.json` | `name` (the folder name), `tag_prefix` (its own); then steps, score, guards, control floor, splits, `protected`, `tests` |
 | `training/configs/base.json` | `name`, `data_root` (`{data}/<name>`), then your settings |
-| `dataset/`, `gt/` | the data recipe and its manifest (from the problem folder: `PYTHONPATH=.:../../autoresearch ~/miniconda3/envs/gcar/bin/python dataset/make_data.py manifest`), the ground truth; the data-folder fallback in `net/prep/shards.py` and the dataset name in `evaluation/adapter.py` |
-| `net/`, `training/`, `evaluation/`, `tests/` | network, loss, trainer, metric, tests (a renamed test also in `problem.json` `tests`) |
+| `dataset/`, `gt/` | the data recipe and its manifest (`python3 -m research py <name> -m <name>.dataset.make_data manifest`), the ground truth; the data-folder fallback in `net/prep/shards.py` and the dataset name in `evaluation/adapter.py` |
+| `net/`, `training/`, `evaluation/`, `tests/` | network, loss, trainer, metric, tests (a renamed test also in `problem.json` `tests`; a new code folder gets an empty `__init__.py`) |
 | `training/architecture.json` | title and boxes, then `python3 reporter/archdraw.py render ../problems/<name>/training/architecture.json` (the title of `training/architecture.md` is edited by hand) |
 | texts | `README.md`, `TEST_LOG.md`; add `PROBLEM.md` (`templates/problem.md`, and name it in `problem.json` `protected`), `DESIGN.md`, `DECISIONS.md`, `HANDOVER.md` |
 
@@ -49,18 +55,19 @@ python3 -m research start <name> E1
 ## A new run step
 An entry in `problem.json` `steps`:
 ```json
-"stats": {"run": ["{python}", "training/stats.py", "{config}"], "gpus": 1, "dir": "stats"}
+"stats": {"run": ["{python}", "-P", "-m", "<name>.training.stats", "{config}"], "gpus": 1, "dir": "stats"}
 ```
+- A step is a module of the problem's package, started with `-P -m` (a problem that is no package yet names a script path).
 - The words may name `{python} {config} {run_dir} {data} {runs} {seed} {split}`. `gpus` above 0 waits for a GPU slot; `gpu_mb` (optional, with
   `gpus`) is the MiB of GPU memory the step needs: it then also waits until that much is free; `dir` (optional) is
   the step's own folder in the run folder. `"run": "evaluate"` is the core's evaluation step.
 - It runs when `default_steps` or a card's `steps` name it; a TEST evaluation runs `test_steps`.
-- The script runs from the snapshot in the problem folder: exit 0 done, 75 stopped, anything else failed. A long step stops when a `CONTROL`
+- It runs from the snapshot, with the problem folder as its working folder (`-P` keeps that folder off the module path): exit 0 done, 75 stopped, anything else failed. A long step stops when a `CONTROL`
   file appears in its folder and logs rows `{"step": n, ...}` to `log.jsonl` there, which the card's kill rules read (`trainkit` does both:
   `trainkit/control.py`). It writes into the run folder, never records.
 - A setting it reads enters the base config first, with the old behaviour as its default. A trainer on `trainkit` refuses unknown config
   keys: add the field to its config class too (the toy: `TrainConfig` in `training/train.py`).
-- A new script needs a box in the problem's drawing (see "A new metric").
+- A new module needs a box in the problem's drawing (see "A new metric").
 
 ## A new report part
 - A report is a folder in git (`problems/<name>/reports/<report>/`, or an experiment's `report/`);

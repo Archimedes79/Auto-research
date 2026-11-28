@@ -16,9 +16,9 @@ from Evaluation.contracts import TapSpec
 from Evaluation.defaults import Defaults
 from Evaluation.render.figure import ERROR_LEGEND, error_rgb
 from Evaluation.torch_taps import count_ops
-from gt import generate as GT
-from net.model.net import DiscNet
-from net.prep import shards as S
+from toy.gt import generate as GT
+from toy.net.model.net import DiscNet
+from toy.net.prep import shards as S
 
 ROOT = S.ROOT
 METRICS = ("seg",)

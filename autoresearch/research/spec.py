@@ -20,7 +20,8 @@ PROBLEM_KEYS = {
     "note": (str, False),
 }
 # test_steps: the steps a TEST evaluation of a finished run runs (default ["evaluate"]; a problem that predicts in a step of its own names it too)
-# tests: the problem's own tests, "script.py [args]" relative to its folder (`research tests`: each with the problem's interpreter and module path)
+# tests: the problem's own tests, "<problem>.<folders>.<module> [args]" (`research tests`: each with the problem's interpreter and module path,
+# started with -P -m); a problem that is no package yet names "script.py [args]" relative to its folder, and "pythonpath" for its flat imports
 CONFIG_KEYS = ("name", "seed", "out_root")                 # every base config has them: the run's name, its seed and where it writes
 STEP_KEYS = {"run": ((list, str), True), "gpus": (int, False), "gpu_mb": (int, False), "dir": (str, False), "note": (str, False)}
 # dir: the step's own folder inside the run folder, where it writes log.jsonl (the kill rules) and reads CONTROL (default "": the run folder)
@@ -59,10 +60,13 @@ def _check(obj: Any, keys: Dict[str, Tuple[Any, bool]], where: str) -> List[str]
     return errs
 
 
-def problem_errors(p: Dict[str, Any], folder_name: str = "") -> List[str]:
+def problem_errors(p: Dict[str, Any], folder_name: str = "", packaged: bool = False) -> List[str]:
+    """`packaged`: the problem's folder holds an __init__.py (paths.is_package)"""
     errs = _check(p, PROBLEM_KEYS, "problem.json")
     if errs:
         return errs
+    if packaged and "pythonpath" in p:
+        errs.append('problem.json: "pythonpath" in a problem that is a package: its module path is problems/ and the key would be ignored, remove it')
     if folder_name and p["name"] != folder_name:
         errs.append(f"problem.json: name {p['name']!r} is not the folder name {folder_name!r}")
     if not NAME.match(p["name"]) or not NAME.match(p["tag_prefix"]):
@@ -91,8 +95,11 @@ def problem_errors(p: Dict[str, Any], folder_name: str = "") -> List[str]:
     if p["evaluate"].get("split") in p.get("holdout", []):
         errs.append("problem.json: the evaluation split is a holdout split")
     for t in p.get("tests", []):
-        if not isinstance(t, str) or not t.split(" ")[0].endswith(".py") or t.startswith(("/", "..")):
-            errs.append(f"problem.json tests: a script relative to the problem folder and its arguments, got {t!r}")
+        first = t.split(" ")[0] if isinstance(t, str) else ""
+        module = first == p["name"] or first.startswith(p["name"] + ".")
+        if not (module or first.endswith(".py")) or first.startswith(("/", "..")):
+            errs.append(f"problem.json tests: a module of the problem ({p['name']}.<folders>.<module>) or a script relative to its folder, and its "
+                        f"arguments, got {t!r}")
     return errs
 
 

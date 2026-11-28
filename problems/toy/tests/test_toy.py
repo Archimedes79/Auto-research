@@ -1,7 +1,9 @@
-"""The toy's own tests: known answers of data, ground truth and metric (asymmetric, so a transposed or swapped argument fails), the refusals of the
-data reader, and a training stopped in the middle and resumed that equals the uninterrupted one bit for bit.
+"""The toy's own tests: the style of the package (one name per module, no path work, the layers, every module loaded once), known answers of data,
+ground truth and metric (asymmetric, so a transposed or swapped argument fails), the refusals of the data reader, and a training stopped in the
+middle and resumed that equals the uninterrupted one bit for bit.
 
-    python tests/test_toy.py [--quick]          (from the problem folder, with autoresearch/ on PYTHONPATH; --quick: no training)
+    python3 -m research tests toy                                        (from autoresearch/; problem.json runs it with --quick)
+    python3 -m research py toy -m toy.tests.test_toy [--quick]           (by hand, from any folder; --quick: no training)
 """
 import json
 import os
@@ -13,14 +15,37 @@ import tempfile
 import numpy as np
 import torch
 
-HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path[:0] = [HERE, os.path.join(os.path.dirname(os.path.dirname(HERE)), "autoresearch")]
+from Evaluation import FrameRef, Prediction, Sample
+from research import pkgcheck
+from toy.dataset import make_data
+from toy.evaluation import adapter as AD
+from toy.gt import generate as GT
+from toy.net.prep import shards as S
 
-from dataset import make_data                                       # noqa: E402
-from Evaluation import FrameRef, Prediction, Sample                 # noqa: E402
-from evaluation import adapter as AD                                # noqa: E402
-from gt import generate as GT                                       # noqa: E402
-from net.prep import shards as S                                    # noqa: E402
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # the problem folder
+
+
+def layer_errors(uses):
+    """the toy's layers: net/ imports nothing of the toy outside net/; training/ and evaluation/ do not import each other"""
+    errs = []
+    for f, mods in uses.items():
+        layer = f.split("/")[0]
+        for m in mods:
+            to = (m.split(".") + [""])[1]
+            if (layer == "net" and to != "net") or {layer, to} == {"training", "evaluation"}:
+                errs.append(f"{f} imports {m}")
+    return errs
+
+
+def package_style():
+    assert pkgcheck.check(HERE) == [], pkgcheck.check(HERE)
+    assert layer_errors(pkgcheck.imports(HERE)) == [], layer_errors(pkgcheck.imports(HERE))
+    planted = {"net/model/net.py": ["toy.gt.raster", "toy.net.prep.shards"], "training/train.py": ["toy.evaluation.adapter"],
+               "evaluation/adapter.py": ["toy.net.model.net", "toy.training.train"]}
+    assert layer_errors(planted) == ["net/model/net.py imports toy.gt.raster", "training/train.py imports toy.evaluation.adapter",
+                                     "evaluation/adapter.py imports toy.training.train"], layer_errors(planted)
+    assert pkgcheck.identity_errors(HERE) == [], pkgcheck.identity_errors(HERE)
+    print("ok  package: one name per module, no path work, the layers, every module loaded once and from this folder")
 
 
 def known_answers(root):
@@ -98,23 +123,22 @@ def stop_and_resume(root, tmp):
     from trainkit import control
     base = json.load(open(os.path.join(HERE, "training", "configs", "base.json"), encoding="utf-8"))
     base.update(steps=3000, save_every=500, eval_every=3000, log_every=1, threads=1, data_root=root, out_root=os.path.join(tmp, "runs"))
-    env = dict(os.environ, PYTHONPATH=os.pathsep.join(sys.path[:2]))
 
     def start(name):
         cfg = os.path.join(tmp, name + ".json")
         json.dump({**base, "name": name}, open(cfg, "w", encoding="utf-8"))
-        return [sys.executable, os.path.join(HERE, "training", "train.py"), cfg]
+        return [sys.executable, "-P", "-m", "toy.training.train", cfg]          # as a step starts it, on the module path this test was given
 
-    subprocess.run(start("whole"), cwd=HERE, env=env, check=True, capture_output=True)
+    subprocess.run(start("whole"), cwd=HERE, check=True, capture_output=True)
     cmd = start("cut")
-    proc = subprocess.Popen(cmd, cwd=HERE, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    proc = subprocess.Popen(cmd, cwd=HERE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     log = os.path.join(tmp, "runs", "cut", "log.jsonl")
     while proc.poll() is None and not (os.path.exists(log) and os.path.getsize(log) > 0):
         pass
     control.request_stop(os.path.join(tmp, "runs", "cut"), "test")
     out = proc.communicate(timeout=300)[0]
     assert proc.returncode == control.EXIT_STOPPED, f"exit {proc.returncode} (a run that ended before the stop request proves nothing)\n{out[-800:]}"
-    subprocess.run(cmd, cwd=HERE, env=env, check=True, capture_output=True)
+    subprocess.run(cmd, cwd=HERE, check=True, capture_output=True)
 
     def final(name):
         ck = torch.load(os.path.join(tmp, "runs", name, "ckpt_00003000.pt"), map_location="cpu", weights_only=False)
@@ -129,6 +153,7 @@ def main(argv):
     tmp = tempfile.mkdtemp(prefix="toy_test_")
     try:
         root = os.path.join(tmp, "data")
+        package_style()
         known_answers(root)
         refusals(root)
         if "--quick" not in argv:

@@ -123,12 +123,19 @@ def load_adapter(spec: Any, project: Optional[str]):
             spec = config.get("adapter")
             if not spec:
                 raise EvaluationError(f"no adapter: pass one, or write {cfg} as {{\"adapter\": \"module.path\"}}")
-        if project not in sys.path:
-            sys.path.insert(0, project)
+        packaged = spec.split(".")[0] == os.path.basename(project)             # the project is a package named like its folder: its root is the folder above
+        root = os.path.dirname(project) if packaged else project
+        if root not in sys.path:
+            sys.path.insert(0, root)
         try:
             mod = importlib.import_module(spec)
         except ImportError as e:
             raise EvaluationError(f"adapter {spec!r} cannot be imported: {e}") from None
+        file = os.path.realpath(getattr(mod, "__file__", None) or os.devnull)
+        own = spec.split(".")[0] == __package__.split(".")[0]                 # an adapter this package ships (minimal, its tests) belongs to no project
+        if not own and not file.startswith(os.path.realpath(project) + os.sep):   # found elsewhere on the module path: another tree's code under this project's hashes
+            raise EvaluationError(f"adapter {spec!r} was imported from {file}, outside the project {project}: the module path names another tree first, or the "
+                                  "project is a copy whose adapter still carries the other folder's package name")
     missing = [f for f in defaults.REQUIRED if not hasattr(mod, f)]
     if missing:
         raise EvaluationError(f"the adapter lacks {', '.join(missing)}")

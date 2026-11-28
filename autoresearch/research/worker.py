@@ -23,8 +23,8 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 from research import spec
 from research.launch import SNAPSHOT_PATHS
-from research.paths import (ResearchError, child_env, expand, interpreter, machine, module_path, read_json, record_dir, repo, run_dir, runs_root,
-                            state_dir, write_json)
+from research.paths import (ResearchError, child_env, core_step, expand, interpreter, machine, module_path, read_json, record_dir, repo, run_dir,
+                            runs_root, state_dir, write_json)
 from research import gitio
 
 EXIT_STOPPED = 75
@@ -249,10 +249,9 @@ class Worker:
 
     # ---------------------------------------------------------------------------------------- the steps
     def command(self, step: Dict[str, Any], code: str, cfg_path: str, p: Dict[str, Any]) -> List[str]:
-        py = interpreter(p["python"])
         if step["run"] == "evaluate":
-            return [py, "-m", "research.evaluate", self.problem, self.rid] + (["--test"] if self.test else [])
-        names = {"python": py, "config": cfg_path, "run_dir": self.out, "data": self.m["data"], "runs": runs_root(self.problem),
+            return core_step(p["python"], "research.evaluate", self.problem, self.rid, *(["--test"] if self.test else []))
+        names = {"python": interpreter(p["python"]), "config": cfg_path, "run_dir": self.out, "data": self.m["data"], "runs": runs_root(self.problem),
                  "seed": str(self.run["seed"]), "split": self.split}
         try:
             return [w.format(**names) for w in step["run"]]

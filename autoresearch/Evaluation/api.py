@@ -16,7 +16,8 @@ compare the evaluations by their ids.
 `run` here is not `research start`: it writes no record and takes no GPU slot; a number that feeds a verdict comes from the evaluation step of a registered run (research/evaluate.py).
 
 Frames are a text (`val`, `spread:1000:large.val`, `scenes:a,b:val`, ...: `Frames` in project.py). The adapter is a module of the project, named in
-`<project>/evaluation/evaluation.json` as {"adapter": "evaluation.bev_eval"} or passed to Evaluation (a module or its name); EXTENSIONS.md lists its functions. A source's `describe()`
+`<project>/evaluation/evaluation.json` as {"adapter": "toy.evaluation.adapter"} (a project that is a package: its name from the folder above; one that is none yet names it from the
+project folder, "evaluation.bev_eval"; a named adapter that is imported from outside the project is refused) or passed to Evaluation (a module or its name); EXTENSIONS.md lists its functions. A source's `describe()`
 must give `gt_signature` and `evaluator_hash` (the hash of the files that shape the numbers); without either the Evaluation refuses (a hash that cannot be computed is not "unchanged").
 Numpy and the standard library only here."""
 from __future__ import annotations

@@ -4,8 +4,8 @@
  "python": "gcar",
  "config": "training/configs/base.json",
  "steps": {
-  "prepare": {"run": ["{python}", "gt/generate.py", "make", "--config", "{config}"], "note": "the raw shards and the ground truth: written once, checked against the manifest"},
-  "train": {"run": ["{python}", "training/train.py", "{config}"]},
+  "prepare": {"run": ["{python}", "-P", "-m", "toy.gt.generate", "make", "--config", "{config}"], "note": "the raw shards and the ground truth: written once, checked against the manifest"},
+  "train": {"run": ["{python}", "-P", "-m", "toy.training.train", "{config}"]},
   "evaluate": {"run": "evaluate"}
  },
  "default_steps": ["prepare", "train", "evaluate"],
@@ -16,6 +16,6 @@
  "holdout": ["test"],
  "protected": ["problem.json", "TEST_LOG.md", "dataset/manifest.json", "evaluation/"],
  "data": "dataset/manifest.json",
- "tests": ["tests/test_toy.py --quick"],
+ "tests": ["toy.tests.test_toy --quick"],
  "note": "the reference problem: a disc in noise, small enough for the CPU; the chain test of the research system"
 }

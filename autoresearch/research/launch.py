@@ -14,7 +14,7 @@ import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from research import gates, gitio, spec
-from research.paths import (CORE, ResearchError, exp_number, experiment_dir, problem_dir, read_json, record_dir, rel, repo, run_dir, run_id,
+from research.paths import (CORE, ResearchError, exp_number, experiment_dir, is_package, problem_dir, read_json, record_dir, rel, repo, run_dir, run_id,
                             runs_root, write_json)
 
 SNAPSHOT_PATHS = ("autoresearch", "GtGenerator", "datasets")       # besides the problem's own folder: the code a run may import
@@ -27,7 +27,7 @@ def load_problem(problem: str, root: Optional[str] = None, at: Optional[str] = N
         p = json.loads(gitio.show(root or repo(), at, rel(path, root)) if at else open(path, encoding="utf-8").read())
     except ValueError as e:
         raise ResearchError(f"{path}: not json ({e})") from None
-    errs = spec.problem_errors(p, problem)
+    errs = spec.problem_errors(p, problem, packaged=not at and is_package(root or repo(), problem))
     if errs:
         raise ResearchError("\n".join(errs))
     return p
