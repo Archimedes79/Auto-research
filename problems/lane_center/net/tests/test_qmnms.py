@@ -3,7 +3,7 @@ e >= thr for three (radius, sigma) pairs; the gradient reaches the weaker node's
 import numpy as np
 import torch
 
-from qmnms import matrix_nms_logit
+from lane_center.net.model.qmnms import matrix_nms_logit
 
 
 def matrix_nms(pos, e, radius, thr=0.5, sigma=0.5, protect=None):

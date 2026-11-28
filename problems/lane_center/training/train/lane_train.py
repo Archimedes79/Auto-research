@@ -3,7 +3,7 @@ head B' from the token cache (jtoken_train), stage 2 trains the head and B''s no
 folder below the run (<run>/stage1, <run>/stage2; the trainers keep their own config.json and log there), and stage 2's model.pt is copied,
 byte for byte, into the run's folder, where the step `predict` reads it.
 
-    python training/train/lane_train.py stage1|stage2 <the run's config.json>
+    python -P -m lane_center.training.train.lane_train stage1|stage2 <the run's config.json>
 
 Config: the blocks `stage1` and `stage2` are the options of the two trainers, key by key (`options`: --<key with dashes> <value>; null = the
 trainer's own default; a text may hold {seed}), so an arm of a card sets every one of them through the base config. What the run gives is in
@@ -16,10 +16,7 @@ import os
 import shutil
 import sys
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/train", "../.."):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import bflc_paths as BP  # noqa: E402
+from lane_center.training import bflc_paths as BP
 
 
 def options(block, seed):
@@ -71,11 +68,11 @@ def main(argv):
             return 0
         if src != cfg["name"]:
             raise SystemExit(f"from_run {src}: its stage 1 is not complete")
-        import jtoken_train
+        from lane_center.training.train import jtoken_train
         return jtoken_train.main(stage_args(cfg, "stage1")) or 0
     if stage == "stage2":
         if not complete(cfg["name"], "stage2"):
-            import jlive_train
+            from lane_center.training.train import jlive_train
             code = jlive_train.main(stage_args(cfg, "stage2")) or 0
             if code:
                 return code

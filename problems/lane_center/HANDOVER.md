@@ -18,6 +18,6 @@ lane module on the scored path stored dump -> prediction -> numbers; `evaluation
 hashed into every result: a change, even of a comment, makes old runs incomparable (the judge refuses a `from` control). The hash changed
 with the interface round of 2026-11-28 (no number moved: the anchor agrees at tolerance 0), so the champion is measured again under it
 before it serves as a control. A TEST
-evaluation is not built yet: `net/prep/lane_tokcache.py build` takes train and val only and the token loaders refuse `test`, so
+evaluation is not built yet: `-m lane_center.net.prep.lane_tokcache build` takes train and val only and the token loaders refuse `test`, so
 `research test lane_center` ends in the step `predict`; that path (the test rows are in the val features) is built before the owner's TEST
 row. The same holds for BEV Fusion (`evaluation/bev_sets.py`). Owner of the code: the lead chat of a round.

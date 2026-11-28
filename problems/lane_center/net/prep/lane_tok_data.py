@@ -1,7 +1,7 @@
 """E357 data: the 39 frozen BEV channels of a frame + its GT node table on a lattice (the tokens of E357's pair head; today read by the token cache and the live tokens) and the GT links, padded and masked.
 
     ds, dl = loader("train" | "val", res=2.5, bs=8, workers=4)
-    python net/prep/lane_tok_data.py build-cache --split train --lattice 2.5 [--max N] [--threads 2]      # the cache of the node tables (one process; frames already there are skipped)
+    python -P -m lane_center.net.prep.lane_tok_data build-cache --split train --lattice 2.5 [--max N] [--threads 2]      # the cache of the node tables (one process; frames already there are skipped)
 
 Frames: TRAIN = the train rows of `lane_gt_data.QData` with a stored lane GT; VAL = exactly the rows of data/splits.json['val'] in that order (asserted: 873, none missing; the val feature files also hold the TEST rows, never read).
 The features and the token of a row are read here as QData reads them (its item path builds 2 m targets with sizes bound at import and must not run on another lattice).
@@ -15,19 +15,15 @@ of the long GT links (NaN elsewhere), table = the per-frame tables. Tests: throu
 import argparse
 import json
 import os
-import sys
 import time
 
 import numpy as np
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training/data", "net/prep", "net/model", "net/loss"):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
-import lane_gt_data as LD  # noqa: E402
-import qtargets as QT  # noqa: E402
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+import GtGenerator  # the ground truth: its public interface only
+from lane_center.net.prep import lane_gt_data as LD
+from lane_center.net.prep import qtargets as QT
 
 CACHE = os.path.join(BP.RUNS, "e357_cache")
 TABLE_VERSION = "t1"                                                        # part of the cache key: bump it BY HAND whenever `frame_table` (or what it reads of qtargets) changes what a table holds
@@ -72,7 +68,7 @@ class TokData(torch.utils.data.Dataset):
         self.rows = [int(self.qd.bd.rows[k]) for k in self.qd.ks]
         self.tokens = [self.qd.tokens[r] for r in self.rows]
         if split == "val":
-            want = [int(r) for r in json.load(open(os.path.join(ROOT, "data", "splits.json")))["val"]]
+            want = [int(r) for r in json.load(open(os.path.join(BP.ROOT, "data", "splits.json")))["val"]]
             assert self.qd.missing == 0 and len(want) == 873 and self.rows == want, f"VAL is not the 873 rows of data/splits.json['val'] ({len(self.rows)} rows, {self.qd.missing} without lane GT)"
         self.dir = None if cache is None else os.path.join(cache, f"l{self.res:g}_{GtGenerator.lane_signature()}_{TABLE_VERSION}", split)
         if self.dir:

@@ -15,22 +15,15 @@ and where along the range the misses are. These metrics close them; graph format
             the far bin is also split at max(|x|,|y|) = 45 m, the edge of the inference seed lattice (E266): far_inner (< 45) and far_ring (45 - 48).
 
     extra(preds, gts) -> dict(topo_P, topo_R, topo_F1, dup_frac, R@1_near / mid / far / far_inner / far_ring, P@1_ the same)
-Self-test: python topo_metrics.py
+Self-test: python -P -m lane_center.evaluation.sparse_lanes.topo_metrics
 """
-import os
-import sys
-
 import numpy as np
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
-import bflc_paths as BP  # project paths from the location of this checkout
-import graph_eval as GE
-
-if os.path.join(BP.REPO, "autoresearch") not in sys.path:
-    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
-from Evaluation import stats as ST  # noqa: E402  (the shared scene bootstrap)
+from lane_center.evaluation.sparse_lanes import graph_eval as GE
+from Evaluation import stats as ST  # the shared scene bootstrap
 
 CLIP = 48.0
 BINS = (("near", 0.0, 20.0), ("mid", 20.0, 40.0), ("far", 40.0, 1e9))

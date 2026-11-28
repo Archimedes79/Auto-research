@@ -14,11 +14,11 @@ Prediction of one frame (`pred`, a dict):
 Read-out (output step, named; `evaluation/qgraph_eval.py`): nodes with e >= 0.5, links with p >= 0.5 between delivered nodes, one lane piece per section.
 
 `oracle_prediction(g)` builds that dict from a lane GT graph: nodes and links of `qtargets.node_table`, probabilities 1, curves = `qtargets.decode`, assignment = each node to its own piece.
-Run the self-test: python qformat.py
+Run the self-test: python -P -m lane_center.net.model.qformat
 """
 import numpy as np
 
-import qtargets as QT
+from lane_center.net.prep import qtargets as QT
 
 
 def oracle_prediction(g, marker_dist=0.0, with_assign=True):
@@ -41,7 +41,7 @@ def oracle_prediction(g, marker_dist=0.0, with_assign=True):
 
 
 def _selftest():
-    import qtargets
+    from lane_center.net.prep import qtargets
     qtargets._selftest()
     ys = lambda a, b: np.stack([np.zeros(int((b - a) / 0.5) + 1), np.arange(a, b + 1e-9, 0.5)], 1)
     A = qtargets._piece("A", ys(-40, 40), start_open=True, end_open=True)

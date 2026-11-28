@@ -1,12 +1,12 @@
 """Self-test of sparse_metrics: the spec of graph_from_vertices, a perfect graph scores 1, DP sparsity of the ground truth.
-Run from the problem folder with the module path of problem.json: python evaluation/sparse_lanes/selftest.py"""
+Run: python -P -m lane_center.evaluation.sparse_lanes.selftest (the module path: README.md)"""
 import os
 import pickle
 
 import numpy as np
 
-import bflc_paths as BP
-import sparse_metrics as SM
+from lane_center.evaluation.sparse_lanes import sparse_metrics as SM
+from lane_center.training import bflc_paths as BP
 
 
 def spec_graph_from_vertices():

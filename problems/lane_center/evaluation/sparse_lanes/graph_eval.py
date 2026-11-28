@@ -8,17 +8,13 @@ Kennzahlen (je Sample, dann gemittelt bzw. mikro-gemittelt):
   - Route: APLS-aehnlich ueber den gerichteten Punktgraphen (Punkte alle 1 m): Quell-/Zielpaare aus dem Soll (Erreichbarkeit <= 40 m), Vorhersage-Weglaenge gegen Soll-Weglaenge ('route_recall'); umgekehrt Paare der Vorhersage im Soll ('route_precision'); 'route_f' = harmonisches Mittel
   - Richtung: Anteil der Vorhersagepunkte (innerhalb 1,5 m eines Soll-Punkts), deren Fahrtrichtung zum Soll passt (< 60 Grad), nur fuer gerichtete Graphen
 """
-import os
-import sys
-
 import numpy as np
 from numba import njit
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import dijkstra
 from scipy.spatial import cKDTree
 
-sys.path.insert(1, os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, os.pardir, "net", "prep"))
-from polylines import dense_points, resample  # noqa: E402,F401 (polylines as points: shared with the grid data)
+from lane_center.net.prep.polylines import dense_points, resample  # noqa: F401 (polylines as points: shared with the grid data)
 
 TAUS = (0.5, 1.0, 1.5)
 

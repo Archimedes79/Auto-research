@@ -23,18 +23,13 @@ on is delivered), `fork_gate` (a second successor only at a node the type softma
 The switches of the closed experiments E376 (pos_loss max, the argmax decode), E379 (distillation), E392 (message rounds, early reads) and E395 (the position head and its curve loss) are in the tag v1.
 """
 import math
-import os
-import sys
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-for sub_ in (".", "../prep", "../loss"):
-    sys.path.insert(0, os.path.normpath(os.path.join(HERE, sub_)))
-import jtok as JT  # noqa: E402
+from lane_center.net.model import jtok as JT
 
 SHORT, NG = JT.SHORT, JT.NG
 NEG = -1e4                                                                  # the fill of a masked logit

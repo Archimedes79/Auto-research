@@ -3,7 +3,7 @@ extracted again by `gcar_features.frames` and compared per channel group (dec32,
 difference, the correlation. Every frame is extracted twice; the second against the first is the noise of the rasteriser itself, the bar a
 comparison with the stored rows is read against. GPU, batch 1, about a minute plus 0.4 s per frame and run.
 
-    python net/prep/foundation/check_features.py [--n 8] [--parts val train] [--clone DIR] [--weights FILE] [--out FILE]
+    python -P -m lane_center.net.prep.foundation.check_features [--n 8] [--parts val train] [--clone DIR] [--weights FILE] [--out FILE]
 
 Frames (`pick_rows`): only rows of TRAIN and VAL of data/splits.json (the TEST rows of the part "val" stay closed); of each part n scenes at
 even steps through its scenes, of each the middle row, moved by one row where needed so that even and odd rows alternate. The sets are reported
@@ -15,14 +15,12 @@ import hashlib
 import json
 import os
 import statistics
-import sys
 import time
 
 import numpy as np
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import gcar_features as GF  # noqa: E402  (it puts training/ on the module path)
-import bflc_paths as BP  # noqa: E402
+from lane_center.net.prep.foundation import gcar_features as GF
+from lane_center.training import bflc_paths as BP
 
 KINDS = {"stored": "new against stored", "repeat": "new against new (the rasteriser's own noise)"}
 

@@ -25,6 +25,6 @@ done
 $PY -m research judge lane_center "$EXP" --write --no-commit > /dev/null
 for f in "$FOLDER"/runs/*/run.json; do
   run=$(basename "$(dirname "$f")")
-  (cd "$PROBLEM" && $PY tools/diagnose/diagnose.py "$run" --worst 3 > /dev/null) || echo "diagnosis of $run failed"
+  $PY -m research py lane_center -m lane_center.tools.diagnose.diagnose "$run" --worst 3 > /dev/null || echo "diagnosis of $run failed"
 done
-$PY "$HERE/summary.py" "$EXP"
+$PY -m research py lane_center -m lane_center.tools.diagnose.summary "$EXP"

@@ -4,11 +4,11 @@ the trainable groups of the phase and none of its frozen stages, with and withou
 import numpy as np
 import torch
 
-import lane_gt_data as LD
-import map_sim as MS
-import qtargets as QT
-from loss_qgraph import qgraph_loss
-from qgraph import PHASE_FROZEN, PHASE_TRAIN, REMOVED, QGraph, from_args, trainable_params
+from lane_center.net.prep import lane_gt_data as LD
+from lane_center.net.prep import map_sim as MS
+from lane_center.net.prep import qtargets as QT
+from lane_center.net.loss.loss_qgraph import qgraph_loss
+from lane_center.net.model.qgraph import PHASE_FROZEN, PHASE_TRAIN, REMOVED, QGraph, from_args, trainable_params
 
 
 def toy_batch(B=2):

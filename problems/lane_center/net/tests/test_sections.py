@@ -2,9 +2,9 @@
 not join them, the gradient reaches the link logits and the section-start logits. CPU, seconds."""
 import torch
 
-from loss_sections import section_loss
-from qnodes import N
-from sections import section_membership
+from lane_center.net.loss.loss_sections import section_loss
+from lane_center.net.model.qnodes import N
+from lane_center.net.model.sections import section_membership
 
 
 def main():

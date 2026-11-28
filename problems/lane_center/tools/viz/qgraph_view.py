@@ -3,10 +3,10 @@ same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the 
 lane GT of the frame (`GtGenerator.load_lane`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
 dict through `pred_fn(token)`.
 
-    python qgraph_view.py frame <token | scene-0221:12> --out DIR [--pred oracle|degraded] [--no-cams]
-    python qgraph_view.py scene <VAL scene id | scene name> --out DIR [--pred ...] [--frames N] [--every K]     (the mp4 of a scene left with tools/video, tag v1)
-    python qgraph_view.py list                    the VAL scenes (id as in `grid_view.py --scene`, name, location, frames, description)
-    python qgraph_view.py --selftest              a synthetic frame (needs no stored GT; imports the scorer)
+    python -P -m lane_center.tools.viz.qgraph_view frame <token | scene-0221:12> --out DIR [--pred oracle|degraded] [--no-cams]
+    python -P -m lane_center.tools.viz.qgraph_view scene <VAL scene id | scene name> --out DIR [--pred ...] [--frames N] [--every K]     (the mp4 of a scene left with tools/video, tag v1)
+    python -P -m lane_center.tools.viz.qgraph_view list                    the VAL scenes (id as in `grid_view.py --scene`, name, location, frames, description)
+    python -P -m lane_center.tools.viz.qgraph_view --selftest              a synthetic frame (needs no stored GT; imports the scorer)
 
 Panels (1920 x 1080 with the six cameras; metres, x right, y forward, ego at the origin):
   cameras   the GT lane graph projected into the six cameras (front large; the projection is `GtGenerator.lane_graph_view.camera_image`; a camera that is not on disk is a grey tile)
@@ -22,7 +22,7 @@ Read-out: the scorer's rule (`qgraph_eval.kept`: e >= 0.5, p >= 0.5 between kept
 centre1 channel 0, road2 = road, intersection; values inside [0, 1] are probabilities (on at > 0.5), others logits (on at > 0).
 
 Minimal example (python):
-    import qgraph_view as QV
+    from lane_center.tools.viz import qgraph_view as QV
     g = QV.load_gt(token); pred = QV.make_pred(g, "degraded", token)              # or the network's dict
     QV.render_frame(token, pred, "frame.png", cams=True)                          # returns the RGB array too
     QV.render_scene("scene-0221", "out_dir", pred_fn=lambda t: QV.make_pred(QV.load_gt(t), "oracle", t))
@@ -37,7 +37,6 @@ import argparse  # noqa: E402
 import colorsys  # noqa: E402
 import json  # noqa: E402
 import pickle  # noqa: E402
-import sys  # noqa: E402
 import zlib  # noqa: E402
 
 import matplotlib  # noqa: E402
@@ -50,14 +49,12 @@ from matplotlib.patches import Circle  # noqa: E402
 from scipy.ndimage import maximum_filter  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for _sub in ("../..", "net/prep", "net/model", "net/loss", "evaluation"):
-    sys.path.insert(0, os.path.join(ROOT, _sub))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import qformat as QF  # noqa: E402
-import qraster as QR  # noqa: E402
-import qtargets as QT  # noqa: E402
+from lane_center.training import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
+from lane_center.net.model import qformat as QF  # noqa: E402
+from lane_center.net.prep import qraster as QR  # noqa: E402
+from lane_center.net.prep import qtargets as QT  # noqa: E402
 
+ROOT = BP.ROOT
 NUSC = BP.NUSC
 EXP = BP.B123
 CAMS = ("CAM_FRONT_LEFT", "CAM_FRONT", "CAM_FRONT_RIGHT", "CAM_BACK_LEFT", "CAM_BACK", "CAM_BACK_RIGHT")
@@ -280,7 +277,7 @@ def select(pred, keep, lkeep=None):
 
 def readout(pred):
     """the delivered graph as a pred: the nodes and links the scorer keeps (`qgraph_eval.kept`, the one place of the read-out rule)"""
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     keep, L = QE.kept(pred)
     lk = np.zeros(len(pred["links"]["src"]), bool)
     lk[L] = True
@@ -416,7 +413,7 @@ def compare_graph(d, nt, tol=2.0):
 
 def scorer_numbers(pred, g, token):
     """the numbers of the scorer (`qgraph_eval`: node, assignment and, for a VAL frame, graph metrics against the old graph GT of the lane suite); the graph keys are missing for other tokens"""
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     out = dict(QE.node_metrics(pred, g), **QE.assign_metrics(pred, g))
     if "frames" not in _CACHE:
         _CACHE["frames"] = {f.token: f for f in QE.val_frames()}

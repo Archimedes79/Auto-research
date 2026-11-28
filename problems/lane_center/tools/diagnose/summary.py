@@ -1,13 +1,13 @@
-"""The verdict of a lane experiment and the stage numbers of its runs (and of the control's) in one table: `summary.py E<n>` from anywhere."""
+"""The verdict of a lane experiment and the stage numbers of its runs (and of the control's) in one table:
+`python3 -m research py lane_center -m lane_center.tools.diagnose.summary E<n>` (from autoresearch/)."""
 import glob
 import json
 import os
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PROBLEM = os.path.normpath(os.path.join(HERE, "..", ".."))
-sys.path.insert(0, os.path.join(PROBLEM, "training"))
-import bflc_paths as BP  # noqa: E402
+from lane_center.training import bflc_paths as BP
+
+PROBLEM = BP.ROOT
 
 METRICS = ("graph.topo_F1", "graph.junction_F1", "graph.F1@1.0", "graph.lanes_found", "graph.dup_frac", "graph.vert100_dp")
 

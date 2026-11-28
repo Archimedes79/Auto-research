@@ -9,17 +9,13 @@
 Tests: net/tests/test_lane_tokcache.py
 """
 import os
-import sys
 
 import numpy as np
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation"):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
-import lane_tokcache as LC  # noqa: E402
-import qtargets as QT  # noqa: E402
+import GtGenerator  # the ground truth: its public interface only
+from lane_center.net.prep import lane_tokcache as LC
+from lane_center.net.prep import qtargets as QT
 
 TOKEN_FIELDS = ("tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid")
 CACHE_K = 512                 # the tokens per frame of the cache that every run reads: the champion's (a finished cache of another K changes nothing)

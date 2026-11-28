@@ -1,7 +1,7 @@
 """Tests of `jtoken_eval.py` (read-out and checks of the token head); CPU only (the GPU is hidden), 2 threads. Hand frames need no data; the tests marked (cache) read the first VAL frames of the predicted-node cache of B' seed 0 under
 runs/e365_cache and are skipped with a message when it is not there.
 
-    python evaluation/tests/test_jtoken_eval.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
+    python -P -m lane_center.evaluation.tests.test_jtoken_eval [name ...]         # all tests, or the named ones (with or without the `test_` prefix)
 
 decode_variant (the defaults = the record decode, thresholds and the none gate by hand, monotone), decode_perclass (E375 link_thr_long: None = one threshold, each class threshold moves only its class, the class = the token chord; textual
 mutants), sweep (the per-class grid, the only one: 36 cells, counts monotone per class, one row = a direct scoring; the removed commands and options are refused), keep_rule (a node is kept at p_none 0.49 and not at 0.50, e = 1 - p_none, the links of a dropped node go), decode_fork (rec keeps both branches of a fork; the none slot wins when the branches are weak),
@@ -29,20 +29,16 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ""                                      # t
 import numpy as np  # noqa: E402
 import torch  # noqa: E402
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-for sub_ in ("../..", "../../training", "../../net/prep", "../../net/model", "../../net/loss", "../../training/data", "../../training/data/prep", "../../training/train"):
-    sys.path.insert(0, os.path.normpath(os.path.join(HERE, sub_)))
-import jtok as JT  # noqa: E402
-import jtoken as JK  # noqa: E402
-import jtoken_eval as E  # noqa: E402
-import lane_dump as DU  # noqa: E402
-import lane_net as LN  # noqa: E402
-import lane_predict as PR  # noqa: E402
-import lane_ptok_data as LP  # noqa: E402
-import lane_readout as RO  # noqa: E402
-import lane_tokcache as LC  # noqa: E402
-sys.path.insert(0, os.path.normpath(os.path.join(HERE, "../../net/tests")))
-from merged_source import must_fail  # noqa: E402
+from lane_center.net.model import jtok as JT  # noqa: E402
+from lane_center.net.model import jtoken as JK  # noqa: E402
+from lane_center.evaluation import jtoken_eval as E  # noqa: E402
+from lane_center.evaluation import lane_dump as DU  # noqa: E402
+from lane_center.net.model import lane_net as LN  # noqa: E402
+from lane_center.evaluation import lane_predict as PR  # noqa: E402
+from lane_center.net.prep import lane_ptok_data as LP  # noqa: E402
+from lane_center.net.model import lane_readout as RO  # noqa: E402
+from lane_center.net.prep import lane_tokcache as LC  # noqa: E402
+from lane_center.net.tests.merged_source import must_fail  # noqa: E402
 
 torch.set_num_threads(2)
 CACHE_OK = any(os.path.exists(os.path.join(LC.CACHE, d, "val", "manifest.json")) for d in (os.listdir(LC.CACHE) if os.path.isdir(LC.CACHE) else []))
@@ -126,7 +122,7 @@ def test_keep_rule():
     nd = pred["nodes"]
     assert np.allclose(nd["e"], [0.51, 0.9]) and nd["pos"].tolist() == [[0.0, 0.0], [0.0, 4.0]], nd
     assert pred["links"]["src"].tolist() == [0] and pred["links"]["dst"].tolist() == [1], "only the link between two kept nodes survives, renumbered"
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     assert QE.kept(pred, 0.5, 0.5)[0].all(), "the scorer keeps every node the writer wrote (e > 0.5)"
     out, tok = stub_out(K, {0: {2: 0.8}}, [0.5, 0.5, 0.5, 0.5])
     assert len(pred_of(out, tok)[0]["nodes"]["pos"]) == 0, "p_none = 0.50 exactly: no node is kept (the card's p_none < 0.5)"
@@ -179,7 +175,7 @@ def test_decode_variant():
     v = RO.decode_variant(f, np.array([True, True, True, True, True, False]), keep_thr=0.6)                 # the valid mask: an invalid token is never a node, whatever its p_none
     assert not v["keep"][5] and v["keep"][2]
     pred = RO.frame_prediction(tok, RO.decode_variant(f, valid, keep_thr=0.6), "rec", 0.6)                   # a node kept at 0.6 still passes the scorer's e >= 0.5, e = 1 - p_none + 0.1
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     assert QE.kept(pred, 0.5, 0.5)[0].all() and abs(pred["nodes"]["e"][2] - 0.55) < 1e-6 and abs(pred["nodes"]["e"][0] - 1.0) < 1e-6 and len(pred["nodes"]["pos"]) == 6, pred["nodes"]["e"]
     old = dict(f, cand={k: v for k, v in f["cand"].items() if k not in ("a", "b")})                         # a dump of before the variants (no scales in the candidates): refused, re-dump
     must_fail(RO.decode_variant, old, valid)
@@ -352,7 +348,7 @@ def test_numbers():
     s = DU.sample(8414, "train")
     assert len(s) == 873 and s[0] == 0 and s[-1] == 8413 and (np.diff(s) > 0).all()
     # paired junction F1 (E375): counts pooled per draw, the scene draws of qgraph_eval.paired; two scenes of one frame each: a = [pred, GT, matched] [1, 1, 1] + [0, 3, 0] (pooled F1 0.4, the frame mean would be 0.5), b = [1, 1, 0] + [0, 3, 0]
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     jr = lambda *cs: dict(graph=[dict(lane=dict(junc=np.array(x, float)), rec=None, topo=None) for x in cs])  # noqa: E731
     fr2 = [types.SimpleNamespace(scene=s) for s in (0, 1)]
     draws, real_draws = [], E.ST.scene_draws
@@ -477,7 +473,7 @@ def test_sweep():
         os.makedirs(out3)
         pj = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--max", "3", "--jobs", "3"]), runs, out3)))
         assert pj["rows"] == prow, "sweep --jobs 3 gives the rows of the serial sweep, to the last digit"
-        import qgraph_eval as QE
+        from lane_center.evaluation import qgraph_eval as QE
         r0 = pcell[(0.1, 0.05, 0.6)]                                                                        # one row against a direct scoring of its decode
         d0 = E.score_preds([RO.frame_prediction(t, RO.decode_variant(f, t["valid"], 0.1, 0.6, False, 0.05), "rec", 0.6) for f, t in zip(d["frames"], toks)], QE.val_frames()[:3], log=lambda *a, **k: None)
         jn = np.sum([c["lane"]["junc"] for c in d0["rec"]["graph"]], 0)                                    # predicted, GT, matched junction points of the 3 frames (three different counts: a mix-up shows)
@@ -512,7 +508,7 @@ def test_every():
     if not CACHE_OK or not os.path.exists(SMOKE):
         print("every: the sample ok, the dump / score / sweep part SKIPPED (no cache or smoke model)")
         return
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     ds = DU.open_cache("val", 0)
     with tempfile.TemporaryDirectory() as tmp:
         runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
@@ -608,7 +604,7 @@ def test_graphs():
     if not CACHE_OK or not os.path.exists(SMOKE):
         print("graphs: SKIPPED (no cache or no smoke model)")
         return
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     with tempfile.TemporaryDirectory() as tmp:
         runs = os.path.join(tmp, "runs")
         os.makedirs(os.path.join(runs, "h"))
@@ -851,8 +847,8 @@ def test_live():
     if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(base_pt):
         print("live: the hand part ok, the cache part SKIPPED (no cache, smoke model or runs/e292_a_s0)")
         return
-    import lane_tok_data as TD
-    import qgraph_eval as QE
+    from lane_center.net.prep import lane_tok_data as TD
+    from lane_center.evaluation import qgraph_eval as QE
     ds = DU.open_cache("val", 0)
     td = TD.TokData("val", E.LATTICE, feats=False)
     base = torch.load(base_pt, map_location="cpu")["state"]

@@ -10,13 +10,13 @@ L_cov   coverage of the GT points by the vertex weights, noisy-or: C(g) = 1 - pr
         frame of the GT tangent, cell position = centre + offset; loss = mean(1 - C): a vertex pays for itself where it covers lane that nobody else covers
 L_prec  mean over the vertex weight of the clipped distance (2 m) of the CELL CENTRE to the nearest lane point (the offset gets its gradient from L_off and L_cov): weight off the lane is punished
 L_bud   the vertex budget (`soft_lines.budget`), only the excess over `per100` vertices per 100 m of GT lane
-Run the self-test: python losses.py
+Run the self-test: python -P -m lane_center.net.loss.losses
 """
 import torch
 import torch.nn.functional as F
 
-import soft_lines as SL
-import targets as TG
+from lane_center.net.model import soft_lines as SL
+from lane_center.net.prep import targets as TG
 
 W = dict(p=1.0, dice=1.0, dir=0.5, off=1.0, cov=2.0, prec=1.0, bud=1.0)
 SIGMA = 1.0

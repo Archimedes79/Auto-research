@@ -5,9 +5,9 @@
  "config": "training/configs/base.json",
  "first_experiment": 396,
  "steps": {
-  "stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1, "dir": "stage1", "note": "the token head on the frozen lane head B' (jtoken_train, reads the token cache)"},
-  "stage2": {"run": ["{python}", "training/train/lane_train.py", "stage2", "{config}"], "gpus": 1, "dir": "stage2", "note": "the head and B''s node head trained together through the token loss (jlive_train)"},
-  "predict": {"run": ["{python}", "evaluation/lane_predict.py", "{config}"], "gpus": 1, "note": "the live dump of the run's network on the split: B' at batch 4 (its GPU parity), the head at batch 8"},
+  "stage1": {"run": ["{python}", "-P", "-m", "lane_center.training.train.lane_train", "stage1", "{config}"], "gpus": 1, "dir": "stage1", "note": "the token head on the frozen lane head B' (jtoken_train, reads the token cache)"},
+  "stage2": {"run": ["{python}", "-P", "-m", "lane_center.training.train.lane_train", "stage2", "{config}"], "gpus": 1, "dir": "stage2", "note": "the head and B''s node head trained together through the token loss (jlive_train)"},
+  "predict": {"run": ["{python}", "-P", "-m", "lane_center.evaluation.lane_predict", "{config}"], "gpus": 1, "note": "the live dump of the run's network on the split: B' at batch 4 (its GPU parity), the head at batch 8"},
   "evaluate": {"run": "evaluate"}
  },
  "default_steps": ["predict", "evaluate"],
@@ -25,9 +25,9 @@
  "holdout": ["test"],
  "protected": ["problem.json", "TEST_LOG.md", "PROBLEM.md", "data/splits.json", "evaluation/adapter.py", "evaluation/qgraph_eval.py", "evaluation/sparse_lanes/", "evaluation/lane_task/"],
  "data": "data/splits.json",
- "pythonpath": ["evaluation", "evaluation/sparse_lanes", "net/prep", "net/model", "net/loss", "training", "training/train", "tools/viz"],
- "tests": ["net/tests/test_net_layering.py", "evaluation/tests/test_evaluator_hash.py", "evaluation/sparse_lanes/selftest.py", "evaluation/jtiming.py", "net/tests/merged_source.py", "net/tests/test_qmnms.py", "net/tests/test_sections.py",
-           "net/tests/test_qgraph.py", "net/tests/test_jtoken.py", "net/tests/test_lane_tokcache.py", "net/tests/test_lane_net.py",
-           "net/tests/test_jlive_train.py", "net/tests/test_lane_train.py", "net/tests/test_foundation.py", "evaluation/tests/test_jtoken_eval.py"],
+ "tests": ["lane_center.net.tests.test_net_layering", "lane_center.evaluation.tests.test_evaluator_hash", "lane_center.evaluation.sparse_lanes.selftest", "lane_center.evaluation.jtiming",
+           "lane_center.net.tests.merged_source", "lane_center.net.tests.mutant selftest", "lane_center.net.tests.test_qmnms", "lane_center.net.tests.test_sections",
+           "lane_center.net.tests.test_qgraph", "lane_center.net.tests.test_jtoken", "lane_center.net.tests.test_lane_tokcache", "lane_center.net.tests.test_lane_net",
+           "lane_center.net.tests.test_jlive_train", "lane_center.net.tests.test_lane_train", "lane_center.net.tests.test_foundation", "lane_center.evaluation.tests.test_jtoken_eval"],
  "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
 }

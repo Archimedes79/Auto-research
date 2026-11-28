@@ -11,7 +11,7 @@ from typing import Tuple
 
 import numpy as np
 
-from .geometry import LaneGraph, resample, simplify
+from lane_center.evaluation.lane_task.geometry import LaneGraph, resample, simplify
 
 
 @dataclass(frozen=True)

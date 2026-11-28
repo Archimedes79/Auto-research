@@ -16,19 +16,15 @@ import hashlib
 import json
 import os
 import pickle
-import sys
 
 import numpy as np
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "../.."):
-    p_ = os.path.normpath(os.path.join(ROOT, sub_))
-    if p_ not in sys.path:
-        sys.path.insert(0, p_)
-import bflc_paths as BP  # noqa: E402
-from Evaluation import FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, Task, View  # noqa: E402
-from Evaluation.defaults import file_hash  # noqa: E402
-from lane_cost import LaneCost  # noqa: E402
+from lane_center.training import bflc_paths as BP
+from Evaluation import FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, Task, View
+from Evaluation.defaults import file_hash
+from lane_center.evaluation.lane_cost import LaneCost
+
+ROOT = BP.ROOT
 
 METRICS = ("graph", "cost")
 # the quality numbers: connectivity (topo F1, the score) and junctions, position (F1 at 0.5 / 1 m, lanes found, length off every lane), shape (heading error:
@@ -41,7 +37,7 @@ _FRAMES = {}
 
 
 def _qe():
-    import qgraph_eval as QE
+    from lane_center.evaluation import qgraph_eval as QE
     return QE
 
 
@@ -105,8 +101,8 @@ class LaneSubject(Subject):
     """the delivered graph of every frame, from the run's dump at the run's decode"""
 
     def __init__(self, net, split):
-        import lane_dump as DU
-        import lane_readout as RO
+        from lane_center.evaluation import lane_dump as DU
+        from lane_center.net.model import lane_readout as RO
         cfg = json.load(open(os.path.join(net, "config.json"), encoding="utf-8"))
         a = argparse.Namespace(run=os.path.basename(os.path.normpath(net)), seed=cfg["seed"], split=split, live=True, every=1)
         r = DU.read_dump(a, os.path.dirname(os.path.normpath(net)), 0)
@@ -134,7 +130,7 @@ class LaneGraph(Metric):
     better = {k: ("low" if k in LOWER else "high") for k in HEADLINE}
 
     def frame(self, sample, pred):
-        import qtargets as QT
+        from lane_center.net.prep import qtargets as QT
         QE = _qe()
         with QT.lattice(LATTICE):
             _, r = QE.score_frames([pred.outputs], [sample.reference], records=True, lean=True)
@@ -198,11 +194,14 @@ def task(net, metrics=METRICS):
 
 
 # The scored path, stored dump -> prediction -> numbers: every module of this problem that this file imports, directly or through another one
-# (evaluation/tests/test_evaluator_hash.py walks the imports and names the few modules where no scored number passes: its NOT_SCORED).
+# (evaluation/tests/test_evaluator_hash.py walks the imports and names the few modules where no scored number passes: its NOT_SCORED), and the
+# __init__.py of every package those imports run (empty today: a line added to one changes the hash).
 EVALUATOR_FILES = [os.path.join(ROOT, *f.split("/")) for f in (
+    "__init__.py", "evaluation/__init__.py", "evaluation/lane_task/__init__.py", "evaluation/sparse_lanes/__init__.py", "net/__init__.py", "net/model/__init__.py",
+    "net/prep/__init__.py",
     "evaluation/adapter.py", "evaluation/lane_cost.py", "evaluation/lane_dump.py", "evaluation/qgraph_eval.py", "evaluation/lane_suite.py",
     "evaluation/sparse_lanes/bootstrap.py", "evaluation/sparse_lanes/graph_eval.py", "evaluation/sparse_lanes/sparse_metrics.py", "evaluation/sparse_lanes/topo_metrics.py",
-    "evaluation/lane_task/__init__.py", "evaluation/lane_task/geometry.py", "evaluation/lane_task/raster.py", "evaluation/lane_task/measures.py",
+    "evaluation/lane_task/geometry.py", "evaluation/lane_task/raster.py", "evaluation/lane_task/measures.py",
     "net/model/lane_readout.py", "net/model/qformat.py", "net/prep/lane_ptok_data.py", "net/prep/lane_tokcache.py", "net/prep/polylines.py", "net/prep/qtargets.py")]
 
 

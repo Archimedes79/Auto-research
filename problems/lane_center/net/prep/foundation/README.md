@@ -28,11 +28,11 @@ On this PC (2026-11-28): the clone at `~/work/gaussiancar` (that commit, the six
 `~/work/gaussiancar_ckpt/nuscenes_map.ckpt` (hash checked). `build_rasteriser.sh` was run on a scratch copy of the commit's unchanged source
 (5 minutes with 2 jobs); three TRAIN rows extracted with that build are as close to the stored ones as the table below says.
 
-## Use (under WSL, from the problem folder)
+## Use (under WSL, from `autoresearch/`; the module path: ../../../README.md)
 ```
 export GCAR_REPO=<clone> GCAR_WEIGHTS=<nuscenes_map.ckpt>
-python net/prep/foundation/gcar_features.py --out <new folder>      # val, then train: 10,120 frames, 30 GB, the token lists
-python net/prep/foundation/check_features.py --n 8                  # 8 frames per part, twice, against the stored arrays
+python3 -m research py lane_center -m lane_center.net.prep.foundation.gcar_features --out <new folder, absolute>   # val, then train: 10,120 frames, 30 GB, the token lists
+python3 -m research py lane_center -m lane_center.net.prep.foundation.check_features --n 8               # 8 frames per part, twice, against the stored arrays
 ```
 `gcar_features.py` never overwrites an array: it writes into a new folder, goes on with an interrupted part from its mark
 (`<part>.extracting`) and refuses a finished one. About 0.4 s per frame on the RTX 3060 alone (record of the first extraction). The lane code

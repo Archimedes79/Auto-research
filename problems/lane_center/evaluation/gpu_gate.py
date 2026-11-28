@@ -12,13 +12,13 @@ several waiters that see the same drop start together (the dumps are serialised 
     wait_for_room(max_used_mb=9000, poll_s=60, timeout_s=4 * 3600, who="")  -> seconds waited (about 0 when there is room, no GPU reading, or the gate is off)
 
 Environment: `GPU_GATE_MB` overrides `max_used_mb` (0 = off; a value that is not a number is ignored), `GPU_GATE_TIMEOUT_S` the timeout.
-Self-test (CPU only, no GPU is touched): python evaluation/gpu_gate.py selftest (its hand mutants, evaluation/tests/test_gpu_gate.py, are in the tag v1)
+Self-test (CPU only, no GPU is touched): python -P -m lane_center.evaluation.gpu_gate selftest (its hand mutants, evaluation/tests/test_gpu_gate.py, are in the tag v1)
 """
 import os
 import subprocess
 import sys
 import time
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
+from lane_center.training import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 DEFAULT_MB = 9000
 STATUS = os.path.normpath(os.path.join(BP.SCRATCH, "gpu_gate.status"))

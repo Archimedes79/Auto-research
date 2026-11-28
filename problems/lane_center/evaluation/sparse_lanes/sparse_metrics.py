@@ -12,7 +12,7 @@ Moved here from scripts/p16_common.py (which re-exports these names); functions 
 """
 import numpy as np
 
-import graph_eval as GE
+from lane_center.evaluation.sparse_lanes import graph_eval as GE
 
 DP_ORACLE = 14.3  # vertices per 100 m, Douglas-Peucker at 0.3 m on the ground truth (Imai-Iri floor about 13)
 
@@ -75,7 +75,7 @@ def card(preds, gts, with_route=False, extra=False):
     m["S"], m["J"], m["Sp"] = composite(m)
     m["Q"] = quality(m)
     if extra:
-        import topo_metrics as TM
+        from lane_center.evaluation.sparse_lanes import topo_metrics as TM
         m.update(TM.extra(preds, gts))
     return m
 

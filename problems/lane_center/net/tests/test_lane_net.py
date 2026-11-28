@@ -1,18 +1,18 @@
 """Tests of the lane network as one module (`net/model/lane_net.py`: `LaneNet`, `live_tokens`, `pair_gate`) and of the data of its live token path (`net/prep/lane_live_data.py`).
 
-    python net/tests/test_lane_net.py                                                   # the selftest, the real-data commands, then the hand mutants (about 15 minutes)
-    python net/tests/test_lane_net.py selftests                                         # the selftest and the real-data commands only
-    python net/tests/test_lane_net.py selftest                                          # no cache, no GPU (a toy `QGraph`)
-    python net/tests/test_lane_net.py check   [--split val] [--seed 0] [--n 20]         # the guards, the frame order and the checkpoint of the cache; node_targets against the maps of `lane_gt_data.QData`, bit for bit
-    python net/tests/test_lane_net.py fixture [--split val] [--n 40] [--seeds 0 1] [--gpu] [--bs 4] [--out FILE]      # features -> tokens -> labels against the cache (`PTokData`), field by field; --gpu: must be bit for bit (exit 1 otherwise)
-    python net/tests/test_lane_net.py grad    [--split val] [--seed 0] [--n 2] [--head e373_cb_s0]                    # the gradient check on real frames with the real B' (CPU)
+    python -P -m lane_center.net.tests.test_lane_net                                                   # the selftest, the real-data commands, then the hand mutants (about 15 minutes)
+    python -P -m lane_center.net.tests.test_lane_net selftests                                         # the selftest and the real-data commands only
+    python -P -m lane_center.net.tests.test_lane_net selftest                                          # no cache, no GPU (a toy `QGraph`)
+    python -P -m lane_center.net.tests.test_lane_net check   [--split val] [--seed 0] [--n 20]         # the guards, the frame order and the checkpoint of the cache; node_targets against the maps of `lane_gt_data.QData`, bit for bit
+    python -P -m lane_center.net.tests.test_lane_net fixture [--split val] [--n 40] [--seeds 0 1] [--gpu] [--bs 4] [--out FILE]      # features -> tokens -> labels against the cache (`PTokData`), field by field; --gpu: must be bit for bit (exit 1 otherwise)
+    python -P -m lane_center.net.tests.test_lane_net grad    [--split val] [--seed 0] [--n 2] [--head e373_cb_s0]                    # the gradient check on real frames with the real B' (CPU)
 
 selftest (a toy `QGraph` on the CPU): the node targets by hand, the live selection against `select_tokens`, the graph and its gradient at the chosen cells, the labels and the values of tokens_np by hand, the pair gate, the PMAX
 overflow, the loader and its guards, `compare_frame` / `_vs_cache`, the freezing, tokens + labelled = live, the head reads only its inputs, the gradient check (the head's loss reaches every node-head tensor and no frozen
 stage), the pyramid group, and features -> graph: `LaneNet.graph` is the read-out of the predict path's records, a checkpoint loads back strictly (`from_checkpoint`).
-A mutant = one textual change of lane_net.py (N), lane_live_data.py (D) or of the comparison code of this file (T); the mutated copy stands in for its module (LANE_MUTANT) while a child runs `selftest`, four at a time. A mutant
+A mutant = one textual change of lane_net.py (N), lane_live_data.py (D) or of the comparison code of this file (T); the mutated copy stands in for its module (`mutant.py`) while a child runs `selftest`, four at a time. A mutant
 counts as KILLED only when the child's own output shows an AssertionError (or `refuses`' "accepted although it must be refused"), or, for a mutant that is killed by a crash on purpose, the error text named in its last field; any
-other non-zero exit is reported as CRASHED and fails the test, like a mutant that survives.
+other non-zero exit is reported as CRASHED and fails the test, like a mutant that survives. An unmutated copy of each of the three must pass first.
 The real-data commands need the token caches (VAL and TRAIN of B' seeds 0 and 1) and the node-table cache; `fixture --gpu` is run by hand (the GPU): its rule is below.
 
 GPU FIXTURE ACCEPTANCE (a DIAGNOSTIC: it feeds no verdict): PASS = on the first --n frames in batches of --bs 4 (as the cache build; n a multiple of 4), for EVERY seed given, in BOTH parts (`labels` = the label step on the
@@ -29,28 +29,21 @@ import subprocess
 import sys
 import tempfile
 
-MUTANT = os.environ.get("LANE_MUTANT")                                                                  # a mutant run (`run_mutants`): this mutated copy of a module stands in for the module
-if MUTANT:
-    import importlib.util
-    spec_ = importlib.util.spec_from_file_location(os.path.basename(MUTANT)[:-3], MUTANT)
-    sys.modules[spec_.name] = importlib.util.module_from_spec(spec_)
-    spec_.loader.exec_module(sys.modules[spec_.name])
+import numpy as np
+import torch
 
-import numpy as np  # noqa: E402
-import torch  # noqa: E402
-
-import bflc_paths as BP  # noqa: E402
-import jtok as JT  # noqa: E402
-import jtoken as JK  # noqa: E402
-import lane_live_data as LLD  # noqa: E402
-import lane_net as LN  # noqa: E402
-import lane_ptok_data as LP  # noqa: E402
-import lane_readout as RO  # noqa: E402
-import lane_tokcache as LC  # noqa: E402
-import loss_jtoken as LJK  # noqa: E402
-import loss_qgraph as LQG  # noqa: E402
-import qgraph as QG  # noqa: E402
-import qtargets as QT  # noqa: E402
+from lane_center.training import bflc_paths as BP
+from lane_center.net.model import jtok as JT
+from lane_center.net.model import jtoken as JK
+from lane_center.net.prep import lane_live_data as LLD
+from lane_center.net.model import lane_net as LN
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.model import lane_readout as RO
+from lane_center.net.prep import lane_tokcache as LC
+from lane_center.net.loss import loss_jtoken as LJK
+from lane_center.net.loss import loss_qgraph as LQG
+from lane_center.net.model import qgraph as QG
+from lane_center.net.prep import qtargets as QT
 
 NP_KEYS = ("pos", "dirv", "e_p", "flags_p", "s_p")                                                     # the float fields of `tokens_np` (what the read-out writer reads; plus cell and valid)
 STATS = ("n_gt", "n_gt_assigned", "n_links", "n_links_c", "gt_out", "n_nosrc", "n_reach", "n_pairs", "n_conflict", "n_valid", "n_deliv", "n_deliv_near", "n_gt_deliv_cov", "n_e50_in")      # per-frame counts of a label dict, as the cache stores them
@@ -668,12 +661,10 @@ def commands(argv):
 
 # ------------------------------------------------------------------------------------------------------------------------------ the mutants (the text below this line is not mutated)
 HERE = os.path.abspath(__file__)
+ME = "lane_center.net.tests.test_lane_net"                                                              # this test as a module: a child runs it, a T mutant stands in for it
 SOURCES = dict(N=os.path.join(BP.ROOT, "net", "model", "lane_net.py"), D=os.path.join(BP.ROOT, "net", "prep", "lane_live_data.py"), T=HERE)
-ENV = dict(os.environ, BFLC_ROOT=BP.ROOT, OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")                    # a shared box: one thread per test process
-ENV.pop("LANE_MUTANT", None)
-# `import numpy, torch` walks the project directories of PYTHONPATH on /mnt/c first: the children import the two with that path moved behind site-packages, then restore it
-LAUNCH = ("import os, sys, runpy; o = list(sys.path); r = os.environ['BFLC_ROOT']; sys.path[:] = [p for p in o if not p.startswith(r)] + [p for p in o if p.startswith(r)]; import numpy, torch; sys.path[:] = o; "
-          "p = sys.argv[1]; sys.argv = sys.argv[1:]; runpy.run_path(p, run_name='__main__')")
+MODULES = dict(N="lane_center.net.model.lane_net", D="lane_center.net.prep.lane_live_data", T=ME)
+ENV = dict(os.environ, OMP_NUM_THREADS="1", MKL_NUM_THREADS="1")                                        # a shared box: one thread per test process
 ASSERTED = re.compile(r"^(AssertionError|RuntimeError: accepted although)", re.M)                       # how a test names its own failure
 MARK = "\n# " + "-" * 126 + " the mutants (the text below this line is not mutated)\n"
 
@@ -754,7 +745,7 @@ MUTANTS = [
 
 
 def run_selftest():
-    r = subprocess.run([sys.executable, "-c", LAUNCH, HERE, "selftest"], capture_output=True, text=True, env=ENV)
+    r = subprocess.run([sys.executable, "-P", "-m", ME, "selftest"], capture_output=True, text=True, env=ENV)
     assert r.returncode == 0, f"selftest failed:\n{r.stdout[-800:]}{r.stderr[-2500:]}"
     print(r.stdout.strip().splitlines()[-1], flush=True)
 
@@ -763,7 +754,7 @@ def run_real():
     """the real-data commands: the node targets against QData and the cache's checkpoint (VAL and TRAIN, 20 frames each), the fixture on 8 frames of both seeds at bs 4 and of one seed at bs 8 (exit code 0 = the label step on the cached tokens is exactly the cache at any
     batch size) and the gradient check on 2 real frames with the champion's stage-1 head e373_cb_s0 (the head's loss reaches every node-head parameter of the real B', none of the frozen stages, the pyramid is unchanged by a step)"""
     for args in (["check", "--split", "val", "--n", "20"], ["check", "--split", "train", "--n", "20"], ["fixture", "--n", "8", "--seeds", "0", "1"], ["fixture", "--n", "8", "--seeds", "1", "--bs", "8"], ["grad", "--n", "2", "--head", "e373_cb_s0"]):
-        r = subprocess.run([sys.executable, "-c", LAUNCH, HERE] + args, capture_output=True, text=True, env=ENV)
+        r = subprocess.run([sys.executable, "-P", "-m", ME] + args, capture_output=True, text=True, env=ENV)
         assert r.returncode == 0, f"{' '.join(args)} failed:\n{r.stdout[-1500:]}{r.stderr[-1500:]}"
         print(f"{' '.join(args)}: {r.stdout.strip().splitlines()[-1]}", flush=True)
 
@@ -780,7 +771,8 @@ def one(args):
     p = os.path.join(d, os.path.basename(SOURCES[where]))
     with open(p, "w", encoding="utf-8") as fh:
         fh.write(body.replace(a, b) + (MARK + rest if where == "T" else ""))
-    r = subprocess.run([sys.executable, "-c", LAUNCH, p if where == "T" else HERE, "selftest"], capture_output=True, text=True, env=ENV if where == "T" else dict(ENV, LANE_MUTANT=p))
+    run = [] if where == "T" else ["--main", ME]                                                       # a T mutant is the program itself
+    r = subprocess.run([sys.executable, "-P", "-m", "lane_center.net.tests.mutant", MODULES[where], p] + run + ["selftest"], capture_output=True, text=True, env=ENV)
     if r.returncode == 0:
         return name, "SURVIVED"
     if (re.compile(expect[0]) if expect else ASSERTED).search(r.stderr + r.stdout):
@@ -791,6 +783,9 @@ def one(args):
 def run_mutants(workers=4):
     left = []
     with tempfile.TemporaryDirectory() as tmp, cf.ThreadPoolExecutor(workers) as ex:
+        first = {w: open(p, encoding="utf-8").readline() for w, p in SOURCES.items()}                    # an edit of nothing: the copy is the module itself
+        for name, res in ex.map(one, [(f"same_{w}", (w, f"unmutated copy {w}", first[w], first[w]), tmp) for w in SOURCES]):
+            assert res == "SURVIVED", f"{name}: {res}: the launcher, not a mutant, makes the child fail"
         for name, res in ex.map(one, [(k, m, tmp) for k, m in enumerate(MUTANTS)]):
             print(f"{res:<12} {name}", flush=True)
             if res != "killed":

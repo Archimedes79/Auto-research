@@ -15,9 +15,9 @@ import time
 import numpy as np
 import torch
 
-import bflc_paths as BP
-import lane_ptok_data as LP
-import lane_readout as RO
+from lane_center.training import bflc_paths as BP
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.model import lane_readout as RO
 
 NSAMPLE = 873                                                               # frames of a TRAIN read-out
 

@@ -1,6 +1,6 @@
 """General training harness for every model of the project (new code uses it; the loop-10..17 scripts have their own copies of the same boilerplate).
 
-    import trainer as T
+    from lane_center.training import trainer as T
     run = T.Run("e210_demo")                                   # runs/e210_demo/{log.txt, status.json, ckpt.pt, model.pt}
     T.fit(model, loss_fn, run, steps=4800, batch_fn=make_batch, lr=6e-4)
 
@@ -18,22 +18,19 @@ What it adds to a plain loop (each of these was missing in a run that was lost):
     `log.txt`), the stop protocol of `trainkit.control` (`research stop`: the worker writes CONTROL, looked at before every step; the trainer saves a checkpoint, writes STOPPED and exits
     with code 75, never 0, so no `.done` and nobody evaluates a half-trained model), an `incident_<step>.json` for a skipped non-finite step (`trainkit.probe`)
 """
-import bflc_paths as BP  # project paths from the location of this checkout
+from lane_center.training import bflc_paths as BP  # project paths from the location of this checkout
 import json
 import math
 import os
 import random
-import sys
 import time
 import traceback
 
 import numpy as np
 import torch
 
-if os.path.join(BP.REPO, "autoresearch") not in sys.path:
-    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
-from trainkit import control  # noqa: E402  (the stop protocol of the training engine)
-from trainkit import probe as PR  # noqa: E402  (gradient and update size per module, data wait, incident dumps)
+from trainkit import control  # the stop protocol of the training engine
+from trainkit import probe as PR  # gradient and update size per module, data wait, incident dumps
 
 RUNS = BP.RUNS
 

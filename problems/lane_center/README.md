@@ -49,7 +49,14 @@ python3 -m research start lane_center E<n>               # steps predict + evalu
 python3 -m research judge lane_center E<n> --write
 ```
 Tests: `python3 -m research tests lane_center` (the list in `problem.json`), among them `net/tests/test_net_layering.py`: the layers `net/prep` <
-`net/model` < `net/loss` < `training/` | `evaluation/` for every import (DESIGN.md R13), and `net/tests/test_lane_net.py`: the network as one module, `evaluation/tests/test_evaluator_hash.py`: the scored path is the evaluator hash. By
-hand on the GPU: `net/tests/test_lane_net.py fixture --gpu` (features -> tokens equals the cache bit for bit) and `evaluation/tests/test_champion_gpu.py`
-(the champion's files give the stored dump and its graphs). Other scripts run from this folder with the
-module path of `problem.json` `pythonpath` on `PYTHONPATH`.
+`net/model` < `net/loss` < `training/` | `evaluation/` for every import (DESIGN.md R13) and the style of a package, and `net/tests/test_lane_net.py`: the network as one module, `evaluation/tests/test_evaluator_hash.py`: the scored path is the evaluator hash. By
+hand on the GPU: `-m lane_center.net.tests.test_lane_net fixture --gpu` (features -> tokens equals the cache bit for bit) and `-m lane_center.evaluation.tests.test_champion_gpu`
+(the champion's files give the stored dump and its graphs).
+
+The problem is the Python package `lane_center` (every code folder has an empty `__init__.py`; a module imports another as
+`from lane_center.net.model import lane_net as LN`; nothing edits `sys.path`). A module is started as a module, with the module path the research
+system gives (`problems/`, `autoresearch/`, the repository), never by its file:
+```
+python3 -m research py lane_center -m lane_center.net.tests.test_jtoken            # from autoresearch/: the problem's interpreter and module path
+PYTHONPATH=..:../../autoresearch:../.. ~/miniconda3/envs/gcar/bin/python -P -m lane_center.net.tests.test_jtoken     # the same from this folder
+```

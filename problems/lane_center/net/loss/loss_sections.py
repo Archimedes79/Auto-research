@@ -1,7 +1,7 @@
 """Losses of the section stage: the loss side of net/model/sections.py (D152; the functions are unchanged, `sections` holds the network)."""
 import torch
 
-from qnodes import N
+from lane_center.net.model.qnodes import N
 
 
 def start_targets(gt, links):

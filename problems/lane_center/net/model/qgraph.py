@@ -13,12 +13,12 @@ Test: net/tests/test_qgraph.py
 
 import torch
 
-import qassign as QA
-import qlinks as QL
-import qmnms as QMN
-import qnodes as QN
-import sections as SE
-from pyramid import PyramidHead
+from lane_center.net.model import qassign as QA
+from lane_center.net.model import qlinks as QL
+from lane_center.net.model import qmnms as QMN
+from lane_center.net.model import qnodes as QN
+from lane_center.net.model import sections as SE
+from lane_center.net.model.pyramid import PyramidHead
 
 STAGES = ("pyr", "nodes", "links", "sections", "assign")
 PHASE_TRAIN = {2: ("pyr",), 3: ("nodes",), 4: ("links",), 5: ("nodes_s",), 6: ("menc", "asg"), 7: ("pyr", "nodes", "links", "menc", "asg")}

@@ -2,7 +2,7 @@
 import torch
 import torch.nn.functional as F
 
-from jtoken import NEG, SHORT  # noqa: E402,I001
+from lane_center.net.model.jtoken import NEG, SHORT  # noqa: E402,I001
 
 
 def _frame_mean(x, m, w=None):
