@@ -33,7 +33,7 @@ OLD = {"stage1": ["--name", "E1.a_s1/stage1", "--seed", "1", "--head-seed", "3",
 SET = {"stage1": [dict(ident="e273_p", head_seed_offset=5, none_weight=0.5, steps=7, bs=3, lr=0.5, workers=1)],
        "stage2": [dict(head_run="h_s{seed}", b_run="runs/b_s{seed}", b_state_from="c_s{seed}", head_seed=9, b_weight=0.5, train_pyr=1, pyr_lr_mult=0.1, steps=7, bs=3,
                        lr=0.5, workers=1),
-                  dict(train_nodes=0, live_inputs=0)]}
+                  dict(train_nodes=0, live_inputs=0, output_layers="soft_output")]}
 RUN_GIVES = ("name", "seed", "smoke")                                      # no setting of a card: the run's name and seed; the 20-step plumbing run
 
 

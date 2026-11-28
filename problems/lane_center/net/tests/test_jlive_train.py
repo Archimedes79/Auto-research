@@ -88,7 +88,9 @@ MUTANTS = [
     ("a stored run of a removed option is resumed", "        LN.check_removed(c.get(\"args\") or {}, folder)\n", ""),
     ("the removed arm b (--train-nodes 1 --live-inputs 0) is accepted", "    assert a.live_inputs or not a.train_nodes,", "    assert True,"),
     ("a config of before E393 does not resume", "RECIPE_DEFAULTS.get(k, LN.ARCH_DEFAULTS.get(k))", "LN.ARCH_DEFAULTS.get(k)"),
-    ("the recipe lacks the E393 keys", ",\n          \"b_state_from\", \"b_state_sha256\", \"train_pyr\", \"pyr_lr_mult\")", ")"),
+    ("the recipe lacks the E393 keys", ",\n          \"b_state_from\", \"b_state_sha256\", \"train_pyr\", \"pyr_lr_mult\", \"output_layers\")", ",\n          \"output_layers\")"),
+    ("the recipe lacks the output layers (E425)", "\"pyr_lr_mult\", \"output_layers\")", "\"pyr_lr_mult\")"),
+    ("the output layers are not passed to the head (E425)", "**(LN.JK.OUTPUT_LAYERS[a.output_layers] if a.output_layers else {}), ", ""),
     ("the start state is not loaded (E393)", "        joint.b.load_state_dict(LN.load_checkpoint(p)[\"b_state\"])\n", "        pass\n"),
     ("the start run's base B' file is not checked (E393)", "        assert s[\"args\"].get(\"b_sha256\") == b_sha,", "        assert True,"),
     ("the start file is not re-checked at the build (E393)", "        assert BP.file_sha256(p) == args[\"b_state_sha256\"],", "        assert True,"),
@@ -555,7 +557,7 @@ def runs(T, w, tmp):
     T.check_start(cfg, folder)
     ch = dict(seed=lambda v: v + 1, head_run=lambda v: v + "x", head_sha256=lambda v: "0" * 64, b_run=lambda v: v + "x", b_sha256=lambda v: "0" * 64, train_nodes=lambda v: 1 - v, live_inputs=lambda v: 1 - v, b_weight=lambda v: v * 2,
               none_weight=lambda v: v * 2, head_seed=lambda v: v + 1, bs=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2,
-              b_state_from=lambda v: "bst", b_state_sha256=lambda v: "0" * 64, train_pyr=lambda v: 1 - v, pyr_lr_mult=lambda v: v * 2)
+              b_state_from=lambda v: "bst", b_state_sha256=lambda v: "0" * 64, train_pyr=lambda v: 1 - v, pyr_lr_mult=lambda v: v * 2, output_layers=lambda v: "soft_output")
     assert set(ch) == set(T.RECIPE), f"a recipe key without a refusal test: {set(ch) ^ set(T.RECIPE)}"
     for k in ch:
         refuses(lambda: T.check_start(dict(cfg, **{k: ch[k](cfg[k])}), folder), "of another run")
@@ -568,6 +570,16 @@ def runs(T, w, tmp):
             T.check_start(cfg, os.path.join(tmp, "oldcfg"))
         else:
             refuses(lambda: T.check_start(cfg, os.path.join(tmp, "oldcfg")), why)
+    # E425: --output-layers trains the head WITH the soft output layers in its forward: two steps, finite losses, another first loss than without them, and the model keeps the layers' settings (build_head builds them)
+    import jtoken as JK
+    with Built(T, [w["B"]]):
+        T.train(T.parse_args(cli(w, "ol", 1, steps=2, extra=["--output-layers", "soft_output"])), runs=tmp, ckpt_every=500)
+    m_ol = torch.load(os.path.join(tmp, "ol", "model.pt"), weights_only=False)
+    layers = JK.OUTPUT_LAYERS["soft_output"]
+    assert m_ol["args"]["output_layers"] == "soft_output" and all(m_ol["args"].get(k) == v for k, v in layers.items()), m_ol["args"]
+    assert all(math.isfinite(x) for x in m_ol["rec"]["h"]) and m_ol["rec"]["h"][0] != a_["rec"]["h"][0], ("the loss is read after the layers", m_ol["rec"]["h"], a_["rec"]["h"])
+    head = LN.build_head(m_ol["args"])
+    assert head.skip == layers["skip_suppress"] and head.gap == layers["close_gaps"] and head.fork == layers["fork_gate"] and head.refine == layers["refine_positions"]
 
 
 def pyr_arms(T, w, tmp):

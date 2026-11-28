@@ -41,8 +41,16 @@ NEG = -1e4                                                                  # th
 SKIP_KEYS = ("sigma", "hops", "m", "t_short", "t_long", "keep")             # E399: the settings of the soft skip-link layer (`skip_suppress`)
 GAP_KEYS = ("sigma", "sigma_lo", "gamma", "lo", "lo_long", "t_short", "t_long", "keep")    # E420: the settings of the soft gap-closing layer (`close_gaps`)
 FORK_KEYS = ("sigma", "sigma_rel", "tau", "sigma_f", "t_short", "t_long", "keep")          # E423: the settings of the soft fork gate (`fork_gate`)
+SKIP_FLOOR = 1e-3                                                            # the share a fully covered link keeps in `skip_suppress`: the loss of a head that trains with the layer stays finite
+GAP_ROOM = 0.5                                                               # the largest share of a source's old mass `close_gaps` moves to its lifted links: at least half of the none slot stays
 POS_KEYS = ("gain", "lam", "sigma", "t_short", "keep")                      # E424: the settings of the soft position layer (`refine_positions`)
 CELL = 2.0                                                                   # the side of B''s node cells (m): a node is its cell's centre plus an offset inside the cell
+# named sets of the soft output layers as a run's args hold them (`lane_net.build_head`), at the champion's read-out thresholds (0.3 / 0.2 / 0.6); the settings were chosen on the TRAIN sample (cards E399, E420, E423, E424)
+OUTPUT_LAYERS = {"soft_output": dict(
+    skip_suppress=dict(sigma=0.03, hops=5, m=8, t_short=0.3, t_long=0.2, keep=0.6),
+    close_gaps=dict(sigma=0.01, sigma_lo=0.01, gamma=16.0, lo=0.03, lo_long=0.02, t_short=0.3, t_long=0.2, keep=0.6),
+    fork_gate=dict(sigma=0.01, sigma_rel=0.02, tau=0.05, sigma_f=0.01, t_short=0.3, t_long=0.2, keep=0.6),
+    refine_positions=dict(gain=1.2, lam=0.5, sigma=0.03, t_short=0.3, keep=0.6))}
 TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
 FORK = 2
 SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
@@ -99,7 +107,7 @@ def link_prob(logp, cand):
 def skip_suppress(logp, cand, pnone, chord, cfg):
     """E399: the soft skip-link layer (no parameter, differentiable). logp (B, 2, K, K + 1) of `wiring_logp`, cand (B, 2, K, K), pnone (B, K) the none probability of the node type, chord (B, K, K) in m; cfg: sigma, hops, m, t_short,
     t_long, keep (the thresholds of the read-out). The soft "delivered" strength of a link is q = sigmoid((p - t) / sigma) x k_i x k_j with k = sigmoid((keep - pnone) / sigma) and t the threshold of the pair's class (chord above 8 m: long);
-    R(i, j) = the largest product of q along a path i -> .. -> j of 2 .. hops links over every node's m strongest links; p'(i -> j) = p x (1 - R) and the removed mass goes to the source's none slot of the class, so every row stays a
+    R(i, j) = the largest product of q along a path i -> .. -> j of 2 .. hops links over every node's m strongest links; p'(i -> j) = p x (1 - (1 - SKIP_FLOOR) R) and the removed mass goes to the source's none slot of the class, so every row stays a
     probability distribution. A link that another path of the same graph already covers (a jump ahead on its own lane) is thus damped"""
     B, K = cand.shape[0], cand.shape[-1]
     p = logp[..., :K].exp() * cand
@@ -113,7 +121,7 @@ def skip_suppress(logp, cand, pnone, chord, cfg):
     reach = q                                                               # paths of 1 .. h links
     for _ in range(int(cfg["hops"]) - 2):
         reach = torch.maximum(q, hop(reach))
-    p2 = p * (1.0 - hop(reach))[:, None]                                    # paths of 2 .. hops links
+    p2 = p * (1.0 - (1.0 - SKIP_FLOOR) * hop(reach))[:, None]               # paths of 2 .. hops links
     lp = torch.where(cand, p2.clamp_min(1e-30).log(), logp[..., :K])
     none = (1.0 - p2.sum(-1)).clamp_min(1e-30).log()
     return torch.cat([lp, none[..., None]], -1)
@@ -131,8 +139,9 @@ def close_gaps(logp, cand, pnone, chord, cfg):
     of a pair, t its class threshold, k the soft "kept" of a node and q = sigmoid((P - t) / sigma) x k_i x k_j the soft "delivered" strength of a link: a pair is OPEN by (1 - max_j' q(i, j')) x (1 - max_i' q(i', j)) over the OTHER pairs
     j' != j and i' != i (no other delivered link leaves its source or reaches its target), ELIGIBLE by sigmoid((P - lo) / sigma_lo) x k_i x k_j (lo_long for the long class) and BEST by (m / max over the source's pairs)^gamma x
     (m / max over the target's pairs)^gamma with m = P x open x eligible (1 for the strongest such pair of both its ends, near 0 for a clearly weaker one). With w = open x eligible x best, P is lifted by w x t x (1 - P): at w = 1 to
-    t + (1 - t) P, above the threshold and still ordered by P. A pair's own P enters neither its openness nor anything that falls with it, so the output never falls when P rises. The lifted mass is taken from the source's none slot of
-    the class and, where that does not suffice, from its other links in proportion; every row stays a probability distribution. A weak link that is the only way to continue an open end is thus delivered"""
+    at least t, above the threshold and still ordered by P. A pair's own P enters neither its openness nor anything that falls with it, so the output never falls when P rises. A row (source, class) whose lifts sum to L makes room by
+    scaling ALL its old mass, the none slot included, by 1 - L' with L' = min(L, GAP_ROOM) and adds the lifts (scaled to the sum L'): every row stays a probability distribution and the none slot never empties (at least half of it
+    stays: the loss of a head that trains with the layer stays finite). A weak link that is the only way to continue an open end is thus delivered"""
     K = cand.shape[-1]
     p = logp[..., :K].exp() * cand
     P = p.sum(1)
@@ -147,10 +156,11 @@ def close_gaps(logp, cand, pnone, chord, cfg):
     m = P * gate
     rel = lambda dim: (m / m.amax(dim, keepdim=True).clamp_min(1e-12)) ** gamma  # noqa: E731
     lift = (gate * rel(2) * rel(1) * t * (1.0 - P).clamp_min(0.0))[:, None] * cand
-    room = (1.0 - lift.sum(-1, keepdim=True)).clamp_min(0.0)
-    p2 = p * (room / p.sum(-1, keepdim=True).clamp_min(1e-30)).clamp(max=1.0) + lift
+    total = lift.sum(-1, keepdim=True)
+    used = total.clamp(max=GAP_ROOM)
+    p2 = p * (1.0 - used) + lift * (used / total.clamp_min(1e-12))
     lp = torch.where(cand, p2.clamp_min(1e-30).log(), logp[..., :K])
-    none = (1.0 - p2.sum(-1)).clamp_min(1e-30).log()
+    none = logp[..., K] + torch.log1p(-used[..., 0])                           # the old none mass, scaled like the rest
     return torch.cat([lp, none[..., None]], -1)
 
 

@@ -13,7 +13,8 @@ the tag v1) at their off value resume and load, another value is refused with th
 input, the full gradient against float64 central differences; textual mutants; build_head / load_model read it, absent = False).
 head_seed (--seed 0 --head-seed 2 reads the seed-0 cache, initialises (the trainer's step-0 head = build_head after seed_all(2)) and orders the data as --seed 2, also through a shuffling DataLoader as the loader; --head-seed = --seed is the default run).
 champion (the default path against RECORDED numbers: the forward, the loss and the gradient sums of a seeded head at two head steps and of the stored E373 head; the 20 smoke steps of the champion recipe; one step on the real
-TRAIN cache starts as E373 did). The tests of the removed switches (E376 pos_loss max, E379 distillation, E381 noise, E392 rounds, E395 position head) are in the tag v1.
+TRAIN cache starts as E373 did); the soft output layers, each against a brute-force or hand case (skip_suppress, close_gaps, fork_gate, refine_positions: off = the head bit for bit, build_head) and layers_train (the loss
+behind the wiring layers and every gradient finite, the none slot never emptied). The tests of the removed switches (E376 pos_loss max, E379 distillation, E381 noise, E392 rounds, E395 position head) are in the tag v1.
 """
 import json
 import math
@@ -241,7 +242,7 @@ def test_skip_suppress():
     sg = lambda x: 1 / (1 + np.exp(-x))  # noqa: E731
     k = sg((0.6 - pn[0].numpy()) / 0.2)
     q = sg((p - 0.3) / 0.2) * cand[0].any(0).numpy() * k[:, None] * k[None]
-    want = p * (1 - _skip_brute(q.astype(np.float64), 4))
+    want = p * (1 - (1 - JK.SKIP_FLOOR) * _skip_brute(q.astype(np.float64), 4))
     assert np.abs(got - want)[cand[0, 0].numpy()].max() < 1e-5, np.abs(got - want).max()
     torch.manual_seed(7)
     plain = JK.JTokenHead().eval()
@@ -280,10 +281,37 @@ def _gap_brute(p, cand, pnone, chord, cfg):
     out = np.zeros_like(p)
     for c in range(2):
         for i in range(K):
-            total = (p[c, i] * cand[c, i]).sum()
-            f = min(max(1 - lift[c, i].sum(), 0.0) / max(total, 1e-30), 1.0)
-            out[c, i] = p[c, i] * cand[c, i] * f + lift[c, i]
+            total = lift[c, i].sum()
+            used = min(total, 0.5)
+            out[c, i] = p[c, i] * cand[c, i] * (1 - used) + lift[c, i] * (used / max(total, 1e-12))
     return out
+
+
+def test_layers_train():
+    """E425 a head that trains with the layers: on a source whose none probability is smaller than its lift the none slot keeps at least half of its mass; the token loss behind all three wiring layers is finite and so is every
+    gradient, also with a source that has no true successor"""
+    cfg = dict(sigma=0.01, sigma_lo=0.01, gamma=16.0, lo=0.03, lo_long=0.02, t_short=0.3, t_long=0.2, keep=0.6)
+    K = 4
+    p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
+    for j in (1, 2, 3):
+        p[0, 0, 0, j], cand[0, 0, 0, j] = 0.29, True                         # three weak links of one source, none 0.13: their lifts exceed it
+    logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1).requires_grad_(True)
+    out = JK.close_gaps(logp, cand, torch.zeros(1, K), torch.full((1, K, K), 2.0), cfg)
+    none = float(out.exp()[0, 0, 0, K])
+    assert 0.065 - 1e-4 <= none <= 0.13 and float(out.exp()[0, 0, 0, 1]) >= 0.3, ("the none slot keeps half of its mass and the links are delivered", none, out.exp()[0, 0, 0])
+    (-out[0, 0, 0, K]).backward()
+    assert torch.isfinite(logp.grad).all(), "a finite gradient through the none slot of a lifted source"
+    layers = JK.OUTPUT_LAYERS["soft_output"]
+    for seed in (3, 11):
+        torch.manual_seed(seed)
+        head = JK.JTokenHead(skip=layers["skip_suppress"], gap=layers["close_gaps"], fork=layers["fork_gate"], refine=layers["refine_positions"]).train()
+        head.set_step(JK.SWITCH + 1)
+        b = JK.synthetic_batch(4, 64, seed=seed)
+        loss, info = LJK.jtoken_loss(head(b), b, none_weight=0.25)
+        loss.backward()
+        bad = [n for n, q in head.named_parameters() if q.grad is None or not torch.isfinite(q.grad).all()]
+        assert torch.isfinite(loss) and float(loss) < 30 and not bad, (seed, float(loss), bad)
+    print("layers_train: the none slot keeps half its mass under a lift; the loss behind skip, gap and fork layers is finite, every gradient finite: ok")
 
 
 def test_close_gaps():
@@ -313,7 +341,7 @@ def test_close_gaps():
     assert float(out[1, 3]) < 0.1, ("the weaker candidate of the same source stays", float(out[1, 3]))
     for i, j in ((0, 1), (2, 3)):
         assert 0.8 <= float(out[i, j]) <= 0.8 + 0.3 * 0.2 + 1e-5, ("a delivered link stays delivered and rises by at most t (1 - p)", i, j, float(out[i, j]))
-    assert abs(float(out[1, K]) - (1 - float(out[1, :K].sum()))) < 1e-5 and float(out[1, K]) < 1 - 0.17, "the lifted mass comes from the none slot"
+    assert abs(float(out[1, K]) - (1 - float(out[1, :K].sum()))) < 1e-5 and float(out[1, K]) < 1 - 0.17, "the lifted mass comes from the source's other slots, mostly none"
     assert float(run((0.8, 0.03, 0.02, 0.8))[1, 2]) < 0.1, "below the lower threshold nothing is delivered"
     assert float(run((0.8, 0.10, 0.60, 0.1))[1, 2]) < 0.12, "a source with a delivered successor is not open"
     assert float(run((0.8, 0.10, 0.07, 0.8), torch.tensor([[0.0, 0.99, 0.0, 0.0]]))[1, 2]) < 0.12, "a node that is not kept opens no gap"
@@ -825,10 +853,10 @@ def test_arch_options():
         ck = torch.load(os.path.join(runs, "r", "model.pt"), map_location="cpu", weights_only=False)       # `check_removed`: a stored run's removed options at their off value resume and load as before, another value is refused by name
         bad = dict(prior="rule", teacher="rule", init="runs/x/model.pt", token_drop=0.1, none_weight_near=0.73, d=96, heads=2, layers=4, ffn=512,
                    pos_loss="max", distill_from="runs/a,runs/b", distill_weight=0.5, distill_sha256=["0"], noise_pos=0.2, noise_e=0.5, cache="runs/k384", K=384,
-                   rounds=2, wire_weight=0.5, msg="uniform", pos_head=True, curve_w=0.5, node_w=0.5)
+                   rounds=2, wire_weight=0.5, msg="uniform", pos_head=True, curve_w=0.5, node_w=0.5, min_e=0.2)
         off = {k: v for options in LN.REMOVED.values() for k, v in options.items()}
         tag = {k: t for t, options in LN.REMOVED.items() for k in options}
-        assert set(bad) == set(off) and set(tag.values()) == {"v1", "archive/jtoken-before-simplify-2026-11-17"} and tag["rounds"] == "v1", "a refusal test for every removed option"
+        assert set(bad) == set(off) and set(tag.values()) == {"v1", "archive/jtoken-before-simplify-2026-11-17", "archive/e399-thinning-2026-11-28"} and tag["rounds"] == "v1", "a refusal test for every removed option"
         for name, extra in [("o_dflt", off)] + [(f"o_{k}", {k: v}) for k, v in bad.items()]:
             os.makedirs(os.path.join(runs, name))
             json.dump(dict(design="jtoken", args=dict(ck["args"], **extra)), open(os.path.join(runs, name, "config.json"), "w"))
@@ -1124,7 +1152,7 @@ def test_champion():
           f"the champion recipe: first loss {got[0]:.6f}, last {got[1]:.6f}, the log row and the weights as recorded; {_twin_step()}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_close_gaps, test_fork_gate, test_refine_positions, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options,
+TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_close_gaps, test_fork_gate, test_refine_positions, test_layers_train, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options,
          test_live_inputs, test_head_seed, test_champion]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]

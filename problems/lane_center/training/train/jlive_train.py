@@ -55,8 +55,8 @@ import loss_qgraph as LQG  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "head_seed", "bs", "steps", "lr",
-          "b_state_from", "b_state_sha256", "train_pyr", "pyr_lr_mult")
-RECIPE_DEFAULTS = dict(b_state_from=None, b_state_sha256=None, train_pyr=0, pyr_lr_mult=1.0)        # E393's keys as a config of before them reads (the other keys: `lane_net.ARCH_DEFAULTS`)
+          "b_state_from", "b_state_sha256", "train_pyr", "pyr_lr_mult", "output_layers")
+RECIPE_DEFAULTS = dict(b_state_from=None, b_state_sha256=None, train_pyr=0, pyr_lr_mult=1.0, output_layers=None)        # E393's / E425's keys as a config of before them reads (the other keys: `lane_net.ARCH_DEFAULTS`)
 K = 512                     # tokens per frame, as the cache
 CLIP = 3.0                  # the clip of each group (the head, the node head)
 LOG_EVERY = 100             # fit's logged steps
@@ -95,6 +95,7 @@ def parse_args(argv=None):
     ap.add_argument("--b-state-from", default=None, dest="b_state_from", help="E393: a jlive run under runs/ whose b_state is the start B' (its base B' file must be --b-run's); default: --b-run's own state")
     ap.add_argument("--train-pyr", type=int, choices=(0, 1), default=0, dest="train_pyr", help="E393: 1 = B''s pyramid trains too (on the loss of the step; it has no pixel loss here); needs --train-nodes 1")
     ap.add_argument("--pyr-lr-mult", type=float, default=1.0, dest="pyr_lr_mult", help="E393: the pyramid's lr = this x the schedule's (its own AdamW group); only with --train-pyr 1")
+    ap.add_argument("--output-layers", default=None, choices=sorted(LN.JK.OUTPUT_LAYERS), dest="output_layers", help="E425: the head trains WITH the named soft output layers in its forward (jtoken.OUTPUT_LAYERS: the loss is read after them) and keeps them")
     a = ap.parse_args(argv)
     assert a.steps > 0 and a.bs > 0 and a.lr > 0 and a.b_weight >= 0, f"--steps {a.steps} --bs {a.bs} --lr {a.lr} --b-weight {a.b_weight}"
     assert a.live_inputs or not a.train_nodes, "--live-inputs 0 with --train-nodes 1 (E372's control arm b: B''s node head on its own loss only) no longer exists (the tag v1 keeps it)"
@@ -122,7 +123,7 @@ def resolve(a, runs):
         assert "b_state" in s, f"--b-state-from {a.b_state_from}: its model.pt carries no b_state"
         assert s["args"].get("b_sha256") == b_sha, f"--b-state-from {a.b_state_from}: its base B' file (b_sha256 {str(s['args'].get('b_sha256'))[:12]}) is not --b-run {b_run} ({b_sha[:12]})"
         s_sha = BP.file_sha256(p)
-    return dict(vars(a), ident=h.get("ident") or "e292_a",
+    return dict(vars(a), **(LN.JK.OUTPUT_LAYERS[a.output_layers] if a.output_layers else {}), ident=h.get("ident") or "e292_a",
                 none_weight=LN.ARCH_DEFAULTS["none_weight"] if h.get("none_weight") is None else h["none_weight"],          # (a key stored as None means the default, as `lane_net.build_head` reads it)
                 head_seed=a.head_seed if a.head_seed is not None else (h["seed"] if h.get("head_seed") is None else h["head_seed"]),
                 b_run=b_run, head_sha256=BP.file_sha256(os.path.join(runs, a.head_run, "model.pt")), b_sha256=b_sha, b_state_sha256=s_sha)
