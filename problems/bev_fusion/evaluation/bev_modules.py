@@ -1,8 +1,7 @@
 """Module probe: what does every module of the chain output, does it respond to its input, is it related to the GT? One run, a few val frames,
-CPU or GPU (no checkpoint is changed, the network runs through the same `train.forward_loss` as the evaluation, cold memory per frame).
+CPU or GPU (no checkpoint is changed, the network runs through the same `chain.forward_loss` as the labelled evaluation, cold memory per frame).
 
     python evaluation/bev_modules.py RUN [--frames 3] [--device cpu] [--split val] [--threads 2] [--out DIR]     (also: `Evaluation.probe(RUN)`)
-    python evaluation/bev_modules.py --selftest                                                                    (synthetic, no run needed)
 
 Writes OUT (default RUN/eval/modules/):
     modules.json        per module output (every float tensor inside it, named by its path): shape, finite, mean, std, absmax, share of zeros, share of dead
@@ -11,35 +10,36 @@ Writes OUT (default RUN/eval/modules/):
     response.json       the response test: remove the camera (probability and context tensors), all radar detections, or only the Doppler of the detections,
                         and give the relative change ||a - b|| / ||a|| of the memories, the fusion, the trunk, the motion block and of the heads' outputs
                         (a stage that does not change when its input is removed is not reading it)
-    static_check.json   the velocity field (v_hat and every v_levels.*) on static GT cells (speed < 0.3 m/s) and on moving ones (>= 1 m/s): mean offset, spread, EPE
+    static_check.json   the velocity field (v_hat and every v_levels.*) on static GT cells (speed < 0.3 m/s) and on moving ones (>= 1 m/s): mean offset, spread,
+    EPE
                         (a field with an offset along the ego velocity on static cells has not learnt to subtract the ego motion)
     frame_<k>.png       one panel per stage, the GT beside the heads (x forward = up)
-The probed modules are the model's direct children (`chain_modules`: lift AND lift2 of a dual camera, lane, ...), the trunk through its `.features()`; `bev_timing.py`
+The probed modules are the model's direct children (`chain_modules`: lift AND lift2 of a dual camera, lane, ...), the trunk through its `.features()`;
+`bev_timing.py`
 times the same. What to know when reading the numbers:
   * a module called once per dt (the heads) is recorded at its FIRST call (dt -0.5 for `sem_head:` / `obj_head:`); `OUT dt0:` holds the dt-0 outputs
-  * `aux_cam` / `aux_rad` only run while training: no output here (for a look, the `radar_aux` tap runs the head on the radar branch: `run --taps radar_aux`, `draw-frame ... --view taps`)
+  * `aux_cam` / `aux_rad` only run while training: no output here (for a look, the `radar_aux` tap runs the head on the radar branch: `run --taps radar_aux`,
+  `draw-frame ... --view taps`)
   * the response row of a stage uses its first two tensors (motion_block: the two coarsest levels; `OUT:v_hat` is the finest)
   * `zero_doppler` sets the radial velocity of every detection to 0, which in the ego-compensated frame reads "every detection stands still", not "no Doppler";
     the camera perturbation also zeroes `lane_img` / `img`; a perturbation that changes nothing at all prints a WARNING (the t3 cam_off class of bug)
   * "static" cells of the velocity check are all defined cells with GT speed < 0.3 m/s, empty ground included, not only static objects
   * the velocity-field and response numbers of a few frames are a probe, not a measurement: no confidence interval
-Every perturbation is itself tested (`--selftest`): it changes exactly the keys it names and nothing else."""
+Every perturbation is itself tested (tests/test_bev_modules.py): it changes exactly the keys it names and nothing else."""
 from __future__ import annotations
 
 import argparse
 import json
 import os
-import sys
-import tempfile
 
 import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-sys.path[:0] = [ROOT, os.path.join(ROOT, "..", ".."), os.path.join(ROOT, "..", "..", "autoresearch")]
+from net import chain
+from net.prep.batches import clip_step, to_device
+from evaluation import bev_adapter as A
 
-MODULES = ("lift", "cam_reduce", "cam_reduce2", "cam_merge", "cam_temporal", "radar", "rad_temporal", "fusion", "trunk", "head_reduce",
-           "motion_block", "sem_head", "obj_head", "aux_cam", "aux_rad")     # the chain of the t16 configuration, for reading; the probe takes the model's own children (chain_modules)
 MEMORIES = ("cam_temporal", "rad_temporal", "fusion")                       # shown again on the warm frame
 RESPONSE_STAGES = ("cam_temporal", "radar", "rad_temporal", "fusion", "trunk", "motion_block")
 STATIC_SPEED, MOVING_SPEED = 0.3, 1.0                                       # m/s: GT cells below / above these speeds are static / moving
@@ -51,7 +51,8 @@ def tensors_of(o, prefix=""):
     out = {}
     if torch.is_tensor(o):
         if o.is_floating_point():
-            out[prefix or "out"] = o.detach().float().cpu().clone()               # a copy: float32 on the CPU is no copy, a later in-place op would change the record
+            # a copy: float32 on the CPU is no copy, a later in-place op would change the record
+            out[prefix or "out"] = o.detach().float().cpu().clone()
     elif isinstance(o, dict):
         for k, v in o.items():
             out.update(tensors_of(v, f"{prefix}.{k}" if prefix else str(k)))
@@ -62,13 +63,14 @@ def tensors_of(o, prefix=""):
 
 
 def chain_modules(model):
-    """the names of the model's direct child modules in definition order: everything the chain is made of (lift AND lift2 of a dual camera, lane, cam_adapter, ...),
+    """the names of the model's direct child modules in definition order: everything the chain is made of (lift AND lift2 of a dual camera, lane, ...),
     not a fixed list. aux_cam / aux_rad are children but only run while training (model.py), so they have no output in an evaluation-mode probe."""
     return [n for n, _ in model.named_children()]
 
 
 def wrap_method(obj, name, wrapper):
-    """replace obj.<name> by wrapper(original) on the instance; -> restore() that puts back exactly what was there (the class method, or the instance attribute)"""
+    """replace obj.<name> by wrapper(original) on the instance; -> restore() that puts back exactly what was there (the class method, or the instance
+    attribute)"""
     had = name in obj.__dict__
     original = getattr(obj, name)
     setattr(obj, name, wrapper(original))
@@ -123,7 +125,8 @@ def average_response(lst):
 
 # ------------------------------------------------------------------------------------------------ the velocity field on static and moving cells
 def velocity_rows(frame, ego_v, fields, gv, undefined):
-    """fields {level name: (2, X, Y) tensor}, gv the GT velocity (2, X, Y) in m/s, undefined (X, Y) bool -> one row per level: on the static cells (GT speed < 0.3,
+    """fields {level name: (2, X, Y) tensor}, gv the GT velocity (2, X, Y) in m/s, undefined (X, Y) bool -> one row per level: on the static cells (GT speed <
+    0.3,
     defined) the mean field (vx, vy), its spread and the mean speed (zero for a field that knows the cells stand still), on the moving cells (>= 1 m/s) the
     end-point error and the mean GT speed"""
     gv = gv.float()
@@ -144,7 +147,8 @@ def velocity_rows(frame, ego_v, fields, gv, undefined):
 
 # ------------------------------------------------------------------------------------------------ the response test: remove an input
 def zero_cam(batch):
-    """every camera input times 0: the cached probability / context tensors the lift reads, and the images the lane branch and the camera student read (`lane_img`,
+    """every camera input times 0: the cached probability / context tensors the lift reads, and the images the lane branch and the camera student read
+    (`lane_img`,
     `lane_img_old` of student_frames 'all', `img`) - a camera
     path that is left in the batch would make the test say 'the camera does not matter' (the t3 cam_off bug)"""
     return {**batch, **{k: batch[k] * 0 for k in ("prob", "ctx", "prob2", "ctx2", "lane_img", "lane_img_old", "img") if k in batch and torch.is_tensor(batch[k])}}
@@ -162,12 +166,13 @@ def map_radar(batch, fn):
 def zero_radar(batch):
     """no radar detection at all (every list of the detection dict empty, in every radar_seq set too) and the hit / static maps zero"""
     out = map_radar(batch, lambda r: {k: v[:0] for k, v in r.items()})
-    out.update({k: batch[k] * 0 for k in ("radar_hits", "radar_static") if k in batch and torch.is_tensor(batch[k])})
+    out.update({k: batch[k] * 0 for k in ("radar_hits",) if k in batch and torch.is_tensor(batch[k])})
     return out
 
 
 def zero_doppler(batch):
-    """the radial velocity of every detection 0 (in the ego-compensated frame that reads 'every detection stands still'): positions, ranges and rcs stay; in every
+    """the radial velocity of every detection 0 (in the ego-compensated frame that reads 'every detection stands still'): positions, ranges and rcs stay; in
+    every
     radar_seq set too"""
     return map_radar(batch, lambda r: {**r, "vr": r["vr"] * 0})
 
@@ -285,11 +290,8 @@ def probe(run, frames=3, device="cpu", split="val", out_dir=None, threads=2, ckp
     run = os.path.abspath(run)
     out_dir = out_dir or os.path.join(run, "eval", "modules")
     os.makedirs(out_dir, exist_ok=True)
-    from evaluation import bev_adapter as A
-    A.setup_paths(run)
     src, subj, _ = A.build(run, device=device, split=split, workers=0, ckpt_dir=ckpt_dir)
-    ns, model, loss, cfg = subj.ns, subj.model, subj.loss, subj.cfg
-    T, dev = ns.T, subj.device
+    model, loss, cfg, dev = subj.model, subj.loss, subj.cfg, subj.device
     print("run", run, "step", subj.step, "checkpoint", os.path.basename(subj.ckpt), "device", dev, flush=True)
     rec = Recorder(model)
     refs = []
@@ -302,7 +304,7 @@ def probe(run, frames=3, device="cpu", split="val", out_dir=None, threads=2, ckp
     def forward(batch, **kw):
         rec.clear()
         with torch.no_grad():
-            _, res, _ = T.forward_loss(model, loss, batch, 1.0, dev, cfg.amp, cfg, train_terms=False, **kw)
+            _, res, _ = chain.forward_loss(model, loss, batch, 1.0, dev, cfg, train_terms=False, **kw)
         return res
 
     modules, response, rows = {}, {}, []
@@ -314,12 +316,11 @@ def probe(run, frames=3, device="cpu", split="val", out_dir=None, threads=2, ckp
 
 
 def _probe_frames(refs, src, subj, rec, forward, modules, response, rows, out_dir, run):
-    ns, model = subj.ns, subj.model
-    T, dev = ns.T, subj.device
+    model, dev = subj.model, subj.device
     for k, (scene, idx) in enumerate(refs):
         ref = src.frames(scene)[idx]
         sample = src.load(ref)
-        batch = T.to_device(sample.inputs, dev)
+        batch = to_device(sample.inputs, dev)
         res = forward(batch)
         base = rec.copy()
         out0 = res["out"][0.0]
@@ -337,7 +338,7 @@ def _probe_frames(refs, src, subj, rec, forward, modules, response, rows, out_di
         rows += velocity_rows(ref.key, batch["v"][0], fields, torch.as_tensor(np.asarray(gt["velocity"])), torch.as_tensor(np.asarray(gt["undefined"])).bool())
         if idx + 1 < len(src.frames(scene)):                                    # the warm frame: the next one with the state of this one
             s2 = src.load(src.frames(scene)[idx + 1])
-            forward(T.to_device(s2.inputs, dev), state=ns.detach_tree(res["state"]), step=ns.clip_step(sample.inputs, dev))
+            forward(to_device(s2.inputs, dev), state=res["state"], step=clip_step(sample.inputs, dev))
             for n, d in rec.store.items():
                 for p, t in d.items():
                     if n in MEMORIES:
@@ -377,124 +378,16 @@ def print_report(r):
     print("written", r["out_dir"])
 
 
-# ------------------------------------------------------------------------------------------------ self-test
-def selftest():
-    # numbers of tensors: known answers
-    t = torch.zeros(2, 3, 4, 4)
-    t[:, 0] = torch.randn(2, 4, 4)
-    t[:, 1] = 1.0                                                                # constant channel: dead; channel 2 all zero: dead
-    s = stat(t)
-    assert s["shape"] == [2, 3, 4, 4] and s["finite"] and abs(s["dead_channels"] - 2 / 3) < 1e-6, s
-    assert abs(s["zero_share"] - 1 / 3) < 1e-6 and s["absmax"] >= 1.0
-    assert not stat(torch.tensor([[[[1.0, float("nan")]]]]))["finite"] and stat(torch.ones(5))["dead_channels"] is None
-    nest = tensors_of({"a": (torch.ones(1, 2), torch.zeros(3, dtype=torch.int64)), "b": [torch.ones(2)]})
-    assert set(nest) == {"a[0]", "b[0]"}, set(nest)
-    assert abs(rel_change(torch.tensor([3.0, 4.0]), torch.tensor([3.0, 4.0])) ) < 1e-9 and abs(rel_change(torch.tensor([3.0, 4.0]), torch.zeros(2)) - 1.0) < 1e-6
-    assert abs(rel_change(torch.tensor([3.0, 4.0]), torch.tensor([3.0, 0.0])) - 0.8) < 1e-6
-    assert energy(torch.ones(1, 4, 5, 6)).shape == (5, 6) and abs(energy(torch.ones(1, 4, 5, 6))[0, 0] - 2.0) < 1e-6
-    assert mean_over_frames([{"std": 1.0, "shape": [1], "finite": True}, {"std": 3.0, "shape": [2], "finite": False}]) == {"std": 2.0, "shape": [1], "finite": 0.5}
-    assert average_response([{"a": {"x": 1.0, "y": None}}, {"a": {"x": 3.0, "y": None}}]) == {"a:x": 2.0, "a:y": None}
-    # the velocity field on static and moving cells: planted offsets
-    gv = torch.zeros(2, 6, 6)
-    gv[0, :2] = 4.0                                                              # 12 moving cells at (4, 0) m/s
-    und = torch.zeros(6, 6, dtype=torch.bool)
-    und[5] = True                                                                # one row undefined: not counted
-    field = gv + torch.tensor([0.3, 0.4])[:, None, None]                         # every cell is off by (0.3, 0.4): EPE 0.5
-    row = velocity_rows("f", 7.0, {"v_hat": field}, gv, und)[0]
-    assert row["static_cells"] == 18 and row["moving_cells"] == 12 and abs(row["static_mean_vx"] - 0.3) < 1e-6 and abs(row["static_mean_vy"] - 0.4) < 1e-6, row
-    assert abs(row["static_epe"] - 0.5) < 1e-6 and abs(row["moving_epe"] - 0.5) < 1e-6 and abs(row["moving_gt_speed"] - 4.0) < 1e-6 and row["static_std_x"] < 1e-6 and row["ego_v_mps"] == 7.0
-    assert velocity_rows("f", 0.0, {"v": torch.zeros(2, 3, 3)}, torch.zeros(2, 3, 3), torch.zeros(3, 3).bool())[0]["moving_epe"] is None, "no moving cell: None, not nan"
-    # every perturbation changes exactly what it names (the cam_off bug of t3: a flag that changed nothing)
-    batch = {"prob": torch.ones(1, 2), "ctx": torch.ones(1, 2), "lane_img": torch.ones(1, 3, dtype=torch.uint8), "lane_img_old": torch.ones(1, 2, 3, dtype=torch.uint8),
-             "radar_hits": torch.ones(1, 3), "v": torch.ones(1),
-             "radar": {"x": torch.arange(5.0), "vr": torch.ones(5), "y": torch.ones(5)}}
-    snapshot = {k: (v.clone() if torch.is_tensor(v) else {kk: vv.clone() for kk, vv in v.items()}) for k, v in batch.items()}
-    c, r, d = zero_cam(batch), zero_radar(batch), zero_doppler(batch)
-    assert c["prob"].abs().sum() == 0 and c["ctx"].abs().sum() == 0 and c["lane_img"].sum() == 0 and c["lane_img_old"].sum() == 0 and c["radar"] is batch["radar"] and c["radar_hits"].sum() == 3 and c["v"].sum() == 1
-    assert r["radar"]["x"].numel() == 0 and r["radar"]["vr"].numel() == 0 and r["radar_hits"].abs().sum() == 0 and r["prob"].sum() == 2 and r["lane_img"].sum() == 3 and r["lane_img_old"].sum() == 6
-    assert d["radar"]["vr"].abs().sum() == 0 and d["radar"]["x"].sum() == 10 and d["radar"]["y"].sum() == 5 and d["prob"].sum() == 2
-    assert all(torch.equal(batch[k], snapshot[k]) if torch.is_tensor(batch[k]) else all(torch.equal(batch[k][kk], snapshot[k][kk]) for kk in batch[k]) for k in batch), "the batch is not changed in place"
-    # radar_per_frame (t25): the sets of radar_seq are perturbed too (the recursive unroll's radar branch reads those), the batch is not changed in place
-    seq = {"radar": {"x": torch.arange(5.0), "vr": torch.ones(5)}, "radar_seq": [{"x": torch.arange(5.0), "vr": torch.ones(5)}, {"x": torch.arange(3.0), "vr": torch.ones(3)}]}
-    rs, ds = zero_radar(seq), zero_doppler(seq)
-    assert rs["radar"]["x"].numel() == 0 and len(rs["radar_seq"]) == 2 and all(s["x"].numel() == 0 and s["vr"].numel() == 0 for s in rs["radar_seq"])
-    assert ds["radar"]["vr"].abs().sum() == 0 and all(s["vr"].abs().sum() == 0 for s in ds["radar_seq"]) and ds["radar_seq"][1]["x"].sum() == 3
-    assert seq["radar_seq"][0]["vr"].sum() == 5 and seq["radar_seq"][1]["x"].numel() == 3 and seq["radar"]["x"].numel() == 5, "radar_seq is not changed in place"
-    assert "radar_seq" not in zero_radar(batch) and "radar_seq" not in zero_doppler(batch), "a batch without radar_seq stays without"
-    # response row: a stage that follows its input changes, one that does not stays
-    base = {"radar": {"out": torch.ones(2, 3)}, "fusion": {"out": torch.ones(2, 3)}}
-    new = {"radar": {"out": torch.zeros(2, 3)}, "fusion": {"out": torch.ones(2, 3)}}
-    heads = {"sem": torch.ones(2), "obj": {"hm": torch.ones(2), "vel": torch.ones(2)}, "v_hat": None}
-    rr = response_row(base, heads, new, {"sem": torch.ones(2), "obj": {"hm": torch.zeros(2), "vel": torch.ones(2)}, "v_hat": None})
-    assert abs(rr["radar"]["out"] - 1.0) < 1e-6 and rr["fusion"]["out"] == 0.0 and rr["OUT"]["hm"] > 0.99 and rr["OUT"]["sem"] == 0.0 and rr["OUT"]["v_hat"] is None, rr
-    # the recorder: forward hooks and the wrapped trunk.features; closing restores everything
-    import torch.nn as nn
-
-    class Trunk(nn.Module):
-        def features(self, x):
-            return x * 2
-
-    class Toy(nn.Module):
-        def __init__(self):
-            super().__init__()
-            self.lift, self.radar, self.trunk = nn.Identity(), nn.Identity(), Trunk()
-
-        def forward(self, x):
-            return self.trunk.features(self.radar(self.lift(x)))
-    m = Toy()
-    plain = m.trunk.features
-    rec = Recorder(m)
-    y = m(torch.ones(1, 2, 3, 3))
-    assert set(rec.store) == {"lift", "radar", "trunk"} and torch.equal(rec.store["trunk"]["out"], y) and y.sum() == 36, set(rec.store)
-    snap = rec.copy()
-    rec.clear()
-    assert not rec.store and "out" in snap["lift"]
-    rec.close()
-    assert m.trunk.features == plain and "features" not in m.trunk.__dict__, "the trunk is as before (no instance attribute left behind)"
-    assert chain_modules(m) == ["lift", "radar", "trunk"] and chain_modules(nn.Sequential(nn.Identity())) == ["0"], "the chain is the model's own children"
-    m.lift2 = nn.Identity()                                                      # a dual camera's second lift is probed without a list that has to know it
-    rec2 = Recorder(m)
-    m(torch.ones(1, 2, 3, 3))
-    m.lift2(torch.ones(1))
-    assert "lift2" in rec2.store
-    rec2.close()
-    assert stat(torch.ones(1))["std"] == 0.0, "a single element has no spread (not nan)"
-    t_cpu = torch.ones(1, 2, 2, 2)
-    stored = tensors_of(t_cpu)["out"]
-    t_cpu.mul_(5)
-    assert float(stored.mean()) == 1.0, "a later in-place operation does not change the record"
-    assert changed_nothing({"a": {"x": 0.0, "y": None}}) and not changed_nothing({"a": {"x": 0.0}, "OUT": {"sem": 0.2}})
-    # pictures: the stage panels and the figure
-    stages = {"fusion": {"out": torch.rand(1, 4, 6, 5)}}
-    out0 = {"sem": torch.randn(1, 2, 6, 5), "obj": {"hm": torch.randn(1, 3, 6, 5), "mov": torch.randn(1, 3, 6, 5)}, "v_hat": torch.randn(1, 2, 6, 5),
-            "v_levels": {"l0": torch.randn(1, 2, 6, 5)}}
-    gt = {"drivable_area": np.zeros((6, 5)), "lane_divider": np.zeros((6, 5)), "vehicle": np.zeros((6, 5)), "flow": np.zeros((2, 6, 5))}
-    panels = frame_panels(stages, torch.rand(1, 4, 6, 5), out0, gt, ["drivable_area", "lane_divider"])
-    titles = [p[0] for p in panels]
-    assert "fusion |feat|" in titles and "M level l0 |v|" in titles and "pred moving prob (hurdle)" in titles and "GT lane_divider" in titles, titles
-    with tempfile.TemporaryDirectory() as d_:
-        path = os.path.join(d_, "f.png")
-        draw_panels(path, "toy", panels)
-        assert os.path.getsize(path) > 2000
-    print("bev_modules selftest ok: tensor numbers, dead channels, static / moving velocity cells, each perturbation changes only what it names, response rows, recorder, pictures")
-
-
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("run", nargs="?")
+    ap.add_argument("run")
     ap.add_argument("--frames", type=int, default=3)
     ap.add_argument("--device", default="cpu")
     ap.add_argument("--split", default="val")
     ap.add_argument("--threads", type=int, default=2)
     ap.add_argument("--out", default=None)
     ap.add_argument("--ckpt-dir", default=None, help="the folder of a moved checkpoint")
-    ap.add_argument("--selftest", action="store_true")
     a = ap.parse_args(argv)
-    if a.selftest:
-        selftest()
-        return 0
-    if not a.run:
-        ap.error("RUN is required (or --selftest)")
     print_report(probe(a.run, a.frames, a.device, a.split, a.out, a.threads, a.ckpt_dir))
     return 0
 

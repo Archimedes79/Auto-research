@@ -14,7 +14,7 @@ def sample_targets(samples):
     """GtGenerator training samples ({'cur', 'prev', 'next'}, a list = a batch) -> {nominal dt: [GT dict per sample]}, keyed by SIDE
     (prev -0.5, cur 0, next +0.5), never by the rounded true gap: every list has one entry per sample, in batch order, aligned
     with the model's predictions at that dt (a 0.75 s keyframe gap, scene-0994, used to round to -1.0 and leave B - 1 targets
-    for B predictions). The true gap stays in meta['dt'] / meta['steps']: train.batch_ego decodes each sample with it."""
+    for B predictions). The true gap stays in meta['dt'] / meta['steps']: batches.batch_ego decodes each sample with it."""
     out = {}
     for key, dt in SIDE_DT.items():
         have = [key in s for s in samples]
@@ -27,7 +27,7 @@ def sample_targets(samples):
 
 def head_box(bx, groups=NUSC_GROUPS):
     """gt_bev meta box (center, size = w, l, h, yaw, vel, group) -> object_head box dict; circles: radius = half the
-    larger side (as studies/early/object_head_synth.py, tag v1). None for a group the head does not have."""
+    larger side. None for a group the head does not have."""
     kinds = dict(groups)
     if bx["group"] not in kinds:
         return None

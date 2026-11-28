@@ -1,37 +1,25 @@
-"""Loss extras from the literature scan of 2026-10-26 (plan.md 8.4; notes in literature/papers, scout tables
-temp/scout_tables/papers_new_{mtl,mapl,trainrecipe}.csv): the pieces of the training loop that are not part of BEVLoss
-(UWSO, group_gradient_cosines and cross_time_consistency are used by training/train.py; losses.py imports the weighted-sum
-helpers `_wsum` / `_wcount` from here). Conventions as losses.py: prob / target (B, K, X, Y), weights w broadcastable (a cell
+"""Loss pieces that are not part of BEVLoss (notes in literature/papers): a diagnostic of the task groups and the cross-time consistency of the
+predictions (net/chain.py and net/loss/train_terms.py use them; losses.py imports the weighted-sum helpers `_wsum` / `_wcount` from here). Conventions as
+losses.py: prob / target (B, K, X, Y), weights w broadcastable (a cell
 of weight 0 is ignored), per-channel results (K,), 0 for a channel without GT.
 
-1  UWSO                    UW-SO (2408.07985): weights softmax(1 / (L.detach() T)) over the task groups, one
-                           hyper-parameter T, no extra pass; drop-in for losses.TaskWeights (`loss.task = UWSO(...)`).
-2  group_gradient_cosines  diagnostic: cosine and norm of the task-group gradients at the shared BEV feature (head
+1  group_gradient_cosines  diagnostic: cosine and norm of the task-group gradients at the shared BEV feature (head
                            backward passes only) - look at it before any gradient surgery.
-3  cross_time_consistency  train-only cross-time consistency of the predictions at dt = 0 and dt = +-0.5 s (MapTCL
+2  cross_time_consistency  train-only cross-time consistency of the predictions at dt = 0 and dt = +-0.5 s (MapTCL
                            2608.05209, ST-P3 / FIERY-style warping, UnFlow 1711.07837 masks): the prediction at dt = 0 is
                            carried to the other time by the splat geometry (ego steps + the motion field) and compared,
                            BOTH directions (forward: splat P_0 and compare with P_b, stop-grad on P_b; backward: gather
                            P_b at the carried positions and compare with P_0, stop-grad on P_0), only where both sides are
                            visible, cells without a counterpart cost a constant (no trivial solution by pushing everything
                            out of the grid), age weights. Nothing at inference.
-Run the self-test: python net/loss/loss_extras.py
+Tests: tests/test_loss_extras.py
 """
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
 import math
-import os
-import sys
 
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from lift_pd import Grid
-from splat import chain_positions, grid_points, splat
+from net.model.splat import chain_positions, grid_points, splat
 
 EPS = 1e-6
 
@@ -45,24 +33,6 @@ def _wcount(w, like):
 
 
 # ------------------------------------------------------------------------------------------------ 1
-class UWSO(nn.Module):
-    """Task-group weights w = softmax(1 / (L.detach() T)) (UW-SO, 2408.07985); total = scale * sum_g w_g L_g with
-    scale = the number of groups present (so equal losses give the weight 1 per group, like equal weighting).
-    Same call and return as losses.TaskWeights: forward(group_losses) -> (total, {group: weight})."""
-
-    def __init__(self, T=1.0, scale=True):
-        super().__init__()
-        self.T, self.scale = T, scale
-
-    def forward(self, group_losses):
-        names = list(group_losses)
-        L = torch.stack([group_losses[g] for g in names])
-        w = torch.softmax(1.0 / (L.detach().clamp(min=EPS) * self.T), 0)
-        total = (w * L).sum() * (len(names) if self.scale else 1.0)
-        return total, {g: w[i].detach() for i, g in enumerate(names)}
-
-
-# ------------------------------------------------------------------------------------------------ 2
 def group_gradient_cosines(group_losses, feature):
     """Gradients of every group loss at the shared feature tensor (retain_graph): -> (names, cosine matrix (G, G),
     norms (G,)). Costs the head backward passes only. Negative cosines = conflicting groups."""
@@ -77,7 +47,7 @@ def group_gradient_cosines(group_losses, feature):
     return names, unit @ unit.T, norms
 
 
-# ------------------------------------------------------------------------------------------------ 3
+# ------------------------------------------------------------------------------------------------ 2
 def _norm_xy(pos, grid):
     """positions in metres (B, N, 2) -> grid_sample coordinates (B, N, 2) = (along W = y, along H = x)."""
     nx = 2 * (pos[..., 0] - grid.x_min) / (grid.nx * grid.res) - 1
@@ -159,91 +129,3 @@ def cross_time_consistency(probs, steps, v_hat, grid, weights=None, channels=Non
         total, wsum = total + a * 0.5 * (f + bk), wsum + a
     out["total"] = total / max(wsum, EPS)
     return out
-
-
-# ----------------------------------------------------------------------------------------------- self-test
-def _blob(grid, cx, cy, s=1.2, device="cpu"):
-    xs, ys = grid.xy_centres(device)
-    return torch.exp(-(((xs.view(-1, 1) - cx) ** 2 + (ys.view(1, -1) - cy) ** 2) / (2 * s * s)))[None, None]
-
-
-def _selftest():
-    torch.manual_seed(0)
-    # 1 UW-SO: weights sum to 1, the smaller loss gets the larger weight, drop-in call of TaskWeights, equal losses -> 1 each
-    uw = UWSO(T=1.0)
-    tot, wts = uw({"areas": torch.tensor(0.2), "lines": torch.tensor(0.8), "objects": torch.tensor(0.5)})
-    assert abs(sum(float(v) for v in wts.values()) - 1) < 1e-6 and wts["areas"] > wts["objects"] > wts["lines"]
-    tot2, wts2 = uw({"a": torch.tensor(0.5), "b": torch.tensor(0.5)})
-    assert abs(float(tot2) - 1.0) < 1e-6 and abs(float(wts2["a"]) - 0.5) < 1e-6, "equal losses: the sum"
-    la = torch.tensor(0.4, requires_grad=True)
-    uw({"a": la, "b": torch.tensor(1.0)})[0].backward()
-    assert la.grad is not None and torch.isfinite(la.grad)
-
-    # 2 group gradient cosines: parallel, opposite and orthogonal groups
-    f = torch.randn(4, 3, requires_grad=True)
-    g_par, g_opp, g_orth = (f * 2).sum(), (-f * 3).sum(), (f[:, 0] * 0 + f[:, 1].sum() * 0 + (f * torch.tensor([[0.0, 0.0, 1.0]]).expand_as(f)).sum() * 0).sum()
-    base = (f * torch.tensor([[1.0, 0.0, 0.0]])).sum()                          # gradient (1, 0, 0) per row
-    orth = (f * torch.tensor([[0.0, 1.0, 0.0]])).sum()
-    names, C, nrm = group_gradient_cosines({"base": base, "par": base * 2, "opp": -base, "orth": orth}, f)
-    i = {n: k for k, n in enumerate(names)}
-    assert abs(C[i["base"], i["par"]] - 1) < 1e-6 and abs(C[i["base"], i["opp"]] + 1) < 1e-6 and abs(C[i["base"], i["orth"]]) < 1e-6
-    assert abs(nrm[i["par"]] / nrm[i["base"]] - 2) < 1e-5
-
-    # 3 cross-time consistency: a blob moving at 8 m/s, ego static, the probabilities at dt = 0 and +-0.5 s exact
-    grid = Grid(x_min=0.0, x_max=32.0, y_min=-8.0, y_max=8.0, res=0.5)
-    X, Y = grid.nx, grid.ny
-    P = {0.0: _blob(grid, 12.0, -2.0), 0.5: _blob(grid, 16.0, -2.0), -0.5: _blob(grid, 8.0, -2.0)}
-    st = {0.5: [[(0.5, 0.0, 0.0)]], -0.5: [[(-0.5, 0.0, 0.0)]]}
-    v_true = torch.zeros(1, 2, X, Y)
-    v_true[:, 0] = 8.0 * (P[0.0][:, 0] > 0.02).float()                          # the field is nonzero on the object only
-    r = cross_time_consistency(P, st, v_true, grid)
-    r0 = cross_time_consistency(P, st, torch.zeros(1, 2, X, Y), grid)           # no motion: the blob does not match
-    assert r["total"] < 0.5 * r0["total"] and r["matched@+0.5"] > 0.9, (float(r["total"]), float(r0["total"]))
-    # trivial solution: a motion field that pushes every cell out of the grid costs the constant penalty, not 0
-    far = torch.zeros(1, 2, X, Y)
-    far[:, 0] = 400.0
-    rf = cross_time_consistency(P, st, far, grid, penalty=0.5)
-    assert rf["total"] > 0.4 and rf["matched@+0.5"] < 0.05, float(rf["total"])
-    # ego motion exact: a static pattern seen from a moved ego (v = 10 m/s, omega = 0.3 rad/s, dt = 0.5 s): P_dt rendered
-    #   from the exact motion; with v_hat = 0 the consistency is small, with a wrong ego step it is not
-    xs, ys = grid.xy_centres()
-    v_e, w_e, dte = 10.0, 0.3, 0.5
-    th = w_e * dte
-    dxe, dye = v_e / w_e * math.sin(th), v_e / w_e * (1 - math.cos(th))
-
-    def world(x, y):                                                            # a smooth static world, ego frame at t = 0
-        return torch.exp(-(((x - 16.0) ** 2 + (y - 1.0) ** 2) / 8.0)) + 0.6 * torch.exp(-(((x - 8.0) ** 2 + (y + 3.0) ** 2) / 6.0))
-    gx, gy = xs.view(-1, 1).expand(X, Y), ys.view(1, -1).expand(X, Y)
-    qx, qy = gx - dxe, gy - dye
-    # the cell (gx, gy) of the frame at dt sees the world point R(th) (gx, gy) + d in the frame at 0
-    wx, wy = math.cos(th) * gx - math.sin(th) * gy + dxe, math.sin(th) * gx + math.cos(th) * gy + dye
-    Pe = {0.0: world(gx, gy)[None, None], 0.5: world(wx, wy)[None, None]}
-    rst = cross_time_consistency(Pe, {0.5: [[(0.5, v_e, w_e)]]}, torch.zeros(1, 2, X, Y), grid)
-    rbad = cross_time_consistency(Pe, {0.5: [[(0.5, 0.0, 0.0)]]}, torch.zeros(1, 2, X, Y), grid)
-    # (the totals contain the constant penalty for the cells that enter the field of view through the ego motion: judge the
-    #  error over the matched cells)
-    assert rst["ferr@+0.5"] < 0.5 * rbad["ferr@+0.5"] and rst["berr@+0.5"] < 0.5 * rbad["berr@+0.5"], \
-        (float(rst["ferr@+0.5"]), float(rbad["ferr@+0.5"]), float(rst["berr@+0.5"]), float(rbad["berr@+0.5"]))
-    # stop-gradient directions: forward carries a gradient to P_0 only, backward to P_dt only (through the gather)
-    Pg = {0.0: P[0.0].clone().requires_grad_(True), 0.5: P[0.5].clone().requires_grad_(True)}
-    rr = cross_time_consistency(Pg, {0.5: st[0.5]}, v_true, grid)
-    g_fwd = torch.autograd.grad(rr["fwd@+0.5"], [Pg[0.0], Pg[0.5]], retain_graph=True, allow_unused=True)
-    assert g_fwd[0] is not None and g_fwd[0].abs().sum() > 0 and (g_fwd[1] is None or g_fwd[1].abs().sum() == 0)
-    g_bwd = torch.autograd.grad(rr["bwd@+0.5"], [Pg[0.0], Pg[0.5]], retain_graph=True, allow_unused=True)
-    assert g_bwd[1] is not None and g_bwd[1].abs().sum() > 0 and (g_bwd[0] is None or g_bwd[0].abs().sum() == 0)
-    # the motion field gets a gradient (the self-supervised flow signal); cells of weight 0 are ignored
-    vg = v_true.clone().requires_grad_(True)
-    cross_time_consistency(P, st, vg, grid)["total"].backward()
-    assert vg.grad is not None and vg.grad.abs().sum() > 0
-    wv = {0.0: torch.ones(1, 1, X, Y), 0.5: torch.zeros(1, 1, X, Y), -0.5: torch.zeros(1, 1, X, Y)}
-    assert float(cross_time_consistency(P, st, v_true, grid, weights=wv)["total"]) == 0.0, "no visible cell: no loss"
-    print("loss_extras selftest ok: UW-SO weights, group gradient cosines (parallel / opposite / orthogonal), "
-          f"cross-time consistency (moving blob {float(r['total']):.3f} vs no motion {float(r0['total']):.3f}; "
-          f"pushed-out field {float(rf['total']):.2f} not 0; ego motion exact: matched-cell error "
-          f"{float(rst['ferr@+0.5']):.3f} / {float(rst['berr@+0.5']):.3f} (fwd / bwd) vs wrong step "
-          f"{float(rbad['ferr@+0.5']):.3f} / {float(rbad['berr@+0.5']):.3f}; stop-gradient per direction; motion field "
-          f"gets a gradient)")
-
-
-if __name__ == "__main__":
-    _selftest()

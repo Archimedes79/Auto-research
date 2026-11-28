@@ -1,14 +1,13 @@
-"""The datasets of a run config and what turns their items into the batches the network reads: clips of consecutive keyframes, the move to the device, the
-host-side copies and the ego motion of the gaps. The config is read by attribute only (no import of the trainer)."""
-import functools
+"""The datasets of a run config and what turns their items into the batches the network reads: clips of consecutive keyframes, the move to the device
+and the ego motion of the gaps. The config is read by attribute only (no import of the trainer)."""
 import math
 import os
 
 import numpy as np
 import torch
 
-from feature_cache import CachedFrontRadarDataset, FeatureStore
-from nuscenes_dataset import FrontRadarDataset, available_scenes
+from net.prep.feature_cache import CachedFrontRadarDataset, FeatureStore
+from net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
 
 
 def make_datasets(cfg):
@@ -87,16 +86,6 @@ def to_device(batch, device, non_blocking=False):
     return out
 
 
-HOST_KEYS = ("K", "T_cam_car", "ida", "ida2", "flip")        # the batch entries the network needs as Python numbers (cache key of the lift, "any flipped?")
-
-
-def host_side(batch):
-    """{key: CPU tensor} of HOST_KEYS in a batch that is still on the host: references, not copies. Taken BEFORE `to_device`, because a `.tolist()` / `.any()` of the GPU copy
-    waits until the GPU has finished everything queued (D54: ~290 such waits per step for the projection-table cache key alone). forward_loss puts the dict into the device
-    batch as batch["host"] (interface.INPUTS); the network uses it only with ModelConfig.sync_free."""
-    return {k: batch[k] for k in HOST_KEYS if torch.is_tensor(batch.get(k)) and batch[k].device.type == "cpu"}
-
-
 def gap_ego_motion(steps):
     """The ego steps [(dt_i, v_i, omega_i)] (batch["gap_steps"]: time 0 -> the target keyframe, negative dt backwards) as ONE
     splat step (dt, v, omega) that lands a static point where the chain does: the chain is composed with the splat's own
@@ -117,7 +106,8 @@ def gap_ego_motion(steps):
 
 
 def _one_copy(rows, device):
-    """float32 tensor of the nested Python lists `rows` on `device` with ONE host-to-device copy, made from pinned memory without waiting (D54). The values are those of
+    """float32 tensor of the nested Python lists `rows` on `device` with ONE host-to-device copy, made from pinned memory without waiting (D54). The values are
+    those of
     torch.tensor(rows, dtype=torch.float32, device=device), which converts on the host as well; the old code made one tensor, i.e. one copy from pageable memory
     (a copy that first waits until the GPU has finished everything queued) per element of the result: three per dt and three per clip step."""
     flat = torch.tensor(rows, dtype=torch.float32)
@@ -128,8 +118,10 @@ def _one_copy(rows, device):
 
 def batch_ego(gap_steps, dts, device, strict=False):
     """{nominal dt != 0: (dt, v, omega)} as (B,) tensors: the true gap and the gap-mean ego motion of every sample, from batch["gap_steps"]
-    (the dataset makes them from the poses: the network input needs no ground truth). gap_steps holds the previous and the next keyframe only, i.e. dt = -0.5 and +0.5 s: any other dt
-    would silently get the 0.5 s gap; strict (LossConfig.hygiene_2026_11_02) raises instead. All tensors are views of one (n_dt, 3, B) tensor (one copy to the GPU, D54)."""
+    (the dataset makes them from the poses: the network input needs no ground truth). gap_steps holds the previous and the next keyframe only, i.e. dt = -0.5
+    and +0.5 s: any other dt
+    would silently get the 0.5 s gap; strict (LossConfig.hygiene_2026_11_02) raises instead. All tensors are views of one (n_dt, 3, B) tensor (one copy to the
+    GPU, D54)."""
     keys, rows = [], []
     for dt in dts:
         if abs(dt) < 1e-6:
@@ -144,6 +136,14 @@ def batch_ego(gap_steps, dts, device, strict=False):
         return {}
     flat = _one_copy(rows, device)
     return {dt: (flat[j, 0], flat[j, 1], flat[j, 2]) for j, dt in enumerate(keys)}
+
+
+def clip_step(prev_batch, device):
+    """(dt, v, omega) as (B,) tensors from the previous keyframe of each clip (or of a scene, in the evaluation) to the current one: the ego steps of the
+    previous batch toward its next keyframe (batch["gap_steps"], from the poses), composed into one splat step; the model's memory pose advances by it."""
+    vals = [gap_ego_motion(g["next"]) for g in prev_batch["gap_steps"]]
+    flat = _one_copy([[v[i] for v in vals] for i in range(3)], device)           # one copy to the GPU, three views
+    return flat[0], flat[1], flat[2]
 
 
 def val_subset(ds, n):

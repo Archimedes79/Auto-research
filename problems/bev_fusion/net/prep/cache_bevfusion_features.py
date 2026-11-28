@@ -1,36 +1,30 @@
-"""Cache of the BEVFusion camera-only-seg image side's outputs (feature-swap test, plan.md 2.8 step 0): the same 198 channels as the DualBEV cache
+"""Cache of the BEVFusion camera-only-seg image side's outputs (the feature-swap test): the same 198 channels as the DualBEV cache
 (118 depth probabilities + 80 context, float16) but at stride 8 (32 x 88 cells) from the MAP-trained Swin-T + FPN of `net/model/bevfusion_camera.py`.
 
 Same shard format as `net/prep/feature_cache.py` (so `FeatureStore(root)` reads it, N_PROB = 118, N_CTX = 80): one `<scene>.npy` (n, 198, 32, 88)
-float16 + `<scene>.index.npz` (the sample_data tokens, row order) per scene. The frames are the ones of an existing DualBEV cache (`--src`), so both caches cover
+float16 + `<scene>.index.npz` (the sample_data tokens, row order) per scene. The frames are the ones of an existing DualBEV cache (`--src`), so both caches
+cover
 the same frames; `--keyframes-only` keeps only the key frames (20 k frames, about 22 GB) instead of all cached frames (58 k, about 64 GB: 1.1 MB per frame
 against 0.28 MB at stride 16). Images as BEVFusion's test pipeline reads them (`bevfusion_camera.load_image`: 0.48 scale, bicubic, crop 32 / 176). The
 calibration side of a model that reads this cache: `ida = bevfusion_ida()`, depth bin centres 1.0 + 0.5 i, `LiftPD(frustum_cells=True)`.
 The token -> file name map is read from `sample_data.json` once (a trainval parse peaks at about 3 GB for a minute; do not run it next to a training round
 without checking free memory). Resumable per scene, 2 loader threads.
 Build: python net/prep/cache_bevfusion_features.py build --src data/cache/cam_feats [--out data/cache/cam_feats_bevfusion] [--keyframes-only] [--device cuda]
-Self-test (nuScenes mini, CPU): python net/prep/cache_bevfusion_features.py
+Tests: tests/test_cache_bevfusion_features.py
 """
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
 import argparse
 import glob
 import json
 import os
-import sys
-import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import torch
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from bevfusion_camera import BEVFusionImageSide
-from images import load_image  # noqa: E402
-from feature_cache import FEAT_HW_OF, N_CTX, N_PROB, FeatureStore, shard_complete, write_shard  # noqa: E402
+from net.model.bevfusion_camera import BEVFusionImageSide
+from net.prep.images import load_image
+from net.prep.feature_cache import FEAT_HW_OF, N_CTX, N_PROB, FeatureStore, shard_complete, write_shard
 
 FEAT_HW = FEAT_HW_OF["bevfusion"]
 
@@ -132,40 +126,7 @@ def build(src_root, out_root, dataroot, version, device="cpu", batch=8, keyframe
     return FeatureStore(out_root)
 
 
-def _selftest():
-    torch.manual_seed(0)
-    root = os.path.expanduser("~/data/nuscenes")
-    src = "data/cache/cam_feats_mini"
-    with tempfile.TemporaryDirectory() as tmp:
-        store = build(src, tmp, root, "v1.0-mini", max_scenes=1, max_frames=4, verbose=False)
-        assert len(store) == 4, len(store)
-        tok = next(iter(store.index))
-        prob, ctx = store.get(tok)
-        assert prob.shape == (N_PROB,) + FEAT_HW and ctx.shape == (N_CTX,) + FEAT_HW and prob.dtype == torch.float16
-        assert torch.allclose(prob.float().sum(0), torch.ones(FEAT_HW), atol=5e-3), "probabilities sum to 1"
-        # equals a direct forward of the same image (float16 storage)
-        fm = filemap(root, "v1.0-mini", [tok])
-        model = BEVFusionImageSide().eval()
-        model.load_pretrained()
-        with torch.no_grad():
-            p, c = model.image_features(load_image(os.path.join(root, fm[tok][0]))[None])
-        assert (p[0] - prob.float()).abs().max() < 2e-3 and (c[0] - ctx.float()).abs().max() < 5e-2 * max(1.0, float(c.abs().max())), "cache = direct forward"
-        # the streamed parse equals a full json parse (bounded-memory reader, tiny chunks force records across chunk borders)
-        full = {r["token"]: r for r in json.load(open(os.path.join(root, "v1.0-mini", "sample_data.json")))}
-        streamed = {r["token"]: r for r in _stream_records(os.path.join(root, "v1.0-mini", "sample_data.json"), chunk=1 << 12)}
-        assert streamed == full, "streamed records equal json.load"
-        # key frames only keeps a subset (mini: the cached frames of one scene include sweeps)
-        n_all = len(source_tokens(src)[sorted(source_tokens(src))[0]])
-    keys = filemap(root, "v1.0-mini", [t for ts in source_tokens(src).values() for t in ts])
-    n_key = sum(1 for v in keys.values() if v[1])
-    print(f"cache_bevfusion_features selftest ok: shards in the DualBEV cache format ((n, 198, 32, 88) float16 + token index, read by FeatureStore), "
-          f"probabilities sum to 1, equal to a direct forward within float16; {n_key} of {len(keys)} cached mini frames are key frames "
-          f"(--keyframes-only), source scene has {n_all} cached frames")
-
-
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] != "build":
-        return _selftest()
     ap = argparse.ArgumentParser()
     ap.add_argument("cmd")
     ap.add_argument("--src", default="data/cache/cam_feats")

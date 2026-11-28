@@ -1,13 +1,19 @@
 """The split lists (`splits/*.json`) and `net/prep/splits.py` (resolve, manifest, split.json). Known answers, no data, no GPU.
 
   1. the files: `large` = exactly the lists of the stored config base.json (428 / 82 scenes), `xl` 700 / 82 with large inside it, `small` a
-     subset of `large` (60 / 10); train and val never share a scene; every file names a GtGenerator version of GtGenerator/versions.csv; train scenes are official nuScenes train scenes, val scenes official val scenes
-  2. resolve: `"split": "large"` gives the lists of the inline base.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it; the
-     trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false, [] and a number
+     subset of `large` (60 / 10); train and val never share a scene; every file names a GtGenerator version of GtGenerator/versions.csv; train scenes are
+     official nuScenes train scenes, val scenes official val scenes
+  2. resolve: `"split": "large"` gives the lists of the inline base.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it;
+  the
+     trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false,
+     [] and a number
      are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
-  3. manifest and split.json of a run folder (built here with known content; the real run t20_base_s0 in the site's run root when it is there: split large 428 / 82)
-Removed in v2 (D154): the comparison of xl with t17_data.json (that config is gone); the Training hook (`autoresearch/Training` compose, project.json `training.resolve`,
-`package.split_record`: gone, the research core starts base.json with its inline lists); the commit and GT of the real run (t16_full_s0 is gone, the kept runs hold
+  3. manifest and split.json of a run folder (built here with known content; the real run t20_base_s0 in the site's run root when it is there: split large 428 /
+  82)
+Removed in v2 (D154): the comparison of xl with t17_data.json (that config is gone); the Training hook (`autoresearch/Training` compose, project.json
+`training.resolve`,
+`package.split_record`: gone, the research core starts base.json with its inline lists); the commit and GT of the real run (t16_full_s0 is gone, the kept runs
+hold
 no gt.json and no code snapshot).
 Run from the problem folder: ~/miniconda3/envs/gcar/bin/python tests/test_splits.py
 """
@@ -18,11 +24,8 @@ import subprocess
 import sys
 import tempfile
 
-sys.path.insert(0, "training")
-sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
-sys.path.insert(1, "net")                                          # netpath: SITE, the folder that holds the runs
-import netpath  # noqa: E402
-import splits as S  # noqa: E402
+from net import netpath
+from net.prep import splits as S
 
 fails = []
 
@@ -58,7 +61,7 @@ check(all(not set(d["train"]) & set(d["val"]) for d in (small, large, xl)), "no 
 with open(os.path.join("..", "..", "GtGenerator", "versions.csv"), newline="", encoding="utf-8") as f:
     versions = {r["version"] for r in csv.DictReader(f)}
 check(all(d["gt"] in versions for d in (small, large, xl)), f"every split names a GtGenerator version ({large['gt']}) of GtGenerator/versions.csv")
-from nuscenes.utils.splits import create_splits_scenes  # noqa: E402
+from nuscenes.utils.splits import create_splits_scenes
 official = create_splits_scenes()
 check(all(set(d["train"]) <= set(official["train"]) and set(d["val"]) <= set(official["val"]) for d in (small, large, xl)), "train scenes are official train scenes, val scenes official val scenes (the devkit's lists)")
 
@@ -81,7 +84,7 @@ with tempfile.TemporaryDirectory() as tmp:                       # a split file 
         json.dump(d, open(os.path.join(tmp, "bad.json"), "w"))
         check(raises(lambda: S.load("bad", tmp), "bad.json"), f"split file with {label}: refused")
 try:
-    from train import read_config  # noqa: E402 - needs torch (the gcar environment)
+    from training.train import read_config  # noqa: E402 - needs torch (the gcar environment)
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "c.json")
         json.dump(S.resolve(dict(inline, split="small")), open(p, "w"))
@@ -99,23 +102,22 @@ with tempfile.TemporaryDirectory() as tmp:
     p = subprocess.run([sys.executable, "net/prep/splits.py", "resolve"], input=json.dumps(dict(inline, split="xl")), capture_output=True, text=True)
     check(p.returncode == 0 and json.loads(p.stdout) == S.resolve(dict(inline, split="xl")), "the command line (stdin -> stdout) gives the same as resolve()")
     p = subprocess.run([sys.executable, "net/prep/splits.py", "names", "small"], capture_output=True, text=True)
-    check(p.returncode == 0 and p.stdout.split("\n")[:-1] == small["train"] + small["val"], "names: the scenes of a split, train then val, one per line (the format of gt_scenes.py names)")
+    check(p.returncode == 0 and p.stdout.split("\n")[:-1] == small["train"] + small["val"], "names: the scenes of a split, train then val, one per line (the format of GtGenerator --scenes-file)")
     p = subprocess.run([sys.executable, "net/prep/splits.py", "resolve"], input=json.dumps(dict(inline, split="nope")), capture_output=True, text=True)
     check(p.returncode == 1 and "no split 'nope'" in p.stderr and "large" in p.stderr, "an unknown split on the command line: exit 1, the message names the splits that exist")
 
 # 3 manifest and split.json
 with tempfile.TemporaryDirectory() as tmp:
     run = os.path.join(tmp, "runs", "t99_toy_s0")
-    os.makedirs(os.path.join(run, "code"))
+    os.makedirs(run)
     json.dump(S.resolve(dict(inline, split="small")), open(os.path.join(run, "config.json"), "w"))
     json.dump({"gt_signature": "0.5_4_6a7aa7864a", "gt_version": "v8"}, open(os.path.join(run, "gt.json"), "w"))
-    open(os.path.join(run, "code", "SNAPSHOT.txt"), "w").write("commit 0123456789 (git archive of bev_fusion/training; run t99.toy_s0, tag bf/t99.toy_s0)\n")
     rec = os.path.join(tmp, "run.json")
     json.dump({"hypothesis": "h", "prediction": "p", "rule": "r", "commit": "x"}, open(rec, "w"))
     m = S.manifest(run, rec)
     check(m == {"run": "t99_toy_s0", "split": {"name": "small", "train": {"n": 60, "hash": S.list_hash(small["train"])}, "val": {"n": 10, "hash": S.list_hash(small["val"])}},
-                "gt": {"signature": "0.5_4_6a7aa7864a", "version": "v8"}, "code": {"commit": "0123456789", "tag": "bf/t99.toy_s0"}, "card": {"hypothesis": "h", "prediction": "p", "rule": "r"}},
-          "manifest: split name found from the lists, counts and hashes, GT, commit and tag of the snapshot, the card")
+                "gt": {"signature": "0.5_4_6a7aa7864a", "version": "v8"}, "card": {"hypothesis": "h", "prediction": "p", "rule": "r"}},
+          "manifest: split name found from the lists, counts and hashes, GT, the card")
     check(S.list_hash(["b", "a"]) == S.list_hash(["a", "b"]) != S.list_hash(["a", "c"]), "the hash is of the set of scenes (order does not matter)")
     check(S.manifest(run)["card"] is None, "without a record the card is null")
     cfg = json.load(open(os.path.join(run, "config.json")))
@@ -134,7 +136,8 @@ with tempfile.TemporaryDirectory() as tmp:
     check(json.load(open(S.write_split_json(run, os.path.join(tmp, "results", "other"))))["evaluation_frames"] is None, "frames unknown = null")
     check(raises(lambda: S.manifest(os.path.join(tmp, "none")), "no readable config.json"), "a folder without config.json is refused")
     check(d["note"] is None, "a run with a config has no note")
-    old = os.path.join(tmp, "runs", "t99_old_s0")                                  # an older run: a folder, no config.json (9 such folders in runs/ on 2026-11-03)
+    # an older run: a folder, no config.json (9 such folders in runs/ on 2026-11-03)
+    old = os.path.join(tmp, "runs", "t99_old_s0")
     os.makedirs(old)
     d0 = json.load(open(S.write_split_json(old, os.path.join(tmp, "results", "old"))))
     check((d0["train"], d0["val"], d0["split"]) == (None, None, None) and d0["note"] == "no config.json: scene lists unknown" and d0["gt"] == {"signature": None, "version": None},

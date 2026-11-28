@@ -19,8 +19,15 @@
  "evaluate": {"split": "val", "frames": "spread:1000:val", "metrics": ["maps", "boxes", "board"], "device": "cuda", "anchor_tolerance": 0.003},
  "holdout": ["test"],
  "protected": ["problem.json", "PROBLEM.md", "splits/", "evaluation/metrics.py", "evaluation/bev_task.py", "evaluation/bev_eval.py"],
- "pythonpath": ["net", "net/prep", "net/model", "net/loss", "training"],
- "tests": ["tests/test_layers.py", "tests/test_net_layering.py", "tests/test_splits.py", "tests/test_evaluation_api.py", "tests/test_trainkit_equivalence.py",
+ "tests": ["tests/test_net_layering.py", "tests/test_chain.py", "tests/test_layers.py", "tests/test_splits.py", "tests/test_evaluation_api.py", "tests/test_trainkit_equivalence.py",
+           "tests/test_interface.py", "tests/test_lift_pd.py", "tests/test_splat.py", "tests/test_temporal_fusion.py", "tests/test_fusion.py", "tests/test_bev_trunk.py",
+           "tests/test_timed_head.py", "tests/test_object_head.py", "tests/test_extract.py", "tests/test_motion_block.py", "tests/test_radar_bev.py", "tests/test_radar_encoder.py",
+           "tests/test_lane_branch.py", "tests/test_camera_encoder.py", "tests/test_bevfusion_camera.py", "tests/test_cached_model.py", "tests/test_precompute.py",
+           "tests/test_images.py", "tests/test_synthetic_world.py", "tests/test_loss_extras.py", "tests/test_losses.py",
+           "tests/test_metrics.py", "tests/test_bev_sets.py", "tests/test_bev_curves.py", "tests/test_bev_errors.py", "tests/test_bev_fusion_area.py", "tests/test_bev_velocity.py",
+           "tests/test_bev_views.py", "tests/test_bev_modules.py", "tests/test_bev_timing.py",
+           "tests/test_nuscenes_dataset.py", "tests/test_feature_cache.py", "tests/test_gt_cache_build.py", "tests/test_build_feature_cache.py",
+           "tests/test_cache_bevfusion_features.py", "tests/test_augment.py", "tests/test_model.py",
            "tests/test_end_to_end.py --cpu --threads 2"],
  "note": "BEV Fusion: camera + radar BEV perception (map layers, objects, motion) on nuScenes; the score board7 = the mean of six map rows and the object mAP; the memory is carried (D70)"
 }

@@ -1,15 +1,9 @@
 """The key-frame (and older-frame) image cache of the lane branch and the camera student: where the JPEGs are, how a finished build is marked and how it is
 built from a dataset. The command line that builds the cache a config names is training/build_image_cache.py."""
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
 import json
 import os
 import time
 
-import numpy as np
-import torch
 
 
 JPEG_QUALITY = 95
@@ -29,10 +23,12 @@ def load_image(root, sd_token):
     return decode_jpeg(read_file(p))
 
 
-OLDER = "sweeps"                                          # sub-folder of the image cache with the OLDER frames of a window (t26, model.student_frames 'all'): same layout, one file per CAM_FRONT sample_data token
+# sub-folder of the image cache with the OLDER frames of a window (t26, model.student_frames 'all'): same layout, one file per CAM_FRONT sample_data token
+OLDER = "sweeps"
 
 
-BUILT = "BUILT.json"                                      # the finished-build marker of a cache folder, written when the builder has been through EVERY sample of its datasets (a crash half-way leaves none):
+# the finished-build marker of a cache folder, written when the builder has been through EVERY sample of its datasets (a crash half-way leaves none):
+BUILT = "BUILT.json"
 
 
 KEY = "key_frames"
@@ -43,7 +39,8 @@ def older_root(root):
 
 
 def older_key(n_cam, cam_stride):
-    """the frames a build covers depend on the window: the older frames of n_cam = 3, cam_stride = 2 (0, -2, -4 sweeps) are other sweeps than those of n_cam = 2, cam_stride = 4"""
+    """the frames a build covers depend on the window: the older frames of n_cam = 3, cam_stride = 2 (0, -2, -4 sweeps) are other sweeps than those of n_cam =
+    2, cam_stride = 4"""
     return f"n_cam={n_cam},cam_stride={cam_stride}"
 
 
@@ -75,15 +72,17 @@ def key_missing_scenes(root, scenes):
 
 
 def build_settings():
-    """what the builder makes the JPEGs with, recorded in the marker: the quality and the resize + crop of the dataset's own image (nuscenes_dataset._image_uint8); a cache made with other ones is
+    """what the builder makes the JPEGs with, recorded in the marker: the quality and the resize + crop of the dataset's own image
+    (nuscenes_dataset._image_uint8); a cache made with other ones is
     not the cache of this code"""
-    from images import nuscenes_front_ida
-    from nuscenes_dataset import DST_HW
+    from net.prep.images import nuscenes_front_ida
+    from net.prep.nuscenes_dataset import DST_HW
     return {"jpeg_quality": JPEG_QUALITY, "hw": list(DST_HW), "ida": [round(float(x), 6) for x in nuscenes_front_ida(dst_hw=DST_HW).flatten().tolist()]}
 
 
 def older_records(ds, sample_token):
-    """the CAM_FRONT sample_data records of the older frames (k = 1 .. n_cam - 1) of one sample: the track of the scene, cam_stride records apart, clamped at its start
+    """the CAM_FRONT sample_data records of the older frames (k = 1 .. n_cam - 1) of one sample: the track of the scene, cam_stride records apart, clamped at
+    its start
     (the rule of nuscenes_dataset._cam_frames and feature_cache.used_frames, so these are the frames the teacher caches hold)"""
     track = ds.gt.camera_track(sample_token)
     i0 = [x["token"] for x in track].index(ds.gt.cam(sample_token)["token"])
@@ -120,14 +119,16 @@ def _fill(args):
 
 
 def _fill_older(args):
-    """the older frames of the samples (older_records) into <root>/sweeps/: every record, also one that is a key frame (a clamped frame at the start of a scene)"""
+    """the older frames of the samples (older_records) into <root>/sweeps/: every record, also one that is a key frame (a clamped frame at the start of a
+    scene)"""
     root, tokens = args
     _write(older_root(root), [sd for t in tokens for sd in older_records(_DS, t)])
     return len(tokens)
 
 
 def _mark_built(folder, key, datasets):
-    """<folder>/BUILT.json: the scenes of these datasets are now complete in the cache folder `folder` under `key` (merged with the scenes of earlier builds). The read-modify-write is under a lock file
+    """<folder>/BUILT.json: the scenes of these datasets are now complete in the cache folder `folder` under `key` (merged with the scenes of earlier builds).
+    The read-modify-write is under a lock file
     (flock, released when the process dies), so two builds of one folder do not lose each other's update"""
     import datetime
     import fcntl
@@ -149,7 +150,8 @@ def _mark_built(folder, key, datasets):
 
 
 def build_cache(datasets, root, workers=1, older=False):
-    """Write the current CAM_FRONT frame of every sample of the datasets (resumable); older=True: the older frames of the window into <root>/sweeps/ instead. The finished-build marker
+    """Write the current CAM_FRONT frame of every sample of the datasets (resumable); older=True: the older frames of the window into <root>/sweeps/ instead.
+    The finished-build marker
     (BUILT.json of that folder) is written once every sample is through."""
     import multiprocessing as mp
     import time
@@ -169,6 +171,7 @@ def build_cache(datasets, root, workers=1, older=False):
             for k in pool.imap_unordered(fill, [(root, c) for c in chunks]):
                 n += k
                 print(f"lane image cache{' (older frames)' if older else ''}: {n} samples, {time.time() - t0:.0f} s", flush=True)
-    if datasets:                                           # the finished-build mark (training/build_image_cache.py checks it; student_frames 'all'): a half-built cache is not started on
+    # the finished-build mark (training/build_image_cache.py checks it; student_frames 'all'): a half-built cache is not started on
+    if datasets:
         _mark_built(older_root(root), older_key(datasets[0].n_cam, datasets[0].cam_stride), datasets) if older else _mark_built(root, KEY, datasets)
     return n

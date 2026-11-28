@@ -176,8 +176,8 @@
    "code": [
     "net/prep/batches.py::gap_ego_motion",
     "net/prep/batches.py::batch_ego",
-    "training/train.py::clip_step",
-    "net/prep/nuscenes_dataset.py::FrontRadarDataset"
+    "net/prep/nuscenes_dataset.py::FrontRadarDataset",
+    "net/prep/batches.py::clip_step"
    ],
    "note": "the ego step from every past frame to now (dataset, from the poses), calibration and crop, the radar poses, and the ego steps to the neighbouring keyframes (batch['gap_steps']: the true gap to the target time and the memory step between calls, from the poses; train.batch_ego / clip_step read them, so the network runs without GT)"
   },
@@ -206,21 +206,19 @@
     "net/model/lift_pd.py::LiftPD",
     "net/model/model.py::BEVFusionModel.camera_bevs",
     "net/model/model.py::BEVFusionModel.camera_visibility",
-    "net/model/blocks_new.py::ZSumReduce",
     "net/model/student_encoder.py::StudentEncoder"
    ],
    "note": "contract: BEVInputs -> (BEVs (B, F, C_cam, X, Y), visibility (B, 1, X, Y)), mirrored in BEV for flipped samples (cached perspective features cannot be mirrored); kinds dualbev, bevfusion, dual; option camera_student (t22 stage B, t26): a small trained image encoder (StudentEncoder, EfficientViT-B1 or ResNet-18) replaces the cached teacher outputs of the current frame, with student_frames 'all' (t26) of every frame of the window, and can be trained on the task (student_trainable)"
   },
   {
    "id": "rad_enc",
-   "label": "Radar BEV encoder\nraster | delta slots | pillars | off",
+   "label": "Radar BEV encoder\nraster | delta slots | off",
    "kind": "learned",
    "col": 3,
    "row": 1,
    "code": [
     "net/model/radar_bev.py::RadarBEV",
     "net/model/radar_bev.py::rasterize",
-    "net/model/blocks_new.py::RadarPillars",
     "net/model/radar_encoder.py::RadarEncoder"
    ],
    "note": "contract: radar points -> (B, C_rad, X, Y); the raster is the first op, before any weight, so it costs no gradient; radar history is the sweeps inside the points (with radar_per_frame, t25: one sweep per camera frame, the past in the radar memory of the temporal block); kind delta_slots (radar_encoder.py, in the t16 / t20 chain): the lossless delta-coded slot raster (K = 3 exact slots per cell + remainder mean + count) and two convolutions, with a reconstruction side loss (radar_aux) whose weight decays to a floor"
@@ -240,28 +238,26 @@
   },
   {
    "id": "fusion",
-   "label": "Fusion\nconcat | gate",
+   "label": "Fusion\nconcat",
    "kind": "learned",
    "col": 5,
    "row": 0,
    "h": 2,
    "code": [
     "net/model/fusion.py::ConcatFusion",
-    "net/model/fusion.py::GateFusion",
     "net/model/fusion.py::drop_modality"
    ],
    "note": "contract: (camera BEV, radar BEV) -> (B, C_fuse, X, Y); modality dropout lives here (off when a sensor is off)"
   },
   {
    "id": "backbone",
-   "label": "BEV backbone + neck\nResNet + FPN | SECOND",
+   "label": "BEV backbone + neck\nResNet + FPN",
    "kind": "learned",
    "col": 6,
    "row": 0,
    "h": 2,
    "code": [
-    "net/model/bev_trunk.py::BEVTrunk",
-    "net/model/blocks_new.py::SecondTrunk"
+    "net/model/bev_trunk.py::BEVTrunk"
    ],
    "note": "contract: (B, C_fuse, X, Y) -> features S (B, C, X, Y), the optional 1x1 head reduction included"
   },
@@ -366,8 +362,7 @@
    "row": 4,
    "code": [
     "../../GtGenerator/",
-    "net/prep/gt_cache_build.py",
-    "training/gt_scenes.py"
+    "net/prep/gt_cache_build.py"
    ],
    "note": "GT release v14 (front v13 + lane l6, merged under D83); the BEV trainer's cache is keyed by the front signature"
   },
@@ -396,7 +391,10 @@
     "../../autoresearch/trainkit/",
     "training/freeze.py",
     "net/model/model.py::check_config",
-    "net/prep/feature_cache.py::CachedBEVFusionModel"
+    "net/chain.py::build",
+    "net/chain.py::load_weights",
+    "net/chain.py::forward_loss",
+    "net/model/cached_model.py::CachedBEVFusionModel"
    ],
    "note": "ModelConfig picks one kind per slot from the builder tables of model.py (LIFTS, COLLAPSES, TEMPORALS, RADARS, FUSIONS, TRUNKS); check_config refuses every unknown kind and unfitting combination in one place; since D48 train() builds model, loss and data and hands them to the project-independent loop autoresearch/trainkit (checkpoints with resume, EMA, clipping, the stop request), train.py's ProbeHooks calls the probes of trainkit/probe.py"
   },
@@ -412,7 +410,9 @@
     "net/loss/motion_loss.py",
     "net/prep/targets.py",
     "net/loss/losses.py::BEVLoss",
-    "net/loss/loss_extras.py"
+    "net/loss/loss_extras.py",
+    "net/loss/train_terms.py",
+    "net/loss/student_loss.py"
    ],
    "note": "one module: the Kendall weights and the cross-head terms (motion and time consistency, refine) stay together; heads declare their output keys; the terms per layer come from the layer table (area: BCE + overlap, polyline: dilated Dice + distance + direction, dense box); loss.hygiene_2026_11_02 switches the corrected terms of the 2026-11-02 findings"
   },
@@ -449,7 +449,6 @@
     "net/prep/geometry.py",
     "net/prep/precompute.py::Precompute",
     "net/prep/precompute.py::radar_hits",
-    "net/prep/precompute.py::radar_static",
     "net/prep/geometry.py::camera_visibility"
    ],
    "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans of the calibrated poses (D36; GtGenerator.coverage.radar_cells, cached per rig), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask), radar_static = the same weighted by the measured Doppler (the write mask with rad_static_gate); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
@@ -656,8 +655,14 @@
    "to": "mblock",
    "label": "2 camera BEVs",
    "via": [
-    [4.0, 0.5],
-    [4.0, 3.5]
+    [
+     4.0,
+     0.5
+    ],
+    [
+     4.0,
+     3.5
+    ]
    ]
   },
   {
@@ -665,8 +670,14 @@
    "to": "mblock",
    "label": "radar points",
    "via": [
-    [3.0, 2.5],
-    [3.0, 3.5]
+    [
+     3.0,
+     2.5
+    ],
+    [
+     3.0,
+     3.5
+    ]
    ]
   },
   {
@@ -674,8 +685,14 @@
    "to": "motion",
    "label": "velocity field",
    "via": [
-    [5.5, 3.5],
-    [5.5, 2.5]
+    [
+     5.5,
+     3.5
+    ],
+    [
+     5.5,
+     2.5
+    ]
    ]
   },
   {
@@ -688,9 +705,18 @@
    "to": "out_iface",
    "label": "sem_1m",
    "via": [
-    [7.0, 3.5],
-    [7.0, 4.0],
-    [8.5, 4.0]
+    [
+     7.0,
+     3.5
+    ],
+    [
+     7.0,
+     4.0
+    ],
+    [
+     8.5,
+     4.0
+    ]
    ]
   },
   {
@@ -746,6 +772,10 @@
  },
  "covers": [
   {
+   "dir": "net",
+   "glob": "*.py"
+  },
+  {
    "dir": "net/prep",
    "glob": "*.py"
   },
@@ -763,6 +793,6 @@
   }
  ],
  "not_drawn": {
-  "net/model/launch_saving.py": "speed variants of the forward (D53 / D54: fused splat, one shared mover, sync-free forms, host copies), same arithmetic as the plain code and off by default; drawn as the plain boxes"
+  "net/netpath.py": "the folder the code works in (the problem's data folder): no stage of the chain"
  }
 }

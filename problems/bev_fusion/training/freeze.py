@@ -9,15 +9,19 @@ A prefix is the dotted name of a module (`obj_head.head.vel.`, `lane.`): it sele
 A prefix that matches no parameter is an ERROR (a typo would train the wrong thing silently), with the nearest names.
 
 What "frozen" means here, and the traps it avoids:
-- `requires_grad = False` on the parameters, so no gradient is computed or stored for them and the optimiser never sees them. The plan only ever FREEZES more: a parameter
-  that the model keeps frozen itself (the camera heads with freeze_camera, the res4 lane features) stays frozen, and a `train_only` prefix that selects only such parameters
+- `requires_grad = False` on the parameters, so no gradient is computed or stored for them and the optimiser never sees them. The plan only ever FREEZES more: a
+parameter
+  that the model keeps frozen itself (the camera heads with freeze_camera, the res4 lane features) stays frozen, and a `train_only` prefix that selects only
+  such parameters
   is an error (it would claim to train what it cannot train)
-- a parameter that has several names (a module registered under two parents, e.g. the TimeMover of the heads) is ONE parameter: it trains when any of its names is selected by
+- a parameter that has several names (a module registered under two parents, e.g. the TimeMover of the heads) is ONE parameter: it trains when any of its names
+is selected by
   `train_only` (or there is no `train_only`) and is frozen when any of its names is listed in `freeze`. Prefixes may use any of its names
 - a frozen module is kept in eval mode whatever the trainer does (`model.train()` before every epoch or evaluation would switch BatchNorm back to
   updating its running statistics, which changes the "frozen" weights: `unchanged` finds that); the mode is forced by a forward pre-hook, so it holds
   across every later `model.train()` call. Hooks fire when the module is CALLED (a module whose forward is not used through `__call__` is not covered)
-- buffers are covered by `frozen_keys`, `snapshot` and `unchanged` too, not only parameters, and by every name they have: the BatchNorm statistics of the frozen modules and every
+- buffers are covered by `frozen_keys`, `snapshot` and `unchanged` too, not only parameters, and by every name they have: the BatchNorm statistics of the frozen
+modules and every
   constant buffer; only the running statistics of normalisation layers in the TRAINED part are left out (they change)
 - the resume of a run is exact only with the same train_only / freeze (the optimiser state has one slot per trainable parameter): `signature` is a short
   text of the plan to put into the run's config copy and to compare on resume
@@ -124,10 +128,14 @@ def signature(train_only=(), freeze=()):
 
 
 def frozen_keys(model):
-    """state_dict keys (under every name they have) that a plan keeps fixed: the parameters without gradient, the buffers of the modules whose parameters are all frozen, and
-    every constant buffer (grids, depth bins: anything that is not the running statistics of a normalisation layer outside a frozen module). Their values must stay what
-    they were: the trainer's EMA skips them (an average of a constant is the constant only up to rounding, and 'rest frozen' should mean bit-equal in the EMA weights that
-    are evaluated, too), and `snapshot` / `unchanged` watch them. Only the running statistics of normalisation layers in the TRAINED part are left out: they change"""
+    """state_dict keys (under every name they have) that a plan keeps fixed: the parameters without gradient, the buffers of the modules whose parameters are
+    all frozen, and
+    every constant buffer (grids, depth bins: anything that is not the running statistics of a normalisation layer outside a frozen module). Their values must
+    stay what
+    they were: the trainer's EMA skips them (an average of a constant is the constant only up to rounding, and 'rest frozen' should mean bit-equal in the EMA
+    weights that
+    are evaluated, too), and `snapshot` / `unchanged` watch them. Only the running statistics of normalisation layers in the TRAINED part are left out: they
+    change"""
     frozen = {id(p) for p in model.parameters() if not p.requires_grad}
     in_frozen = set()
     for m in model.modules():

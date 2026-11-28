@@ -7,7 +7,8 @@ all 98 k front frames of the 510 scenes 27 GB, only the frames the dataset uses 
 
 Storage: one shard per scene in `root` - `<scene>.npy` (float16, (n, 198, 16, 44): 118 probability channels, then 80
 context channels) + `<scene>.index.npz` (the sample_data tokens, row order). Files are .npy / .npz: ignored by git, derived
-data of this project (rebuilt by this script from the raw nuScenes data and the pre-trained checkpoint; data/README.md). The build is resumable (a scene whose shard covers its tokens is skipped).
+data of this project (rebuilt by this script from the raw nuScenes data and the pre-trained checkpoint; data/README.md). The build is resumable (a scene whose
+shard covers its tokens is skipped).
 
 Use:
     store = FeatureStore(root)
@@ -16,24 +17,17 @@ Use:
     model = CachedBEVFusionModel(cfg)                                           # camera_bevs reads batch["prob"], ["ctx"]
 Equivalence: the cached model's camera BEVs equal the standard model's within float16 precision (self-test).
 Build:  python net/prep/build_feature_cache.py build <dataroot> <version> <root> [--split train|val] [--device cuda] [--limit N]
-Self-test (nuScenes mini, CPU): python net/prep/feature_cache.py
+Tests: tests/test_feature_cache.py
 """
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
 import glob
 import os
-import sys
 import time
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from geometry import lift_key
-from nuscenes_dataset import DST_HW, FrontRadarDataset, available_scenes, collate, pose_matrix
+from net.prep.nuscenes_dataset import DST_HW, FrontRadarDataset, collate
 
 N_PROB, N_CTX, FEAT_HW = 118, 80, (16, 44)
 CHECKPOINT = "models/pretrained/dualbev-r50-cbgs.pth"
@@ -156,7 +150,7 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         super().__init__(*args, **kw)
         if lane_images_older and self.n_cam < 2:
             raise ValueError("lane_images_older: the window has no older frame (n_cam 1)")
-        from cameras import CAMERAS
+        from net.prep.cameras import CAMERAS
         self.store, self.radar_cache, self.lane_images, self.store2 = store, radar_cache, lane_images, store2
         self.lane_images_older = bool(lane_images_older)
         if camera_features not in CAMERAS:
@@ -170,7 +164,7 @@ class CachedFrontRadarDataset(FrontRadarDataset):
             if st is not None:
                 check_feature_hw(st, src.features, src.cache)
             if src.features == "bevfusion":                  # the cache was made with BEVFusion's test pipeline (scale 0.48, crop 32 / 176)
-                from images import bevfusion_ida
+                from net.prep.images import bevfusion_ida
                 setattr(self, "ida" + src.suffix, bevfusion_ida())      # ida (alone) or ida2 (second source); the DualBEV family keeps self.ida
         self._rsig = radar_signature() if radar_cache else None
 
@@ -210,7 +204,7 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         for src in self.sources[1:]:
             item["ida" + src.suffix] = getattr(self, "ida" + src.suffix)
         if self.lane_images:
-            from image_cache import load_image, older_root
+            from net.prep.image_cache import load_image, older_root
             item["lane_img"] = load_image(self.lane_images, item["frames"][0]["token"])
             if self.lane_images_older:                    # t26 student_frames 'all': the older frames of the window (sweeps), the same crop
                 item["lane_img_old"] = torch.stack([load_image(older_root(self.lane_images), f["token"]) for f in item["frames"][1:]])
@@ -256,95 +250,3 @@ def collate_cached(items):
     if "lane_img_old" in items[0]:
         batch["lane_img_old"] = torch.stack([it["lane_img_old"] for it in items])                       # (B, F - 1, 3, H, W) uint8
     return batch
-
-
-def _selftest_radar():
-    """the radar cache returns exactly what FrontRadarDataset computes (dtypes, shapes, values); a second read comes from
-    the file; the parallel fill covers every sample."""
-    import tempfile
-    root_nusc = os.path.expanduser("~/data/nuscenes")
-    ds = FrontRadarDataset(root_nusc, "v1.0-mini", n_cam=3, cam_stride=2, with_gt=False)
-    with tempfile.TemporaryDirectory() as tmp:
-        cds = CachedFrontRadarDataset(root_nusc, "v1.0-mini", store=None, radar_cache=tmp, n_cam=3, cam_stride=2,
-                                      with_gt=False, nusc=ds.nusc)
-        cds.samples = cds.samples[:12]
-        for t in cds.samples[:3]:
-            s, cur = ds.nusc.get("sample", t), ds.gt.cam(t)
-            ref = ds._radar(s, cur)
-            first = cds._radar(s, cur)                                  # computed and written
-            assert os.path.exists(cds._radar_path(s, cur))
-            t0 = time.time()
-            second = cds._radar(s, cur)                                 # read back
-            t_read = time.time() - t0
-            for k in ref:
-                for got in (first, second):
-                    assert got[k].dtype == ref[k].dtype and torch.equal(got[k], ref[k]), k
-        n = build_radar_cache(cds, workers=2)
-        assert n == 9 and all(os.path.exists(cds._radar_path(ds.nusc.get("sample", t), ds.gt.cam(t))) for t in cds.samples)
-        assert not [f for f in os.listdir(tmp) if ".tmp" in f], "no partial files left"
-        # a whole item through the cached dataset: cached features attached, radar equal to the plain dataset's; a batch
-        # collates (this path broke once when the class lost its __getitem__)
-        fdir, item_checked = "data/cache/cam_feats_mini", False
-        if os.path.isdir(fdir):
-            store = FeatureStore(fdir)
-            cds.store, cds.stores = store, [store]                      # the item reads the per-source list made at construction
-            ok = [i for i, t in enumerate(cds.samples) if all(store.has(f["token"]) for f in cds._cam_frames(t)[0])]
-            if ok:
-                it = cds[ok[0]]
-                ref = ds[ds.samples.index(cds.samples[ok[0]])]
-                assert all("prob" in f and "ctx" in f for f in it["frames"])
-                assert all(torch.equal(it["radar"][k], ref["radar"][k]) for k in ref["radar"])
-                b = collate_cached([it, it])
-                assert b["prob"].shape[:2] == (2, 3) and len(b["radar"]["b"]) == 2 * len(ref["radar"]["x"])
-                item_checked = True
-    print(f"radar cache selftest ok: cached radar equals the computed one exactly (every column, dtype), read back in "
-          f"{1000 * t_read:.1f} ms, parallel fill of 9 samples, no partial files; whole cached item + collate "
-          f"{'checked' if item_checked else 'NOT checked (no mini feature cache)'}")
-
-
-def _selftest_shards():
-    """write_shard / FeatureStore without nuScenes: round trip, the feature-size guard, a cut build (row count != index)."""
-    import tempfile
-    with tempfile.TemporaryDirectory() as d:
-        a = np.random.rand(3, N_PROB + N_CTX, *FEAT_HW).astype(np.float16)
-        write_shard(d, "scene-x", a, ["t0", "t1", "t2"])
-        assert sorted(os.listdir(d)) == ["scene-x.index.npz", "scene-x.npy"], os.listdir(d)
-        s = FeatureStore(d)
-        p, c = s.get("t2")
-        assert torch.equal(torch.cat([p, c]), torch.from_numpy(a[2])) and s.feature_hw() == FEAT_HW
-        check_feature_hw(s, "dualbev")
-        try:
-            check_feature_hw(s, "bevfusion")
-            raise AssertionError("a DualBEV-size cache passed as BEVFusion features")
-        except ValueError:
-            pass
-        np.savez(os.path.join(d, "scene-x.index.npz"), tokens=np.array(["t0", "t1"], dtype="U40"))   # a build cut between the files
-        try:
-            FeatureStore(d).get("t0")
-            raise AssertionError("a shard whose row count differs from its index was read")
-        except RuntimeError:
-            pass
-        assert not shard_complete(d, "scene-x", {"t0", "t1"}), "a cut shard is rebuilt by the next build, not skipped"
-        write_shard(d, "scene-x", a, ["t0", "t1", "t2"])
-        assert shard_complete(d, "scene-x", {"t0", "t1"}) and not shard_complete(d, "scene-x", {"t9"})
-        failed = False
-        try:
-            write_shard(d, "scene-y", np.array([lambda: 0], dtype=object), ["t0"])      # np.save cannot pickle it
-        except Exception:                                                               # noqa: BLE001
-            failed = True
-        assert failed and not any(".tmp" in n for n in os.listdir(d)), os.listdir(d)
-    print("feature store selftest ok: atomic shard round trip (no temporary file left after a failure), feature-size guard, cut build "
-          "refused and rebuilt")
-
-
-def CachedBEVFusionModel(cfg=None):
-    """net/model/cached_model.CachedBEVFusionModel: kept under this name for the evaluation, which also loads pinned run snapshots."""
-    from cached_model import CachedBEVFusionModel as make
-    return make(cfg)
-
-
-if __name__ == "__main__":
-    checks = {"shards-selftest": _selftest_shards, "radar-selftest": _selftest_radar}
-    if len(sys.argv) != 2 or sys.argv[1] not in checks:
-        sys.exit("feature_cache.py: shards-selftest | radar-selftest (the caches are built with net/prep/build_feature_cache.py)")
-    checks[sys.argv[1]]()

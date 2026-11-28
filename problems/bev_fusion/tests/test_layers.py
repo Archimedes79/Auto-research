@@ -3,13 +3,15 @@
   STEP A, the table changes no number: every old layout (centrelines x dense_objects x stationary) gives the same channel list as the OLD layer_spec
      body (a reference copy below), the OLD map_terms body (a reference copy) gives the same terms and groups as the table-driven one on a synthetic batch
      (to 1e-9, and through BEVLoss.terms_at for the main, camera-aux and radar-aux heads), build_layer_targets reads the same GT layers, and a model with
-     the option off has exactly the state_dict keys and shapes of before (golden hashes made from the code of commit 479100d, the tiny config of v1's test_slots.py).
+     the option off has exactly the state_dict keys and shapes of before (golden hashes made from the code of commit 479100d, the tiny config of v1's
+     test_slots.py).
   STEP B, centreline_1m (off by default): the pooling has a known answer on a hand-made 4 x 4 example (mask max-pool, direction = the mask-weighted mean,
      truncated distance min-pool); the truncated distance equals scipy's exact transform; the pooled targets of a synthetic frame; the loss is finite, an
      oracle prediction costs ~0 and a reversed direction does not; through the tiny model the output 'sem_1m' has the shape (B, 4, X / 2, Y / 2), the loss is
      finite, and a gradient reaches every new parameter and the trunk; a model / loss disagreement on the flag is refused. check_config refuses an odd grid
-     for the 1 m row, and the slot kinds of v1's fallbacks.py (lift 's', temporal 'ego_gru', fusion 'cmx'; removed in v2) with a message, not an ImportError.
-Run (from the bev_fusion folder): wsl ~/miniconda3/envs/gcar/bin/python tests/test_layers.py   (PYTHONPATH = the repository root for GtGenerator)
+     for the 1 m row, and the slot kinds that left the code (lift 's', temporal 'ego_gru', radar 'pillars', lane 'rgb'; in the tag v1) with a message, not an
+     ImportError.
+Run (from the problem folder, with its module path): python tests/test_layers.py
 """
 import hashlib
 import math
@@ -21,15 +23,13 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests/support", "training", "net/prep", "net/model", "net/loss"):
-    sys.path.insert(0, os.path.join(ROOT, sub))
-import layers as LY  # noqa: E402
-import losses as L  # noqa: E402
-import synthetic_world as sw  # noqa: E402
-from feature_cache import CachedBEVFusionModel  # noqa: E402
-from lift_pd import Grid  # noqa: E402
-from model import ModelConfig, check_config  # noqa: E402
-from synthetic_batch import batch_for  # noqa: E402
+from net.model import layers as LY
+from net.loss import losses as L
+from tests.support import synthetic_world as sw
+from net.model.cached_model import CachedBEVFusionModel
+from net.model.lift_pd import Grid
+from net.model.model import ModelConfig, check_config
+from tests.support.synthetic_batch import batch_for
 
 torch.set_num_threads(2)
 fails = []
@@ -187,8 +187,8 @@ class OldBEVLoss(L.BEVLoss):
 # ------------------------------------------------------------------------------------------------ the synthetic frame
 grid = Grid()
 X, Y = grid.nx, grid.ny
-scene = L._demo_scene(sw)
-gts = {dt: [L.synthetic_gt(scene.step(dt) if dt else scene, grid)] for dt in (0.0, 0.5)}
+scene = sw.demo_scene()
+gts = {dt: [sw.synthetic_gt(scene.step(dt) if dt else scene, grid)] for dt in (0.0, 0.5)}
 
 
 def logits(n, h=X, w=Y, seed=3):
@@ -228,7 +228,8 @@ for cl, do in product((False, True), repeat=2):                   # the losses o
     got, gg = L.map_terms(logits(len(spec)), T, spec, w, cfg)
     ref, rg = old_map_terms(logits(len(spec)), T, old_layer_spec(cl, do), w, cfg)
     check(same(got, ref) and same(gg, rg) and len(got) > 0, f"map_terms = the old body: centrelines={cl} dense_objects={do} ({len(got)} terms, groups {list(gg)})")
-derived = {"boxes", "obj_cells", "w_map", "w_lines", "w_obj", "w_cam", "w_radar", "w_keep", "w_fusion", "radar_stationary"}      # made from the layers, not read
+# made from the layers, not read
+derived = {"boxes", "obj_cells", "w_map", "w_lines", "w_obj", "w_cam", "w_radar", "w_keep", "w_fusion", "radar_stationary"}
 for cl in (False, True):
     check(set(L.build_layer_targets(gts[0.0], L.LossConfig(centrelines=cl))) == set(old_target_keys(cl)) | derived,
           f"build_layer_targets reads the GT layers of before (centrelines={cl})")
@@ -247,7 +248,8 @@ for cl, rs in product((False, True), repeat=2):
     ref.update(("radar_aux." + k, v) for k, v in old_map_terms(p["radar_aux"], T, old_radar_aux_spec(rs), {"object": wr * T["w_keep"], "stationary": wr}, cfg)[0].items())
     check(same(terms, ref), f"BEVLoss.terms_at (centrelines={cl}, radar_stationary={rs}): sem, cam_aux and radar_aux terms = the old body ({len(ref)} terms)")
 
-# the whole BEVLoss at dt 0 and 0.5 against the old copy: every term, the dt-weighted groups, the Kendall terms (s_g set to non-trivial values), aux and the total
+# the whole BEVLoss at dt 0 and 0.5 against the old copy: every term, the dt-weighted groups, the Kendall terms (s_g set to non-trivial values), aux and the
+# total
 for cl, rs in product((False, True), repeat=2):
     cfg = L.LossConfig(centrelines=cl, radar_stationary=rs)
     new, old = L.BEVLoss(cfg, grid), OldBEVLoss(cfg, grid)
@@ -371,7 +373,8 @@ off, on = seeded(), seeded(centreline_1m=True)
 extra = sorted(set(on.state_dict()) - set(off.state_dict()))
 check(extra == [f"head_1m.net.{k}" for k in ("0.weight", "1.bias", "1.num_batches_tracked", "1.running_mean", "1.running_var", "1.weight", "3.bias", "3.weight")]
       and not set(off.state_dict()) - set(on.state_dict()), "option on: exactly one new SemanticHead (conv, BN, conv) in the state_dict, nothing else changes")
-for kw in ({}, {"aux_heads": False, "dense_objects": False, "object_direction": True}):          # the new head is built last: at one seed every other tensor is the same on / off
+# the new head is built last: at one seed every other tensor is the same on / off
+for kw in ({}, {"aux_heads": False, "dense_objects": False, "object_direction": True}):
     sa, sb = seeded(**kw).state_dict(), seeded(centreline_1m=True, **kw).state_dict()
     check(list(sb)[:len(sa)] == list(sa) and all(k.startswith("head_1m.") for k in list(sb)[len(sa):]) and all(torch.equal(sa[k], sb[k]) for k in sa),
           f"same seed, option on / off ({kw or 'default'}): all {len(sa)} shared tensors equal in value, key order and shape, the 1 m head's keys come last")
@@ -388,7 +391,7 @@ check(all(res["out"][dt]["sem_1m"].shape == (2, 4, gx // 2, gy // 2) for dt in (
 check(all("sem_1m" not in r["out"][0.0] for r in (off(batch_for(off.cfg), dts=(0.0,)),)), "option off: no 'sem_1m' output")
 tgrid = on.grid
 tscene = sw.Scene([sw.Box(9.0, -1.75, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0)], lanes=[-5.25, -1.75, 1.75, 5.25], v=8.0, omega=0.05)
-tg = {dt: [L.synthetic_gt(tscene.step(dt) if dt else tscene, tgrid)] * 2 for dt in (0.0, 0.5)}
+tg = {dt: [sw.synthetic_gt(tscene.step(dt) if dt else tscene, tgrid)] * 2 for dt in (0.0, 0.5)}
 lm = L.BEVLoss(L.LossConfig(centreline_1m=True), tgrid)
 out = lm({dt: {k: v for k, v in p.items() if k in ("sem", "sem_1m", "mass")} for dt, p in res["out"].items()}, tg, 1.0)
 t1 = {k: v for k, v in out.items() if k.startswith("sem1m.")}
@@ -423,7 +426,7 @@ try:
     check(False, "check_config refuses an odd grid for centreline_1m")
 except ValueError:
     check(True, "check_config refuses an odd grid for centreline_1m")
-for kw in ({"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"fusion": "cmx"}):
+for kw in ({"lift": "s"}, {"cam_temporal": "ego_gru"}, {"rad_temporal": "ego_gru"}, {"radar_kind": "pillars"}, {"lane_branch": "rgb"}):
     try:
         check_config(ModelConfig(**dict(TINY, **kw)))
         check(False, f"check_config refuses the removed slot kind {kw}")

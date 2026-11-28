@@ -1,4 +1,4 @@
-"""The whole camera + radar BEV chain, assembled from the blocks of training/ (plan.md sections 2-8).
+"""The whole camera + radar BEV chain, assembled from the blocks of net/model/.
 
     front camera frames (current + K-1 past, 12 Hz)            radar detections of all sweeps of the last 0.5 s
         |  pre-trained DualBEV image heads (frozen)                  |  already at the camera time (exact poses +
@@ -6,7 +6,7 @@
         |  lift (PD / P) per frame -> 1x1 reduce                      |  radar block (raster + properties + 2 convs)
         |  camera temporal fusion (window of original frames         |  radar temporal fusion (optional)
         |     + world-aligned memory / none)                         |
-        +---------------------------------- fusion (concat / gate) --+
+        +---------------------------------- fusion (concat) ---------+
                                          |
                            BEV trunk (ResNet pyramid + FPN)
                                          |
@@ -15,7 +15,7 @@
 
 The five layers (training/architecture.md): precompute (precompute.py: the visibility maps, made at the entry of forward only where a
 memory reads them), input interface (interface.py), the network slots below (one builder table per slot, check_config), output
-interface (per dt the maps and object maps; with dense_outputs the dense boxes and the soft line map of extract.py), post-processing
+interface (per dt the maps and object maps), post-processing
 (boxes(): extract.boxes_from_maps, the one box extractor; object_head.decode is the same function).
 Every block is chosen in ModelConfig; each option is either the plan's design or its paper fallback:
   lift          "pd"  lift PD, pull with depth weight (DualBEV / FastBEV++ / FB-BEV) - default
@@ -33,71 +33,66 @@ Every block is chosen in ModelConfig; each option is either the plan's design or
                 radar_per_frame (t25, needs "recurrent" and rad_temporal 'window_memory'), one sweep per camera frame (batch["radar_seq"]) through the
                 radar block and the radar temporal block over the same frames and ego chains as the camera (state["buf"]["rad_fused"], state["rad"]),
                 entering as a residual that starts as the identity (radar features + rad_mix(block output), rad_mix zero-initialised)
-  camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, net/model/student_encoder.py): a small trained image encoder replaces, for the current frame, the DualBEV
-                depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached outputs, or with student_frames "all" (t26) come from the student too
+  camera_student "" (default) | "evit_b1" | "resnet18" (t22 stage B, net/model/student_encoder.py): a small trained image encoder replaces, for the current
+  frame, the DualBEV
+                depth and context, the BEVFusion depth and context AND the lane branch's depth (it reads the DualBEV one); older frames keep their cached
+                outputs, or with student_frames "all" (t26) come from the student too
   rad_temporal  "none" (default: the 0.5 s of sweeps are already accumulated at point level), "window_memory"
-                (rad_static_gate: the memory writes only the cells the measured Doppler calls static)
-  fusion        "concat" (BEVFusion ConvFuser) - default, "gate" (GaussianCaR FeatureRectify)
+  fusion        concat (BEVFusion ConvFuser)
   heads         semantic (channels = losses.layer_spec, made from the layer table layers.py; centreline_1m adds the 1 m branch sem_1m) and
                 objects (CenterPoint, S5a), both decoded at any dt by
                 net/model/timed_head.py (the shared TimeMover moves S to dt); the output is the prediction layout of losses.BEVLoss;
                 S5c refinement works on the decoded boxes (object_head.py). forward(ego=...) takes the true gap per sample.
 Conventions as the blocks: grid x 0..60 m forward, y -26..26 m left, 0.5 m; maps (B, C, X, Y).
-Run the self-test (nuScenes mini, 2 samples): python net/model/model.py
+Tests: tests/test_model.py
 """
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
 from dataclasses import dataclass, field
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-import launch_saving as LS
-from augment import flip_cam
-from bev_trunk import BEVTrunk, SemanticHead
-from blocks_new import CtxAdapter, RadarPillars, SecondTrunk, ZSumReduce
-from camera_encoder import FrontCameraEncoder, depth_centres
-from extract import boxes_from_maps, dense_boxes, soft_line_map
-from fusion import ConcatFusion, GateFusion
-from lane_branch import LaneBranch
-from lift_pd import Grid, LiftPD, lift_key
-from layers import LEVELS, layer_spec, layer_spec_1m, radar_aux_spec
-from targets import NUSC_GROUPS, refine_gt_boxes, sample_targets
-from object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
-from precompute import Precompute
-from radar_bev import RadarBEV
-from radar_encoder import RadarEncoder, n_channels
-from temporal_fusion import TemporalFusion, as_chain
-from motion_block import MotionBlock, block_inputs
-from timed_head import TimedHead, TimeMover
-from cameras import CAMERAS, CameraSource  # noqa: F401
+from net.prep.augment import flip_cam
+from net.model.bev_trunk import BEVTrunk, SemanticHead
+from net.model.camera_encoder import FrontCameraEncoder, depth_centres
+from net.model.extract import boxes_from_maps
+from net.model.fusion import ConcatFusion
+from net.model.lane_branch import LaneBranch
+from net.model.lift_pd import Grid, LiftPD
+from net.model.layers import LEVELS, layer_spec, layer_spec_1m, radar_aux_spec
+from net.prep.targets import NUSC_GROUPS, refine_gt_boxes, sample_targets
+from net.model.object_head import BoxRefiner, ObjectHead, decode, refine_boxes, refine_candidates
+from net.prep.precompute import Precompute
+from net.model.radar_bev import RadarBEV
+from net.model.radar_encoder import RadarEncoder, n_channels
+from net.model.temporal_fusion import TemporalFusion, as_chain
+from net.model.motion_block import MotionBlock, block_inputs
+from net.model.timed_head import TimedHead, TimeMover
+from net.prep.cameras import CAMERAS  # noqa: F401
 
 Z_LEVELS = (-0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)        # a slice at the road plane (oracle-lift gate fix)
-REMOVED_KINDS = {("lift", "s"), ("cam_temporal", "ego_gru"), ("rad_temporal", "ego_gru"), ("fusion", "cmx")}   # v1's paper fallbacks (fallbacks.py): gone in v2
+# kinds that left the code: only in the tag v1
+REMOVED_KINDS = {("lift", "s"), ("cam_temporal", "ego_gru"), ("rad_temporal", "ego_gru"), ("radar_kind", "pillars"), ("lane_branch", "rgb")}
+RAD_MASK = "radar_hits"                                     # the write mask of the radar memory (precompute.MAPS): where the radar measured now
 
 
 @dataclass
 class ModelConfig:
-    camera_features: str = "dualbev"   # "dualbev" (frozen DualBEV heads, stride 16) | "bevfusion" (cached BEVFusion features, stride 8; needs feature_cache) | "dual" (both, needs feature_cache + feature_cache2)
+    # "dualbev" (frozen DualBEV heads, stride 16) | "bevfusion" (cached BEVFusion features, stride 8; needs feature_cache) | "dual" (both, needs feature_cache +
+    # feature_cache2)
+    camera_features: str = "dualbev"
     lift: str = "pd"
     cam_temporal: str = "window_memory"
     cam_buffer: str = "window"         # t21: what the camera temporal block carries from the past: "window" (the batch's n_cam frames, today) | "pair" (the
                                        # previous raw BEV) | "recurrent" (the previous fused output); the last two need cam_temporal 'window_memory'
     rad_temporal: str = "none"
-    rad_static_gate: bool = False      # the radar memory writes only where the measured Doppler says static (precompute.radar_static), not
-                                       # everywhere a detection is (radar_hits): a moving car is not remembered; needs rad_temporal
-    rad_static_vr: float = 1.0         # the Doppler (m/s) at which a detection counts as 1/e static: weight exp(-(vr / rad_static_vr)^2)
-    radar_per_frame: bool = False      # t25: the radar branch runs per camera frame inside the recurrent unroll: each frame's own radar set (batch["radar_seq"],
-                                       # nuscenes_dataset radar_per_frame; the dataset follows this switch, train.make_datasets) goes through the radar block and
-                                       # rad_temporal with the previous fused radar BEV as its past, like the camera; needs cam_buffer 'recurrent' and rad_temporal
-                                       # 'window_memory'. The memory enters as a residual that starts as the identity:
-                                       # fused = radar features + rad_mix(block output), rad_mix a zero-initialised 1 x 1 conv (new keys rad_mix.*), so a fresh block
-                                       # does not scramble the radar input of the pretrained fusion; the write mask is made per frame from that frame's sweep.
-                                       # Know: the radar side loss reads the newest frame's features only, the motion block reads batch["radar"] (= the newest set)
-    fusion: str = "concat"
+    # t25: the radar branch runs per camera frame inside the recurrent unroll: each frame's own radar set (batch["radar_seq"], nuscenes_dataset radar_per_frame;
+    # the dataset follows this switch, batches.make_datasets) goes through the radar block and rad_temporal with the previous fused radar BEV as its past, like
+    # the camera; needs cam_buffer 'recurrent' and rad_temporal 'window_memory'. The memory enters as a residual that starts as the identity: fused = radar
+    # features + rad_mix(block output), rad_mix a zero-initialised 1 x 1 conv (new keys rad_mix.*), so a fresh block does not scramble the radar input of the
+    # pretrained fusion; the write mask is made per frame from that frame's sweep. Know: the radar side loss reads the newest frame's features only, the motion
+    # block reads batch["radar"] (= the newest set)
+    radar_per_frame: bool = False
     c_cam: int = 64
     c_rad: int = 32
     c_fuse: int = 96
@@ -105,40 +100,47 @@ class ModelConfig:
     trunk_detail: int = 0              # stride-1 detail path (bev_trunk.DetailPath) channels, 0 = off
     head_channels: int = 0             # 1x1 reduction of the trunk output before the heads (CenterPoint-style light heads), 0 = off
     trunk_pretrained: str = ""         # DualBEV checkpoint to initialise the BEV encoder (width 1.0, c_fuse 80), "" = random
-    trunk_kind: str = "dualbev"        # "dualbev" (ResNet pyramid + FPN-LSS) | "second" (SECOND + SECONDFPN, blocks_new.py)
     trunk_fpn_original: bool = False   # t4: FPN-LSS concatenation order of BEVDet / DualBEV (stage 0 first), what the pre-trained weights expect
-    radar_kind: str = "raster"         # "raster" (means + 2 convs) | "pillars" (point MLP + scatter-max, blocks_new.py) | "off" (zeros)
+    radar_kind: str = "raster"         # "raster" (means + 2 convs) | "off" (zeros)
                                        # | "delta_slots" (radar_encoder.RadarEncoder: lossless delta-coded slot raster + 2 convs; needs c_rad >= 61;
                                        # its reconstruction side loss is switched on by TrainConfig.radar_aux)
-    cam_collapse: str = "zconv"        # try 7: "zconv" (1x1 conv over Z x 80 channels) | "zsum" (sum over heights, then 1x1; blocks_new.ZSumReduce)
-    cam_adapter: bool = False          # try 6 (t3_improve_loop): trainable residual adapter on the image context features before the lift
     camera_off: bool = False           # study arm: the camera BEV is zero (radar-only system), the image heads are not run
     p_drop: float = 0.2                # modality dropout of the fusion in training (fusion.drop_modality: per sample the camera or the
                                        # radar input is zeroed, p / 2 each); forced to 0 when a sensor is off (camera_off, radar_kind
                                        # "off"): dropping the only live sensor would blank the sample (review 2026-10-31 pass 2)
     lane_branch: str = ""              # t7: stride-4 lane branch of the current frame added to the camera BEV after the temporal
-                                       # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1) | "rgb" (CNN from scratch);
+                                       # block (lane_branch.py): "" = off | "res4" (frozen ResNet-50 layer 1);
                                        # camera_features 'dualbev' or 'dual' (t20: it reads the first source = DualBEV, and adds to the merged BEV)
     lane_pretrained: str = "models/pretrained/dualbev-r50-cbgs.pth"    # weights of the "res4" features
-    lane_use_depth: bool = True        # t24: the lane branch's lift: True = lift PD (weighted by the DualBEV depth probabilities, t7 / t20), False = lift P (pull without the weight,
-                                       # same table, same tensors: a checkpoint with the branch loads either way). check_config refuses False without lane_branch.
-                                       # Know: with False the lane output sends no gradient to the depth head, also not to a trainable camera_student's depth (lift PD does); no config uses it.
-    camera_student: str = ""           # t22 stage B: "" = off | a key of STUDENTS (net/model/student_encoder.py): a small trained image encoder that replaces the cached teacher outputs of
-                                       # the CURRENT frame (frame 0) of both feature sources, from batch["lane_img"] (TrainConfig.lane_images); older frames keep their cached teacher
-                                       # outputs (student_frames 'all': they come from the student too), and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the main lift uses), gradient included.
-                                       # Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the same on or off).
-                                       # Know: a frozen student's EMA copy drifts by about 3e-7 and warm_start / the evaluation apply that copy, not student_init; zero_cam (the
-                                       # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of every key frame of a clip stay in memory: measured 16.3 GB at batch 3 x clips of 3 (paging on a 12 GB card), 9.1 GB with the encoder and the lift recomputed in the backward (checkpoint_encode, camera_bevs; +2.6 s per step)
-    student_init: str = ""             # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
-    student_trainable: bool = False    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the checkpoints (loaded from student_init)
-    student_frames: str = "current"    # the frames the student replaces: "current" (frame 0 only; the older frames of a pair / window keep their cached teacher outputs, the stored configs of stage B) |
-                                       # "all" (t26, back from the cut stage B2, tag bf/t22.B2_s0: every frame of the window from its own image, <lane_images>/sweeps, training/build_image_cache.py build-cache-older; the
-                                       # newest frame with a graph, the older F - 1 in one batched forward under no_grad, so they enter as constants (values, not gradients: in training mode the BatchNorm
-                                       # statistics behind the lift still couple the frames); the anchor loss and the lane branch stay on frame 0; a one-frame (stream) batch needs no older image)
+    # t24: the lane branch's lift: True = lift PD (weighted by the DualBEV depth probabilities, t7 / t20), False = lift P (pull without the weight, same table,
+    # same tensors: a checkpoint with the branch loads either way). check_config refuses False without lane_branch. Know: with False the lane output sends no
+    # gradient to the depth head, also not to a trainable camera_student's depth (lift PD does); no config uses it.
+    lane_use_depth: bool = True
+    # t22 stage B: "" = off | a key of STUDENTS (net/model/student_encoder.py): a small trained image encoder that replaces the cached teacher outputs of the
+    # CURRENT frame (frame 0) of both feature sources, from batch["lane_img"] (TrainConfig.lane_images); older frames keep their cached teacher outputs
+    # (student_frames 'all': they come from the student too), and the lane branch (lane_branch) lifts with the student's DualBEV depth of frame 0 (the one the
+    # main lift uses), gradient included. Needs the cached chain with camera_features 'dual'; module `student`, built LAST (every other tensor's init is the
+    # same on or off). Know: a frozen student's EMA copy drifts by about 3e-7 and warm_start / the evaluation apply that copy, not student_init; zero_cam (the
+    # evaluation's camera response) feeds the student a black image, not nothing; with seq_bptt the graphs of every key frame of a clip stay in memory: measured
+    # 16.3 GB at batch 3 x clips of 3 (paging on a 12 GB card), 9.1 GB with the encoder and the lift recomputed in the backward (checkpoint_encode, camera_bevs;
+    # +2.6 s per step)
+    camera_student: str = ""
+    # a distillation run folder (its newest checkpoint) or a checkpoint file: the student starts from its EMA weights; "" = random (only with student_trainable)
+    student_init: str = ""
+    # True: the student trains in the chain (lr group 'student', BatchNorm statistics fixed; add 'student' to grad_clip_split); False: frozen, not part of the
+    # checkpoints (loaded from student_init)
+    student_trainable: bool = False
+    # the frames the student replaces: "current" (frame 0 only; the older frames of a pair / window keep their cached teacher outputs, the stored configs of
+    # stage B) | "all" (t26, back from the cut stage B2, tag bf/t22.B2_s0: every frame of the window from its own image, <lane_images>/sweeps,
+    # training/build_image_cache.py build-cache-older; the newest frame with a graph, the older F - 1 in one batched forward under no_grad, so they enter as
+    # constants (values, not gradients: in training mode the BatchNorm statistics behind the lift still couple the frames); the anchor loss and the lane branch
+    # stay on frame 0; a one-frame (stream) batch needs no older image)
+    student_frames: str = "current"
     oversample: int = 4
     centrelines: bool = False          # head layout = losses.layer_spec(centrelines, dense_objects)
-    centreline_1m: bool = False        # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer
-                                       # table (layers.py): output p["sem_1m"] = losses.layer_spec_1m; LossConfig.centreline_1m must agree. Off = no new parameter
+    # plan 2026-11-03: a 1 m branch (SemanticHead on the sem head's state, 2 x 2 average-pooled) with the centre-line row of the layer table (layers.py): output
+    # p["sem_1m"] = losses.layer_spec_1m; LossConfig.centreline_1m must agree. Off = no new parameter
+    centreline_1m: bool = False
     dense_objects: bool = True
     radar_stationary: bool = True      # radar aux head = losses.radar_aux_spec(radar_stationary)
     aux_heads: bool = True
@@ -150,10 +152,6 @@ class ModelConfig:
     motion_strides: tuple = (4, 2, 1)  # its pyramid levels in cells, coarse to fine; (4, 2) = the runtime arm without the 0.5 m level
     box_vel_from_field: bool = False   # t15: the object head's `vel` = the motion block's field (at dt != 0 moved with the state, the
                                        # vector turned with the ego yaw); the object head's own vel branch stays (unused for the output)
-    share_mover: bool = False          # D53: the semantic and the object head read the same moved state: ONE splat per dt instead of two (same math; the
-                                       # sum of the two heads' gradients meets in one backward node, so a GPU run is equal up to rounding, a CPU forward bit for bit)
-    splat_fused: bool = False          # D53: splat.splat scatters the four bilinear corners in one call (launch_saving.py: same arithmetic, fewer launches)
-    sync_free: bool = False            # D53 / D54: fixed-shape / host-side forms of the data-dependent steps of the forward (radar raster, memory re-centring; the dt embedding filled on the GPU) and the reads of batch["host"] (projection-table cache key, flip flags) instead of waits for the GPU; launch_saving.py
     refine: bool = False               # S5c: deformable box refinement (object_head.BoxRefiner, n = 1, dt-aware) on the
                                        # object head's features at the target time; trained on decoded + jittered GT
     refine_k: int = 50                 # candidates: top-k decoded boxes per sample + refine_jitter copies of each GT box
@@ -162,13 +160,11 @@ class ModelConfig:
     freeze_camera: bool = True
     z_levels: tuple = Z_LEVELS
     grid_kwargs: dict = field(default_factory=dict)
-    dense_outputs: bool = False        # output interface: per dt the dense box output and the soft line map (extract.py); off by default
-                                       # (no loss and no evaluation reads them yet, stored ms stay comparable)
 
 
 # ------------------------------------------------------------------ the network slots: one builder table each (kind -> block)
 def _bevfusion_depths():
-    from bevfusion_camera import DEPTHS
+    from net.model.bevfusion_camera import DEPTHS
     return DEPTHS
 
 
@@ -176,18 +172,13 @@ def _zconv(nz, n_ctx, c):
     return nn.Sequential(nn.Conv2d(nz * n_ctx, c, 1, bias=False), nn.BatchNorm2d(c), nn.ReLU(True))
 
 
-def _dualbev_trunk(cfg, p_drop):
+def _dualbev_trunk(cfg):
     trunk = BEVTrunk(cin=cfg.c_fuse, width=cfg.trunk_width, detail=cfg.trunk_detail, fpn_original_order=cfg.trunk_fpn_original)
     if cfg.trunk_pretrained:                                          # detection-trained BEV encoder of DualBEV (SOA init)
         rep = trunk.load_pretrained(cfg.trunk_pretrained)
         if rep["missing"] or rep["shape_mismatch"]:
             raise RuntimeError(f"trunk weights do not fit: {rep['missing'][:3]} {rep['shape_mismatch'][:3]}")
     return trunk, trunk.img_bev_encoder_neck.out_channels + cfg.trunk_detail
-
-
-def _second_trunk(cfg, p_drop):
-    trunk = SecondTrunk(cin=cfg.c_fuse)
-    return trunk, trunk.out_channels
 
 
 def source_lift(src, cfg, grid):
@@ -199,23 +190,21 @@ def source_lift(src, cfg, grid):
 
 LIFTS = {"pd": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=True, oversample=cfg.oversample, depth_centres=depths, **kw),
          "p": lambda grid, depths, cfg, **kw: LiftPD(grid, use_depth=False, oversample=cfg.oversample, depth_centres=depths, **kw)}
-COLLAPSES = {"zconv": _zconv, "zsum": ZSumReduce}                     # height collapse of the lifted volume
 TEMPORALS = {"window_memory": lambda c, grid: TemporalFusion(c, c, grid),     # temporal slot, the same table for camera and radar
              "none": lambda c, grid: None}
 RADARS = {"raster": lambda grid, c: RadarBEV(grid, c), "off": lambda grid, c: RadarBEV(grid, c),
-          "pillars": lambda grid, c: RadarPillars(grid, c),
           "delta_slots": lambda grid, c: RadarEncoder(grid, C=c)}      # radar_encoder.py: delta-coded slot raster, pass-through start, side loss
+LANES = ("", "res4")                                                  # the lane branch: off, or the frozen ResNet-50 stage of the DualBEV backbone
 CAM_BUFFERS = ("window", "pair", "recurrent")                          # what the camera temporal block gets from the past (forward: _camera_buffered)
-FUSIONS = {"concat": ConcatFusion, "gate": GateFusion}
-TRUNKS = {"dualbev": _dualbev_trunk, "second": _second_trunk}
 
 
 def _student(backbone):
-    from student_encoder import StudentEncoder
+    from net.model.student_encoder import StudentEncoder
     return StudentEncoder(backbone, pretrained=False, warp_h8=True)           # the weights come from student_init (or from the training)
 
 
-# camera student (t22 stage B, option camera_student): kind -> the encoder that stands in for the cached teachers of the current frame; which of its outputs replaces which
+# camera student (t22 stage B, option camera_student): kind -> the encoder that stands in for the cached teachers of the current frame; which of its outputs
+# replaces which
 # feature family's cached tensors: StudentEncoder.HEAD_OF
 STUDENTS = {"evit_b1": lambda: _student("efficientvit_b1"), "resnet18": lambda: _student("resnet18")}
 
@@ -224,24 +213,23 @@ def _build_student(cfg):
     """the module `student` of ModelConfig.camera_student: its trained weights (student_init), BatchNorm statistics fixed, frozen unless student_trainable"""
     student = STUDENTS[cfg.camera_student]()
     if cfg.student_init:
-        from student_encoder import load_trained
+        from net.model.student_encoder import load_trained
         load_trained(student, cfg.student_init)
     student.keep_bn_eval()
     student.requires_grad_(cfg.student_trainable)
-    student.checkpoint_encode = bool(cfg.student_trainable)       # a training student keeps no backbone activations of the 9 frames of a micro-batch (StudentEncoder.forward)
+    # a training student keeps no backbone activations of the 9 frames of a micro-batch (StudentEncoder.forward)
+    student.checkpoint_encode = bool(cfg.student_trainable)
     return student
 
 
 def check_config(cfg):
     """every unknown kind and every combination of slot kinds that does not fit, in one place (one ValueError naming all)"""
-    errs = [f"{name}={val!r}: one of {sorted(table)}" + (" (removed in v2 with fallbacks.py; tag v1)" if (name, val) in REMOVED_KINDS else "")
+    errs = [f"{name}={val!r}: one of {sorted(table)}" + (" (removed in v2; tag v1)" if (name, val) in REMOVED_KINDS else "")
             for name, val, table in
-            (("camera_features", cfg.camera_features, CAMERAS), ("lift", cfg.lift, LIFTS), ("cam_collapse", cfg.cam_collapse, COLLAPSES),
+            (("camera_features", cfg.camera_features, CAMERAS), ("lift", cfg.lift, LIFTS), ("lane_branch", cfg.lane_branch, LANES),
              ("cam_temporal", cfg.cam_temporal, TEMPORALS), ("cam_buffer", cfg.cam_buffer, CAM_BUFFERS), ("rad_temporal", cfg.rad_temporal, TEMPORALS),
-             ("radar_kind", cfg.radar_kind, RADARS), ("fusion", cfg.fusion, FUSIONS), ("trunk_kind", cfg.trunk_kind, TRUNKS))
+             ("radar_kind", cfg.radar_kind, RADARS))
             if val not in table]
-    if len(CAMERAS.get(cfg.camera_features, ())) > 1 and cfg.cam_adapter:
-        errs.append(f"camera_features={cfg.camera_features!r} (several feature sources) is not supported with cam_adapter")
     if cfg.lane_branch and (cfg.camera_features not in CAMERAS or CAMERAS[cfg.camera_features][0].features != "dualbev"):
         errs.append("lane_branch reads the depth, the calibration and the crop of the FIRST feature source (the lane image is the DualBEV one): it needs "
                     "camera_features 'dualbev' or 'dual'")
@@ -249,10 +237,6 @@ def check_config(cfg):
         errs.append(f"cam_buffer={cfg.cam_buffer!r} buffers a frame for the window-memory block: it needs cam_temporal 'window_memory' (is {cfg.cam_temporal!r})")
     if cfg.radar_kind == "delta_slots" and cfg.c_rad < n_channels():
         errs.append(f"radar_kind='delta_slots' needs c_rad >= {n_channels()} (one channel per input channel: the pass-through start); c_rad = {cfg.c_rad}")
-    if cfg.rad_static_gate and (cfg.rad_temporal == "none" or cfg.radar_kind == "off"):
-        errs.append("rad_static_gate gates the write of the radar memory: it needs rad_temporal 'window_memory' and a radar")
-    if cfg.rad_static_vr <= 0:
-        errs.append(f"rad_static_vr must be positive (m/s), is {cfg.rad_static_vr}")
     if not isinstance(cfg.radar_per_frame, bool):                     # a config value null / 0 / "false" must not silently switch the radar branch
         errs.append(f"radar_per_frame must be true or false, is {cfg.radar_per_frame!r}")
     elif cfg.radar_per_frame and (cfg.cam_buffer != "recurrent" or cfg.rad_temporal != "window_memory" or cfg.radar_kind == "off"):
@@ -263,13 +247,12 @@ def check_config(cfg):
     if not isinstance(cfg.lane_use_depth, bool):                      # t24: a config value null / 0 / "false" must not silently pick a lift
         errs.append(f"lane_use_depth must be true or false, is {cfg.lane_use_depth!r}")
     elif not cfg.lane_use_depth and not cfg.lane_branch:
-        errs.append("lane_use_depth false does nothing without lane_branch: set lane_branch 'res4' / 'rgb' or leave it true")
+        errs.append("lane_use_depth false does nothing without lane_branch: set lane_branch 'res4' or leave it true")
     if cfg.camera_student:                                            # t22 stage B
         if cfg.camera_student not in STUDENTS:
             errs.append(f"camera_student={cfg.camera_student!r}: one of {sorted(STUDENTS)}")
         if cfg.camera_features != "dual":
             errs.append("camera_student replaces the cached outputs of BOTH feature sources (DualBEV and BEVFusion) of the current frame: it needs camera_features 'dual'")
-        # cam_adapter needs no rule of its own: 'dual' (several feature sources) refuses it above
         if cfg.camera_off:
             errs.append("camera_student reads the camera image: it cannot be combined with camera_off")
         if not cfg.student_trainable and not cfg.student_init:
@@ -299,8 +282,10 @@ def check_config(cfg):
 
 
 class BEVFusionModel(nn.Module):
-    CACHED = False                         # True in the cached model (feature_cache.CachedBEVFusionModel): camera_student replaces cached outputs, so it needs it
-    _student_side = None                   # camera_student: the student's and the cached teacher's current-frame tensors of the last camera_bevs call, taken by _forward
+    # True in the cached model (feature_cache.CachedBEVFusionModel): camera_student replaces cached outputs, so it needs it
+    CACHED = False
+    # camera_student: the student's and the cached teacher's current-frame tensors of the last camera_bevs call, taken by _forward
+    _student_side = None
 
     def __init__(self, cfg=None):
         super().__init__()
@@ -321,27 +306,25 @@ class BEVFusionModel(nn.Module):
         n_ctx, nz = 80, len(cfg.z_levels)
         srcs = CAMERAS[cfg.camera_features]                          # one lift + collapse per feature source (the order = the checkpoint's)
         self.lift = source_lift(srcs[0], cfg, self.grid)
-        self.cam_adapter = CtxAdapter(n_ctx) if cfg.cam_adapter else None
-        self.cam_reduce = COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam)
+        self.cam_reduce = _zconv(nz, n_ctx, cfg.c_cam)
         for src in srcs[1:]:                                         # t10 "dual": lift2 + cam_reduce2 (BEVFusion features, stride 8)
             setattr(self, "lift" + src.suffix, source_lift(src, cfg, self.grid))
-            setattr(self, "cam_reduce" + src.suffix, COLLAPSES[cfg.cam_collapse](nz, n_ctx, cfg.c_cam))
+            setattr(self, "cam_reduce" + src.suffix, _zconv(nz, n_ctx, cfg.c_cam))
         if len(srcs) > 1:                                            # the sources' BEVs merged back to c_cam
             self.cam_merge = nn.Sequential(nn.Conv2d(len(srcs) * cfg.c_cam, cfg.c_cam, 1, bias=False), nn.BatchNorm2d(cfg.c_cam),
                                            nn.ReLU(True))
         # temporal slot, one block per branch (the same table)
         self.cam_temporal = TEMPORALS[cfg.cam_temporal](cfg.c_cam, self.grid)
         # lane add-on (option): stride-4 branch of the current frame, added after the camera's temporal block
-        self.lane = (LaneBranch(self.grid, depth_centres(), kind=cfg.lane_branch, c_out=cfg.c_cam, oversample=cfg.oversample,
+        self.lane = (LaneBranch(self.grid, depth_centres(), c_out=cfg.c_cam, oversample=cfg.oversample,
                                 pretrained=cfg.lane_pretrained, use_depth=cfg.lane_use_depth) if cfg.lane_branch else None)
         # radar slot
         self.radar = RADARS[cfg.radar_kind](self.grid, cfg.c_rad)
         self.rad_temporal = TEMPORALS[cfg.rad_temporal](cfg.c_rad, self.grid)
-        self._rad_mask = "radar_static" if cfg.rad_static_gate else "radar_hits"        # the write mask of the radar memory (precompute.MAPS)
         # fusion + backbone slots
         p_drop = 0.0 if (cfg.camera_off or cfg.radar_kind == "off") else cfg.p_drop
-        self.fusion = FUSIONS[cfg.fusion](cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
-        self.trunk, c = TRUNKS[cfg.trunk_kind](cfg, p_drop)
+        self.fusion = ConcatFusion(cfg.c_cam, cfg.c_rad, cfg.c_fuse, p_drop=p_drop)
+        self.trunk, c = _dualbev_trunk(cfg)
         if hasattr(self.trunk, "head"):
             del self.trunk.head                                      # the heads below decode the trunk features
         self.head_reduce = None
@@ -368,12 +351,13 @@ class BEVFusionModel(nn.Module):
             self.aux_cam = SemanticHead(cfg.c_cam, len(layer_spec(False, True)))
             self.aux_rad = SemanticHead(cfg.c_rad, len(radar_aux_spec(cfg.radar_stationary)))
         self.c_trunk = c
-        self._dist_idx = [i for i, s in enumerate(self.spec) if s[1] == "dist"]    # distance channels -> the soft line map
         self.spec_1m = layer_spec_1m(cfg.centreline_1m)
         self.head_1m = SemanticHead(c, len(self.spec_1m)) if self.spec_1m else None   # one pyramid level down, reads the sem head's moved state.
         # Built LAST: at one seed the init of every other module is the same with the option on or off (the random numbers it draws come after theirs)
-        self.student = _build_student(cfg) if cfg.camera_student else None            # t22: the image encoder that stands in for the cached teachers of frame 0 (the cached model uses it)
-        self.rad_mix = None                                                           # t25 radar_per_frame (built after the student too): the residual of the radar memory starts as the identity
+        # t22: the image encoder that stands in for the cached teachers of frame 0 (the cached model uses it)
+        self.student = _build_student(cfg) if cfg.camera_student else None
+        # t25 radar_per_frame (built after the student too): the residual of the radar memory starts as the identity
+        self.rad_mix = None
         if cfg.radar_per_frame:
             self.rad_mix = nn.Conv2d(cfg.c_rad, cfg.c_rad, 1)
             nn.init.zeros_(self.rad_mix.weight)
@@ -392,35 +376,18 @@ class BEVFusionModel(nn.Module):
             prob, ctx = self.camera.image_features(img.flatten(0, 1), batch["cam_vec"].flatten(0, 1))
         prob, ctx = prob.view(B, Fn, *prob.shape[1:]), ctx.view(B, Fn, *ctx.shape[1:])
         self._prob0 = prob[:, 0]                                  # depth of the current frame (lane branch)
-        if self.cam_adapter is not None:
-            ctx = self.cam_adapter(ctx.flatten(0, 1)).view_as(ctx)
         hw = img.shape[-2:]
-        keys = self._lift_keys(batch, hw)
         bevs = []
         for b in range(B):                                       # one calibration per sample (scenes differ)
-            vol = self.lift(ctx[b], prob[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], hw, batch["ida"], key=None if keys is None else keys[b])
+            vol = self.lift(ctx[b], prob[b], batch["K"][b, 0], batch["T_cam_car"][b, 0], hw, batch["ida"])
             bevs.append(self.cam_reduce(vol))
         return torch.stack(bevs)
 
     @staticmethod
-    def _lift_keys(batch, hw, ida_name="ida"):
-        """the projection-table cache key of every sample's current-frame camera (lift_pd.lift_key), made from the CPU copies in batch["host"] (train.host_side; kept in the
-        batch only when sync_free is on), so the lift does not wait for the GPU to read its calibration; None when the batch has no such copies (the lift makes the key itself).
-        ida_name: the batch entry of the crop transform this lift uses ('ida', or 'ida2' for the BEVFusion source)"""
-        host = batch.get("host")
-        if not host or "K" not in host or "T_cam_car" not in host or ((ida_name in batch) != (ida_name in host)):
-            return None
-        Kh, Th, ida = host["K"], host["T_cam_car"], host.get(ida_name)
-        return [lift_key(Kh[b, 0], Th[b, 0], hw, ida) for b in range(Kh.shape[0])]
-
-    @staticmethod
     def _flip_any(batch):
-        """True if a sample of the batch is mirrored: read from the CPU copy in batch["host"] when there is one (a `.any()` of the GPU tensor waits for the GPU)"""
+        """True if a sample of the batch is mirrored"""
         fl = batch.get("flip")
-        if fl is None:
-            return False
-        hf = (batch.get("host") or {}).get("flip")
-        return bool((fl if hf is None else hf).any())
+        return fl is not None and bool(fl.any())
 
     def camera_visibility(self, batch, like):
         """(B, 1, X, Y): the cells the current camera frame observes (LiftPD.visibility per sample) - the obs_mass of the
@@ -546,7 +513,8 @@ class BEVFusionModel(nn.Module):
         return cam, cam_state, v_levels, new_buf, rad
 
     def _encode_radar(self, radar, B, device):
-        """the radar block on one radar set -> (radar BEV (B, c_rad, X, Y), radar_side or None); radar_kind 'delta_slots': the side loss (train.py) reads
+        """the radar block on one radar set -> (radar BEV (B, c_rad, X, Y), radar_side or None); radar_kind 'delta_slots': the side loss
+        (net/loss/train_terms.py) reads
         the features and the lossless raster"""
         if self.cfg.radar_kind == "off":
             return torch.zeros(B, self.cfg.c_rad, self.grid.nx, self.grid.ny, device=device), None
@@ -566,7 +534,7 @@ class BEVFusionModel(nn.Module):
                              f"got {None if seq is None else len(seq)}")
         B, pre = like.shape[0], Precompute.from_model(self)
         enc = [self._encode_radar(r, B, like.device) for r in seq]
-        return {"bevs": torch.stack([e[0] for e in enc], 1), "side": enc[0][1], "obs": [pre.radar_mask(self._rad_mask, r, B).to(like) for r in seq]}
+        return {"bevs": torch.stack([e[0] for e in enc], 1), "side": enc[0][1], "obs": [pre.radar_mask(RAD_MASK, r, B).to(like) for r in seq]}
 
     def advance(self, batch, state=None, step=None):
         """stream mode, a frame that needs no output (cam_buffer 'pair' / 'recurrent'): lift + the camera temporal block only - no motion block,
@@ -617,25 +585,21 @@ class BEVFusionModel(nn.Module):
         cold start) and `step` is the ego step since it, one triple or the per-sweep chain (a list of triples like batch["steps"][k], which
         is what the batch path uses); with 'recurrent' a batch of several frames continues from state["buf"] too when `step` is given (the
         trainer's keyframe gap step), 'pair' never. radar_per_frame (t25): batch["radar_seq"] holds one radar set per camera frame (a stream step: one), the
-        radar state stepped per frame is state["rad"] and the buffer also holds the fused radar BEV (state["buf"]["rad_fused"]). Returns {"out": preds, "state": ..., "features": trunk
+        radar state stepped per frame is state["rad"] and the buffer also holds the fused radar BEV (state["buf"]["rad_fused"]). Returns {"out": preds, "state":
+        ..., "features": trunk
         features}, preds in the layout of losses.BEVLoss: {dt: {"sem", "obj" (object head maps), "mass" (splat mass at dt), "v_hat" (dt = 0),
         "cam_aux" / "radar_aux" (dt = 0, training only)}}. ego: optional {nominal dt: (dt, v, omega)} as (B,) tensors -
         the true gap to the target keyframe and the gap-mean ego motion per sample (the GT keyframe is 0.40-0.60 s
         away, not the nominal 0.5 s); without it a head decodes at the nominal dt with the batch's v, omega. The output
         key stays the nominal dt."""
-        with LS.enabled(splat=self.cfg.splat_fused, sync=self.cfg.sync_free):       # D53: the launch-saving variants, for this call only
-            return self._forward(batch, dts, state, step, ego)
-
-    def _forward(self, batch, dts, state, step, ego):
         state = state or {}
-        if "host" in batch and not self.cfg.sync_free:           # D54: the CPU copies of the calibration and the flip flags are used only with sync_free; without it the old code runs
-            batch = {k: v for k, v in batch.items() if k != "host"}
         need = (("vis_cam",) if self.cam_temporal is not None else ()) + \
-               ((self._rad_mask,) if self.rad_temporal is not None and not self.cfg.radar_per_frame else ())     # every memory kind gets its write mask (arms
+               ((RAD_MASK,) if self.rad_temporal is not None and not self.cfg.radar_per_frame else ())     # every memory kind gets its write mask (arms
                                                                                     # matched); radar_per_frame makes it per frame in _radar_frames
         batch = Precompute.from_model(self)(dict(batch), need) if need else batch   # layer 1: only the maps a memory reads, in
         cam_frames = self.camera_bevs(batch)                                         # the batch's frame (kept when precomputed)
-        student_side, self._student_side = self._student_side, None                  # camera_student: set by the cached model's camera_bevs, handed out with the result
+        # camera_student: set by the cached model's camera_bevs, handed out with the result
+        student_side, self._student_side = self._student_side, None
         steps = [[tuple(torch.as_tensor(t, dtype=cam_frames.dtype, device=cam_frames.device) for t in s) for s in f]
                  for f in batch["steps"]]
         cam_obs = batch["vis_cam"].to(cam_frames) if "vis_cam" in need else None
@@ -654,12 +618,13 @@ class BEVFusionModel(nn.Module):
         if self.lane is not None:                                # t7: current frame at stride 4, zero start, mirrored like cam; the depth, K, ida
                                                                  # are those of source 1 (DualBEV; with 'dual' also what batch["prob"], ["ida"] hold)
             img0 = batch["lane_img"] if "lane_img" in batch else batch["img"][:, 0]
-            if student_side is not None:                         # t22: the student replaces the depth of frame 0 here too: the lane branch lifts with the same student depth as the main lift
+            # t22: the student replaces the depth of frame 0 here too: the lane branch lifts with the same student depth as the main lift
+            if student_side is not None:
                 prob0 = student_side["p16"].float()              # (its graph is kept: a student that trains gets the lane branch's gradient too)
             else:
                 prob0 = batch["prob"][:, 0].float() if "prob" in batch else self._prob0
             hw = batch["hw"] if "hw" in batch else batch["img"].shape[-2:]
-            lane = self.lane(img0, prob0, batch["K"][:, 0], batch["T_cam_car"][:, 0], hw, batch["ida"], keys=self._lift_keys(batch, hw))
+            lane = self.lane(img0, prob0, batch["K"][:, 0], batch["T_cam_car"][:, 0], hw, batch["ida"])
             if flipped:
                 lane = flip_cam(lane[:, None], None, flip)[0][:, 0]
             cam = cam + lane
@@ -667,9 +632,7 @@ class BEVFusionModel(nn.Module):
             (rad, rad_state), radar_side = rad_out, rad_in["side"]
         else:
             rad, radar_side = self._encode_radar(batch["radar"], cam.shape[0], cam.device)
-            rad_obs = batch[self._rad_mask].to(rad) if self._rad_mask in batch else None   # radar memory: write where it measured (with
-                                                                                           # rad_static_gate: where it measured the static world);
-                                                                                           # no radar points: no mask = everywhere
+            rad_obs = batch[RAD_MASK].to(rad) if RAD_MASK in batch else None   # radar memory: write where it measured; no radar points: no mask = everywhere
             rad, rad_state = self._branch_temporal(self.rad_temporal, rad[:, None], [[]], state.get("rad"), step, rad_obs)
         S = self.trunk.features(self.fusion(cam, rad))
         if self.head_reduce is not None:
@@ -682,14 +645,8 @@ class BEVFusionModel(nn.Module):
             dt_i, v_i, w_i = (dt, v, w) if e is None else (torch.as_tensor(x).to(S) for x in e)
             vf = v_levels[-1] if v_levels is not None else None
             carry = vf if (vf is not None and self.cfg.box_vel_from_field and abs(float(dt)) > 1e-6) else None
-            if self.cfg.share_mover:                             # D53: one splat per dt for both heads (with a carry the object head's splat carries the state too)
-                pre = self.mover(S, dt_i, v_i, w_i, v_field=vf, carry=carry)
-                pre = pre if carry is not None else pre + (None,)
-                sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, premoved=pre[:3] + (None,))
-                obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, premoved=pre)
-            else:
-                sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf)
-                obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf, carry=carry)
+            sem, a = self.sem_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf)
+            obj, ao = self.obj_head(S, dt_i, v_i, w_i, return_aux=True, v_field=vf, carry=carry)
             if vf is not None and self.cfg.box_vel_from_field:   # the box velocity is the field (t12's second decision)
                 obj = dict(obj, vel=vf if carry is None else _turn(ao["carry"], w_i, dt_i))
             p = {"sem": sem, "obj": obj, "mass": a["mass"]}
@@ -700,9 +657,6 @@ class BEVFusionModel(nn.Module):
                 p["obj_dt"] = torch.as_tensor(dt_i).to(S).reshape(-1).expand(S.shape[0])
                 if len(refine_gt.get(float(dt), [])) == S.shape[0]:
                     p["refine"] = self._refine_train(obj, ao["state"], refine_gt[float(dt)], dt_i)
-            if self.cfg.dense_outputs:                           # output interface: dense, differentiable boxes and lines (extract.py)
-                p["boxes"] = dense_boxes({k: v.float() for k, v in obj.items()}, self.grid, NUSC_GROUPS)
-                p["lines"] = soft_line_map(sem[:, self._dist_idx].float().clamp(min=0), self.grid.res)   # clamped as the evaluation does
             if abs(float(dt)) < 1e-6:
                 p["v_hat"] = self.mover.motion(S) if v_levels is None else v_levels[-1]
                 if v_levels is not None and len(v_levels) > 1:     # the coarser levels, coarse to fine: the same motion term (deep supervision,
@@ -715,7 +669,7 @@ class BEVFusionModel(nn.Module):
             res["state"]["buf"] = buf
         if radar_side is not None:
             res["radar_side"] = radar_side
-        if student_side is not None:                              # t22: the anchor of train.forward_loss reads it (student_encoder.anchor_terms)
+        if student_side is not None:                              # the anchor of a student that trains reads it (net/loss/student_loss.py)
             res["student_side"] = student_side
         return res
 
@@ -726,113 +680,3 @@ def _turn(vec, omega, dt):
     a = -(torch.as_tensor(omega).to(vec) * torch.as_tensor(dt).to(vec)).reshape(-1, 1, 1)
     c, s = torch.cos(a), torch.sin(a)
     return torch.stack([c * vec[:, 0] - s * vec[:, 1], s * vec[:, 0] + c * vec[:, 1]], 1)
-
-
-# ----------------------------------------------------------------------------------------------- self-test
-def _selftest():
-    import os
-    import sys
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from losses import BEVLoss, sample_targets
-    from nuscenes_dataset import FrontRadarDataset, collate
-    torch.manual_seed(0)
-    os.chdir(netpath.SITE)                                                   # the site folder: the default weights are named relative to it (models/pretrained)
-    assert BEVFusionModel(ModelConfig(pretrained="")).fusion.p_drop == 0.2
-    for off in (dict(camera_off=True), dict(radar_kind="off")):    # one sensor off: no modality dropout (it would blank the sample)
-        assert BEVFusionModel(ModelConfig(pretrained="", **off)).fusion.p_drop == 0.0, off
-    try:
-        BEVFusionModel(ModelConfig(pretrained="", camera_off=True, lane_branch="rgb"))
-        raise AssertionError("lane_branch with camera_off was accepted")
-    except ValueError:
-        pass
-    ds = FrontRadarDataset(os.path.expanduser("~/data/nuscenes"), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
-    batch = collate([ds[10], ds[200]])                       # mid-scene keyframes: GT of k-1, k, k+1 exist
-    gts = sample_targets(batch["gt"])
-    dts = tuple(sorted(gts))
-    assert dts == (-0.5, 0.0, 0.5) and all(len(g) == 2 for g in gts.values()), {k: len(g) for k, g in gts.items()}
-    model = BEVFusionModel()
-    model.train()
-    res = model(batch, dts=dts)
-    o = res["out"][0.0]
-    X, Y = model.grid.nx, model.grid.ny
-    assert o["sem"].shape == (2, len(model.spec), X, Y) and o["obj"]["hm"].shape == (2, 3, X, Y), o["sem"].shape
-    assert set(res["out"]) == set(dts) and "v_hat" in o and "cam_aux" in o and "v_hat" not in res["out"][0.5]
-    crit = BEVLoss(grid=model.grid)
-    L = crit(res["out"], gts, step_frac=1.0)
-    assert torch.isfinite(L["total"]), {k: float(v) for k, v in L.items() if torch.is_tensor(v)}
-    L["total"].backward()
-    assert model.camera.depth_net.depth_conv[4].weight.grad is None, "frozen camera heads get no gradient"
-    for name, mod in (("reduce", model.cam_reduce), ("camera temporal", model.cam_temporal), ("radar", model.radar),
-                      ("fusion", model.fusion), ("trunk", model.trunk), ("time mover", model.mover),
-                      ("semantic head", model.sem_head), ("object head", model.obj_head)):
-        assert any(p.grad is not None and p.grad.abs().sum() > 0 for p in mod.parameters()), f"no gradient: {name}"
-    n_train = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    n_all = sum(p.numel() for p in model.parameters())
-    groups = ", ".join(f"{k[6:]} {float(v.detach()):.2f}" for k, v in L.items() if k.startswith("group."))
-    # a second call with the returned state and the step since (sequence mode)
-    with torch.no_grad():
-        model.eval()
-        res2 = model(batch, state=res["state"], step=(torch.full((2,), 1 / 12), torch.tensor([5.0, 8.0]),
-                                                      torch.tensor([0.0, 0.1])))
-    assert res2["out"][0.0]["sem"].shape == o["sem"].shape and "cam_aux" not in res2["out"][0.0]
-    # the camera memory writes only where the camera observes (obs_mass = LiftPD.visibility), nothing outside the view
-    if isinstance(model.cam_temporal, TemporalFusion):
-        with torch.no_grad():
-            vis = model.camera_visibility(batch, o["sem"])                                  # (B, 1, X, Y)
-            st = model(batch)["state"]["cam"]
-            from temporal_fusion import read_memory as _rm
-            _, conf = _rm(st["M"], st["W"], st["pose"], model.cam_temporal.ego_pts, vis.shape[-2], vis.shape[-1],
-                          model.cam_temporal.mem_grid)
-        assert 0.05 < float(vis.mean()) < 0.95, f"visibility covers part of the grid ({float(vis.mean()):.2f})"
-        assert float(conf[vis < 0.5].max()) < 1e-4 and float(conf[vis > 0.5].mean()) > 0.1, \
-            "memory written inside the camera view only"
-    # per-sample true keyframe gap: the ego path equals the scalar path for shared values; a 0.45 s gap moves 0.9 x
-    with torch.no_grad():
-        vv, ww = batch["v"].float(), batch["omega"].float()
-        base = model(batch, dts=(0.5,))["out"][0.5]
-        same = model(batch, dts=(0.5,), ego={0.5: (torch.full((2,), 0.5), vv, ww)})["out"][0.5]
-        assert torch.allclose(same["sem"], base["sem"], atol=1e-5) and torch.allclose(same["mass"], base["mass"])
-        v10, w0 = torch.full((2,), 10.0), torch.zeros(2)
-        unk = lambda gaps: (model(batch, dts=(0.5,), ego={0.5: (torch.tensor(gaps), v10, w0)})["out"][0.5]["mass"]
-                            < 0.5).float().mean((1, 2, 3))
-        u_ref, u_gap = unk([0.5, 0.5]), unk([0.5, 0.45])
-    assert abs(float(u_gap[0] - u_ref[0])) < 1e-6 and abs(float(u_gap[1] / u_ref[1]) - 0.9) < 0.05, (u_ref, u_gap)
-    del model, res, res2
-    # S5c in training: refine=True adds the refinement terms to the objects group, the gradient reaches the refiner,
-    # the output survives the trainer's float cast; at run time boxes() returns refined boxes
-    m = BEVFusionModel(ModelConfig(pretrained="", refine=True)).train()
-    r = m(batch, dts=dts)
-    cast = {dt: {k: ({a: b.float() for a, b in v.items()} if isinstance(v, dict) else v.float()) for k, v in p.items()}
-            for dt, p in r["out"].items()}                                       # as train.py does
-    Lr = BEVLoss(grid=m.grid)(cast, gts, step_frac=1.0)
-    assert all(f"refine.reg@{dt:+.1f}" in Lr for dt in dts) and torch.isfinite(Lr["total"]), sorted(Lr)[:8]
-    Lr["total"].backward()
-    assert any(q.grad is not None and q.grad.abs().sum() > 0 for q in m.refiner.mlp.parameters()), "refiner gradient"
-    n_ref = int(r["out"][0.0]["refine"]["valid"].sum())
-    m.eval()
-    with torch.no_grad():
-        rb = m.boxes(m(batch, dts=(0.0,)), 0.0, threshold=0.0)
-    assert len(rb) == 2 and all(len(b) > 0 for b in rb) and "obj_feat" in r["out"][0.0]
-    del m, r, cast, Lr
-    # every swappable block (shapes only: no checkpoint, no gradient)
-    swaps = [{"lift": "p"}, {"fusion": "gate"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"},
-             {"radar_kind": "pillars"}, {"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "off"}, {"trunk_kind": "second", "head_channels": 96},
-             {"camera_off": True}, {"cam_adapter": True}, {"cam_collapse": "zsum"}, {"cam_buffer": "recurrent"}]
-    tried = []
-    for kw in swaps:
-        m = BEVFusionModel(ModelConfig(pretrained="", **kw)).eval()
-        with torch.no_grad():
-            r = m(batch, dts=(0.0, 0.5))
-        assert r["out"][0.5]["sem"].shape == o["sem"].shape, kw
-        tried.append("=".join(str(x) for x in next(iter(kw.items()))))
-        del m, r
-    print(f"model selftest ok: two mini samples through the whole chain at dt {dts}, BEVLoss total "
-          f"{float(L['total'].detach()):.2f} ({groups}); {n_train / 1e6:.1f} M of {n_all / 1e6:.1f} M parameters trainable "
-          f"(camera heads frozen, no gradient); gradients reach reduce, camera temporal, radar, fusion, trunk, mover, "
-          f"both heads; sequence mode with state; per-sample keyframe gap (ego = scalar path; 0.45 s gap: unknown band "
-          f"{float(u_gap[1] / u_ref[1]):.2f} x the 0.5 s band); S5c refinement trains ({n_ref} valid candidates at dt 0, "
-          f"gradient reaches the refiner, float cast ok) and refines at run time; swapped blocks run: {', '.join(tried)}")
-
-
-if __name__ == "__main__":
-    _selftest()

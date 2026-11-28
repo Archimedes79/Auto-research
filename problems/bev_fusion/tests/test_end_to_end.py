@@ -1,4 +1,4 @@
-"""End-to-end gate of the whole chain on real data (plan.md section 10.1, last gate before training runs).
+"""End-to-end gate of the whole chain on real data (the last gate before training runs).
 
 One nuScenes mini keyframe (front camera now + 2 past frames, 5 radars, GT of k-1 / k / k+1) through
 net/model/model.py with net/loss/losses.py BEVLoss, overfitted for N steps (Adam, lr 5e-4, clipping). The chain
@@ -15,15 +15,11 @@ import time
 import torch
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-sys.path.insert(0, os.path.join(ROOT, "training"))
-sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
-sys.path.insert(0, ROOT)
-sys.path.insert(1, os.path.join(ROOT, "net"))
-import netpath                                                       # noqa: E402
-from evaluation.metrics import SegMeter                              # noqa: E402
-from losses import BEVLoss, sample_targets                           # noqa: E402
-from model import BEVFusionModel, ModelConfig                        # noqa: E402
-from nuscenes_dataset import FrontRadarDataset, collate              # noqa: E402
+from net import netpath
+from evaluation.metrics import SegMeter
+from net.loss.losses import BEVLoss, sample_targets
+from net.model.model import BEVFusionModel, ModelConfig
+from net.prep.nuscenes_dataset import FrontRadarDataset, collate
 
 
 def to_device(batch, dev):
