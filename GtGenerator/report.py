@@ -30,7 +30,8 @@ import numpy as np  # noqa: E402
 from matplotlib.backends.backend_pdf import PdfPages  # noqa: E402
 
 from .checks import SRC_HASH, Checks, leave_one_radar_out, radar_fov  # noqa: E402
-from .store import canonical_of, check_resume, finish_index, write_keyframe  # noqa: E402
+from .store import check_resume, finish_index, write_keyframe  # noqa: E402
+from .versions import canonical  # noqa: E402
 from .light_nusc import scene_names  # noqa: E402
 from .pipeline import GROUP_SCENES  # noqa: E402
 from .suite import GtGenerator  # noqa: E402
@@ -109,7 +110,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
         names = scenes or gen0.scenes()
     sig = gen0.signature()
     grid = gen0.grid
-    sig_dir = os.path.join(data_dir, canonical_of(sig)) if data_dir else None
+    sig_dir = os.path.join(data_dir, canonical(sig)) if data_dir else None
     if sig_dir:
         check_resume(sig_dir, grid, gen0.ss)                    # a folder of another resolution / supersampling is not continued
         os.makedirs(sig_dir, exist_ok=True)
@@ -151,7 +152,8 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
                 held[n] = sample
     n_kf = len(ck.st["dt_ms"])
     if sig_dir:
-        finish_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options, written, dataroot)      # a report that wrote nothing leaves the manifest of a finished store alone
+        # a report that wrote nothing leaves the manifest of a finished store alone
+        finish_index(sig_dir, gen, version, [n for n in names if n not in failed], stride, n_kf, options, written, dataroot)
     fov = radar_fov(gen, [n for n in keep if n not in failed], stride)
     ho = leave_one_radar_out(gen, [n for n in names if n not in failed], stride) if (holdout and not light) else None
     os.makedirs(os.path.dirname(os.path.abspath(out_pdf)), exist_ok=True)
@@ -174,7 +176,7 @@ def report(dataroot, version, out_pdf, data_dir=None, scenes=None, stride=1, hol
             fig = figure(gen, name, k, None, gt=gk)
             pdf.savefig(fig)
             plt.close(fig)
-    info = {"pdf": os.path.abspath(out_pdf), "signature": canonical_of(sig), "keyframes": n_kf, "written": written, "stored": sig_dir,
+    info = {"pdf": os.path.abspath(out_pdf), "signature": canonical(sig), "keyframes": n_kf, "written": written, "stored": sig_dir,
             "samples": list(held), "failed": failed}
     if verbose:
         print(f"report: {info['pdf']} ({os.path.getsize(out_pdf) / 1e6:.1f} MB), {len(held)} samples, signature {sig}, "

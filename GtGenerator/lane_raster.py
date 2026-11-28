@@ -1,26 +1,31 @@
 """Masks from the area polygons of the lane GT, in the BEV grid, and their packed side cache.
 
-The lane GT stores the road and intersection areas of a keyframe as polygons (`g["areas"]["road" | "intersection"]`, exterior + holes, not dilated), cut to the window of its rig.
+The lane GT stores the road and intersection areas of a keyframe as polygons (`g["areas"]["road" | "intersection"]`, exterior + holes, not dilated), cut to the
+window of its rig.
 For BEV Fusion the rig `bev_fusion` has exactly the window of the BEV grid, so a mask of any area is one function:
 
     from GtGenerator import lane_raster, lane_gt
     g = lane_gt.load(token, rig="bev_fusion")
-    m = lane_raster.area_mask(g, "intersection", border_m=0.5)        # (120, 104) uint8, [ix, iy] like the GT maps: x forward 0..60 m, y -26..26 m (iy = 0 is the RIGHT edge)
+    m = lane_raster.area_mask(g, "intersection", border_m=0.5)        # (120, 104) uint8, [ix, iy] like the GT maps: x forward 0..60 m,
+                                                                       # y -26..26 m (iy = 0 is the RIGHT edge)
     m = lane_raster.load_mask(token, "intersection", border_m=0.5)    # the same from the packed cache (one array lookup), see build_mask_cache
 
-A cell is set when its CENTRE lies inside an area (exact point in polygon, holes left out); `border_m` widens every area by that many metres first (Euclidean, rounded corners: the cell
-is set when its centre is within `border_m` of the area): 0 = the polygons as they are, 0.5 = one cell. An area is cut at the window of the rig, so near the edge of the grid
-the widening cannot reach beyond it. A raster made with PIL at 4x supersampling (the way the BEV chat first drew it) differs by about 1.6 % of the cells at the edges of the polygons (PIL fills the
-low-x / low-y edge one pixel further): this one is exact.
+A cell is set when its CENTRE lies inside an area (exact point in polygon, holes left out); `border_m` widens every area by that many metres first (Euclidean,
+rounded corners: the cell is set when its centre is within `border_m` of the area): 0 = the polygons as they are, 0.5 = one cell. An area is cut at the window
+of the rig, so near the edge of the grid the widening cannot reach beyond it. A raster made with PIL at 4x supersampling (the way the BEV chat first drew it)
+differs by about 1.6 % of the cells at the edges of the polygons (PIL fills the low-x / low-y edge one pixel further): this one is exact.
 
-PACKED CACHE. `build_mask_cache(store_dir)` rasterises every graph of a lane store once and writes, below the store (`<lane store>/masks/<kind>_b<border>.npz`), the masks of all keyframes as
-packed bits (1,560 bytes per frame: 53 MB for trainval per border), keyed by the store it was made from (a store that is deleted or replaced takes its masks with it) and by `RASTER_VERSION`:
-a change of the rasteriser that changes a mask bumps that constant, the caches of the old one are stale (`cache_complete` says so, `build_mask_cache` makes them again, `load_mask` refuses them).
-`load_mask(token, kind, border_m)` reads one: a plain (X, Y) uint8 array, deterministic, no polygons at training time. A mask of a graph whose window does not cover the grid is refused
-(the Spurmitte rig has |x| <= 50 m, the BEV grid reaches 60 m). The cache is read as a whole (53 MB per border and process): load it before a DataLoader forks, or accept 53 MB per worker.
+PACKED CACHE. `build_mask_cache(store_dir)` rasterises every graph of a lane store once and writes, below the store (`<lane store>/masks/<kind>_b<border>.npz`),
+the masks of all keyframes as packed bits (1,560 bytes per frame: 53 MB for trainval per border), keyed by the store it was made from (a store that is deleted
+or replaced takes its masks with it) and by `RASTER_VERSION`:
+a change of the rasteriser that changes a mask bumps that constant, the caches of the old one are stale (`cache_complete` says so, `build_mask_cache` makes them
+again, `load_mask` refuses them).
+`load_mask(token, kind, border_m)` reads one: a plain (X, Y) uint8 array, deterministic, no polygons at training time. A mask of a graph whose window does not
+cover the grid is refused (the Spurmitte rig has |x| <= 50 m, the BEV grid reaches 60 m). The cache is read as a whole (53 MB per border and process): load it
+before a DataLoader forks, or accept 53 MB per worker.
 `workers` > 1 builds with a pool of processes (34k frames: about 11 min in one process).
 
-    python -m GtGenerator.gt_api_selftest       (this module is tested there)
+    python -m GtGenerator selftest --only gt_api   (this module is tested there)
 """
 import gzip
 import multiprocessing as mp
@@ -39,8 +44,9 @@ GRID = GridSpec()               # the BEV grid of the front GT: the cache is mad
 
 
 def area_masks(g, kind="intersection", borders=(0.0,), grid=None):
-    """the polygons `g["areas"][kind]` of a lane graph (any frame) as masks in `grid` (default the BEV grid, 0.5 m cells): {border: (nx, ny) uint8}, 1 where the cell centre lies inside an area
-    (holes are left out) widened by `border` metres. Raises ValueError when the window of the graph does not cover the grid, or `kind` is not an area of the graph."""
+    """the polygons `g["areas"][kind]` of a lane graph (any frame) as masks in `grid` (default the BEV grid, 0.5 m cells): {border: (nx, ny) uint8}, 1 where the
+    cell centre lies inside an area (holes are left out) widened by `border` metres. Raises ValueError when the window of the graph does not cover the grid, or
+    `kind` is not an area of the graph."""
     import shapely
     from shapely.geometry import Polygon
     from . import lane_graph as LG
@@ -60,14 +66,16 @@ def area_masks(g, kind="intersection", borders=(0.0,), grid=None):
         poly = Polygon(np.asarray(a["exterior"], float), [np.asarray(h, float) for h in a["holes"]])
         polys.append(poly if poly.is_valid else poly.buffer(0))
     out, prev = {}, None
-    for b in sorted({float(b) for b in borders}):                   # the mask at a larger border contains the one at a smaller: only the cells that are not in yet are tested
+    # the mask at a larger border contains the one at a smaller: only the cells that are not in yet are tested
+    for b in sorted({float(b) for b in borders}):
         m = np.zeros((nx, ny), np.uint8) if prev is None else prev.copy()
         for poly in polys:
             p = poly.buffer(b, quad_segs=8) if b > 0 else poly
             if p.is_empty:
                 continue
             x0, y0, x1, y1 = p.bounds
-            i0, i1 = max(0, int(np.searchsorted(xs, x0, "left"))), min(nx, int(np.searchsorted(xs, x1, "right")))        # only the cells inside the bounding box
+            # only the cells inside the bounding box
+            i0, i1 = max(0, int(np.searchsorted(xs, x0, "left"))), min(nx, int(np.searchsorted(xs, x1, "right")))
             j0, j1 = max(0, int(np.searchsorted(ys, y0, "left"))), min(ny, int(np.searchsorted(ys, y1, "right")))
             if i0 >= i1 or j0 >= j1:
                 continue
@@ -91,7 +99,8 @@ def cache_path(store_dir, kind="intersection", border_m=0.0):
 
 
 def cache_complete(store_dir, kind="intersection", border_m=0.0, held=None):
-    """True when the cache file exists, was made by THIS rasteriser (RASTER_VERSION) for the BEV grid and holds exactly the keyframes the store holds now (`held`: the tokens, scanned once by the caller)"""
+    """True when the cache file exists, was made by THIS rasteriser (RASTER_VERSION) for the BEV grid and holds exactly the keyframes the store holds now
+    (`held`: the tokens, scanned once by the caller)"""
     p = cache_path(store_dir, kind, border_m)
     if not os.path.exists(p):
         return False
@@ -131,8 +140,9 @@ def _rows(args):
 
 
 def build_mask_cache(store_dir, kinds=("intersection",), borders=(0.0, 0.5), force=False, verbose=True, workers=1):
-    """rasterise every graph of the lane store `store_dir` once and write one packed cache file per (kind, border) below `<store_dir>/masks/`; a file that is complete (same rasteriser, same keyframes) is left
-    alone (`force` makes it again); `workers` > 1: a pool of spawned processes. -> {"files": [paths], "frames": n, "made": [paths written]}"""
+    """rasterise every graph of the lane store `store_dir` once and write one packed cache file per (kind, border) below `<store_dir>/masks/`; a file that is
+    complete (same rasteriser, same keyframes) is left alone (`force` makes it again); `workers` > 1: a pool of spawned processes. -> {"files": [paths],
+    "frames": n, "made": [paths written]}"""
     from .gt_api import data_identity
     if not borders or not kinds:
         raise ValueError("kinds and borders: at least one each")
@@ -206,11 +216,13 @@ _CACHES = {}
 
 
 def load_mask(token, kind="intersection", border_m=0.0, store_dir=None):
-    """the packed mask of a keyframe of the BEV Fusion lane store (default store: the one of THIS source, `lane_gt.signature(rig="bev_fusion")`), (nx, ny) uint8, [ix, iy] of the BEV grid.
-    Raises FileNotFoundError when the cache is not there (`python -m GtGenerator generate-bev` or `lane_raster.build_mask_cache(store_dir)` makes it) and ValueError when it was made by another rasteriser"""
+    """the packed mask of a keyframe of the BEV Fusion lane store (default store: the one of THIS source, `lane_gt.signature(rig="bev_fusion")`), (nx, ny)
+    uint8, [ix, iy] of the BEV grid.
+    Raises FileNotFoundError when the cache is not there (`python -m GtGenerator generate-bev` or `lane_raster.build_mask_cache(store_dir)` makes it) and
+    ValueError when it was made by another rasteriser"""
     if store_dir is None:
         from . import lane_gt
-        store_dir = os.path.join(lane_gt.DATA, lane_gt.signature(rig="bev_fusion"))
+        store_dir = os.path.join(lane_gt.lane_root(), lane_gt.signature(rig="bev_fusion"))
     p = cache_path(store_dir, kind, border_m)
     if p not in _CACHES:
         if not os.path.exists(p):

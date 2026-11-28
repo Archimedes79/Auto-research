@@ -6,13 +6,15 @@ many lanes a road has. So everything here is derived from the lane centre-lines.
 
 NEIGHBOURS. At every metre of a lane the nearest lane on its left (and right) is searched: its centre-line point lies 1.5 - 6 m to the side, abreast
 (within 1 m along the lane) and parallel (within 25 degrees: co-directional; antiparallel: opposite). A lane is a neighbour of another when this holds
-along at least `min_overlap` metres; the relation is symmetric (a lane found from one side only counts from both). `lane_count` at a point = 1 + the number of lanes found by following left and right neighbours.
+along at least `min_overlap` metres; the relation is symmetric (a lane found from one side only counts from both). `lane_count` at a point = 1 + the number of
+lanes found by following left and right neighbours.
 ROADS. A road is a set of lanes joined by the neighbour relation and by 1-in-1-out lane-to-lane links (it ends where lanes split, merge or reach an
 intersection). An INTERSECTION is a connected area of road segments flagged is_intersection (the connectors inside it belong to it). A connector outside
 every intersection belongs to the road of its predecessor lane. The road graph has roads and intersections as nodes and the lane successors as edges.
-LINKS. Every joined piece gets `road` (the road or intersection under its middle), `left`, `right` and `opposite` (piece ids), `lane_count` and `lane_index` (lanes to its left; a piece of
-connectors only has no lane of its own and takes those of the lane before it, else after it); the crop lists the roads and intersections of the window with the parts that run along them.
-Open with Mirko: the neighbour distances, the minimum overlap and whether an opposite road counts as part of the same road.
+LINKS. Every joined piece gets `road` (the road or intersection under its middle), `left`, `right` and `opposite` (piece ids), `lane_count` and `lane_index`
+(lanes to its left; a piece of connectors only has no lane of its own and takes those of the lane before it, else after it); the crop lists the roads and
+intersections of the window with the parts that run along them.
+Open with the owner: the neighbour distances, the minimum overlap and whether an opposite road counts as part of the same road.
 """
 import numpy as np
 
@@ -45,7 +47,8 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
     X, H, lane, toks = _samples(polys, kind)
     n = len(X)
     cos_par = np.cos(np.radians(par_deg))
-    cell = np.floor(X / (lat_max + lon_max)).astype(np.int64)             # a cell is as wide as the search reaches: the 3 x 3 cells around it hold every candidate
+    # a cell is as wide as the search reaches: the 3 x 3 cells around it hold every candidate
+    cell = np.floor(X / (lat_max + lon_max)).astype(np.int64)
     key = cell[:, 0] * 1000003 + cell[:, 1]
     order = np.argsort(key)
     skey = key[order]
@@ -87,7 +90,8 @@ def neighbours(polys, kind, lat_min=1.5, lat_max=6.0, lon_max=1.0, par_deg=25.0,
             pair[(name, lane[i], lane[arr[i]])] = pair.get((name, lane[i], lane[arr[i]]), 0) + 1
     out = {name: {t: [] for t in toks} for name in ("left", "right", "opposite")}
     found = {k for k, c in pair.items() if c >= min_overlap}
-    found |= {({"left": "right", "right": "left", "opposite": "opposite"}[name], b, a) for name, a, b in found}      # the relation is symmetric (b left of a <=> a right of b); the search is from one lane only, so a pair at the minimum overlap was found from one side
+    # the relation is symmetric (b left of a <=> a right of b); the search is from one lane only, so a pair at the minimum overlap was found from one side
+    found |= {({"left": "right", "right": "left", "opposite": "opposite"}[name], b, a) for name, a, b in found}
     for name, a, b in sorted(found):
         out[name][toks[a]].append(toks[b])
     # lane count: follow the left / right neighbours point by point
@@ -163,7 +167,8 @@ def build_road_graph(mg, **params):
         for a, ts in by_area.items():
             areas[names[a]] = dict(id=names[a], kind="intersection", connectors=sorted(ts))
         area_of = {t: names[a] for t, a in area_of.items()}
-        area_geoms = [(names.get(a), g) for a, g in enumerate(geoms)]               # every intersection area, with the id of its node (None: no connector in it)
+        # every intersection area, with the id of its node (None: no connector in it)
+        area_geoms = [(names.get(a), g) for a, g in enumerate(geoms)]
     for t in polys:                                                       # connectors outside every intersection: the road of the lane before / after
         if kind[t] == "connector" and t not in area_of:
             ref = [u for u in pred[t] if u in road_of] or [v for v in succ[t] if v in road_of]
@@ -201,7 +206,8 @@ def build_road_graph(mg, **params):
         link["lane_count"] = int(np.median([nb["lane_count"][t] for t in tokens_lane])) if tokens_lane else 0
         link["lane_index"] = int(np.median([nb["lane_index"][t] for t in tokens_lane])) if tokens_lane else 0
         plinks[pid] = link
-    for pid, link in plinks.items():                                       # a piece of connectors only has no lane of its own: it takes the count and the index of the lane it comes from, else of the lane it leads to
+    # a piece of connectors only has no lane of its own: it takes the count and the index of the lane it comes from, else of the lane it leads to
+    for pid, link in plinks.items():
         donor = next((q for q in pieces[pid]["pred"] + pieces[pid]["succ"] if plinks[q]["has_lane"]), None) if not link["has_lane"] else None
         if donor is not None:
             link["lane_count"], link["lane_index"] = plinks[donor]["lane_count"], plinks[donor]["lane_index"]
@@ -209,8 +215,8 @@ def build_road_graph(mg, **params):
 
 
 def attach(graph, rg):
-    """add the road structure to a crop (`lane_graph.crop` calls this with rg = build_road_graph(mg)): per part `road`, `left`, `right`, `opposite`, `lane_count`, `lane_index`;
-    and graph["roads"], the roads and intersections present in the window with their edges and the parts that run along them"""
+    """add the road structure to a crop (`lane_graph.crop` calls this with rg = build_road_graph(mg)): per part `road`, `left`, `right`, `opposite`,
+    `lane_count`, `lane_index`; and graph["roads"], the roads and intersections present in the window with their edges and the parts that run along them"""
     parts_of = {}
     for part in graph["pieces"]:
         parts_of.setdefault(part["piece"], []).append(part)

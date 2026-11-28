@@ -4,38 +4,45 @@ Source: the nuScenes map (`lane` and `lane_connector` with their exact arc paths
 The map is turned into a graph once per location (`build_map_graph`), a keyframe takes a crop of it (`crop`).
 
 PIECES. A map piece is a lane or a lane connector. A chain of map pieces is joined into one piece while every join is 1 in, 1 out (the previous piece
-has one successor and the next one has one predecessor): a piece id is therefore kept along a road and changes only at a split or a merge (Mirko's
-id rule). The id of a piece is the token of its first map piece; `tokens` lists the map pieces it covers and `spans` where (point indices). The points of a piece are the points of its map pieces
-without the repeats of the map (the arc paths repeat the joint of two arcs: no two consecutive points are closer than 1e-3 m).
+has one successor and the next one has one predecessor): a piece id is therefore kept along a road and changes only at a split or a merge (the
+owner's id rule). The id of a piece is the token of its first map piece; `tokens` lists the map pieces it covers and `spans` where (point indices). The points
+of a piece are the points of its map pieces without the repeats of the map (the arc paths repeat the joint of two arcs: no two consecutive points are closer
+than 1e-3 m).
 
 EVENTS. Where pieces meet or end, in the window:
-  split    one piece ends, two or more start            (in = [1 piece], out = [2+ pieces]); `pos` is the end of the one piece (not between the ends of a gap in the map)
+  split    one piece ends, two or more start            (in = [1 piece], out = [2+ pieces]); `pos` is the end of the one piece (not between the ends of a gap in
+           the map)
   merge    two or more end, one starts                  `pos` is the start of the one piece
   cross    two or more end, two or more start           (a node that is both; `pos` the mean of the ends and starts)
   stop     the end of a LANE whose successor connector lies inside an intersection (road_segment.is_intersection, at least `inter_frac` of the
            connector's points inside); it can lie inside a joined piece (`on` = the piece, `s` = metres from the start of the piece part);
            `out` are the stop branches, `n_succ` the number of successors of the lane in the map (n_succ > len(out): a branch that is not a stop)
-  exit     the mirror of stop: the START of a LANE whose predecessor connector lies inside an intersection (same fields: `on`, `s`; `n_pred` = predecessors of the lane
-           in the map, `in` = the intersection branches that lead into it, `out` = the piece it starts); `stop_rule` decides here the same way
+  exit     the mirror of stop: the START of a LANE whose predecessor connector lies inside an intersection (same fields: `on`, `s`;
+           `n_pred` = predecessors of the lane in the map, `in` = the intersection branches that lead into it, `out` = the piece it starts); `stop_rule`
+           decides here the same way
   start    a piece without a predecessor in the map;  end   a piece without a successor in the map
-A stop or an exit can lie inside a joined piece (a lane followed by one connector): then `out` of the stop (`in` of the exit) is that piece itself, the continuation after `s`.
+A stop or an exit can lie inside a joined piece (a lane followed by one connector): then `out` of the stop (`in` of the exit) is that piece itself, the
+continuation after `s`.
 `dirs_in` / `dirs_out` have one row per id of `in` / `out`, in the same order.
   window   the polyline crosses the window border (io "in" / "out"); per frame
 `stop_rule` decides a lane with several successors: "intersection_branch" (default: a stop point for the intersection branches only), "any_successor"
-(if one is an intersection connector, all branches), "all_successors", "none". `dirs_in` / `dirs_out` are the unit directions of the pieces at the event (UNIT vectors in every frame, also when the pose
-has pitch or roll). In a window an event keeps only the ids of the pieces that are inside (`partial`); a split / merge / cross whose point lies outside the window (a gap of the map, at most MAP_GAP m) while a
-branch of it is inside keeps its event, at the branches that are inside; a stop or an exit with nothing on one side is not an event, so every stop / exit names its in and its out, and every natural end
-(no successor, not cut by the window) of a part is a successor, an event that names the part at that end (split, merge, cross, end), or the window.
+(if one is an intersection connector, all branches), "all_successors", "none". `dirs_in` / `dirs_out` are the unit directions of the pieces at the event (UNIT
+vectors in every frame, also when the pose has pitch or roll). In a window an event keeps only the ids of the pieces that are inside (`partial`); a split /
+merge / cross whose point lies outside the window (a gap of the map, at most MAP_GAP m) while a branch of it is inside keeps its event, at the branches that are
+inside; a stop or an exit with nothing on one side is not an event, so every stop / exit names its in and its out, and every natural end (no successor, not cut
+by the window) of a part is a successor, an event that names the part at that end (split, merge, cross, end), or the window.
 
 FRAME. frame="lane" (default): the lane project's frame, ego (rear axle) at the front-camera time, x to the RIGHT, y forward; frame="ego": the frame of
 the other GtGenerator layers, x forward, y left. The window is the square |x|, |y| <= half (default 50 m), or the rectangle `window` = (x0, x1, y0, y1) of a rig
 (lane_gt.RIGS: BEV fusion x 0 .. 60 m, y -26 .. 26 m, which then carries the key `window`). Polylines are cut exactly at the border; a
-part shorter than `min_len` is dropped, but only when the window cuts it at both ends (a short part with a natural end keeps its links and its events); a piece that leaves the window and comes back is several parts (`part` 0, 1, ...; id "<piece>#<part>").
-Every part has `segments`: [{token, kind, i0, i1, in_intersection}], the index ranges of its `pts` per map piece, contiguous (a connector inside an intersection can be dropped by a
-consumer that has no nodes there, a connector outside one is a plain continuation, also on a piece of kind "mixed"). A point of a part stands for a vertex of its map piece (`crop` gives it as `src`):
-a cut point stands for the vertex at the END of the segment it lies on, so a part that starts right after the joint of two map pieces has no segment of the first one.
-`piece` is the id of the piece and is the same in every frame; `id` equals it except for a part that comes back into the window ("<piece>#1": its number depends on the
-window, so use `piece` for anything that must be stable from frame to frame).
+part shorter than `min_len` is dropped, but only when the window cuts it at both ends (a short part with a natural end keeps its links and its events); a piece
+that leaves the window and comes back is several parts (`part` 0, 1, ...; id "<piece>#<part>").
+Every part has `segments`: [{token, kind, i0, i1, in_intersection}], the index ranges of its `pts` per map piece, contiguous (a connector inside an intersection
+can be dropped by a consumer that has no nodes there, a connector outside one is a plain continuation, also on a piece of kind "mixed"). A point of a part
+stands for a vertex of its map piece (`crop` gives it as `src`): a cut point stands for the vertex at the END of the segment it lies on, so a part that starts
+right after the joint of two map pieces has no segment of the first one.
+`piece` is the id of the piece and is the same in every frame; `id` equals it except for a part that comes back into the window ("<piece>#1": its number depends
+on the window, so use `piece` for anything that must be stable from frame to frame).
 A part's `succ` / `pred` lists the ids of the parts that continue it inside the window (a part that ends at the border has none: its window event says so).
 
 The result is plain data (dicts, lists, float32 arrays). `graph` -> {"frame", "half", "location", "pieces": [...], "events": [...], ...}.
@@ -46,8 +53,11 @@ import math
 import numpy as np
 
 STOP_RULES = ("intersection_branch", "any_successor", "all_successors", "none")
-MAP_GAP = 10.0                                              # m: how far outside the window a junction can lie and still keep an event for the branches that are inside (the largest gap of the four maps is 6.3 m)
-REACH_MARGIN = 25.0                                        # m: slack of the pre-filter `reach` (the filter is exact without it: a piece outside the circle cannot reach the window; 1 m instead of 25 m saved 2 - 4 % of the time, below the 10 % that a change of this kind must earn)
+# m: how far outside the window a junction can lie and still keep an event for the branches that are inside (the largest gap of the four maps is 6.3 m)
+MAP_GAP = 10.0
+# m: slack of the pre-filter `reach` (the filter is exact without it: a piece outside the circle cannot reach the window; 1 m instead of 25 m saved 2 - 4 % of
+# the time, below the 10 % that a change of this kind must earn)
+REACH_MARGIN = 25.0
 
 
 # ---------------------------------------------------------------------------------------------------------------- small geometry
@@ -68,8 +78,8 @@ def _length(P):
 
 
 def _distinct(P, eps=1e-3):
-    """the polyline without the points that repeat the previous one: the arc paths of the map repeat the joint of two arcs (a zero-length segment, 31 % of the pieces; the repeats are 0 or
-    below 1e-13 m on the four maps, the other segments are 0.2 m or longer)"""
+    """the polyline without the points that repeat the previous one: the arc paths of the map repeat the joint of two arcs (a zero-length segment, 31 % of the
+    pieces; the repeats are 0 or below 1e-13 m on the four maps, the other segments are 0.2 m or longer)"""
     return P[np.r_[True, np.linalg.norm(np.diff(P, axis=0), axis=1) >= eps]]
 
 
@@ -80,8 +90,8 @@ def to_frame(xy, T_e2g, frame):
 
 
 def dirs_to_frame(d, T_e2g, frame):
-    """global direction vectors (n, 2) -> UNIT vectors in the frame (no translation). The 2 x 2 block of a pose with pitch or roll is not a rotation (it shortens a vector by cos(pitch)); the
-    rows are normalised, which is the direction of the polyline that `to_frame` makes of the same points"""
+    """global direction vectors (n, 2) -> UNIT vectors in the frame (no translation). The 2 x 2 block of a pose with pitch or roll is not a rotation (it
+    shortens a vector by cos(pitch)); the rows are normalised, which is the direction of the polyline that `to_frame` makes of the same points"""
     e = np.asarray(d, float).reshape(-1, 2) @ T_e2g[:2, :2]
     e = e / np.maximum(np.linalg.norm(e, axis=1, keepdims=True), 1e-9)
     return e if frame == "ego" else np.c_[-e[:, 1], e[:, 0]]
@@ -89,7 +99,8 @@ def dirs_to_frame(d, T_e2g, frame):
 
 def clip_rect(P, x0, x1, y0, y1):
     """cut a polyline (n, 2) to the rectangle x0 <= x <= x1, y0 <= y <= y1 exactly at the border (the square |x|, |y| <= h is the case (-h, h, -h, h)) ->
-    [(pts, cut_start, cut_end, seg_first, seg_last)]: the parts in travel order; seg_first / seg_last are the indices of the first / last original segment the part uses"""
+    [(pts, cut_start, cut_end, seg_first, seg_last)]: the parts in travel order; seg_first / seg_last are the indices of the first / last original segment the
+    part uses"""
     if len(P) < 2:
         return []
     a, b = P[:-1], P[1:]
@@ -110,7 +121,8 @@ def clip_rect(P, x0, x1, y0, y1):
     if not len(idx):
         return []
     entry, exit_ = a[idx] + t0[idx][:, None] * d[idx], a[idx] + t1[idx][:, None] * d[idx]
-    joined = (idx[1:] == idx[:-1] + 1) & (t1[idx[:-1]] >= 1.0 - 1e-9) & (t0[idx[1:]] <= 1e-9)           # a segment goes on from the one before when that ends on its vertex and this one starts there
+    # a segment goes on from the one before when that ends on its vertex and this one starts there
+    joined = (idx[1:] == idx[:-1] + 1) & (t1[idx[:-1]] >= 1.0 - 1e-9) & (t0[idx[1:]] <= 1e-9)
     starts = np.flatnonzero(np.r_[True, ~joined])
     out = []
     for s, e in zip(starts, np.r_[starts[1:], len(idx)]):
@@ -126,7 +138,8 @@ def window_of(half, window=None):
 
 
 def reach(half, window=None):
-    """the radius around the ego position that holds the window plus a margin: the pre-filter for the map pieces that can reach it (the frame is a rotation of the global frame)"""
+    """the radius around the ego position that holds the window plus a margin: the pre-filter for the map pieces that can reach it (the frame is a rotation of
+    the global frame)"""
     if window is None:
         return half * math.sqrt(2.0) + REACH_MARGIN
     x0, x1, y0, y1 = window
@@ -204,7 +217,9 @@ def build_map_graph(nmap, step=0.5, inter_frac=0.5, stop_rule="intersection_bran
     for chain in chains:
         pts, spans, n = [], [], 0
         for tok in chain:
-            P = _distinct(polys[tok])               # the points of a piece; `polys` stays as the map has it (the road graph and the intersection test were made on it: 5 connectors and 4 neighbour pairs would move)
+            # the points of a piece; `polys` stays as the map has it (the road graph and the intersection test were made on it: 5 connectors and 4 neighbour
+            # pairs would move)
+            P = _distinct(polys[tok])
             if pts and np.linalg.norm(P[0] - pts[-1][-1]) < 0.05:
                 P = P[1:]                         # the joint point once
             spans.append((tok, n, n + len(P) - 1))
@@ -221,12 +236,14 @@ def build_map_graph(nmap, step=0.5, inter_frac=0.5, stop_rule="intersection_bran
         p["succ"] = [piece_of[v] for v in succ[p["tokens"][-1]]]
         p["pred"] = [piece_of[u] for u in pred[p["tokens"][0]]]
     events = _map_events(pieces, piece_of, succ, pred, kind, in_inter, stop_rule, step)
-    n = 8                                                      # ids in the output are the first n characters of the token (the shortest unique prefix, at least 8)
+    # ids in the output are the first n characters of the token (the shortest unique prefix, at least 8)
+    n = 8
     while len({pid[:n] for pid in pieces}) < len(pieces):
         n += 2
     short = {pid: pid[:n] for pid in pieces}
-    return dict(short=short, pieces=pieces, piece_of=piece_of, succ=succ, pred=pred, kind=kind, in_inter=in_inter, events=events, event_pos=np.array([e["pos"] for e in events]).reshape(-1, 2),
-                polys=polys, inter=inter, params=dict(inter_frac=inter_frac, stop_rule=stop_rule))
+    return dict(short=short, pieces=pieces, piece_of=piece_of, succ=succ, pred=pred, kind=kind, in_inter=in_inter, events=events,
+                event_pos=np.array([e["pos"] for e in events]).reshape(-1, 2), polys=polys, inter=inter,
+                params=dict(inter_frac=inter_frac, stop_rule=stop_rule))
 
 
 def _map_events(pieces, piece_of, succ, pred, kind, in_inter, stop_rule, step):
@@ -255,7 +272,8 @@ def _map_events(pieces, piece_of, succ, pred, kind, in_inter, stop_rule, step):
             typ = "cross"
         else:
             continue
-        if typ == "split":                                      # at the branch end, not between the ends of a gap in the map: where the one piece ends / where the one piece starts
+        # at the branch end, not between the ends of a gap in the map: where the one piece ends / where the one piece starts
+        if typ == "split":
             pos = pieces[ins[0]]["pts"][-1]
         elif typ == "merge":
             pos = pieces[outs[0]]["pts"][0]
@@ -319,8 +337,8 @@ def _span(pieces, pid, tok):
 
 # ---------------------------------------------------------------------------------------------------------------- a keyframe's crop
 def _segments(p, src, mg):
-    """the index ranges of a part's points per map piece: [{token, kind, i0, i1, in_intersection}], contiguous, one range per map piece the points stand for (`src`: the vertex of the joined
-    piece `p` each point stands for, non-decreasing; the spans of `p` partition its vertices)"""
+    """the index ranges of a part's points per map piece: [{token, kind, i0, i1, in_intersection}], contiguous, one range per map piece the points stand for
+    (`src`: the vertex of the joined piece `p` each point stands for, non-decreasing; the spans of `p` partition its vertices)"""
     owner = np.searchsorted(p["starts"], src, side="right") - 1
     cuts = np.flatnonzero(np.diff(owner)) + 1
     out = []
@@ -333,9 +351,11 @@ def _segments(p, src, mg):
 def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", rg=None, window=None, full=True):
     """the graph of one keyframe: the map graph `mg` cut to the window around the ego pose T_e2g (4 x 4, ego -> global); with `rg` =
     road_graph.build_road_graph(mg) the neighbours, lane counts and roads are added (see road_graph.py).
-    The window is the square |x|, |y| <= half, or the rectangle `window` = (x0, x1, y0, y1) in the frame of the graph (then `half` is only the bound that is stored).
+    The window is the square |x|, |y| <= half, or the rectangle `window` = (x0, x1, y0, y1) in the frame of the graph (then `half` is only the bound that is
+    stored).
     `full=False` leaves out the events and the segments (the pieces and their links only: the wide window of the tiers needs no more).
-    Every part also carries `src` (n,): the vertex of its map piece that each point stands for (what the labels of lane_tiers are carried over by); `lane_gt.LaneGT.graph` drops it"""
+    Every part also carries `src` (n,): the vertex of its map piece that each point stands for (what the labels of lane_tiers are carried over by);
+    `lane_gt.LaneGT.graph` drops it"""
     t = T_e2g[:2, 3]
     pieces, short = mg["pieces"], mg["short"]
     W = window_of(half, window)
@@ -349,10 +369,13 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", rg=None, window=None, 
         k = 0
         for pts, cut0, cut1, first, last in clip_rect(Q, *W):
             length = _length(pts)
-            if length < (min_len if (cut0 and cut1) else 0.05):                   # a fragment cut at both ends is dropped when short; a natural end keeps its links
+            # a fragment cut at both ends is dropped when short; a natural end keeps its links
+            if length < (min_len if (cut0 and cut1) else 0.05):
                 continue
-            src = np.arange(first, last + 2)                                      # point j stands for the original vertex src[j] of the piece; the cut points stand for the vertex at the END of the segment they lie on
-            if cut0 and not np.array_equal(pts[0], Q[first]):                     # (an entry cut lies on the segment first -> first + 1; the exit cut is already on last -> last + 1)
+            # point j stands for the original vertex src[j] of the piece; the cut points stand for the vertex at the END of the segment they lie on
+            src = np.arange(first, last + 2)
+            # (an entry cut lies on the segment first -> first + 1; the exit cut is already on last -> last + 1)
+            if cut0 and not np.array_equal(pts[0], Q[first]):
                 src[0] += 1
             part = dict(id=short[pid] if k == 0 else f"{short[pid]}#{k}", piece=pid, part=k, kind=p["kind"], pts=pts.astype(np.float32), start_open=bool(cut0),
                         end_open=bool(cut1), length=length, succ=[], pred=[], src=src)
@@ -379,12 +402,14 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", rg=None, window=None, 
     events = []
 
     def pick(ids, dirs, table, on=None, q=None):
-        """the ids that exist in this window (the part of the piece through `table`; the part `q` for the piece `on` that carries the event) with their direction rows"""
+        """the ids that exist in this window (the part of the piece through `table`; the part `q` for the piece `on` that carries the event) with their
+        direction rows"""
         keep = [k for k, i in enumerate(ids) if (q is not None and i == on) or table.get(i) is not None]
         return [q["id"] if (q is not None and ids[k] == on) else table[ids[k]]["id"] for k in keep], np.asarray(dirs).reshape(-1, 2)[keep]
     epos = to_frame(mg["event_pos"], T_e2g, frame) if full else np.zeros((0, 2))
     inside = (W[0] - 1e-6 <= epos[:, 0]) & (epos[:, 0] <= W[1] + 1e-6) & (W[2] - 1e-6 <= epos[:, 1]) & (epos[:, 1] <= W[3] + 1e-6)
-    near_out = (W[0] - MAP_GAP <= epos[:, 0]) & (epos[:, 0] <= W[1] + MAP_GAP) & (W[2] - MAP_GAP <= epos[:, 1]) & (epos[:, 1] <= W[3] + MAP_GAP)          # a gap of the map can put a junction outside while a branch is inside
+    # a gap of the map can put a junction outside while a branch is inside
+    near_out = (W[0] - MAP_GAP <= epos[:, 0]) & (epos[:, 0] <= W[1] + MAP_GAP) & (W[2] - MAP_GAP <= epos[:, 1]) & (epos[:, 1] <= W[3] + MAP_GAP)
     for i in np.flatnonzero(near_out):
         e, pos = mg["events"][i], epos[i]
         if not inside[i] and (e["type"] not in ("split", "merge", "cross") or not (any(tail.get(j) for j in e["in"]) or any(head.get(j) for j in e["out"]))):
@@ -403,9 +428,11 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", rg=None, window=None, 
             (ids_in, d_in), ids_out, d_out = pick(e["in"], e["dirs_in"], tail, e["on"], q), [q["id"]], np.asarray(e["dirs_out"]).reshape(-1, 2)
         else:
             (ids_in, d_in), (ids_out, d_out) = pick(e["in"], e["dirs_in"], tail), pick(e["out"], e["dirs_out"], head)
-            if not inside[i]:                                                # its point is outside the window, a branch of it is inside: the event is at the branches that are
+            # its point is outside the window, a branch of it is inside: the event is at the branches that are
+            if not inside[i]:
                 pos = np.mean([tail[j]["pts"][-1] for j in e["in"] if tail.get(j)] + [head[j]["pts"][0] for j in e["out"] if head.get(j)], axis=0)
-        if len(ids_in) + len(ids_out) == 0 or (e["type"] in ("stop", "exit") and not (ids_in and ids_out)):          # a stop / exit always says where it leads from / to
+        # a stop / exit always says where it leads from / to
+        if len(ids_in) + len(ids_out) == 0 or (e["type"] in ("stop", "exit") and not (ids_in and ids_out)):
             continue
         events.append(dict(type=e["type"], pos=pos.astype(np.float32), **extra, **{"in": ids_in, "out": ids_out},
                            dirs_in=dirs_to_frame(d_in, T_e2g, frame).astype(np.float32), dirs_out=dirs_to_frame(d_out, T_e2g, frame).astype(np.float32),
@@ -419,7 +446,8 @@ def crop(mg, T_e2g, half=50.0, min_len=2.0, frame="lane", rg=None, window=None, 
                                dirs_in=_tangent(part["pts"], True)[None].astype(np.float32), dirs_out=np.zeros((0, 2), np.float32), partial=False))
     graph = dict(frame=frame, half=half, pieces=out_parts, events=events, params=dict(min_len=min_len, **mg["params"]))
     if window is not None:
-        graph["window"] = W                                  # only a graph with a rectangular window carries the key: the square graphs (lane_center) are unchanged
+        # only a graph with a rectangular window carries the key: the square graphs (lane_center) are unchanged
+        graph["window"] = W
     if rg is not None:
         from . import road_graph
         road_graph.attach(graph, rg)
@@ -445,7 +473,8 @@ def in_frame(graph, frame):
                     out[k] = turn(v)
                 elif k == "holes":
                     out[k] = [turn(h) for h in v]
-                elif k == "window" and v is not None and len(v) == 4:                 # the rectangle of a rig (x0, x1, y0, y1): a rotation of the frame turns it too
+                # the rectangle of a rig (x0, x1, y0, y1): a rotation of the frame turns it too
+                elif k == "window" and v is not None and len(v) == 4:
                     x0, x1, y0, y1 = v
                     out[k] = (y0, y1, -x1, -x0) if frame == "ego" else (-y1, -y0, x0, x1)       # lane -> ego, ego -> lane
                 else:

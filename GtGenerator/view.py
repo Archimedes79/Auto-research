@@ -216,8 +216,8 @@ def figure(gt_gen, name, k, out_dir, total=False, gt=None):
 def stored(token, out_dir=None, total=False, data=None):
     """the figure of a keyframe by sample TOKEN, drawn from the STORED GT of the current generator (mini or trainval, no devkit:
     the scene list and the keyframe order come from the nuScenes json tables)."""
-    from .suite import DATA, default_root, json_tables, load, scene_tokens
-    gt = load(token, data or DATA)
+    from .suite import default_root, json_tables, load, scene_tokens
+    gt = load(token, data)
     for version in ("v1.0-mini", "v1.0-trainval"):                                  # mini first: its tables are tiny (mini = a subset of trainval)
         root = default_root(version)
         if os.path.exists(os.path.join(root, version, "scene.json")):

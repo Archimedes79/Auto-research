@@ -11,7 +11,8 @@ checkout (`git worktree add`; the commands and the check that it is the checkout
     GtGenerator.versions.version_of(sig)  "v5" or None; GtGenerator.current_version() the GT version of THIS source with the default options
     GtGenerator.versions.canonical(sig)   the signature of the store that `sig`'s code fills (`same_gt_as`: v9 makes the GT of v8, so it uses its store)
     GtGenerator.versions.version_of_key(k) the same for a training cache key '0.5_4_<signature>' (what runs/<name>/gt.json and the cards record)
-    GtGenerator.versions.releases()       the rows of releases.csv: ONE number for the whole suite (the front GT version and the lane GT version that belong together)
+    GtGenerator.versions.releases()       the rows of releases.csv: ONE number for the whole suite (the front GT version and the lane GT version that belong
+                                          together)
     GtGenerator.versions.current_release()  the release of THIS source ("v10"), or None when the pair (front version, lane version) has no row yet
     python -m GtGenerator versions        the table, the current version marked, which GT is stored
     GtGenerator.versions.code_state()     {"commit", "dirty"} of the generator code, recorded in the manifest of a stored GT (index.json)
@@ -25,9 +26,10 @@ RELEASES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "releases.cs
 # the modules of this package that do NOT shape the GT (command line, storage, reports, pictures, checks, scene sets, the light devkit loader,
 # this table). Every other module is hashed into the signature (nuscenes_gt.SIGNATURE_FILES); `python -m GtGenerator selftest` fails for a module
 # that is in neither list, and for a hashed module that nuscenes_gt.py does not import, so a change of the generator cannot slip past a version.
-# the lane GT (lane_gt.py, lane_graph.py, road_graph.py, lane_lines.py) has its own version (lane_versions.csv), not the front GT's signature
+# the lane GT (lane_gt.py, lane_graph.py, road_graph.py, lane_lines.py, lane_tiers.py, rig_cameras.py: lane_gt.SOURCE_FILES) has its own version
+# (lane_versions.csv), not the front GT's signature
 NOT_GENERATOR = ("__init__.py", "__main__.py", "checks.py", "clean.py", "api.py", "cli.py", "pipeline.py", "store.py", "lane_gt.py", "lane_graph.py", "lane_graph_selftest.py", "lane_graph_view.py", "lane_tiers.py", "lane_tiers_selftest.py",
-                 "cli_selftest.py", "flow_selftest.py", "generator_selftest.py", "gt_api.py", "gt_api_selftest.py", "interface_selftest.py", "lane_lines.py", "lane_raster.py", "store_audit.py", "light_nusc.py", "report.py", "rig_cameras.py", "rig_masks.py", "road_graph.py", "selftest.py", "sets.py", "suite.py", "versions.py", "video.py", "view.py", "where.py")
+                 "cli_selftest.py", "fixture.py", "flow_selftest.py", "front_selftest.py", "generator_selftest.py", "gt_api.py", "gt_api_selftest.py", "interface_selftest.py", "lane_lines.py", "lane_raster.py", "store_audit.py", "light_nusc.py", "report.py", "rig_cameras.py", "rig_masks.py", "road_graph.py", "selftest.py", "sets.py", "store_selftest.py", "suite.py", "versions.py", "versions_selftest.py", "video.py", "view.py", "where.py")
 
 
 _TABLES = {}
@@ -74,8 +76,8 @@ def canonical(signature):
 
 
 def check_table(rows=None, release_rows=None, lane_versions=None):
-    """versions.csv and releases.csv are consistent: signatures are unique, every same_gt_as names an EARLIER row (no cycle, no dangling name), every release names a front version of
-    versions.csv and a lane version of lane_versions.csv; raises ValueError (`GtGenerator selftest` calls it)"""
+    """versions.csv and releases.csv are consistent: signatures are unique, every same_gt_as names an EARLIER row (no cycle, no dangling name), every release
+    names a front version of versions.csv and a lane version of lane_versions.csv; raises ValueError (`GtGenerator selftest` calls it)"""
     rows = table() if rows is None else rows
     seen = []
     for r in rows:
@@ -121,21 +123,23 @@ def current_release():
     """the release of THIS source: its front version (default options) and its lane version"""
     from . import lane_gt
     from .suite import code_signature
-    return release_of(version_of(code_signature()), lane_gt.version_of(lane_gt.code_signature()))      # the version of the code (v9 / l5), not of its store (v8 / l4)
+    # the version of the code (v9 / l5), not of its store (v8 / l4)
+    return release_of(version_of(code_signature()), lane_gt.version_of(lane_gt.code_signature()))
 
 
 def row_of(version):
     return next((r for r in table() if r["version"] == version), None)
 
 
-# ---------------------------------------------------------------------------------------------------------------- new rows, derived from git: nobody types the tables
+# ---------------------------------------------------------------------------------------------------- new rows, derived from git: nobody types the tables
 def _number(key):
     """"v12" -> 12 (the front versions and the releases are one running sequence)"""
     return int(key[1:])
 
 
 def last_change(files, cwd=None):
-    """{"date", "subject"} of the last commit that touched `files` (git log), "(uncommitted: describe the change)" as the subject while they differ from HEAD; the date is today's then"""
+    """{"date", "subject"} of the last commit that touched `files` (git log), "(uncommitted: describe the change)" as the subject while they differ from HEAD;
+    the date is today's then"""
     import datetime
     import subprocess
     here = cwd or os.path.dirname(os.path.abspath(__file__))
@@ -151,9 +155,10 @@ def last_change(files, cwd=None):
 
 
 def propose(signature, lane_version, change, versions_rows=None, release_rows=None):
-    """the rows that a source with this front `signature` and this `lane_version` still needs: {"front": a row of versions.csv or None, "release": a row of releases.csv or None}. The number is the next of the
-    running sequence (front versions and releases together), the text and the date are those of the last commit that touched the hashed files (`change`, see last_change). What stays by hand: `same_gt_as`
-    (it needs the pinned digests, front_digests.json) and the lane versions (lane_versions.csv belongs to the lane chat)."""
+    """the rows that a source with this front `signature` and this `lane_version` still needs: {"front": a row of versions.csv or None, "release": a row of
+    releases.csv or None}. The number is the next of the running sequence (front versions and releases together), the text and the date are those of the last
+    commit that touched the hashed files (`change`, see last_change). What stays by hand: `same_gt_as` (it needs the pinned digests, front_digests.json) and the
+    lane versions (lane_versions.csv belongs to the lane chat)."""
     vrows = table() if versions_rows is None else versions_rows
     rrows = releases() if release_rows is None else release_rows
     nxt = max([_number(r["version"]) for r in vrows] + [_number(r["release"]) for r in rrows]) + 1
@@ -196,10 +201,10 @@ def _changes_the_code(line):
 
 
 def code_state(max_age=20.0):
-    """{"commit": short hash of HEAD, "dirty": True when a file of GtGenerator/ other than a document (.md, .svg, architecture.json) differs from it (edited or new files)}; both None, with a warning,
-    when git cannot tell. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a scratch one. A worktree
-    that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then. The answer is kept `max_age` seconds: two git processes cost 0.5 - 1.5 s
-    and a run writes its index several times within seconds (an hours-long run asks again at its end)."""
+    """{"commit": short hash of HEAD, "dirty": True when a file of GtGenerator/ other than a document (.md, .svg, architecture.json) differs from it (edited or
+    new files)}; both None, with a warning, when git cannot tell. The manifest of a stored GT records it, so a GT made from a clean tree can be told from a
+    scratch one. A worktree that Windows git made has a path that WSL git cannot read: the Windows git (git.exe) is tried then. The answer is kept `max_age`
+    seconds: two git processes cost 0.5 - 1.5 s and a run writes its index several times within seconds (an hours-long run asks again at its end)."""
     import shutil
     import subprocess
     import time

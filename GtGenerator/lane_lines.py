@@ -2,14 +2,14 @@
 
 Source: the nuScenes map. `lane_divider` and `road_divider` are the map's own line records; the BOUNDARY is the outline of the union of the polygons of
 `boundary_layers` (default: the drivable area; add "carpark_area" and / or "walkway" to count them as part of the road, i.e. no boundary between them
-and the road). nuScenes has no boundary line record, this is a definition (open with Mirko: which layers).
+and the road). nuScenes has no boundary line record, this is a definition (open with the owner: which layers).
 
 CORNERS. Along every polyline the turning angle is measured between the chord of the last `corner_base` metres (default 2) and the chord of the next
 `corner_base` metres; a vertex whose angle exceeds `corner_deg` (default 30 degrees) and is the largest within 2 m is a corner (a kerb corner,
 a sharp end of a divider). A corner is {"pos", "angle" (degrees), "idx" (the nearest point of the polyline), "dir_in", "dir_out"}.
 
-AREAS. The ROAD area is the union of the polygons of `boundary_layers` (the area inside the boundary), the INTERSECTION areas are the connected areas of the road
-segments flagged is_intersection (road_graph.py gives them an id that matches the road nodes); `crop_areas` cuts them to the window as polygons
+AREAS. The ROAD area is the union of the polygons of `boundary_layers` (the area inside the boundary), the INTERSECTION areas are the connected areas of the
+road segments flagged is_intersection (road_graph.py gives them an id that matches the road nodes); `crop_areas` cuts them to the window as polygons
 {"id", "exterior", "holes", "area"} (exterior counter-clockwise, holes clockwise). They are NOT dilated: a head that wants intersection pixels dilated by a few
 metres does that itself; rasterising the polygon gives the intersection pixels as they are.
 
@@ -67,8 +67,8 @@ def build_line_graph(nmap, boundary_layers=("drivable_area",), simplify=0.05):
 
 
 def polygon_chunks(items, tile=100.0, min_area=0.0):
-    """[(id, shapely geometry)] -> chunks {"id", "poly", "bbox"}: every polygon cut into tiles of `tile` metres where it is bigger (the road area of a map is one
-    polygon with 100,000 vertices; a keyframe takes the tiles near the ego)"""
+    """[(id, shapely geometry)] -> chunks {"id", "poly", "bbox"}: every polygon cut into tiles of `tile` metres where it is bigger (the road area of a map is
+    one polygon with 100,000 vertices; a keyframe takes the tiles near the ego)"""
     import shapely
     chunks = []
     for ident, geom in items:
@@ -89,7 +89,8 @@ def polygon_chunks(items, tile=100.0, min_area=0.0):
 
 
 def _valid_polygons(g):
-    """the polygons of a shapely geometry, each one OGC valid: `clip_by_rect` and the union of the map leave rings that touch each other (shapely.make_valid splits such a polygon)"""
+    """the polygons of a shapely geometry, each one OGC valid: `clip_by_rect` and the union of the map leave rings that touch each other (shapely.make_valid
+    splits such a polygon)"""
     import shapely
     out = []
     for part in (g.geoms if hasattr(g, "geoms") else [g]):
@@ -106,7 +107,8 @@ def _valid_polygons(g):
 
 def crop_areas(chunks, T_e2g, half=50.0, frame="lane", merge=False, min_area=0.5, window=None):
     """the polygons of `chunks` cut to the window of one keyframe: [{"id", "exterior" (n, 2) float32 counter-clockwise, "holes" [(m, 2)] clockwise, "area"}];
-    `merge`: the pieces that touch (the tiles of a big polygon) are united first; the window is the square |x|, |y| <= half or the rectangle `window` = (x0, x1, y0, y1)"""
+    `merge`: the pieces that touch (the tiles of a big polygon) are united first; the window is the square |x|, |y| <= half or the rectangle `window` = (x0, x1,
+    y0, y1)"""
     import shapely
     from shapely import affinity
     from shapely.geometry.polygon import orient
@@ -133,8 +135,8 @@ def crop_areas(chunks, T_e2g, half=50.0, frame="lane", merge=False, min_area=0.5
                 if poly.area < min_area:
                     continue
                 poly = orient(poly, 1.0)
-                out.append(dict(id=ident, exterior=np.asarray(poly.exterior.coords, np.float32), holes=[np.asarray(h.coords, np.float32) for h in poly.interiors],
-                                area=float(poly.area)))
+                out.append(dict(id=ident, exterior=np.asarray(poly.exterior.coords, np.float32),
+                                holes=[np.asarray(h.coords, np.float32) for h in poly.interiors], area=float(poly.area)))
     out.sort(key=lambda d: (str(d["id"]), -d["area"]))
     return out
 
@@ -172,7 +174,8 @@ def find_corners(P, deg=30.0, base=2.0):
 
 
 def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=2.0, window=None):
-    """the lines of one keyframe window (see the module docstring); `lg` = build_line_graph(...); the window is the square |x|, |y| <= half or the rectangle `window`"""
+    """the lines of one keyframe window (see the module docstring); `lg` = build_line_graph(...); the window is the square |x|, |y| <= half or the rectangle
+    `window`"""
     t = T_e2g[:2, 3]
     W = window_of(half, window)
     r = reach(half, window)
@@ -203,7 +206,8 @@ def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=
         for m in merged:
             by_line.setdefault(m["line"], []).append(m)
         joined = []
-        for ms in by_line.values():                                    # a ring that leaves the window and has its first vertex inside: its last and first parts are one line
+        # a ring that leaves the window and has its first vertex inside: its last and first parts are one line
+        for ms in by_line.values():
             if len(ms) >= 2 and ms[0]["closed"] and ms[0]["joint_start"] and ms[-1]["joint_end"] and np.linalg.norm(ms[-1]["pts"][-1] - ms[0]["pts"][0]) < 1e-6:
                 last = ms.pop()
                 ms[0]["pts"] = np.concatenate([last["pts"], ms[0]["pts"][1:]])
@@ -214,5 +218,6 @@ def crop_lines(lg, T_e2g, half=50.0, frame="lane", corner_deg=30.0, corner_base=
             P = m["pts"]
             if np.linalg.norm(np.diff(P, axis=0), axis=1).sum() < 0.5:     # a line of under half a metre is a clipping crumb
                 continue
-            out[kind].append(dict(pts=P.astype(np.float32), start_open=m["start_open"], end_open=m["end_open"], corners=find_corners(P, corner_deg, corner_base)))
+            out[kind].append(dict(pts=P.astype(np.float32), start_open=m["start_open"], end_open=m["end_open"],
+                                  corners=find_corners(P, corner_deg, corner_base)))
     return out

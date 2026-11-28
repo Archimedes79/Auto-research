@@ -1,35 +1,42 @@
-"""Command line of the GtGenerator (from the repository root: `python -m GtGenerator COMMAND ...`; in WSL: `wsl bash GtGenerator/run_nice.sh -m GtGenerator COMMAND ...`).
+"""Command line of the GtGenerator (from the repository root: `python -m GtGenerator COMMAND ...`; in WSL: `wsl bash GtGenerator/run_nice.sh -m GtGenerator
+COMMAND ...`).
 
-The command line reaches the suite ONLY through the class `GtGenerator` (GtGenerator/api.py holds its methods): every command is ONE method call, so what the command line does is what Python does
-(`python -m GtGenerator COMMAND --help` has the options of a command; the same call in Python is `GtGenerator.<method>(...)`).
+The command line reaches the suite ONLY through the class `GtGenerator` (GtGenerator/api.py holds its methods): every command is ONE method call, so what the
+command line does is what Python does (`python -m GtGenerator COMMAND --help` has the options of a command; the same call in Python is
+`GtGenerator.<method>(...)`).
 
-  make GT (all resumable; --out is always the ROOT that holds the stores, default <data root>/groundtruth (where.py); the lane stores are below ROOT/lane; they print the GT key, see GtGenerator/gt_api.py)
+  make GT (all resumable; --out is always the ROOT that holds the stores, default <data root>/groundtruth (where.py); the lane stores are below ROOT/lane; they
+  print the GT key, see GtGenerator/gt_api.py)
     generate DATAROOT      GtGenerator.generate          the front GT + both lane GTs + the area masks of the BEV Fusion store (everything)
     generate-bev DATAROOT  GtGenerator.generate_bev_gt   BEV Fusion: the front GT + the lane GT of its rig + the packed intersection masks
     generate-lane DATAROOT GtGenerator.generate_lane_gt  the lane GT of one system (--rig lane_center | bev_fusion | all)
     area-masks             GtGenerator.area_masks        only the packed masks of an existing BEV Fusion lane store
   look at GT
     key SYSTEM             GtGenerator.gt_key            the key of what is stored (exit 1 when incomplete), --json for the dict
-    have                   GtGenerator.have              is the front GT of this generator there for these sequences? (exit 1 when not: the check before a training)
+    have                   GtGenerator.have              is the front GT of this generator there for these sequences? (exit 1 when not: the check before a
+                           training)
     data DATAROOT          GtGenerator.check_data        are the raw nuScenes files on disk? (exit 1 when not)
     sets / versions        GtGenerator.sets / versions   the scene sets and how much is stored / the GT versions, lane versions and releases
     area-mask TOKEN        GtGenerator.area_mask         one area mask: the number of cells, --png to draw it
-    view / sheets / video / lanegraph / masks   GtGenerator.view / sheets / video / lanegraph / masks   pictures of keyframes, of the lane graph, of the coverage masks; videos
+    view / sheets / video / lanegraph / masks   GtGenerator.view / sheets / video / lanegraph / masks   pictures of keyframes, of the lane graph, of the
+                                                coverage masks; videos
   check and clean
     audit-lane SYSTEM      GtGenerator.audit_lane        the audit of a stored lane GT before its release (exit 1 on a problem)
-    check                  GtGenerator.check             consistency checks of the GT of mini        report   GtGenerator.report   the checks over all sequences, one PDF
+    check                  GtGenerator.check             consistency checks of the GT of mini        report   GtGenerator.report   the checks over all
+                           sequences, one PDF
     digest                 GtGenerator.digest            a digest per frame of mini (two generators that make the same GT give the same file)
     clean                  GtGenerator.clean             list / move generated reports and stale caches (--delete only for reports)
-    selftest               GtGenerator.selftest          all tests of the suite (7 - 13 min), or parts with --only
+    selftest               GtGenerator.selftest          all tests of the suite (7 - 13 min), or parts / cases with --only; --all fails without nuScenes mini
 
-Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no traceback; GTGENERATOR_TRACEBACK=1 shows it).
+Exit codes: 0 done, 1 the thing asked about is not there / not complete (have, data, key, audit-lane, digest --compare), 2 wrong arguments (a message, no
+traceback; GTGENERATOR_TRACEBACK=1 shows it).
 """
 import argparse
 import json
 import os
 import sys
 
-from .api import SELFTESTS  # the test parts `selftest --only` can run
+from .api import SELFTEST_NAMES  # the parts and cases `selftest --only` can run
 
 
 # ---------------------------------------------------------------------------------------------------------------- argument helpers
@@ -179,8 +186,10 @@ def _parser():
     act = cl.add_mutually_exclusive_group()
     act.add_argument("--move", action="store_true")
     act.add_argument("--delete", action="store_true")
-    st = command("selftest", "selftest", "all tests of the suite (7 - 13 min), or only some of the file-level ones with --only")
-    st.add_argument("--only", nargs="+", choices=sorted(SELFTESTS), help="run only these parts (each prints its time): " + ", ".join(sorted(SELFTESTS)))
+    st = command("selftest", "selftest", "all tests of the suite (7 - 13 min), or the parts and cases named with --only (selftest.CASES)")
+    st.add_argument("--only", nargs="+", choices=SELFTEST_NAMES, metavar="NAME", help="run only these parts or cases: " + ", ".join(SELFTEST_NAMES))
+    st.add_argument("--root", default=None, help="the nuScenes mini folder (default ~/data/nuscenes); without it the cases that need it are skipped")
+    st.add_argument("--all", action="store_true", help="fail when a case cannot run for want of nuScenes mini (the gate of a signature step, a release)")
     p.registry = registry
     return p
 
@@ -195,7 +204,8 @@ _NOT_ARGUMENTS = ("cmd", "method", "json", "scenes_file")
 
 
 def _kwargs(a):
-    """the arguments of the method: every option that is given (the others keep the default of the method); --scenes-file is read here (one name per line, # comments)"""
+    """the arguments of the method: every option that is given (the others keep the default of the method); --scenes-file is read here (one name per line, #
+    comments)"""
     kw = {k: v for k, v in vars(a).items() if k not in _NOT_ARGUMENTS and v is not None}
     if "borders" in kw:
         kw["borders"] = tuple(kw["borders"])
@@ -206,8 +216,8 @@ def _kwargs(a):
 
 
 def _emit(r, as_json=False):
-    """print what the method returned and give the exit code: a GtKey (or a dict of them, or the `keys` of a dict) as its line; `text` of a dict; 1 when `ok` is False
-    (a dict without `ok`: a key that is not complete)"""
+    """print what the method returned and give the exit code: a GtKey (or a dict of them, or the `keys` of a dict) as its line; `text` of a dict; 1 when `ok` is
+    False (a dict without `ok`: a key that is not complete)"""
     if hasattr(r, "as_dict"):
         keys = [r]
     elif isinstance(r, dict) and r and all(hasattr(v, "as_dict") for v in r.values()):
@@ -228,7 +238,8 @@ def main(argv=None):
     from .suite import GtGenerator                                              # the class interface: the only way the command line reaches the suite
     try:
         code = _emit(getattr(GtGenerator, a.method)(**_kwargs(a)), getattr(a, "json", False))
-    except (ValueError, OSError) as e:                                   # a wrong argument or a missing file: the message and exit 2, as argparse does (GTGENERATOR_TRACEBACK=1 shows the traceback)
+    # a wrong argument or a missing file: the message and exit 2, as argparse does (GTGENERATOR_TRACEBACK=1 shows the traceback)
+    except (ValueError, OSError) as e:
         if os.environ.get("GTGENERATOR_TRACEBACK"):
             raise
         print(f"error: {e}", file=sys.stderr)

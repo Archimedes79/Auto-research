@@ -1,10 +1,11 @@
-"""Tests of the front GT generator and the lane graphs against INDEPENDENT references (the devkit, the nuScenes map, the camera image, a file round trip), which the other selftests do not
-have: the footprints of the boxes against the devkit's corners, the left / right handedness against the front camera image, the centre-line direction against the vector centre-lines, the lane
-divider mask against its vectors, the map layers against exact polygons, the stored file against the live keyframe layer by layer, and the invariants of lane graphs on real frames of every map
-(links symmetric, window events, ids, tiers); plus a guard that the hashed lane sources import no module the signature does not cover. Nothing here changes a hashed file: the tests state what
-the generator does today, so a later change that moves it fails here before a GT is built from it.
+"""Tests of the front GT generator and the lane graphs against INDEPENDENT references (the devkit, the nuScenes map, the camera image, a file round trip), which
+the other selftests do not have: the footprints of the boxes against the devkit's corners, the left / right handedness against the front camera image, the
+centre-line direction against the vector centre-lines, the lane divider mask against its vectors, the map layers against exact polygons, the stored file against
+the live keyframe layer by layer, and the invariants of lane graphs on real frames of every map (links symmetric, window events, ids, tiers); plus a guard that
+the hashed lane sources import no module the signature does not cover. Nothing here changes a hashed file: the tests state what the generator does today, so a
+later change that moves it fails here before a GT is built from it.
 
-    python -m GtGenerator.generator_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
+    python -m GtGenerator selftest --only generator    (cases generator_toy: no data; generator: nuScenes mini)
 """
 import ast
 import math
@@ -31,7 +32,8 @@ def _same_corners(a, b, tol):
 
 
 def _contract_checks():
-    """the pieces of the corrections without any data: the angle wrap, the flag of a stationary box, flow_sigma on a cell of a box of unknown velocity (finite, weight 0), the even supersampling"""
+    """the pieces of the corrections without any data: the angle wrap, the flag of a stationary box, flow_sigma on a cell of a box of unknown velocity (finite,
+    weight 0), the even supersampling"""
     import types
     from .flow import ObjectFlow
     from .layers import Raster
@@ -65,7 +67,8 @@ def _contract_checks():
         rng = np.random.default_rng(seed)
         prisms = [(np.array([[x, y - 1], [x, y + 1], [x + 4, y + 1], [x + 4, y - 1]], float), 0.0, h)
                   for x, y, h in ((8, 0, 1.6), (14, 3, 3.0), (22, -4, 0.8), (30 + seed, 1, 2.5))]
-        cam = np.array([-3.0 if seed < 5 else 12.0, 0.2, 1.5])                                         # the last one: a camera inside the scene, boxes behind it
+        # the last one: a camera inside the scene, boxes behind it
+        cam = np.array([-3.0 if seed < 5 else 12.0, 0.2, 1.5])
         pts = np.c_[rng.uniform(0, 45, 3000), rng.uniform(-12, 12, 3000)]
         zs = rng.uniform(0.0, 3.0, (3, 3000))
         got = cvg.blocked_at_heights(pts, zs, cam, prisms)
@@ -113,7 +116,8 @@ def _front_checks(gt, toks):
         if ahead.sum() >= 10:
             assert np.median(g["centreline_dir"][0][ahead]) > 0.5, "the centre-line ahead of the car points forward"
             n_dir += 1
-        # 3b. the contract of the angles and flags (v13): box yaw wrapped to [-pi, pi], centre-line direction a unit vector or (0, 0), flow_sigma finite and positive, the flag of a
+        # 3b. the contract of the angles and flags (v13): box yaw wrapped to [-pi, pi], centre-line direction a unit vector or (0, 0), flow_sigma finite and
+        # positive, the flag of a
         #     stationary box that no sensor sees is `unobserved` (before it was always `ok`)
         assert all(abs(b["yaw"]) <= math.pi + 1e-9 for b in m["boxes"]), "box yaw is wrapped to [-pi, pi]"
         nrm = np.hypot(g["centreline_dir"][0], g["centreline_dir"][1])[cl]
@@ -148,14 +152,16 @@ def _front_checks(gt, toks):
 
 
 def _map_checks(gt, name, toks):
-    """the map layers against exact polygons of the nuScenes map: drivable area, walkway and ped crossing (IoU of the cells with a coverage above one half, where the map has the feature)"""
+    """the map layers against exact polygons of the nuScenes map: drivable area, walkway and ped crossing (IoU of the cells with a coverage above one half,
+    where the map has the feature)"""
     import shapely
     from shapely.geometry import Polygon
     grid = GridSpec()
     xs, ys = grid.centres()
     scene = next(s for s in gt.nusc.scene if s["name"] == name)
     nmap = gt.map_for(scene["token"])
-    # records_in_patch (the devkit's scan with a prefilter by bounds, also for lane_connector, which has no devkit bounds) gives the devkit's own records on a few patches
+    # records_in_patch (the devkit's scan with a prefilter by bounds, also for lane_connector, which has no devkit bounds) gives the devkit's own records on a
+    # few patches
     pose = np.asarray(gt.keyframe(toks[0])["meta"]["T_e2g"], float)[:2, 3]
     for dx, dy, half in ((0, 0, 40), (25, -10, 30), (-60, 40, 55)):
         box = (pose[0] + dx - half, pose[1] + dy - half, pose[0] + dx + half, pose[1] + dy + half)
@@ -176,7 +182,8 @@ def _map_checks(gt, name, toks):
                 for pg in polys:
                     if pg.is_empty:
                         continue
-                    ego = lambda coords: (np.c_[np.asarray(coords, float)[:, :2], np.zeros(len(coords)), np.ones(len(coords))] @ Tinv.T)[:, :2]      # noqa: E731
+                    # noqa: E731
+                    ego = lambda coords: (np.c_[np.asarray(coords, float)[:, :2], np.zeros(len(coords)), np.ones(len(coords))] @ Tinv.T)[:, :2]
                     poly = Polygon(ego(pg.exterior.coords), [ego(i.coords) for i in pg.interiors])
                     if not poly.is_valid:
                         poly = poly.buffer(0)
@@ -230,11 +237,13 @@ def _lane_invariants(gt, lane_gt, toks, root):
 
 
 def _signature_guard():
-    """the lane signature hashes SOURCE_FILES: a module they import that is neither hashed nor known to be outside is a hole (an edit of it would change the GT without a new version)"""
+    """the lane signature hashes SOURCE_FILES: a module they import that is neither hashed nor known to be outside is a hole (an edit of it would change the GT
+    without a new version)"""
     from . import lane_gt
     here = os.path.dirname(os.path.abspath(__file__))
     hashed = {f[:-3] for f in lane_gt.SOURCE_FILES}
-    outside = {"light_nusc", "store", "sets", "suite", "versions", "where"}       # the devkit loader, the listing of a store, the tables of scenes, the git stamp of the index, the folder
+    # the devkit loader, the listing of a store, the tables of scenes, the git stamp of the index, the folder
+    outside = {"light_nusc", "store", "sets", "suite", "versions", "where"}
                                                                                   # of the stores (l6.1): no label comes from them
     for f in lane_gt.SOURCE_FILES:
         tree = ast.parse(open(os.path.join(here, f), encoding="utf-8").read())
@@ -245,27 +254,45 @@ def _signature_guard():
                     assert mod in hashed or mod in outside, f"{f} imports {mod}, which the lane signature does not cover: add it to SOURCE_FILES (a new lane version) or to the known outside modules here with a reason"
 
 
-def run(root=None, verbose=True):
+# The helpers the lane files copy from the front files: each signature hashes only its own files (the rule of 2026-11-07), so a change of a front
+# file must not change the lane labels silently. The copies are the same code (docstrings aside); a copy that differs on purpose is in DIVERGED.
+TWINS = (("coverage.py", "lane_tiers.py", "camera_cells"), ("coverage.py", "lane_tiers.py", "_clip"), ("coverage.py", "lane_tiers.py", "_wedge"),
+         ("nuscenes_adapter.py", "lane_tiers.py", "category_group"))
+DIVERGED = {("nuscenes_adapter.py", "lane_gt.py", "pose_matrix"): "lane_gt.py imports pyquaternion inside the function (a reader of the lane store "
+                                                                  "imports lane_gt.py without it); the transform is the same"}
+
+
+def _twins():
+    def body(path, name):
+        tree = ast.parse(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), path), encoding="utf-8").read())
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == name)
+        if fn.body and isinstance(fn.body[0], ast.Expr) and isinstance(fn.body[0].value, ast.Constant) and isinstance(fn.body[0].value.value, str):
+            fn.body = fn.body[1:]
+        return ast.dump(fn)
+    for a, b, name in TWINS:
+        assert body(a, name) == body(b, name), f"{b} holds a copy of {a}:{name} that differs: copy it again (a new lane version) or move it to DIVERGED with the reason"
+    for (a, b, name), why in DIVERGED.items():
+        assert body(a, name) != body(b, name), f"{a}:{name} and {b}:{name} are the same again: take them out of DIVERGED ({why})"
+
+
+def toy():
+    """the checks that need no data: the pieces of the corrections, the lane signature guard, the copied helpers"""
+    _contract_checks()
+    _signature_guard()
+    _twins()
+    return f"the lane signature covers what the lane sources import; the {len(TWINS)} copied helpers are the same code ({len(DIVERGED)} differs on purpose)"
+
+
+def mini(root):
+    """the generator against the devkit, the map, the image and a file round trip on nuScenes mini; the lane invariants on real frames"""
     from . import lane_gt
     from .suite import GtGenerator
-    root = os.path.expanduser(root or "~/data/nuscenes")
     gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-0553", "scene-0916"])
     toks = [gt.keyframes("scene-0061")[8], gt.keyframes("scene-0103")[20]]
-    _contract_checks()
     msgs = [_front_checks(gt, toks), _map_checks(gt, "scene-0061", toks[:1])]
-    lane_toks = []
-    for name in ("scene-0061", "scene-0103", "scene-0553", "scene-0916"):
-        lane_toks.append(gt.keyframes(name)[10])
+    lane_toks = [gt.keyframes(name)[10] for name in ("scene-0061", "scene-0103", "scene-0553", "scene-0916")]
     msgs.append(_lane_invariants(gt, lane_gt, lane_toks, root))
-    _signature_guard()
-    msg = "generator selftest ok: " + "; ".join(msgs) + "; the lane signature covers what the lane sources import"
-    if verbose:
-        print(msg)
-    return msg
-
-
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=None)
-    run(ap.parse_args().root)
+    from .nuscenes_adapter import pose_matrix
+    rec = gt.nusc.get("ego_pose", gt.cam(toks[0])["ego_pose_token"])                 # DIVERGED: the two pose_matrix give the same transform
+    assert np.array_equal(pose_matrix(rec), lane_gt.pose_matrix(rec)), "nuscenes_adapter.pose_matrix and lane_gt.pose_matrix differ on a record"
+    return "; ".join(msgs)

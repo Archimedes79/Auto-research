@@ -1,22 +1,28 @@
-"""The rule of the interface and its test: `problems/`, `autoresearch/` and `datasets/` reach the ground truth through `import GtGenerator` (the names of `GtGenerator.__all__`)
-or `python -m GtGenerator COMMAND`, and through nothing below it.
+"""The rule of the interface and its test: `problems/`, `autoresearch/` and `datasets/` reach the ground truth through `import GtGenerator` (the names of
+`GtGenerator.__all__`) or `python -m GtGenerator COMMAND`, and through nothing below it.
 
     GtGenerator.check_imports(["problems/bev_fusion"])      # -> ["file:line: the source line  (why)", ...]; [] = the rule holds
-    python -m GtGenerator selftest --only interface         # the rule on a planted file, the public table against the docs, the readers on a made-up store, the tree
+    python -m GtGenerator selftest --only interface         # the rule on a planted file, the public table against the docs, the readers on a made-up
+                                                            # store (case interface_rules), and the scan of the tree (case interface_tree)
 
 What `check_imports` refuses in a .py file (an AST walk, nothing is imported):
-- an import below the package: `from GtGenerator.<module> import ...`, `import GtGenerator.<module>`, `from GtGenerator import <a name that is not public>` (also `*`);
-- the package used as anything but `GtGenerator.<public name>` (also under `import GtGenerator as G`): an attribute that is not public (`GtGenerator.lane_gt`, `GtGenerator.__file__`;
-  only `__all__` besides the names), and the package as a value (`getattr(GtGenerator, ...)`, `M = GtGenerator`, `return GtGenerator`);
-- on a public name: a member of the class or the key that is not part of the interface (`GtGenerator.GtGenerator.versions`, also on a name bound by `from GtGenerator import
-  GtGenerator`; the list is `_MEMBERS` in __init__.py), and any dunder attribute (`GtGenerator.load.__globals__`);
-- a string that is the name of the package (`import_module("GtGenerator")`, `sys.modules["GtGenerator"]`, `os.path.join(..., "GtGenerator", ...)`), except in an argv right
-  after "-m";
-- a string that holds a path or a dotted name to a file of the folder (`GtGenerator.lane_gt`, `GtGenerator/versions.csv`, in a shell line too). A string that is a statement
-  of its own (a docstring) is a text and is not looked at; a comment never is.
-Allowed: `import GtGenerator [as G]`, `from GtGenerator import <public>`, `GtGenerator.<public>...`, the argv `"-m", "GtGenerator"`, the launcher `GtGenerator/run_nice.sh`.
-What it cannot see: an object (`gen = GtGenerator.GtGenerator(...); gen.clean()`), a name put together at run time. A file that does not parse is reported, never skipped.
-A file that binds one name both ways (`import GtGenerator` and `from GtGenerator import GtGenerator`) gets the members of the class reported: give the class another name there.
+- an import below the package: `from GtGenerator.<module> import ...`, `import GtGenerator.<module>`, `from GtGenerator import <a name that is not
+  public>` (also `*`);
+- the package used as anything but `GtGenerator.<public name>` (also under `import GtGenerator as G`): an attribute that is not public
+  (`GtGenerator.lane_gt`, `GtGenerator.__file__`; only `__all__` besides the names), and the package as a value (`getattr(GtGenerator, ...)`,
+  `M = GtGenerator`, `return GtGenerator`);
+- on a public name: a member of the class or the key that is not part of the interface (`GtGenerator.GtGenerator.versions`, also on a name bound by
+  `from GtGenerator import GtGenerator`; the list is `_MEMBERS` in __init__.py), and any dunder attribute (`GtGenerator.load.__globals__`);
+- a string that is the name of the package (`import_module("GtGenerator")`, `sys.modules["GtGenerator"]`, `os.path.join(..., "GtGenerator", ...)`), except
+  in an argv right after "-m";
+- a string that holds a path or a dotted name to a file of the folder (`GtGenerator.lane_gt`, `GtGenerator/versions.csv`, in a shell line too). A string
+  that is a statement of its own (a docstring) is a text and is not looked at; a comment never is.
+Allowed: `import GtGenerator [as G]`, `from GtGenerator import <public>`, `GtGenerator.<public>...`, the argv `"-m", "GtGenerator"`, the launcher
+`GtGenerator/run_nice.sh`.
+What it cannot see: an object (`gen = GtGenerator.GtGenerator(...); gen.clean()`), a name put together at run time. A file that does not parse is reported,
+never skipped.
+A file that binds one name both ways (`import GtGenerator` and `from GtGenerator import GtGenerator`) gets the members of the class reported: give the class
+another name there.
 """
 import ast
 import contextlib
@@ -29,19 +35,23 @@ from .where import REPO
 PACKAGE = "GtGenerator"
 SCANNED = ("problems", "autoresearch", "datasets")            # the folders of the repository the rule binds
 
-# The lines of the real tree that still reach below the interface: file (from the repository root) -> its source lines; the comment names the public replacement. They move in step S2
-# of the interface plan (the files belong to the sessions of the two problems). `selftest --only interface` fails for a use that is not listed AND for a line that is no longer
-# there: the list can only shrink, and it is empty when S2 is done. For S2: no module is handed on as a value either (the scan refuses `return GtGenerator` and cannot see
-# `self.lg.held(...)`): lane_gt_data.py and lane_tok_data.py call GtGenerator.lane_tokens() / GtGenerator.load_lane(token) directly, and `self.lg` goes.
+# The lines of the real tree that still reach below the interface: file (from the repository root) -> its source lines; the comment names the public
+# replacement. They move in step S2 of the interface plan (the files belong to the sessions of the two problems). `selftest --only interface` fails for a use
+# that is not listed AND for a line that is no longer there: the list can only shrink, and it is empty when S2 is done. For S2: no module is handed on as a
+# value either (the scan refuses `return GtGenerator` and cannot see `self.lg.held(...)`): lane_gt_data.py and lane_tok_data.py call GtGenerator.lane_tokens() /
+# GtGenerator.load_lane(token) directly, and `self.lg` goes.
 PENDING = {}                                                    # nothing waits: every problem reaches the folder through the interface
 
-# The lines of the research core that name the folder as a whole and read nothing of it: file -> its source lines. Not violations (check_imports leaves them out); a line
-# that changes has to be looked at again, so the test fails for one that is no longer there.
+# The lines of the research core that name the folder as a whole and read nothing of it: file -> its source lines. Not violations (check_imports leaves them
+# out); a line that changes has to be looked at again, so the test fails for one that is no longer there.
 NAMED_ONLY = {
-    "autoresearch/research/evaluate.py": ('''SHARED = ("Evaluation", "trainkit", "research", "GtGenerator")     # the packages a run imports besides its problem's own''',),          # a list of package names
-    "autoresearch/research/launch.py": ('''SNAPSHOT_PATHS = ("autoresearch", "GtGenerator", "datasets")       # besides the problem's own folder: the code a run may import''',),     # the folder is copied into a run's snapshot
+    # a list of package names
+    "autoresearch/research/evaluate.py": ('''SHARED = ("Evaluation", "trainkit", "research", "GtGenerator")     # the packages a run imports besides its problem's own''',),
+    # the folder is copied into a run's snapshot
+    "autoresearch/research/launch.py": ('''SNAPSHOT_PATHS = ("autoresearch", "GtGenerator", "datasets")       # besides the problem's own folder: the code a run may import''',),
     "datasets/nuscenes/tools/make_manifest.py": ('LINKS = {"gt": {"registry": "GtGenerator/versions.csv", "tags": "autogt/v<N>", "store": "<data root>/groundtruth/<signature>/index.json", '
-                                                 '"check": "python -m GtGenerator data <dataroot>"},',),                                                                               # a link written into the manifest
+                                                 # a link written into the manifest
+                                                 '"check": "python -m GtGenerator data <dataroot>"},',),
 }
 
 
@@ -57,7 +67,8 @@ def _interface():
 def _found(tree, public, members, files):
     """(line number, why) of every use below the interface in a parsed file"""
     nodes = list(ast.walk(tree))
-    package = {a.asname or PACKAGE for n in nodes if isinstance(n, ast.Import) for a in n.names                       # the names `import GtGenerator [as G]` binds
+    # the names `import GtGenerator [as G]` binds
+    package = {a.asname or PACKAGE for n in nodes if isinstance(n, ast.Import) for a in n.names
                if a.name == PACKAGE or (a.name.startswith(PACKAGE + ".") and not a.asname)}
     bound = {a.asname or a.name: a.name for n in nodes if isinstance(n, ast.ImportFrom) and not n.level and n.module == PACKAGE
              for a in n.names if a.name in public and (a.asname or a.name) not in package}                           # local name -> the public name it is
@@ -116,7 +127,8 @@ def _files(paths):
 
 
 def scan(paths):
-    """[(file, line number, source line, why)] of every use below the interface in the .py files of `paths` (folders are walked), in the order of the files and lines"""
+    """[(file, line number, source line, why)] of every use below the interface in the .py files of `paths` (folders are walked), in the order of the files and
+    lines"""
     interface, out = _interface(), []
     for path in _files(paths):
         with open(path, "rb") as f:
@@ -138,13 +150,14 @@ def _in_repo(path):
 
 
 def check_imports(paths):
-    """the uses of GtGenerator below its interface in the .py files of `paths` (folders, walked, or files; one path or a list): a list of "file:line: the source line  (why)",
-    [] when the rule holds. A test of a problem: `assert not GtGenerator.check_imports([<the problem's folder>])`"""
+    """the uses of GtGenerator below its interface in the .py files of `paths` (folders, walked, or files; one path or a list): a list of "file:line: the source
+    line  (why)", [] when the rule holds. A test of a problem: `assert not GtGenerator.check_imports([<the problem's folder>])`"""
     return [f"{path}:{line}: {source}  ({why})" for path, line, source, why in scan([paths] if isinstance(paths, str) else paths)
             if source not in NAMED_ONLY.get(_in_repo(path), ())]
 
 
-# every line marked `# refused: why[; why]` is reported with exactly these reasons, and no other line: one line per form of going below the interface, among the allowed forms
+# every line marked `# refused: why[; why]` is reported with exactly these reasons, and no other line: one line per form of going below the interface, among the
+# allowed forms
 PLANTED = r'''"""GtGenerator.coverage.radar_cells and GtGenerator/lane_gt.py are named in a text: a text is no import"""
 import importlib, os, runpy, subprocess, sys
 import GtGenerator
@@ -228,7 +241,8 @@ def _rule_check():
         first = check_imports(d)[0]
         assert first.startswith(f"{path}:6: import GtGenerator.lane_gt as L") and first.endswith("  (imports the module GtGenerator.lane_gt)"), first
         assert check_imports([path]) == check_imports(d), "one path or a list, a folder or a file"
-        documented = "from GtGenerator import GtGenerator\nkey = GtGenerator.generate_bev_gt('~/data/nuscenes')\n"       # the name is the class here: its listed members are allowed
+        # the name is the class here: its listed members are allowed
+        documented = "from GtGenerator import GtGenerator\nkey = GtGenerator.generate_bev_gt('~/data/nuscenes')\n"
         _write(path, documented)
         assert scan([d]) == [], "the documented class form is allowed"
         _write(path, documented + "def broken(:\n")
@@ -237,9 +251,9 @@ def _rule_check():
 
 
 def _table_check():
-    """the public table is the documented one: `__all__` is the table, every name resolves to its owner and is no module of the folder, the members of a public class exist,
-    the package docstring has a contract line for each name and names each member, AGENTS.md section 1 names each as `GtGenerator.<name>`, no line of AGENTS.md sends its reader
-    to a `GtGenerator.<name>` that is not public, and the table of README.md lists exactly these names"""
+    """the public table is the documented one: `__all__` is the table, every name resolves to its owner and is no module of the folder, the members of a public
+    class exist, the package docstring has a contract line for each name and names each member, AGENTS.md section 1 names each as `GtGenerator.<name>`, no line
+    of AGENTS.md sends its reader to a `GtGenerator.<name>` that is not public, and the table of README.md lists exactly these names"""
     pkg = importlib.import_module(PACKAGE)
     here = os.path.dirname(os.path.abspath(__file__))
     assert pkg.__all__ == sorted(pkg._PUBLIC), "__all__ is the table"
@@ -270,9 +284,9 @@ def _table_check():
 
 
 def _root_check():
-    """where the stores are: RESEARCH_DATA, else `data` of the machine file, both read at the call. A machine file that is named or exists and does not give the data root is an
-    error that names the file, for the readers too (an empty answer would read as: nothing is stored, generate it); only a machine without any machine file gets the folder
-    in the repository"""
+    """where the stores are: RESEARCH_DATA, else `data` of the machine file, both read at the call. A machine file that is named or exists and does not give the
+    data root is an error that names the file, for the readers too (an empty answer would read as: nothing is stored, generate it); only a machine without any
+    machine file gets the folder in the repository"""
     import json
     import tempfile
     pkg = importlib.import_module(PACKAGE)
@@ -288,17 +302,19 @@ def _root_check():
                 assert bad in _raises(ValueError, pkg.store_root) and bad in _raises(ValueError, pkg.lane_tokens), "the error names the file"
             with _environment(RESEARCH_DATA=d, RESEARCH_MACHINE=bad):
                 assert pkg.store_root() == os.path.join(d, "groundtruth"), "RESEARCH_DATA decides, the machine file is not read"
-        with _environment(RESEARCH_DATA=None, RESEARCH_MACHINE=None, HOME=d):                       # no file is named and none is at the default place: a fresh clone
+        # no file is named and none is at the default place: a fresh clone
+        with _environment(RESEARCH_DATA=None, RESEARCH_MACHINE=None, HOME=d):
             assert pkg.store_root() == os.path.join(REPO, "data", "autogt")
             os.makedirs(os.path.join(d, ".research"))
-            _write(os.path.join(d, ".research", "machine.json"), '{"data": ')                        # a file at the default place that cannot be read is no fresh clone
+            # a file at the default place that cannot be read is no fresh clone
+            _write(os.path.join(d, ".research", "machine.json"), '{"data": ')
             assert os.path.join(d, ".research", "machine.json") in _raises(ValueError, pkg.store_root)
 
 
 def _names_check():
-    """the readers and the identities of the interface on a made-up store root (no nuScenes): the root is read at every call, a lane graph and the stored tokens come from
-    <root>/lane/<lane_signature(rig)>/, a generator names its STORE (after same_gt_as) and takes its options by keyword only, the version names are those of the table, and
-    neither `import GtGenerator` nor a read of the lane store loads the front generator"""
+    """the readers and the identities of the interface on a made-up store root (no nuScenes): the root is read at every call, a lane graph and the stored tokens
+    come from <root>/lane/<lane_signature(rig)>/, a generator names its STORE (after same_gt_as) and takes its options by keyword only, the version names are
+    those of the table, and neither `import GtGenerator` nor a read of the lane store loads the front generator"""
     import gzip
     import pickle
     import subprocess
@@ -322,7 +338,10 @@ def _names_check():
             os.makedirs(folder)
             with gzip.open(os.path.join(folder, token + ".pkl.gz"), "wb") as f:
                 pickle.dump({"rig": rig}, f)
-            assert pkg.lane_signature(rig) == lane_gt.signature(rig=rig), "the store key (after same_gt_as), not the code signature"
+            row = next(r for r in lane_gt.table() if r["signature"] == lane_gt.code_signature(rig=rig))       # the chain of same_gt_as walked here, not by store_of
+            while row["same_gt_as"]:
+                row = next(r for r in lane_gt.table() if r["version"] == row["same_gt_as"] and r["rig"] == rig)
+            assert pkg.lane_signature(rig) == row["signature"], "the store key is the end of the same_gt_as chain of the table, not the code signature"
             assert pkg.lane_tokens(rig) == pkg.lane_tokens(rig, data=root) == {token} and pkg.load_lane(token, rig) == pkg.load_lane(token, rig, root) == {"rig": rig}, rig
         assert len({pkg.lane_signature(rig) for rig in lane_gt.RIGS}) == len(lane_gt.RIGS), "one store per rig"
         quiet = ("import sys, GtGenerator as G; G.store_root(); G.version_of_key('x'); assert 'numpy' not in sys.modules, 'import GtGenerator loads numpy'; "
@@ -345,7 +364,8 @@ def _names_check():
 
 
 def _tree_check():
-    """the real tree: every use below the interface is a line of PENDING (to be migrated) or of NAMED_ONLY (the folder by name), and every line of both is still there"""
+    """the real tree: every use below the interface is a line of PENDING (to be migrated) or of NAMED_ONLY (the folder by name), and every line of both is still
+    there"""
     roots = [os.path.join(REPO, d) for d in SCANNED if os.path.isdir(os.path.join(REPO, d))]
     got = [(_in_repo(path), line, source, why) for path, line, source, why in scan(roots)]
     new = [f"{p}:{line}: {source}  ({why})" for p, line, source, why in got if source not in PENDING.get(p, ()) + NAMED_ONLY.get(p, ())]
@@ -358,22 +378,18 @@ def _tree_check():
     return len(roots), sum(source in PENDING.get(p, ()) for p, _, source, _ in got)
 
 
-def run(verbose=True, tree=True):
-    """`tree=False` leaves the scan of problems/, autoresearch/ and datasets/ out: the full self-test of the generator (the gate of a signature step) must not fail for a
-    half-edited file of another session; `selftest --only interface` and the tests of the problems scan the tree"""
+def package():
+    """the rule on the planted file, the public table against the docs, the store root, the readers on a made-up store"""
     _rule_check()
     names = _table_check()
     _root_check()
     _names_check()
-    msg = (f"interface selftest ok: the planted file gives exactly its {len(PLANTED_FOUND)} violations, {names} public names resolve and are documented, the store root is read at the "
-           "call and a machine file that does not give it is an error, a lane read loads no front generator, a generator names its store")
-    if tree:
-        roots, pending = _tree_check()
-        msg += f"; {roots} folder(s) of the tree reach {PACKAGE} only through the interface" + (f" except the {pending} pending line(s) of {len(PENDING)} file(s)" if pending else "")
-    if verbose:
-        print(msg)
-    return msg
+    return (f"the planted file gives exactly its {len(PLANTED_FOUND)} violations, {names} public names resolve and are documented, the store root is read at the "
+            "call and a machine file that does not give it is an error, a lane read loads no front generator, a generator names its store")
 
 
-if __name__ == "__main__":
-    run()
+def tree():
+    """the scan of problems/, autoresearch/ and datasets/: only when asked (`selftest --only interface`; the tests of the problems call check_imports), so the
+    full self-test of the generator (the gate of a signature step) does not fail for a half-edited file of another session"""
+    roots, pending = _tree_check()
+    return f"{roots} folder(s) of the tree reach {PACKAGE} only through the interface" + (f" except the {pending} pending line(s) of {len(PENDING)} file(s)" if pending else "")

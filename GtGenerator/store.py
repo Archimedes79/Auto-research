@@ -1,6 +1,7 @@
-"""Storage of the front GT: the keyframe files (`<signature>/<sample token>.npz`, float16 layers + the meta as a pickled object), the index.json of a store folder (the manifest: what it holds,
-which generator made it, whether it is a release), the resume checks, and the listing of a store folder by file name. No argparse, no devkit: everything that reads or writes a store comes here
-(`pipeline.py` and `report.py` write with it, `suite.py` / `sets.py` read with it; the hashed `lane_gt.py` uses `names`, `read_index`, `environment` and `detect_version` of it).
+"""Storage of the front GT: the keyframe files (`<signature>/<sample token>.npz`, float16 layers + the meta as a pickled object), the index.json of a store
+folder (the manifest: what it holds, which generator made it, whether it is a release), the resume checks, and the listing of a store folder by file name. No
+argparse, no devkit: everything that reads or writes a store comes here (`pipeline.py` and `report.py` write with it, `suite.py` / `sets.py` read with it; the
+hashed `lane_gt.py` uses `names`, `read_index`, `environment` and `detect_version` of it).
 """
 import json
 import os
@@ -9,9 +10,10 @@ import numpy as np
 
 
 def names(folder, suffix, nonempty=False):
-    """the keys of the files `<key><suffix>` in a store folder, by name only (no stat: 34k stat calls cost 80 s on the 9p mounts one after the other, a scandir 0.2 s; a file that is being written has a
-    `.tmp` name: every writer renames it into place). `nonempty` also drops a zero-byte file (a full disk, a bad copy): the stats then run on 16 threads, the wait is the round trip, not the CPU
-    (12 - 16 s for a store of 34k files); a writer of this suite never leaves one, so the check is for the questions that must not guess (`generate`, the GT key)"""
+    """the keys of the files `<key><suffix>` in a store folder, by name only (no stat: 34k stat calls cost 80 s on the 9p mounts one after the other, a scandir
+    0.2 s; a file that is being written has a `.tmp` name: every writer renames it into place). `nonempty` also drops a zero-byte file (a full disk, a bad
+    copy): the stats then run on 16 threads, the wait is the round trip, not the CPU (12 - 16 s for a store of 34k files); a writer of this suite never leaves
+    one, so the check is for the questions that must not guess (`generate`, the GT key)"""
     if not os.path.isdir(folder):
         return set()
     with os.scandir(folder) as it:
@@ -65,9 +67,9 @@ def load_keyframe(sig_dir, token):
 
 
 def write_keyframe(sig_dir, token, make):
-    """THE writer of a keyframe file. A file that is there is kept (an empty one, from a full disk, is no keyframe); otherwise `make()` gives the GT dict, which is written with float16 for the
-    float32 layers and the meta as an object array, atomically: the temporary name holds the process id, so two writers on one folder do not trip over each other (".tmp" in the name keeps it
-    out of every listing of stored keyframes). -> True when this call wrote the file"""
+    """THE writer of a keyframe file. A file that is there is kept (an empty one, from a full disk, is no keyframe); otherwise `make()` gives the GT dict, which
+    is written with float16 for the float32 layers and the meta as an object array, atomically: the temporary name holds the process id, so two writers on one
+    folder do not trip over each other (".tmp" in the name keeps it out of every listing of stored keyframes). -> True when this call wrote the file"""
     path = os.path.join(sig_dir, token + ".npz")
     if os.path.exists(path) and os.path.getsize(path) > 0:
         return False
@@ -91,7 +93,8 @@ def run_manifest(sig_dir, version, dataroot, set_name=None, options=None):
 
 
 def environment():
-    """the versions of the libraries whose behaviour shapes the stored bytes (the generator signature hashes our files, not these); the index.json of a store records them"""
+    """the versions of the libraries whose behaviour shapes the stored bytes (the generator signature hashes our files, not these); the index.json of a store
+    records them"""
     from importlib import metadata
     out = {}
     for pkg in ("numpy", "shapely", "opencv-python", "matplotlib", "nuscenes-devkit", "pyquaternion"):
@@ -102,36 +105,33 @@ def environment():
     return out
 
 
-def canonical_of(signature):
-    from .versions import canonical
-    return canonical(signature)
-
-
 def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, complete=True, run=None, old_complete=None):
     """index.json of a cache folder (marks it as a GtGenerator cache for `clean`, records what it holds). `generate` writes it with
     complete=False before the first keyframe (so an interrupted run still says which resolution it holds) and again at the end.
     run = run_manifest(...) of a finished run adds the manifest keys set, commit, dirty, sets_complete and release (a complete folder
     whose signature is a released GT version, made from a clean tree, holding the set `full`); without it the keys of an earlier run
-    on this folder stay. old_complete = the `complete` of the index before this run's provisional write (the provisional index of this very run says False and must not make a finished run incomplete)."""
+    on this folder stay. old_complete = the `complete` of the index before this run's provisional write (the provisional index of this very run says False and
+    must not make a finished run incomplete)."""
+    from .versions import canonical, version_of
     names = list(names)
     try:
         with open(os.path.join(sig_dir, "index.json")) as f:
             old = json.load(f)
     except (OSError, ValueError):
         old = {}
-    same = old.get("signature") == canonical_of(gen.signature()) and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
+    same = old.get("signature") == canonical(gen.signature()) and abs(old.get("res", gen.grid.res) - gen.grid.res) < 1e-9 and old.get("ss", gen.ss) == gen.ss
     if same and not set(old.get("scenes", [])) <= set(names):
         # mini is a subset of trainval and both share the folder of their signature: a smaller run (the mini report after the trainval
         # one) must not shrink the record of what the folder holds, nor mark an interrupted bigger run as complete
         if set(old["scenes"]) >= set(names):
             version = old["version"]
         names = sorted(set(old["scenes"]) | set(names))
-        complete = complete and (old.get("complete", True) if old_complete is None else old_complete)      # old_complete: what the folder said BEFORE this run wrote its provisional index
+        # old_complete: what the folder said BEFORE this run wrote its provisional index
+        complete = complete and (old.get("complete", True) if old_complete is None else old_complete)
     if same and old.get("stride", stride) != stride:
         stride = "mixed"                                           # runs with different strides wrote into this folder
     if complete and os.path.isdir(sig_dir):
         n_keyframes = len(front_keys(sig_dir, nonempty=True))      # what the folder holds, whatever this run wanted
-    from .versions import canonical, version_of
     store_sig = canonical(gen.signature())                         # the folder of the GT this code makes (see `same_gt_as` in versions.csv)
     gt_version = version_of(store_sig)                             # None: a signature without a row in versions.csv (unreleased): no key
     idx = {"signature": store_sig, **({"gt_version": gt_version} if gt_version else {}), "version": version, "res": gen.grid.res,
@@ -140,7 +140,8 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
     kept = old if same else {}                                     # files are only added, so a set that was complete stays complete
     from .gt_api import data_identity                              # the identity of the raw nuScenes files this GT was made from (the GT key reads it back)
     was, now = kept.get("data_identity"), data_identity()
-    data_id = now if not was or was == "unknown" else was if now in ("unknown", was) else "mixed"      # files written under another manifest.json than the first ones: the folder says so, the first never wins silently
+    # files written under another manifest.json than the first ones: the folder says so, the first never wins silently
+    data_id = now if not was or was == "unknown" else was if now in ("unknown", was) else "mixed"
     if data_id != "unknown":
         idx["data_identity"] = data_id
     # the sets this run could check are taken from its fresh list (a deleted keyframe removes `full`); a set that this nuScenes version cannot
@@ -163,9 +164,10 @@ def write_index(sig_dir, gen, version, names, stride, n_keyframes, options, comp
 
 
 def finish_index(sig_dir, gen, version, names, stride, n_keyframes, options, written, dataroot, set_name=None, old_complete=None):
-    """the index.json at the end of a run (generate, report): written when this run wrote keyframes, when the index has no manifest yet (no commit: an older store) or when a clean tree can stamp
-    the index of an earlier, dirty run (same signature, same GT); a run that wrote nothing leaves a finished index as it was, whatever stride or sequences it was asked for (it must not turn stride 1 into
-    "mixed", drop the release or re-stamp the commit). -> (the index, whether it was written)"""
+    """the index.json at the end of a run (generate, report): written when this run wrote keyframes, when the index has no manifest yet (no commit: an older
+    store) or when a clean tree can stamp the index of an earlier, dirty run (same signature, same GT); a run that wrote nothing leaves a finished index as it
+    was, whatever stride or sequences it was asked for (it must not turn stride 1 into "mixed", drop the release or re-stamp the commit). -> (the index, whether
+    it was written)"""
     from . import versions
     old = read_index(sig_dir)
     can_upgrade = versions.code_state()["dirty"] is False and not old.get("release")

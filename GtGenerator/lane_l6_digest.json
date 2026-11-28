@@ -1,5 +1,5 @@
 {
-"note": "digests (GtGenerator.checks._feed, sha1) of the graphs of lane GT l6 (both rigs, code signatures lane_center 9ad1d4ce30, bev_fusion 8a04143278, prepared 2026-11-10) for every second keyframe of scene-0061 and scene-0103; lane_graph_selftest checks that the code still makes exactly these graphs (the digest includes the signature: an edit of a hashed file asks for a new file). A change that moves one of them is a NEW lane version with its own store and a new file, not a row with same_gt_as in lane_versions.csv",
+"note": "digests (GtGenerator.checks._feed, sha1) of the graphs of lane GT l6 (both rigs, code signatures lane_center 9ad1d4ce30, bev_fusion 8a04143278, prepared 2026-11-10) for every second keyframe of scene-0061 and scene-0103; lane_graph_selftest checks that the code still makes exactly these graphs (the digest includes the store key, g['signature']: a row with same_gt_as keeps the pins, as l6.1 and l6.2 did). A change that moves one of them is a NEW lane version with its own store and a new file, not a row with same_gt_as in lane_versions.csv",
 "frames": {
 "lane_center": {
 "ca9a282c9e77460f8360f564131a8af5": "20c5ad33ec123bf03c9348aa0eb679f5d7df569a",

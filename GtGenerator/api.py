@@ -1,26 +1,31 @@
-"""The interface of the suite: the methods of the class `GtGenerator` (the class itself is in suite.py; its static methods are these). The command line (`cli.py`) reaches the suite ONLY through them:
-every command is one method, `python -m GtGenerator generate-bev ROOT` is `GtGenerator.generate_bev_gt(ROOT)`.
+"""The interface of the suite: the methods of the class `GtGenerator` (the class itself is in suite.py; its static methods are these). The command line
+(`cli.py`) reaches the suite ONLY through them: every command is one method, `python -m GtGenerator generate-bev ROOT` is `GtGenerator.generate_bev_gt(ROOT)`.
 
     from GtGenerator import GtGenerator
-    key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")        # front GT + lane GT of the rig bev_fusion + packed masks      -> GtKey
-    key = GtGenerator.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")      # the lane GT of Spurmitte (rig="all": both)                    -> GtKey (a dict of them for "all")
+    key = GtGenerator.generate_bev_gt("~/data/nuscenes_full", set_name="full")        # front GT + lane GT of the rig bev_fusion + packed masks  -> GtKey
+    key = GtGenerator.generate_lane_gt("~/data/nuscenes_full", rig="lane_center")      # the lane GT of Spurmitte (rig="all": both)  -> GtKey (a dict for "all")
     key = GtGenerator.gt_key("bev_fusion", set_name="full")                            # what is stored, nothing is generated; key.complete, key.load(token)
-    GtGenerator.generate(root, set_name="small")                                       # everything (front, both lane GTs, masks)                      -> dict, with the keys
-    GtGenerator.have(set_name="full")  /  GtGenerator.check_data(root)  /  GtGenerator.audit_lane("bev_fusion")  /  GtGenerator.sets()  /  GtGenerator.versions()   -> dict {ok, text, ...}
+    GtGenerator.generate(root, set_name="small")                                       # everything (front, both lane GTs, masks)  -> dict, with the keys
+    GtGenerator.have(set_name="full")  /  GtGenerator.check_data(root)  /  GtGenerator.audit_lane("bev_fusion")              # -> dict {ok, text, ...}
+    GtGenerator.sets()  /  GtGenerator.versions()                                                                             # -> dict {ok, text, ...}
 
 The rules: plain data in and out (paths, names, numbers, lists; a dict back, a `GtKey` for the keys); a method
-that has nothing to say about progress does not print; a wrong argument raises ValueError with the message; a dict may hold `text` (what the command line prints) and `ok` (False: the thing
-asked about is not there / not complete: exit code 1). Long runs print their progress when `verbose` (default True). The work itself is in the modules below this file (pipeline, gt_api,
-store_audit, lane_raster, sets, checks, report, view, video, clean ...): these methods only shape the arguments and the result, so a module can be used without the class too.
+that has nothing to say about progress does not print; a wrong argument raises ValueError with the message; a dict may hold `text` (what the command line
+prints) and `ok` (False: the thing asked about is not there / not complete: exit code 1). Long runs print their progress when `verbose` (default True). The work
+itself is in the modules below this file (pipeline, gt_api, store_audit, lane_raster, sets, checks, report, view, video, clean ...): these methods only shape
+the arguments and the result, so a module can be used without the class too.
 """
 import contextlib
 import json
 import os
 
+from .selftest import NAMES as SELFTEST_NAMES  # the parts and cases of the self-test (cli.py: --only)
+
 
 @contextlib.contextmanager
 def _bad_pick():
-    """an unknown sequence (StopIteration) or a keyframe number out of range (IndexError) in the picture commands is a wrong argument: ValueError with the message"""
+    """an unknown sequence (StopIteration) or a keyframe number out of range (IndexError) in the picture commands is a wrong argument: ValueError with the
+    message"""
     try:
         yield
     except (StopIteration, IndexError) as e:
@@ -35,13 +40,14 @@ def _options(use_flow=True, use_radar=True, boxes_at="camera"):
 def _versions_text():
     """the table of versions.csv (key, signature, date, CURRENT for this source, stored when its folder exists), the lane versions and the releases"""
     from . import lane_gt, versions
-    from .suite import DATA, code_signature
+    from . import where
+    from .suite import code_signature
     out = []
     cur, rows = code_signature(), versions.table()
     for r in rows:
         same = f" (the GT of {r['same_gt_as']})" if r.get("same_gt_as") else ""
         out.append(f"{r['version']:3s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == cur else '       '}  "
-                   f"{'stored    ' if os.path.isdir(os.path.join(DATA, versions.canonical(r['signature']))) else 'not stored'}  {r['tag']:11s} "
+                   f"{'stored    ' if os.path.isdir(os.path.join(where.root(), versions.canonical(r['signature']))) else 'not stored'}  {r['tag']:11s} "
                    f"{r['what_changed'][:70]}{same}")
     if cur not in {r["signature"] for r in rows}:
         out.append(f"this source has the signature {cur}: no row in GtGenerator/versions.csv (unreleased): `python -m GtGenerator versions --update` derives it from git")
@@ -50,7 +56,7 @@ def _versions_text():
     for r in lane_gt.table():
         same = f" (the GT of {r['same_gt_as']})" if r["same_gt_as"] else ""
         out.append(f"  {r['version']:3s} {r['rig']:11s} {r['signature']}  {r['date']}  {'CURRENT' if r['signature'] == lane_gt.code_signature(rig=r['rig']) else '       '}  "
-                   f"{'stored    ' if os.path.isdir(os.path.join(lane_gt.DATA, lane_gt.store_of(r['signature']))) else 'not stored'}  {r['what_changed'][:60]}{same}")
+                   f"{'stored    ' if os.path.isdir(os.path.join(lane_gt.lane_root(), lane_gt.store_of(r['signature']))) else 'not stored'}  {r['what_changed'][:60]}{same}")
     out.append("releases (the suite as one number, GtGenerator/releases.csv):")
     for r in versions.releases():
         out.append(f"  {r['release']:5s} front {r['front']:4s} + lane {r['lane']:3s}  {r['date']}  {'CURRENT' if r['release'] == here else '       '}  {r['what_changed'][:80]}")
@@ -72,11 +78,6 @@ def _sets_text():
         out.append(f"{name:6s} {len(sets.scenes(name)):4d} scenes  {s['total']:6d} keyframes ({s['version']})  stored for this generator: "
                    f"{s['have']}/{s['total']}{'  COMPLETE' if s['complete'] else ''}")
     return "\n".join(out)
-
-
-# parts of the suite that `selftest(only=...)` can run alone: name -> module
-SELFTESTS = {"cli": "cli_selftest", "gt_api": "gt_api_selftest", "generator": "generator_selftest", "lane_graph": "lane_graph_selftest", "lane_tiers": "lane_tiers_selftest",
-             "clean": "clean", "rig_masks": "rig_masks", "lane_toy": "lane_tiers", "flow": "flow_selftest", "interface": "interface_selftest"}
 
 
 class Interface:
@@ -111,9 +112,8 @@ class Interface:
     @staticmethod
     def area_masks(out=None, borders=(0.0, 0.5), workers=1, force=False):
         """the packed area masks of an existing BEV Fusion lane store (lane_raster.build_mask_cache) -> its dict + text"""
-        from . import lane_gt, lane_raster
-        from .suite import DATA
-        store = os.path.join(os.path.expanduser(out) if out else DATA, "lane", lane_gt.signature(rig="bev_fusion"))
+        from . import lane_gt, lane_raster, where
+        store = os.path.join(os.path.expanduser(out) if out else where.root(), "lane", lane_gt.signature(rig="bev_fusion"))
         if not os.path.isdir(store):
             raise ValueError(f"no BEV Fusion lane store {store}: make it with `generate-bev` or `generate-lane --rig bev_fusion`")
         r = lane_raster.build_mask_cache(store, borders=tuple(borders), force=force, workers=workers)
@@ -122,13 +122,15 @@ class Interface:
     # ------------------------------------------------------------------------------------------------------------ look at GT
     @staticmethod
     def gt_key(*args, **kwargs):
-        """the key of what is stored for a system, nothing is generated -> GtKey (gt_api.gt_key); key.complete, key.load(token), key.lane(token), key.mask(token)"""
+        """the key of what is stored for a system, nothing is generated -> GtKey (gt_api.gt_key); key.complete, key.load(token), key.lane(token),
+        key.mask(token)"""
         from . import gt_api
         return gt_api.gt_key(*args, **kwargs)
 
     @staticmethod
     def have(set_name=None, scenes=None, version=None, dataroot=None, stride=1, data=None):
-        """is the stored front GT of the current generator there for these sequences (the check before a training; sets.stored_for) -> {ok, have, total, missing, text, ...}"""
+        """is the stored front GT of the current generator there for these sequences (the check before a training; sets.stored_for) -> {ok, have, total,
+        missing, text, ...}"""
         from . import current_version, sets
         want = sets.scenes(set_name) if set_name else scenes
         if not want:
@@ -151,8 +153,9 @@ class Interface:
 
     @staticmethod
     def versions(update=False):
-        """the GT versions, the lane versions and the releases; the current one marked, which is stored. A source whose signature has no row yet gets the rows derived from git (the next number, the text and the
-        date of the last commit that touched the hashed files); `update` writes them to versions.csv / releases.csv -> {text, proposal}"""
+        """the GT versions, the lane versions and the releases; the current one marked, which is stored. A source whose signature has no row yet gets the rows
+        derived from git (the next number, the text and the date of the last commit that touched the hashed files); `update` writes them to versions.csv /
+        releases.csv -> {text, proposal}"""
         from . import lane_gt
         from . import versions as V
         from .nuscenes_gt import SIGNATURE_FILES
@@ -173,12 +176,13 @@ class Interface:
 
     @staticmethod
     def area_mask(token, kind="intersection", border_m=0.0, png=None, out=None):
-        """one area mask of a keyframe of the BEV Fusion lane store below the store root `out` (default where.root()): its number of cells, optionally drawn to `png` (lane_raster.area_mask) -> {cells, shape, text, png}"""
+        """one area mask of a keyframe of the BEV Fusion lane store below the store root `out` (default where.root()): its number of cells, optionally drawn to
+        `png` (lane_raster.area_mask) -> {cells, shape, text, png}"""
         import numpy as np
         from . import lane_gt, lane_raster
         if not 0.0 <= border_m < 100.0:                                  # also refuses nan
             raise ValueError(f"border_m must be 0 or more (metres), got {border_m}")
-        g = lane_gt.load(token, data=os.path.join(os.path.expanduser(out), "lane") if out else lane_gt.DATA, rig="bev_fusion")
+        g = lane_gt.load(token, data=os.path.join(os.path.expanduser(out), "lane") if out else None, rig="bev_fusion")
         m = lane_raster.area_mask(g, kind, border_m)
         text = f"{kind} mask of {token}, border {border_m:g} m: {int(m.sum())} of {m.size} cells ({m.shape[0]} x {m.shape[1]}, x forward 0 .. 60 m, y left -26 .. 26 m)"
         if png:
@@ -194,11 +198,11 @@ class Interface:
     def audit_lane(system, dataset="v1.0-trainval", dataroot=None, scenes=None, out=None, limit=None, verbose=True):
         """audit a stored lane GT before it is released: every keyframe there, every file loads and holds what the version promises (store_audit.audit_lane)
         -> {ok, problems, stats, lines}"""
-        from . import lane_gt, store_audit
-        from .suite import DATA, default_root
+        from . import lane_gt, store_audit, where
+        from .suite import default_root
         if limit is not None and limit < 1:
             raise ValueError(f"limit must be 1 or more, got {limit}")
-        store = os.path.join(os.path.expanduser(out) if out else DATA, "lane", lane_gt.signature(rig=system))
+        store = os.path.join(os.path.expanduser(out) if out else where.root(), "lane", lane_gt.signature(rig=system))
         if not os.path.isdir(store):
             raise ValueError(f"no lane store {store}")
         return store_audit.audit_lane(store, system, dataroot or default_root(dataset), dataset, scenes, limit, verbose=verbose)
@@ -217,20 +221,21 @@ class Interface:
                use_flow=True, use_radar=True, boxes_at="camera"):
         """evaluate the GT of all sequences, store it, write ONE PDF report with samples (report.report; made at 0.5 m) -> {out, text}"""
         import datetime
-        from . import report
+        from . import report, where
         from .store import check_arguments
-        from .suite import DATA, default_root
+        from .suite import default_root
         check_arguments(stride=stride, workers=workers)
-        out = out or os.path.join(DATA, "reports", f"autogt_report_{version}_{datetime.date.today().isoformat()}.pdf")
+        out = out or os.path.join(where.root(), "reports", f"autogt_report_{version}_{datetime.date.today().isoformat()}.pdf")
         light = light or "trainval" in version
         note = "note: the leave-one-radar-out test needs the full devkit: skipped with the light devkit (trainval)" if holdout and light else ""
-        report.report(os.path.expanduser(dataroot or default_root(version)), version, out, None if no_data else os.path.expanduser(data or DATA), scenes, stride, holdout, samples,
+        report.report(os.path.expanduser(dataroot or default_root(version)), version, out, None if no_data else os.path.expanduser(data or where.root()), scenes, stride, holdout, samples,
                       workers, light, **_options(use_flow, use_radar, boxes_at))
         return {"out": out, "text": note}
 
     @staticmethod
     def digest(out=None, compare=None, stride=2):
-        """a digest per frame of nuScenes mini (checks.digests): two generators that make the same GT give the same file; `compare` = [A, B]: exit 1 when any frame differs -> {ok, text}"""
+        """a digest per frame of nuScenes mini (checks.digests): two generators that make the same GT give the same file; `compare` = [A, B]: exit 1 when any
+        frame differs -> {ok, text}"""
         if compare:
             x, y = (json.load(open(p)) for p in compare)
             bad = [k for k in x["digests"] if x["digests"][k] != y["digests"].get(k)] + [k for k in y["digests"] if k not in x["digests"]]
@@ -244,24 +249,12 @@ class Interface:
         return {"ok": True, "text": f"{len(r['digests'])} digests of signature {r['signature']} -> {out}"}
 
     @staticmethod
-    def selftest(only=None):
-        """all tests of the suite (7 - 13 min), or only some parts (`only`: names of SELFTESTS) -> {text}"""
-        if not only:
-            from . import selftest
-            selftest.run()
-            return {"ok": True}
-        import importlib
-        import time
-        lines = []
-        for name in dict.fromkeys(only):                                  # no duplicates, the order asked for
-            if name not in SELFTESTS:
-                raise ValueError(f"unknown test part {name!r}: {', '.join(sorted(SELFTESTS))}")
-            t0 = time.time()
-            mod = importlib.import_module(f".{SELFTESTS[name]}", __package__)
-            fn = getattr(mod, "run", None) or mod.selftest
-            msg = fn(verbose=False) if "verbose" in fn.__code__.co_varnames[:fn.__code__.co_argcount] else fn()
-            lines.append(f"{name}: ok ({time.time() - t0:.0f} s)" + (f" {str(msg)[:150]}" if msg else ""))
-        return {"ok": True, "text": "\n".join(lines)}
+    def selftest(only=None, root=None, all=False, verbose=True):
+        """the cases of selftest.CASES (7 - 13 min with nuScenes mini at `root`, default ~/data/nuscenes), or the parts and cases named in `only`; a line
+        per case as it ends (`verbose`). Without mini the cases that need it are listed as skipped; `all` (a signature step, a release) fails then
+        instead -> {ok, text (the summary), lines, ran, skipped}"""
+        from . import selftest
+        return selftest.run(only, root, all_=all, verbose=verbose)
 
     # ------------------------------------------------------------------------------------------------------------ pictures
     @staticmethod
@@ -321,3 +314,7 @@ class Interface:
         """list / move generated reports and stale caches; `delete` only for reports (clean.clean)"""
         from . import clean
         return clean.clean(delete=delete, move=move, reports=reports, stale_caches=stale_caches)
+
+
+# THE top-level `GtGenerator.generate` (the public table of __init__.py) is the method: one argument order, the keys of the GT added
+generate = Interface.generate

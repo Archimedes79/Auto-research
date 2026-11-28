@@ -12,9 +12,10 @@ keyframe's front-camera time:
 - velocity / flow (flow.py, all in m/s, never per frame): `velocity` (2, nx, ny) world velocity of the covering box in
   ego axes (radar-corrected, 0 elsewhere), `flow_ego` (2, nx, ny) apparent velocity of a static world point caused by the ego
   motion at the camera time, `flow` = flow_ego + velocity, `flow_weight` (nx, ny) 1 known / 0 unknown (ignored boxes, unknown
-  velocity), `flow_sigma` (nx, ny) std of the speed estimate (0.1 m/s in free space, FLOW_SIGMA_UNKNOWN = 10 m/s on every cell whose `flow_weight` is 0: a box of unknown velocity or without a sensor point;
-  always finite, also for the devkit velocity of use_flow=False). Per box in meta: vel, vel_source, vel_flag, vel_sigma, vel_known (a box of unknown velocity has vel (0, 0), vel_known False,
-  vel_sigma NaN: check vel_known before you use vel)
+  velocity), `flow_sigma` (nx, ny) std of the speed estimate (0.1 m/s in free space, FLOW_SIGMA_UNKNOWN = 10 m/s on every cell
+  whose `flow_weight` is 0: a box of unknown velocity or without a sensor point; always finite, also for the devkit velocity of
+  use_flow=False). Per box in meta: vel, vel_source, vel_flag, vel_sigma, vel_known (a box of unknown velocity has vel (0, 0),
+  vel_known False, vel_sigma NaN: check vel_known before you use vel)
 - masks (coverage.py): camera (ground cells that project into the CAM_FRONT image), occluded (ground cells a box hides from the
   camera, boxes standing on the ground plane with their real height), radar (inside the fan of one of the five radars: +-60 deg, measured:
   99.9 % of all detections of nuScenes mini lie inside it), undefined (neither), ignore (see objects). Per box in meta: num_lidar_pts,
@@ -22,10 +23,10 @@ keyframe's front-camera time:
 - meta: sample, scene, timestamp, T_e2g, boxes (EVERY annotated box of the three classes of the keyframe, also those outside the grid: filter by `instance`
   or by the corners), res, cam_file, K, T_c2e, image_size, radar_poses, vectors (exact dividers / centre-lines as ego polylines). A box's `yaw` is
   relative to the ego heading, wrapped to [-pi, pi]
-Rules (Mirko, 2026-10-26): stationary GT is temporally stable. Map layers come from the fixed world geometry in every frame, never
+Rules (2026-10-26): stationary GT is temporally stable. Map layers come from the fixed world geometry in every frame, never
 corrected per frame. Stationary objects (flow.is_stationary: all speeds < 0.5 m/s, all positions < 1 m from
 the median) get ONE world pose for all their keyframes and velocity 0.
-Boxes are at the CAMERA time (decided by Mirko 2026-10-31, the way Waymo's camera_synced_box works): the keyframe is annotated
+Boxes are at the CAMERA time (decided 2026-10-31, the way Waymo's camera_synced_box works): the keyframe is annotated
 at the lidar time, the front camera took its image about 36 ms earlier, so a box of known velocity is moved by v * (t_camera -
 t_annotation) (constant velocity, size, height and yaw unchanged). Stationary boxes (one world pose, v = 0) and boxes of unknown
 velocity do not move. Per box in meta: `center`, `corners`, `world` at camera time; `world_ann` the annotation-time world pose,
@@ -109,7 +110,8 @@ class _BoxCanvas:
         out["flow_weight"] = ((R.at_centres(self.ignore) == 0) & (R.at_centres(self.unknown) == 0)).astype(np.float32)
         known = R.at_centres(self.sig) / np.maximum(pc, 1e-6)                                  # mean over the covered sub-pixels, like velocity
         sigma = np.where(out["instance"] >= 0, np.where(pc > 0, known, FLOW_SIGMA_UNKNOWN), 0.1)
-        out["flow_sigma"] = np.where(out["flow_weight"] == 0, FLOW_SIGMA_UNKNOWN, sigma).astype(np.float32)        # weight 0 (unknown velocity, no sensor point) <=> the unknown sigma
+        # weight 0 (unknown velocity, no sensor point) <=> the unknown sigma
+        out["flow_sigma"] = np.where(out["flow_weight"] == 0, FLOW_SIGMA_UNKNOWN, sigma).astype(np.float32)
         return out
 
 
@@ -152,8 +154,10 @@ class NuScenesGT:
                 toks = [r["token"] for r in getattr(nmap, layer)]
                 try:
                     bb = np.array([nmap.get_bounds(layer, t) for t in toks], float)
-                except ValueError:                                 # lane_connector: the devkit has no bounds for it (it fell back to the devkit's own scan of every record, every keyframe)
-                    bb = np.array([nmap.extract_polygon(nmap.get(layer, t)["polygon_token"]).bounds for t in toks], float)        # a polygon's bounds are the same prefilter
+                # lane_connector: the devkit has no bounds for it (it fell back to the devkit's own scan of every record, every keyframe)
+                except ValueError:
+                    # a polygon's bounds are the same prefilter
+                    bb = np.array([nmap.extract_polygon(nmap.get(layer, t)["polygon_token"]).bounds for t in toks], float)
                 self._bounds[key] = (toks, bb.reshape(-1, 4))
             toks, bb = self._bounds[key]
             hit = (bb[:, 0] <= x1) & (bb[:, 2] >= x0) & (bb[:, 1] <= y1) & (bb[:, 3] >= y0)
@@ -441,8 +445,3 @@ def radar_poses(gt, sample):
     """the sensor -> ego matrices of the radars of a sample"""
     return [pose_matrix(gt.nusc.get("calibrated_sensor", gt.nusc.get("sample_data", tok)["calibrated_sensor_token"]))
             for ch, tok in sample["data"].items() if ch.startswith("RADAR")]
-
-
-def radar_coverage(gt, sample, gx, gy):
-    """cells inside the fan of one of the radars of the sample (see coverage.radar_cells)"""
-    return cvg.radar_cells(gx, gy, radar_poses(gt, sample))

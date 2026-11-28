@@ -1,6 +1,6 @@
 """Self-test of the lane graph (lane_graph.py, road_graph.py, lane_lines.py): a made-up map for the logic, nuScenes mini for the checks against the map.
 
-    python -m GtGenerator.lane_graph_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
+    python -m GtGenerator selftest --only lane_graph   (cases lane_graph_toy: no data; lane_graph: nuScenes mini)
 """
 import collections
 import json
@@ -33,9 +33,11 @@ def _repeat(P, i):
 
 
 class _Map:
-    """just enough of NuScenesMap (`arcs` token -> polyline, `out` token -> successors, `connectors` = the tokens that are lane connectors, `boxes` = [(is_intersection, polygon)]).
+    """just enough of NuScenesMap (`arcs` token -> polyline, `out` token -> successors, `connectors` = the tokens that are lane connectors, `boxes` =
+    [(is_intersection, polygon)]).
     The default: lanes A, H, D, E, F, X, Z; connectors B1, B2, Y inside an intersection.
-    A -> B1 -> D, A -> B2 -> E -> F, H -> D (so D merges B1 and H, and A splits into B1 and B2 E F); X -> Y -> Z (one joined piece with a stop and an exit inside); A, B2 and X repeat a joint point"""
+    A -> B1 -> D, A -> B2 -> E -> F, H -> D (so D merges B1 and H, and A splits into B1 and B2 E F); X -> Y -> Z (one joined piece with a stop and an exit
+    inside); A, B2 and X repeat a joint point"""
     def __init__(self, arcs=None, out=None, connectors=("B1", "B2", "Y"), boxes=None):
         from shapely.geometry import box
         self.arcs = arcs or {"A": _repeat(_line((0, 0), (0, 40)), 20), "B1": _line((0, 40), (0, 60)), "B2": _repeat(_curve((0, 40), (0, 50), (10, 50)), 10),
@@ -58,8 +60,8 @@ class _Map:
 
 
 def _gap_map():
-    """gaps in the map: the lane P ends 4 m before the lanes Q1, Q2 that follow it (a split), R1 and R2 end 4 m before the lane T (a merge), the lane S is followed by the connectors C1, C2
-    of an intersection that starts 4 m after it (a stop)"""
+    """gaps in the map: the lane P ends 4 m before the lanes Q1, Q2 that follow it (a split), R1 and R2 end 4 m before the lane T (a merge), the lane S is
+    followed by the connectors C1, C2 of an intersection that starts 4 m after it (a stop)"""
     from shapely.geometry import box
     arcs = {"P": _line((0, 0), (0, 20)), "Q1": _line((0, 24), (0, 60)), "Q2": _line((0, 24), (12, 60)), "R1": _line((30, 0), (30, 20)), "R2": _curve((40, 0), (30, 0), (30, 20)), "T": _line((30, 24), (30, 60)),
             "S": _line((-20, 0), (-20, 20)), "C1": _line((-20, 24), (-20, 60)), "C2": _curve((-20, 24), (-20, 40), (-32, 40))}
@@ -77,9 +79,10 @@ def _pose(x, y, yaw, pitch=0.0, roll=0.0):
 
 
 def _invariants(g, tol=1e-3):
-    """what a graph of a keyframe must hold, on the toy maps and on real frames: no zero-length segment (the first / last segment of a cut part may be a sliver at the cut), the segments cover the
-    points in contiguous ranges, every natural end / start is explained (a successor, an event that names the piece at that end, or the window), every direction of an event is a unit vector, a stop /
-    exit names where it leads from AND to, a split lies at the end of its piece, a merge at the start of its piece"""
+    """what a graph of a keyframe must hold, on the toy maps and on real frames: no zero-length segment (the first / last segment of a cut part may be a sliver
+    at the cut), the segments cover the points in contiguous ranges, every natural end / start is explained (a successor, an event that names the piece at that
+    end, or the window), every direction of an event is a unit vector, a stop / exit names where it leads from AND to, a split lies at the end of its piece, a
+    merge at the start of its piece"""
     for q in g["pieces"]:
         P = np.asarray(q["pts"], float)
         d = np.linalg.norm(np.diff(P, axis=0), axis=1)
@@ -122,7 +125,8 @@ def _made_up():
     assert stops["X"]["out"] == ["X"] and stops["X"]["in"] == ["X"] and stops["X"]["n_succ"] == 1 and np.allclose(stops["X"]["pos"], (-3, 38), atol=0.1) \
         and stops["X"]["dirs_out"].shape == (1, 2), stops["X"]                                  # a stop inside a joined piece: the piece goes on
     exits = {e["on"]: e for e in mg["events"] if e["type"] == "exit"}
-    assert sorted(exits) == ["B2", "D", "X"], exits                                          # lane D (B1 and H lead into it), lane E inside B2 E F, lane Z inside X Y Z
+    # lane D (B1 and H lead into it), lane E inside B2 E F, lane Z inside X Y Z
+    assert sorted(exits) == ["B2", "D", "X"], exits
     assert exits["D"]["in"] == ["B1"] and exits["D"]["out"] == ["D"] and exits["D"]["n_pred"] == 2 and np.allclose(exits["D"]["pos"], (0, 60), atol=0.1)
     assert exits["B2"]["in"] == ["B2"] and exits["B2"]["out"] == ["B2"] and exits["B2"]["n_pred"] == 1 and np.allclose(exits["B2"]["pos"], (10, 50), atol=0.1) \
         and exits["B2"]["idx"] == mg["pieces"]["B2"]["spans"][1][1] - 1, exits["B2"]                # inside a joined piece, at the start of E
@@ -161,7 +165,8 @@ def _made_up():
     for e in g["events"]:
         assert len(e["dirs_in"]) == len(e["in"]) and len(e["dirs_out"]) == len(e["out"]), e
     sx = {e["type"]: e for e in g["events"] if e["type"] in ("stop", "exit") and e.get("on") == "X"}
-    assert sx["stop"]["out"] == ["X"] and abs(sx["stop"]["s"] - 28.0) < 0.3 and sx["exit"]["in"] == ["X"] and abs(sx["exit"]["s"] - 52.0) < 0.3, sx   # inside the joined piece
+    # inside the joined piece
+    assert sx["stop"]["out"] == ["X"] and abs(sx["stop"]["s"] - 28.0) < 0.3 and sx["exit"]["in"] == ["X"] and abs(sx["exit"]["s"] - 52.0) < 0.3, sx
     # the segments of every part: index ranges per map piece, contiguous, with the intersection flag of the connectors
     sg = by["X"]["segments"]
     assert [s["token"] for s in sg] == ["X", "Y", "Z"] and [s["kind"] for s in sg] == ["lane", "connector", "lane"] and [s["in_intersection"] for s in sg] == [False, True, False]
@@ -185,7 +190,8 @@ def _made_up():
 
 
 def _directions():
-    """the directions of the events are unit vectors also for a car on a slope or leaning (pitch, roll): the 2 x 2 block of such a pose is not a rotation and shortens a vector"""
+    """the directions of the events are unit vectors also for a car on a slope or leaning (pitch, roll): the 2 x 2 block of such a pose is not a rotation and
+    shortens a vector"""
     mg = LG.build_map_graph(_Map())
     for frame in ("lane", "ego"):
         g = LG.crop(mg, _pose(0, 20, math.pi / 2, pitch=0.14, roll=0.05), half=50.0, frame=frame)
@@ -195,8 +201,9 @@ def _directions():
 
 
 def _gaps():
-    """events where the map has a gap: a split lies at the end of its piece and a merge at the start of its piece (not between the ends of the gap); a window that holds the end of a piece and
-    not what follows after the gap keeps the split (partial), so the end is explained, and a stop with no branch inside the window is not an event (the split names the end)"""
+    """events where the map has a gap: a split lies at the end of its piece and a merge at the start of its piece (not between the ends of the gap); a window
+    that holds the end of a piece and not what follows after the gap keeps the split (partial), so the end is explained, and a stop with no branch inside the
+    window is not an event (the split names the end)"""
     mg = LG.build_map_graph(_gap_map())
     split, merge = next(e for e in mg["events"] if e["type"] == "split" and e["in"] == ["P"]), next(e for e in mg["events"] if e["type"] == "merge")
     assert np.allclose(split["pos"], (0, 20)) and np.allclose(merge["pos"], (30, 24)), (split["pos"], merge["pos"])
@@ -204,18 +211,21 @@ def _gaps():
     assert {q["id"] for q in g["pieces"]} == {"P", "S"}
     _invariants(g)
     assert [e["partial"] for e in g["events"] if e["type"] == "split" and e["in"] in (["P"], ["S"])] == [True, True] and not [e for e in g["events"] if e["type"] == "stop"], g["events"]
-    g = LG.crop(mg, _pose(0, 0, math.pi / 2), half=50.0)                    # everything inside: the stop of S names its two connectors, the merge is at the start of T
+    # everything inside: the stop of S names its two connectors, the merge is at the start of T
+    g = LG.crop(mg, _pose(0, 0, math.pi / 2), half=50.0)
     _invariants(g)
     stop = next(e for e in g["events"] if e["type"] == "stop")
     assert stop["in"] == ["S"] and sorted(stop["out"]) == ["C1", "C2"], stop
-    g = LG.crop(mg, _pose(35, 0, math.pi / 2), half=22.0)                   # R1 and R2 end inside (y = 20), T starts outside (y = 24): the merge point is outside, the merge is kept at its branches that are inside
+    # R1 and R2 end inside (y = 20), T starts outside (y = 24): the merge point is outside, the merge is kept at its branches that are inside
+    g = LG.crop(mg, _pose(35, 0, math.pi / 2), half=22.0)
     _invariants(g)
     merge = next(e for e in g["events"] if e["type"] == "merge")
     assert sorted(merge["in"]) == ["R1", "R2"] and merge["out"] == [] and merge["partial"] and np.allclose(merge["pos"], (-5, 20), atol=1e-4), merge
 
 
 def _symmetric_neighbours():
-    """a pair of lanes that overlap by about the minimum is found from one side only by the one-sided search (a's samples find b abeam three times, b's samples only twice): the relation holds both ways"""
+    """a pair of lanes that overlap by about the minimum is found from one side only by the one-sided search (a's samples find b abeam three times, b's samples
+    only twice): the relation holds both ways"""
     polys = {"a": _line((0, 0), (0, 10.5)), "b": _line((3.5, 9.8), (3.5, 49.8))}
     nb = RG.neighbours(polys, {t: "lane" for t in polys})
     assert nb["right"]["a"] == ["b"] and nb["left"]["b"] == ["a"], nb
@@ -225,12 +235,15 @@ def _symmetric_neighbours():
 
 
 def _joint_segments():
-    """the segments of a part that starts right after the joint of two map pieces: the cut point lies on the first segment of the second piece, the first piece has no points in the part"""
+    """the segments of a part that starts right after the joint of two map pieces: the cut point lies on the first segment of the second piece, the first piece
+    has no points in the part"""
     mg = LG.build_map_graph(_Map())
-    g = LG.crop(mg, _pose(-3, 88.1, math.pi / 2), half=50.0)                # the window starts at y = 38.1, the joint X | Y is at y = 38.0 (the next point is at 38.5)
+    # the window starts at y = 38.1, the joint X | Y is at y = 38.0 (the next point is at 38.5)
+    g = LG.crop(mg, _pose(-3, 88.1, math.pi / 2), half=50.0)
     xyz = next(q for q in g["pieces"] if q["id"] == "X")
     assert [s["token"] for s in xyz["segments"]] == ["Y", "Z"] and xyz["segments"][0]["i0"] == 0, xyz["segments"]
-    g = LG.crop(mg, _pose(-3, 12.2, math.pi / 2), half=50.0)                # the window ends at y = 62.2: between the joint Y | Z (62.0) and the next point (62.5): the exit cut is on Z's first segment
+    # the window ends at y = 62.2: between the joint Y | Z (62.0) and the next point (62.5): the exit cut is on Z's first segment
+    g = LG.crop(mg, _pose(-3, 12.2, math.pi / 2), half=50.0)
     xyz = next(q for q in g["pieces"] if q["id"] == "X")
     assert [s["token"] for s in xyz["segments"]] == ["X", "Y", "Z"] and xyz["segments"][-1]["i0"] == xyz["segments"][-1]["i1"] == len(xyz["pts"]) - 1, xyz["segments"]
 
@@ -252,7 +265,8 @@ def _lines():
             c["line"] = 0
         out = LL.crop_lines(lg, _pose(0, 0, math.pi / 2), half=20.0)
         assert len(out["boundary"]) == 1 and out["boundary"][0]["start_open"] and out["boundary"][0]["end_open"], out["boundary"]
-        assert abs(out["boundary"][0]["pts"][:, 0].min() + 20) < 1e-4 and abs(out["boundary"][0]["pts"][:, 0].max() - 20) < 1e-4 and np.allclose(out["boundary"][0]["pts"][:, 1], 1.0)       # lane frame: x right = east
+        # lane frame: x right = east
+        assert abs(out["boundary"][0]["pts"][:, 0].min() + 20) < 1e-4 and abs(out["boundary"][0]["pts"][:, 0].max() - 20) < 1e-4 and np.allclose(out["boundary"][0]["pts"][:, 1], 1.0)
         ring = np.vstack([_line((-10, -10), (30, -10)), _line((30, -10), (30, 30))[1:], _line((30, 30), (-10, 30))[1:], _line((-10, 30), (-10, -10))[1:]])
         lg = {"chunks": LL._chunks(ring, "boundary")}
         for c in lg["chunks"]:
@@ -275,7 +289,8 @@ def _areas():
     ring = Polygon([(0, 0), (20, 0), (20, 20), (0, 20)], [[(8, 8), (8, 12), (12, 12), (12, 8)]])          # a hole of 16 m2 at the centre of the window
     out = LL.crop_areas(LL.polygon_chunks([(None, ring)]), T, half=5.0)
     assert len(out) == 1 and out[0]["id"] is None and len(out[0]["holes"]) == 1 and abs(out[0]["area"] - 84.0) < 1e-3, out
-    touching = Polygon([(0, 0), (20, 0), (20, 20), (0, 20)], [[(4, 4), (4, 12), (10, 12), (10, 4)], [(10, 6), (10, 10), (16, 10), (16, 6)]])       # two holes that touch along a segment: not OGC valid
+    # two holes that touch along a segment: not OGC valid
+    touching = Polygon([(0, 0), (20, 0), (20, 20), (0, 20)], [[(4, 4), (4, 12), (10, 12), (10, 4)], [(10, 6), (10, 10), (16, 10), (16, 6)]])
     assert not touching.is_valid
     out = LL.crop_areas(LL.polygon_chunks([("t", touching)]), T, half=8.0)
     assert out and all(Polygon(o["exterior"], o["holes"]).is_valid for o in out) and abs(sum(o["area"] for o in out) - 184.0) < 1e-3, "the polygons of the areas are valid geometry (l6)"
@@ -316,36 +331,13 @@ def _junction_f1(g, mg, T_e2g, half):
     return 2 * prec * rec / max(prec + rec, 1e-9), len(truth)
 
 
-def toy(verbose=False):
-    """every check that needs no nuScenes data (a few seconds)"""
-    _made_up()
-    _directions()
-    _gaps()
-    _joint_segments()
-    _symmetric_neighbours()
-    _lines()
-    _areas()
-    if verbose:
-        print("lane graph toy checks: ok")
-
-
-def run(root=None, verbose=True):
-    import hashlib
-    import tempfile
+def _tables():
+    """the lane versions and stores without data: this source has a row for each rig, the store chain of same_gt_as, the checks of the table, the rigs,
+    the rectangular cut"""
     from . import lane_gt
-    from .checks import _feed
+    from . import rig_cameras as RC
     from .grid import GridSpec
     from .nuscenes_gt import SIGNATURE_FILES
-    from .suite import GtGenerator
-    root = os.path.expanduser(root or "~/data/nuscenes")
-    toy()
-    # neighbours: three lanes side by side, going the same way, and an opposite lane
-    polys = {"a": _line((0, 0), (0, 30)), "b": _line((3.5, 0), (3.5, 30)), "c": _line((7, 0), (7, 30)), "o": _line((-3.5, 30), (-3.5, 0)),
-             "p": _line((3.5, 30), (3.5, 0)), "far": _line((30, 0), (30, 30))}
-    nb = RG.neighbours(polys, {t: "lane" for t in polys})
-    assert nb["right"]["a"] == ["b"] and nb["left"]["b"] == ["a"] and nb["right"]["b"] == ["c"] and nb["left"]["a"] == [] and nb["opposite"]["a"] == ["o", "p"], nb       # the opposite lane on the left AND on the right
-    assert nb["lane_count"]["a"] == nb["lane_count"]["b"] == nb["lane_count"]["c"] == 3 and nb["lane_index"] == {"a": 0, "b": 1, "c": 2, "o": 0, "p": 0, "far": 0} \
-        and nb["lane_count"]["far"] == 1, nb
     # the lane GT has its own version: nothing of it is in the signature of the front GT, a parameter makes another signature, an unknown one is refused
     assert not set(lane_gt.SOURCE_FILES) & set(SIGNATURE_FILES), "the lane GT must not change the front GT's signature"
     assert lane_gt.signature() == lane_gt.signature(boundary_layers=["drivable_area"]) != lane_gt.signature(stop_rule="none") != lane_gt.signature(corner_deg=45.0)
@@ -357,137 +349,7 @@ def run(root=None, verbose=True):
     for rig in lane_gt.RIGS:
         assert lane_gt.version_of(lane_gt.code_signature(rig=rig)) is not None, (f"the lane GT source has the signature {lane_gt.code_signature(rig=rig)} for the rig {rig} but no row in "
                                                                                   "GtGenerator/lane_versions.csv: add one, commit, tag autogt/lane-l<N>")
-    gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
-    lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
-    n_frames, d_graph, d_ref, f1s, divpairs, found = 0, [], [], [], 0, 0
-    n_lane_pts = n_lane_on_road = n_conn = n_conn_in = 0
-    for name in ("scene-0061", "scene-0103", "scene-1077"):
-        for tok in gt.keyframes(name)[::10]:
-            lg = lgt.graph(tok)
-            g_ = gt.keyframe(tok)
-            T = g_["meta"]["T_e2g"]
-            assert lg["frame"] == "lane" and lg["half"] == 50.0 and lg["location"] and lg["sample"] == tok and np.allclose(T, lgt.pose(tok))
-            ego = LG.in_frame(lg, "ego")
-            ref = np.concatenate([_dense(v) for v in g_["meta"]["vectors"]["centreline"] if len(v) > 1])
-            mine = np.concatenate([_dense(q["pts"]) for q in ego["pieces"]]) if ego["pieces"] else np.zeros((0, 2))
-            grid = GridSpec()
-            inbox = lambda P: P[(P[:, 0] >= grid.x_min + 0.5) & (P[:, 0] <= 49.5) & (np.abs(P[:, 1]) <= grid.y_max - 0.5)]
-            a, b = inbox(ref), inbox(mine)
-            if len(a) and len(b):
-                d_ref += list(_nearest(a, mine))
-                d_graph += list(_nearest(b, ref))
-            f1, n_truth = _junction_f1(lg, lgt._maps[lg["location"]][0], T, 50.0)
-            if n_truth:
-                f1s.append(f1)
-            from shapely.geometry import MultiPolygon, Point, Polygon
-            road = MultiPolygon([Polygon(p["exterior"], p["holes"]) for p in lg["areas"]["road"]]).buffer(0.5) if lg["areas"]["road"] else None
-            inter = [Polygon(p["exterior"], p["holes"]) for p in lg["areas"]["intersection"]]
-            for q in lg["pieces"]:                                    # lanes lie on the drivable area, connectors in an intersection lie in an intersection area
-                P = q["pts"][(np.abs(q["pts"]) < 49.0).all(1)]
-                if q["kind"] == "lane" and len(P) and road is not None:
-                    n_lane_pts += len(P)
-                    n_lane_on_road += sum(road.contains(Point(*p)) for p in P[::4]) * 4
-                if q["kind"] == "connector" and len(P):
-                    mid = P[len(P) // 2]
-                    if str(q.get("road")).startswith("x"):
-                        n_conn += 1
-                        n_conn_in += any(poly.buffer(0.5).contains(Point(*mid)) for poly in inter)
-            _invariants(lg)
-            ids = {x["id"] for x in lg["pieces"]}
-            for q in lg["pieces"]:                                    # every id of a link names a piece of the crop
-                assert set(q["succ"]) <= ids and set(q["pred"]) <= ids and set(q["left"]) <= ids and set(q["right"]) <= ids, q["id"]
-            n_frames += 1
-    d_ref, d_graph = np.array(d_ref), np.array(d_graph)
-    assert np.median(d_graph) < 0.05 and np.percentile(d_graph, 99) < 0.25, (np.median(d_graph), np.percentile(d_graph, 99))      # on the lane graph
-    assert np.percentile(d_ref, 99) < 0.25, np.percentile(d_ref, 99)                                                                # nothing of it missing
-    assert np.mean(f1s) > 0.95 and min(f1s) > 0.8, (np.mean(f1s), min(f1s))                                                         # events + links
-    assert n_lane_on_road >= 0.97 * n_lane_pts > 0 and n_conn_in >= 0.95 * n_conn > 0, (n_lane_on_road, n_lane_pts, n_conn_in, n_conn)      # areas and graph agree
-    # neighbours against the map's own divider tokens (the lanes that have them): a.right divider == b.left divider means b is right of a
-    for loc, (mgm, rgm, _) in lgt._maps.items():
-        for name, mirror in (("left", "right"), ("right", "left"), ("opposite", "opposite")):                   # a relation holds both ways: b is left of a <=> a is right of b
-            assert all(a in rgm["nb"][mirror][b] for a, bs in rgm["nb"][name].items() for b in bs), f"{loc}: {name} neighbours are not symmetric"
-        has_lane = {pid: any(mgm["kind"][t] == "lane" for t in p["tokens"]) for pid, p in mgm["pieces"].items()}
-        for pid, link in rgm["plinks"].items():                                                                  # a piece of connectors only takes the lane count of the lane before / after it
-            if not has_lane[pid] and any(has_lane[q] for q in mgm["pieces"][pid]["pred"] + mgm["pieces"][pid]["succ"]):
-                assert link["lane_count"] >= 1, f"{loc}: piece {pid} has no lane count"
-        nmap = gt.map_for(next(s["token"] for s in gt.nusc.scene if gt.nusc.get("log", s["log_token"])["location"] == loc))
-        left, right = collections.defaultdict(set), collections.defaultdict(set)
-        for l in nmap.lane:
-            for s in l["left_lane_divider_segments"]:
-                left[s["node_token"]].add(l["token"])
-            for s in l["right_lane_divider_segments"]:
-                right[s["node_token"]].add(l["token"])
-        truth = {(a, b) for n in right if n in left for a in right[n] for b in left[n] if a != b}
-        mine = {(a, b) for a, bs in rgm["nb"]["right"].items() for b in bs}
-        assert len(truth) > 100 and len(truth & mine) >= 0.95 * len(truth), (loc, len(truth), len(truth & mine))
-        assert not truth & {(a, b) for a, bs in rgm["nb"]["left"].items() for b in bs}, "left and right are not swapped"
-        divpairs += len(truth)
-        found += len(truth & mine)
-
-    # the store: generate (resumable), load, the manifest, another parameter = another folder
-    def digest(x):
-        h = hashlib.sha1()
-        _feed(h, x)
-        return h.hexdigest()
-    toks = gt.keyframes("scene-0061")
-    with tempfile.TemporaryDirectory() as d:
-        r = lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)
-        assert r["written"] == len(toks) == r["keyframes"] and r["signature"] == lane_gt.signature() and not r["release"], r
-        index_file = os.path.join(d, lane_gt.signature(), "index.json")
-        index_before = open(index_file).read()
-        assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0, "a second run has nothing to do"
-        from . import versions as versions_mod
-        if versions_mod.code_state()["dirty"] is not False:                      # a clean tree may turn the index into a release, then it is written again
-            assert open(index_file).read() == index_before, "a second run leaves the index of a complete store as it is (commit, environment of the run that made it)"
-        open(index_file, "w").write("{damaged")
-        assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0 and json.load(open(index_file))["complete"], "a damaged index is written again"
-        assert lane_gt.missing(toks, data=d) == [] and lane_gt.missing(toks + ["0" * 32], data=d) == ["0" * 32]
-        assert digest(lane_gt.load(toks[5], data=d)) == digest(lgt.graph(toks[5])), "the stored graph is the graph made now"
-        # l6 stays l6: the graphs of both rigs are pinned by digest (lane_l6_digest.json); a change of the code that moves one of them must be a new lane version with its own store and a new
-        # pinned file, not a row `same_gt_as` (the digests include the signature: any edit of a hashed file asks for a new file)
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lane_l6_digest.json")) as f:
-            pin = json.load(f)
-        have = {t for n_ in ("scene-0061", "scene-0103") for t in gt.keyframes(n_)}
-        for rig, frames in pin["frames"].items():
-            lg_rig = lgt if rig == "lane_center" else lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, rig=rig)
-            moved = [t for t, want in frames.items() if t in have and digest(lg_rig.graph(t)) != want]
-            assert len([t for t in frames if t in have]) >= 25 and not moved, f"the rig {rig} is no longer the l6 GT on {len(moved)} pinned frames, e.g. {moved[:2]}: {pin['note']}"
-        idx = json.load(open(os.path.join(d, lane_gt.signature(), "index.json")))
-        assert idx["complete"] and idx["keyframes"] == len(toks) and idx["scenes"] == ["scene-0061"] and idx["params"]["stop_rule"] == "intersection_branch" \
-            and idx["lane_version"] == lane_gt.version_of(lane_gt.signature()) and "shapely" in idx["environment"], idx
-        # the index names the sequences of every run on the folder, and is complete for all of them; a store that grows under other library versions gives a warning, not a refusal
-        lane_gt.generate(root, out=d, scenes=["scene-0103"], verbose=False)
-        idx = json.load(open(os.path.join(d, lane_gt.signature(), "index.json")))
-        assert idx["scenes"] == ["scene-0061", "scene-0103"] and idx["complete"] and idx["keyframes"] == len(toks) + len(gt.keyframes("scene-0103")), idx
-        idx["environment"]["numpy"] = "0.0.1"
-        json.dump(idx, open(os.path.join(d, lane_gt.signature(), "index.json"), "w"))
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.simplefilter("always")
-            assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0
-        assert [w for w in caught if issubclass(w.category, RuntimeWarning) and "library versions" in str(w.message) and "numpy" in str(w.message)], [str(w.message) for w in caught]
-        r2 = lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False, stop_rule="none")
-        assert r2["signature"] != r["signature"] and r2["written"] == len(toks), "another parameter, another folder"
-        assert not [e for e in lane_gt.load(toks[5], data=d, stop_rule="none")["events"] if e["type"] == "stop"] and \
-            [e for e in lane_gt.load(toks[5], data=d)["events"] if e["type"] == "stop"], "the stop rule changes the events"
-        try:
-            lane_gt.load("0" * 32, data=d)
-            raise AssertionError("a missing graph must be refused")
-        except FileNotFoundError as e:
-            assert lane_gt.signature() in str(e)
-    rig_msg = _rigs(root, gt, lane_gt, GridSpec())
-    msg = (f"lane graph selftest ok: {n_frames} mini frames, graph points {np.median(d_graph):.3f} m (99 % {np.percentile(d_graph, 99):.3f}) from the map's "
-           f"centre-lines and {np.percentile(d_ref, 99):.3f} m (99 %) the other way, junction F1 {np.mean(f1s):.3f}, "
-           f"neighbours: {found} of {divpairs} divider-token pairs found; store, load, resume, parameters ok (lane signature {lane_gt.signature()}); {rig_msg}")
-    if verbose:
-        print(msg)
-    return msg
-
-
-def _rigs(root, gt, lane_gt, grid):
-    """the two rigs (l5): the rectangular window, the table of stores (same_gt_as), BEV Fusion's graphs on real mini frames against the Spurmitte rig (same map vertices, same tiers)"""
-    from . import lane_tiers as LT
-    from . import rig_cameras as RC
-    # 1. clip_rect: a rectangle cuts at its four sides, a polyline inside is not cut
+    # clip_rect: a rectangle cuts at its four sides, a polyline inside is not cut
     win = (0.0, 60.0, -26.0, 26.0)
     one = LG.clip_rect(np.array([[-10.0, 3], [70, 3]]), *win)
     assert len(one) == 1 and one[0][1] and one[0][2] and np.allclose(one[0][0], [[0, 3], [60, 3]]), one
@@ -496,8 +358,8 @@ def _rigs(root, gt, lane_gt, grid):
     inside = LG.clip_rect(np.array([[1.0, 0], [2, 1], [3, 1]]), *win)
     assert len(inside) == 1 and not inside[0][1] and not inside[0][2] and len(inside[0][0]) == 3, inside
     assert not LG.clip_rect(np.array([[-9.0, 0], [-1, 5]]), *win) and not LG.clip_rect(np.array([[10.0, 30], [20, 40]]), *win), "outside the window: nothing"
-    # 2. the rigs and the table of stores
-    assert lane_gt.RIGS["bev_fusion"]["window"] == (grid.x_min, grid.x_max, grid.y_min, grid.y_max), "the BEV Fusion window is the window of its BEV grid"
+    # the rigs and the table of stores
+    assert lane_gt.RIGS["bev_fusion"]["window"] == (GridSpec().x_min, GridSpec().x_max, GridSpec().y_min, GridSpec().y_max), "the BEV Fusion window is the window of its BEV grid"
     assert lane_gt.RIGS["lane_center"]["window"] is None and lane_gt.RIGS["bev_fusion"]["cameras"] == ("CAM_FRONT",) and lane_gt.RIGS["lane_center"]["cameras"] == RC.SIX
     assert lane_gt.signature(rig="bev_fusion") != lane_gt.signature() and lane_gt.signature(rig="lane_center") == lane_gt.signature()
     for bad in (dict(rig="surround"), dict(rig="bev_fusion", half=40.0)):
@@ -538,9 +400,176 @@ def _rigs(root, gt, lane_gt, grid):
     finally:
         lane_gt.table = saved
         lane_gt._STORE_KEYS.clear()
-    # 3. BEV Fusion's graphs on real mini frames
+
+
+def toy(verbose=False):
+    """every check that needs no nuScenes data (a few seconds)"""
+    _made_up()
+    _directions()
+    _gaps()
+    _joint_segments()
+    _symmetric_neighbours()
+    _lines()
+    _areas()
+    _tables()
+    if verbose:
+        print("lane graph toy checks: ok")
+
+
+def mini(root):
+    """the checks against the map of nuScenes mini, the store, the pinned graphs of l6 and the two rigs"""
+    import hashlib
+    import tempfile
+    from . import lane_gt
+    from .checks import _feed
+    from .grid import GridSpec
+    from .suite import GtGenerator
+    # neighbours: three lanes side by side, going the same way, and an opposite lane
+    polys = {"a": _line((0, 0), (0, 30)), "b": _line((3.5, 0), (3.5, 30)), "c": _line((7, 0), (7, 30)), "o": _line((-3.5, 30), (-3.5, 0)),
+             "p": _line((3.5, 30), (3.5, 0)), "far": _line((30, 0), (30, 30))}
+    nb = RG.neighbours(polys, {t: "lane" for t in polys})
+    # the opposite lane on the left AND on the right
+    assert nb["right"]["a"] == ["b"] and nb["left"]["b"] == ["a"] and nb["right"]["b"] == ["c"] and nb["left"]["a"] == [] and nb["opposite"]["a"] == ["o", "p"], nb
+    assert nb["lane_count"]["a"] == nb["lane_count"]["b"] == nb["lane_count"]["c"] == 3 and nb["lane_index"] == {"a": 0, "b": 1, "c": 2, "o": 0, "p": 0, "far": 0} \
+        and nb["lane_count"]["far"] == 1, nb
+    gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103", "scene-1077"])
+    lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
+    n_frames, d_graph, d_ref, f1s, divpairs, found = 0, [], [], [], 0, 0
+    n_lane_pts = n_lane_on_road = n_conn = n_conn_in = 0
+    for name in ("scene-0061", "scene-0103", "scene-1077"):
+        for tok in gt.keyframes(name)[::10]:
+            lg = lgt.graph(tok)
+            g_ = gt.keyframe(tok)
+            T = g_["meta"]["T_e2g"]
+            assert lg["frame"] == "lane" and lg["half"] == 50.0 and lg["location"] and lg["sample"] == tok and np.allclose(T, lgt.pose(tok))
+            ego = LG.in_frame(lg, "ego")
+            ref = np.concatenate([_dense(v) for v in g_["meta"]["vectors"]["centreline"] if len(v) > 1])
+            mine = np.concatenate([_dense(q["pts"]) for q in ego["pieces"]]) if ego["pieces"] else np.zeros((0, 2))
+            grid = GridSpec()
+            inbox = lambda P: P[(P[:, 0] >= grid.x_min + 0.5) & (P[:, 0] <= 49.5) & (np.abs(P[:, 1]) <= grid.y_max - 0.5)]
+            a, b = inbox(ref), inbox(mine)
+            if len(a) and len(b):
+                d_ref += list(_nearest(a, mine))
+                d_graph += list(_nearest(b, ref))
+            f1, n_truth = _junction_f1(lg, lgt._maps[lg["location"]][0], T, 50.0)
+            if n_truth:
+                f1s.append(f1)
+            from shapely.geometry import MultiPolygon, Point, Polygon
+            road = MultiPolygon([Polygon(p["exterior"], p["holes"]) for p in lg["areas"]["road"]]).buffer(0.5) if lg["areas"]["road"] else None
+            inter = [Polygon(p["exterior"], p["holes"]) for p in lg["areas"]["intersection"]]
+            # lanes lie on the drivable area, connectors in an intersection lie in an intersection area
+            for q in lg["pieces"]:
+                P = q["pts"][(np.abs(q["pts"]) < 49.0).all(1)]
+                if q["kind"] == "lane" and len(P) and road is not None:
+                    n_lane_pts += len(P)
+                    n_lane_on_road += sum(road.contains(Point(*p)) for p in P[::4]) * 4
+                if q["kind"] == "connector" and len(P):
+                    mid = P[len(P) // 2]
+                    if str(q.get("road")).startswith("x"):
+                        n_conn += 1
+                        n_conn_in += any(poly.buffer(0.5).contains(Point(*mid)) for poly in inter)
+            _invariants(lg)
+            ids = {x["id"] for x in lg["pieces"]}
+            for q in lg["pieces"]:                                    # every id of a link names a piece of the crop
+                assert set(q["succ"]) <= ids and set(q["pred"]) <= ids and set(q["left"]) <= ids and set(q["right"]) <= ids, q["id"]
+            n_frames += 1
+    d_ref, d_graph = np.array(d_ref), np.array(d_graph)
+    assert np.median(d_graph) < 0.05 and np.percentile(d_graph, 99) < 0.25, (np.median(d_graph), np.percentile(d_graph, 99))      # on the lane graph
+    assert np.percentile(d_ref, 99) < 0.25, np.percentile(d_ref, 99)                                                                # nothing of it missing
+    assert np.mean(f1s) > 0.95 and min(f1s) > 0.8, (np.mean(f1s), min(f1s))                                                         # events + links
+    # areas and graph agree
+    assert n_lane_on_road >= 0.97 * n_lane_pts > 0 and n_conn_in >= 0.95 * n_conn > 0, (n_lane_on_road, n_lane_pts, n_conn_in, n_conn)
+    # neighbours against the map's own divider tokens (the lanes that have them): a.right divider == b.left divider means b is right of a
+    for loc, (mgm, rgm, _) in lgt._maps.items():
+        # a relation holds both ways: b is left of a <=> a is right of b
+        for name, mirror in (("left", "right"), ("right", "left"), ("opposite", "opposite")):
+            assert all(a in rgm["nb"][mirror][b] for a, bs in rgm["nb"][name].items() for b in bs), f"{loc}: {name} neighbours are not symmetric"
+        has_lane = {pid: any(mgm["kind"][t] == "lane" for t in p["tokens"]) for pid, p in mgm["pieces"].items()}
+        # a piece of connectors only takes the lane count of the lane before / after it
+        for pid, link in rgm["plinks"].items():
+            if not has_lane[pid] and any(has_lane[q] for q in mgm["pieces"][pid]["pred"] + mgm["pieces"][pid]["succ"]):
+                assert link["lane_count"] >= 1, f"{loc}: piece {pid} has no lane count"
+        nmap = gt.map_for(next(s["token"] for s in gt.nusc.scene if gt.nusc.get("log", s["log_token"])["location"] == loc))
+        left, right = collections.defaultdict(set), collections.defaultdict(set)
+        for l in nmap.lane:
+            for s in l["left_lane_divider_segments"]:
+                left[s["node_token"]].add(l["token"])
+            for s in l["right_lane_divider_segments"]:
+                right[s["node_token"]].add(l["token"])
+        truth = {(a, b) for n in right if n in left for a in right[n] for b in left[n] if a != b}
+        mine = {(a, b) for a, bs in rgm["nb"]["right"].items() for b in bs}
+        assert len(truth) > 100 and len(truth & mine) >= 0.95 * len(truth), (loc, len(truth), len(truth & mine))
+        assert not truth & {(a, b) for a, bs in rgm["nb"]["left"].items() for b in bs}, "left and right are not swapped"
+        divpairs += len(truth)
+        found += len(truth & mine)
+
+    # the store: generate (resumable), load, the manifest, another parameter = another folder
+    def digest(x):
+        h = hashlib.sha1()
+        _feed(h, x)
+        return h.hexdigest()
+    toks = gt.keyframes("scene-0061")
+    with tempfile.TemporaryDirectory() as d:
+        r = lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)
+        assert r["written"] == len(toks) == r["keyframes"] and r["signature"] == lane_gt.signature() and not r["release"], r
+        index_file = os.path.join(d, lane_gt.signature(), "index.json")
+        index_before = open(index_file).read()
+        assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0, "a second run has nothing to do"
+        from . import versions as versions_mod
+        if versions_mod.code_state()["dirty"] is not False:                      # a clean tree may turn the index into a release, then it is written again
+            assert open(index_file).read() == index_before, "a second run leaves the index of a complete store as it is (commit, environment of the run that made it)"
+        open(index_file, "w").write("{damaged")
+        assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0 and json.load(open(index_file))["complete"], "a damaged index is written again"
+        assert lane_gt.missing(toks, data=d) == [] and lane_gt.missing(toks + ["0" * 32], data=d) == ["0" * 32]
+        assert digest(lane_gt.load(toks[5], data=d)) == digest(lgt.graph(toks[5])), "the stored graph is the graph made now"
+        # l6 stays l6: the graphs of both rigs are pinned by digest (lane_l6_digest.json); a change of the code that moves one of them must be a new lane
+        # version with its own store and a new pinned file, not a row `same_gt_as` (the digests include the store key, g["signature"]: a row same_gt_as keeps
+        # them, as l6.1 and l6.2 did)
+        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "lane_l6_digest.json")) as f:
+            pin = json.load(f)
+        have = {t for n_ in ("scene-0061", "scene-0103") for t in gt.keyframes(n_)}
+        for rig, frames in pin["frames"].items():
+            lg_rig = lgt if rig == "lane_center" else lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, rig=rig)
+            moved = [t for t, want in frames.items() if t in have and digest(lg_rig.graph(t)) != want]
+            assert len([t for t in frames if t in have]) >= 25 and not moved, f"the rig {rig} is no longer the l6 GT on {len(moved)} pinned frames, e.g. {moved[:2]}: {pin['note']}"
+        idx = json.load(open(os.path.join(d, lane_gt.signature(), "index.json")))
+        assert idx["complete"] and idx["keyframes"] == len(toks) and idx["scenes"] == ["scene-0061"] and idx["params"]["stop_rule"] == "intersection_branch" \
+            and idx["lane_version"] == lane_gt.version_of(lane_gt.signature()) and "shapely" in idx["environment"], idx
+        # the index names the sequences of every run on the folder, and is complete for all of them; a store that grows under other library versions gives a
+        # warning, not a refusal
+        lane_gt.generate(root, out=d, scenes=["scene-0103"], verbose=False)
+        idx = json.load(open(os.path.join(d, lane_gt.signature(), "index.json")))
+        assert idx["scenes"] == ["scene-0061", "scene-0103"] and idx["complete"] and idx["keyframes"] == len(toks) + len(gt.keyframes("scene-0103")), idx
+        idx["environment"]["numpy"] = "0.0.1"
+        json.dump(idx, open(os.path.join(d, lane_gt.signature(), "index.json"), "w"))
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            assert lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False)["written"] == 0
+        assert [w for w in caught if issubclass(w.category, RuntimeWarning) and "library versions" in str(w.message) and "numpy" in str(w.message)], [str(w.message) for w in caught]
+        r2 = lane_gt.generate(root, out=d, scenes=["scene-0061"], verbose=False, stop_rule="none")
+        assert r2["signature"] != r["signature"] and r2["written"] == len(toks), "another parameter, another folder"
+        assert not [e for e in lane_gt.load(toks[5], data=d, stop_rule="none")["events"] if e["type"] == "stop"] and \
+            [e for e in lane_gt.load(toks[5], data=d)["events"] if e["type"] == "stop"], "the stop rule changes the events"
+        try:
+            lane_gt.load("0" * 32, data=d)
+            raise AssertionError("a missing graph must be refused")
+        except FileNotFoundError as e:
+            assert lane_gt.signature() in str(e)
+    rig_msg = _rigs(root, gt, lane_gt)
+    return (f"{n_frames} mini frames, graph points {np.median(d_graph):.3f} m (99 % {np.percentile(d_graph, 99):.3f}) from the map's "
+           f"centre-lines and {np.percentile(d_ref, 99):.3f} m (99 %) the other way, junction F1 {np.mean(f1s):.3f}, "
+           f"neighbours: {found} of {divpairs} divider-token pairs found; store, load, resume, parameters ok (lane signature {lane_gt.signature()}); {rig_msg}")
+
+
+def _rigs(root, gt, lane_gt):
+    """the two rigs (l5): BEV Fusion's graphs on real mini frames against the Spurmitte rig (same map vertices, same tiers)"""
+    from . import lane_tiers as LT
+    from . import rig_cameras as RC
+    # BEV Fusion's graphs on real mini frames
+    win = lane_gt.RIGS["bev_fusion"]["window"]
     bf_gt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, rig="bev_fusion")
-    big = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, half=60.0)                  # Spurmitte's rig with a bigger square, in the frame of BEV Fusion: the reference for the cut
+    # Spurmitte's rig with a bigger square, in the frame of BEV Fusion: the reference for the cut
+    big = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, half=60.0)
     spur = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc)
     eps = 1e-4
     n, share_same, share_n, vis_n, pts_n, d_len = 0, 0, 0, 0, 0, []
@@ -573,7 +602,8 @@ def _rigs(root, gt, lane_gt, grid):
                 if e["type"] == "window":
                     p = e["pos"]
                     assert min(abs(p[0] - win[0]), abs(p[0] - win[1]), abs(p[1] - win[2]), abs(p[1] - win[3])) < 1e-3, "a window event lies on the border"
-            # the cut against the same graph made with a bigger square: the pieces of the big graph, cut to the rectangle, have the length of the pieces of the BEV Fusion graph
+            # the cut against the same graph made with a bigger square: the pieces of the big graph, cut to the rectangle, have the length of the pieces of the
+            # BEV Fusion graph
             gb = big.graph(tok, frame="ego")
             want = {}
             for q in gb["pieces"]:
@@ -611,7 +641,8 @@ def _rigs(root, gt, lane_gt, grid):
     d_len = np.array(d_len)
     assert vis_n > 0 and n >= 9, (vis_n, n)
     assert np.all(np.abs(d_len[:, 0] - d_len[:, 1]) < 1e-2), d_len                                    # measured 0.0 on every frame: the cut is the cut
-    assert share_n >= 0.8 * pts_n > 0 and share_same == share_n, (share_same, share_n, pts_n)               # l6: the tiers are decided on the wide window, so the window of the rig changes none (l5: 0.992)
+    # l6: the tiers are decided on the wide window, so the window of the rig changes none (l5: 0.992)
+    assert share_n >= 0.8 * pts_n > 0 and share_same == share_n, (share_same, share_n, pts_n)
     return f"BEV Fusion rig: {n} frames inside x {win[0]:.0f} .. {win[1]:.0f} m, y {win[2]:.0f} .. {win[3]:.0f} m, cut = the bigger graph cut, tier equal to Spurmitte's on {share_same / share_n:.3f} of {share_n} shared points"
 
 
@@ -630,9 +661,3 @@ def _nearest(A, B):
         out[i:i + 512] = d.min(1)
     return out
 
-
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default="~/data/nuscenes")
-    run(ap.parse_args().root)

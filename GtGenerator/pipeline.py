@@ -1,5 +1,7 @@
-"""The writer of the front GT: `generate`, THE entry point (read nuScenes from a folder, write the GT of every keyframe, resumable, memory-light, optionally with the lane GT and the masks).
-The files and the index come from `store.py`. `python -m GtGenerator generate ...` and `GtGenerator.generate(...)` are this module."""
+"""The writer of the front GT: `generate`, THE entry point (read nuScenes from a folder, write the GT of every keyframe, resumable, memory-light, optionally
+with the lane GT and the masks).
+The files and the index come from `store.py`. `python -m GtGenerator generate ...` and `GtGenerator.generate(...)` (the method of api.py: the lane keys added)
+call it."""
 import multiprocessing as mp
 import os
 import time
@@ -47,7 +49,8 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
                GtGenerator/sets/; instead of scenes (both given: an error)
     stride     every n-th keyframe (1 = all); res: cell size in m (0.5), ss: supersampling (4)
     workers    processes (1 = this process); options: use_flow, use_radar, boxes_at, ... (see GtGenerator)
-    lane       also make the lane GT (lane graph, roads, lines, polygons: GtGenerator/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the other
+    lane       also make the lane GT (lane graph, roads, lines, polygons: GtGenerator/lane_gt.py) of the same sequences into OUT/lane/<lane signature>/, the
+               other
                store of the same release (releases.csv); only with stride 1, the lane GT is made for every keyframe
     -> {"out": the folder written, "signature", "gt_version" (the key of versions.csv, D29), "version", "scenes", "keyframes": wanted,
         "written": new files, "release": the folder is a release (see write_index), "lane", "lane_rigs", "masks_error"}
@@ -80,16 +83,19 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     stored = front_keys(sig_dir, nonempty=True)                       # a zero-byte file (full disk, a copy) is damage: written again
     size = min(GROUP_SCENES, max(1, -(-len(names) // workers)))           # with several workers every worker gets a group of its own
     code_sig = code_signature(**options)
-    jobs = []                                                             # one per group of sequences that misses keyframes: a finished group needs no devkit load
+    # one per group of sequences that misses keyframes: a finished group needs no devkit load
+    jobs = []
     for g0 in range(0, len(names), size):
         grp = names[g0:g0 + size]
         todo = [t for n in grp for t in tokens[n] if t not in stored]
         if todo:
             jobs.append((code_sig, f"group {g0 // size + 1}/{-(-len(names) // size)}", dataroot, version, res, ss, options, grp, todo, sig_dir, verbose))
-    if (jobs or (lane and stride == 1)) and "trainval" in version:      # the big tables once, not once per group (31 s each, light_nusc.py): also for the lane GT that follows
+    # the big tables once, not once per group (31 s each, light_nusc.py): also for the lane GT that follows
+    if (jobs or (lane and stride == 1)) and "trainval" in version:
         from .light_nusc import ensure_cache
         ensure_cache(dataroot, version, verbose=verbose)
-    before = read_index(sig_dir).get("complete", True)                  # what the folder said before this run: the provisional index below must not make a finished run incomplete
+    # what the folder said before this run: the provisional index below must not make a finished run incomplete
+    before = read_index(sig_dir).get("complete", True)
     if jobs:                                                          # a finished store is not flagged incomplete by a rerun that has nothing to do
         write_index(sig_dir, ident, version, names, stride, n_total, options, complete=False)       # before the first keyframe, also on a resume
     done = 0
@@ -111,8 +117,10 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
               f"read one with GtGenerator.load(<sample token>{'' if out == where.root() else ', data=' + repr(out)})")
     lane_result = lane_rigs = masks_error = None
     if lane and stride == 1:
-        from .gt_api import make_lane_gt                                    # both systems' lane GT + the masks derived from the BEV Fusion one: the same code as generate_bev_gt / generate_lane_gt
-        lane_rigs, masks_error = make_lane_gt(dataroot, out, version, names, workers, verbose, masks=True, strict=False)      # a failing mask cache does not lose the GT that is written: it is reported (exit 1)
+        # both systems' lane GT + the masks derived from the BEV Fusion one: the same code as generate_bev_gt / generate_lane_gt
+        from .gt_api import make_lane_gt
+        # a failing mask cache does not lose the GT that is written: it is reported (exit 1)
+        lane_rigs, masks_error = make_lane_gt(dataroot, out, version, names, workers, verbose, masks=True, strict=False)
         lane_result = lane_rigs["lane_center"]
     elif lane and verbose:
         print("the lane GT is made for every keyframe: skipped with stride", stride)

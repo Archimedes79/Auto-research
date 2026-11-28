@@ -6,17 +6,20 @@
                                  "lane_center"      problems/lane_center/        lane_mask()           lane, x right, y forward; the window 200 x 200
     bev_fusion_mask(grid=None)   the front camera and the five radars on the BEV-fusion grid (default GridSpec(): x forward 0 - 60 m, y left +-26 m, 0.5 m):
                                  {"camera", "radar", "fusion"}, bool arrays [ix, iy] in the ego frame (x forward, y left)
-    lane_mask(res=0.5, half=50)  the six cameras and the five radars on the Spurmitte window (the lane project: 100 x 100 m round the ego, 200 x 200 cells at 0.5 m):
-                                 {"camera", "radar", "fusion", "n_cameras"}, arrays [ix, iy] in the LANE frame (x RIGHT, y forward, cell centres at -half + (i + 0.5) res)
+    lane_mask(res=0.5, half=50)  the six cameras and the five radars on the Spurmitte window (the lane project: 100 x 100 m round the ego, 200 x 200 cells at
+    0.5 m):
+                                 {"camera", "radar", "fusion", "n_cameras"}, arrays [ix, iy] in the LANE frame (x RIGHT, y forward, cell centres at -half + (i +
+                                 0.5) res)
 
-Both are static: the rig of nuScenes is the same in every frame (the calibration differs between the logs by at most 0.04 m and 1 - 3 degrees: the mean over the 850
-logs of trainval is used, as `coverage.rig_radar_poses` does for the radars; the six cameras are `rig_cameras.py`, which the lane signature hashes: this file is not hashed), so the masks are made
-from the calibration alone, in milliseconds, nothing is stored and there is no GT version. They are the same definition as in `coverage.py` (D36 - D38): a camera cell is a point on the ground plane (z = 0 of the ego frame) in front of the camera
-that projects into its 1600 x 900 image; a radar cell lies inside the +-60 degree / 70 m fan of one of the five radars; the fusion area is camera and radar.
+Both are static: the rig of nuScenes is the same in every frame (the calibration differs between the logs by at most 0.04 m and 1 - 3 degrees: the mean over the
+850 logs of trainval is used, as `coverage.rig_radar_poses` does for the radars; the six cameras are `rig_cameras.py`, which the lane signature hashes: this
+file is not hashed), so the masks are made from the calibration alone, in milliseconds, nothing is stored and there is no GT version. They are the same
+definition as in `coverage.py` (D36 - D38): a camera cell is a point on the ground plane (z = 0 of the ego frame) in front of the camera that projects into its
+1600 x 900 image; a radar cell lies inside the +-60 degree / 70 m fan of one of the five radars; the fusion area is camera and radar.
 
-What the static masks do NOT have: what boxes hide. For BEV fusion the stored front GT has the exact per-frame version (layers `camera`, `occluded`, `radar`, `undefined`, and
-`coverage.fusion_cells(g)`), use that for scoring; the static mask is for code that has no GT frame at hand (the model, a plot). For Spurmitte there is no per-frame
-occlusion: a lane line behind a car counts as observed here.
+What the static masks do NOT have: what boxes hide. For BEV fusion the stored front GT has the exact per-frame version (layers `camera`, `occluded`, `radar`,
+`undefined`, and `coverage.fusion_cells(g)`), use that for scoring; the static mask is for code that has no GT frame at hand (the model, a plot). For Spurmitte
+there is no per-frame occlusion: a lane line behind a car counts as observed here.
 
 `python -m GtGenerator masks out.png` draws both.
 """
@@ -53,8 +56,8 @@ def _lane(res, half, cameras):
 
 
 def lane_mask(res=0.5, half=50.0, cameras=SIX):
-    """the cameras (default all six), the five radars and their fusion area on the Spurmitte window, in the lane frame (see the module docstring); `n_cameras` counts
-    the cameras that see a cell. `res` 1 or 2 gives the coarse maps of the head."""
+    """the cameras (default all six), the five radars and their fusion area on the Spurmitte window, in the lane frame (see the module docstring); `n_cameras`
+    counts the cameras that see a cell. `res` 1 or 2 gives the coarse maps of the head."""
     return {k: v.copy() for k, v in _lane(float(res), float(half), tuple(cameras)).items()}
 
 
@@ -62,9 +65,10 @@ PROJECTS = {"bev_fusion": "bev_fusion_mask", "lane_center": "lane_mask"}
 
 
 def mask_for(project, **kwargs):
-    """the coverage mask of a project: "bev_fusion" (the front fusion system, folder problems/bev_fusion/) -> bev_fusion_mask(**kwargs); "lane_center" (the lane-centre problem on
-    GaussianCaR features, folder problems/lane_center/) -> lane_mask(**kwargs). Any other name is an error that names the two. The arrays differ in shape and in frame, so a
-    mask taken for the wrong project does not fit the project's grid and fails at once instead of scoring on the wrong area."""
+    """the coverage mask of a project: "bev_fusion" (the front fusion system, folder problems/bev_fusion/) -> bev_fusion_mask(**kwargs); "lane_center" (the
+    lane-centre problem on GaussianCaR features, folder problems/lane_center/) -> lane_mask(**kwargs). Any other name is an error that names the two. The arrays
+    differ in shape and in frame, so a mask taken for the wrong project does not fit the project's grid and fails at once instead of scoring on the wrong
+    area."""
     if project not in PROJECTS:
         raise ValueError(f"unknown project {project!r}: the masks are for {sorted(PROJECTS)} (bev_fusion = front camera + 5 radars, lane_center = 6 cameras + 5 radars)")
     return globals()[PROJECTS[project]](**kwargs)
@@ -103,10 +107,8 @@ def picture(path):
     return path
 
 
-def selftest(root=None, verbose=True):
-    """orientation, the cross-check against the per-frame front masks of the stored GT (nuScenes mini), symmetry, numbers"""
-    import os
-    from .suite import AutoGT
+def selftest_toy():
+    """the geometry without data: the orientation of the lane frame, symmetry, the shapes per project, numbers"""
     # orientation of the lane frame: ahead is seen by the front camera, behind by the back camera, the sides by the side cameras
     def at(m, x, y, res=0.5, half=50.0):
         return bool(m[int((x + half) / res), int((y + half) / res)])
@@ -128,9 +130,17 @@ def selftest(root=None, verbose=True):
         raise AssertionError("an unknown project must be refused")
     except ValueError as e:
         assert "bev_fusion" in str(e) and "lane_center" in str(e)
-    # the static front mask against the per-frame masks of the stored GT (real calibration, same functions)
-    root = os.path.expanduser(root or "~/data/nuscenes")
-    gt = AutoGT(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103"])
+    bev = bev_fusion_mask()
+    assert bev["radar"].mean() > 0.99 and m["radar"].mean() > 0.99, "the five 70 m fans of the rig cover the BEV grid and the 100 x 100 m window"
+    assert 0.55 < bev["camera"].mean() < 0.70 and m["camera"].mean() > 0.95, (bev["camera"].mean(), m["camera"].mean())
+    return (f"Spurmitte window: camera {m['camera'].mean():.0%}, radar {m['radar'].mean():.0%}, fusion {m['fusion'].mean():.0%} of the 100 x 100 m; "
+            f"BEV fusion grid: camera {bev['camera'].mean():.0%}, radar {bev['radar'].mean():.0%}, fusion {bev['fusion'].mean():.0%}")
+
+
+def selftest(root):
+    """the static front mask against the per-frame masks of the GT of nuScenes mini (real calibration, same functions)"""
+    from .suite import GtGenerator
+    gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103"])
     bev = bev_fusion_mask()
     ious = {"camera": [], "radar": []}
     for name in ("scene-0061", "scene-0103"):
@@ -140,13 +150,4 @@ def selftest(root=None, verbose=True):
                 a, b = bev[k], g[k] > 0
                 ious[k].append((a & b).sum() / max((a | b).sum(), 1))
     assert np.mean(ious["camera"]) > 0.97 and np.mean(ious["radar"]) > 0.995, {k: float(np.mean(v)) for k, v in ious.items()}
-    msg = (f"rig masks selftest ok: static front camera vs the per-frame GT layer IoU {np.mean(ious['camera']):.3f} (min {np.min(ious['camera']):.3f}), radar {np.mean(ious['radar']):.4f}; "
-           f"Spurmitte window: camera {m['camera'].mean():.0%}, radar {m['radar'].mean():.0%}, fusion {m['fusion'].mean():.0%} of the 100 x 100 m; "
-           f"BEV fusion grid: camera {bev['camera'].mean():.0%}, radar {bev['radar'].mean():.0%}, fusion {bev['fusion'].mean():.0%}")
-    if verbose:
-        print(msg)
-    return msg
-
-
-if __name__ == "__main__":
-    print(selftest())
+    return f"static front camera vs the per-frame GT layer IoU {np.mean(ious['camera']):.3f} (min {np.min(ious['camera']):.3f}), radar {np.mean(ious['radar']):.4f}"
