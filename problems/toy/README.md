@@ -7,13 +7,14 @@ ground truth, training, evaluation (numbers, pictures, compute time), a verdict 
 ## What a problem writes
 | file | what |
 |---|---|
-| `problem.json` | the steps (prepare, train, evaluate), the score `seg.iou` with its band, a guard, the control floor, the holdout split, the protected files, the tests |
+| `__init__.py` (empty, in every code folder) | the problem is the package `toy`: its modules import each other as `from toy.net.model.net import DiscNet`, nothing edits `sys.path` |
+| `problem.json` | the steps (prepare, train, evaluate; a step is `{python} -P -m toy.<module>`), the score `seg.iou` with its band, a guard, the control floor, the holdout split, the protected files, the tests |
 | `dataset/` | the recipe of the raw data (`make_data.py`) and its manifest (shards with split, size, sha256) |
 | `gt/` | the ground-truth generator: `raster.py` is the hashed part; the store is named by the signature (rasteriser, options, data manifest) |
 | `net/` | `prep/` the shard reader (checks every shard's hash, guards the holdout), `model/` the network, `loss/` the loss |
 | `training/` | `train.py` on `trainkit`, `configs/base.json` (every setting an arm may change), the drawing `architecture.*` |
 | `evaluation/` | `adapter.py`: sets, source, subject, a metric with additive counts, the overview picture, the timing |
-| `tests/test_toy.py` | known answers (asymmetric), the refusals of the reader, stop and resume bit for bit |
+| `tests/test_toy.py` | the style of the package (`research/pkgcheck.py`, the layers `net` below `training` and `evaluation`), known answers (asymmetric), the refusals of the reader, stop and resume bit for bit |
 | `TEST_LOG.md` | the TEST gate of the holdout split; experiments, `ledger.csv` and `DECISIONS.md` come with the first use |
 
 ## Use (from `autoresearch/`, under WSL)
@@ -25,4 +26,5 @@ python3 -m research judge toy E1 --write                      # verdict.json, le
 python3 -m research adopt toy E1 a --decision D<n>            # the owner's decision: champions/toy/
 ```
 The data (`<data root>/toy/`) and the runs (`<runs root>/toy/`) lie where the machine file says, never in this folder. Tests:
-`python3 -m research tests toy`, or `python tests/test_toy.py` from this folder (the interpreter with torch; `--quick`: no training).
+`python3 -m research tests toy`, or by hand `python3 -m research py toy -m toy.tests.test_toy` (`--quick`: no training). `research py toy ...`
+is python with the toy's interpreter and its module path (`problems/`, `autoresearch/`, the repository); nothing is installed.

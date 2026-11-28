@@ -19,6 +19,8 @@ much of a set the store of the current generator holds. The store folder is shar
 """
 import os
 
+from . import where
+
 DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "sets")
 
 
@@ -77,10 +79,10 @@ def held(sig_dir, nonempty=False):
 
 def status(name, data=None, version=None, dataroot=None, **options):
     """how much of a set the store of the current generator (and options) holds"""
-    from .suite import DATA, current_signature
+    from .suite import current_signature
     version, root = _tables(name, version, dataroot)
     toks = tokens(name, version, root)
-    stored = held(os.path.join(data or DATA, current_signature(**options)))
+    stored = held(os.path.join(data or where.root(), current_signature(**options)))
     have = sum(1 for t in toks if t in stored)
     return {"set": name, "version": version, "have": have, "total": len(toks), "complete": bool(toks) and have == len(toks)}
 
@@ -88,10 +90,10 @@ def status(name, data=None, version=None, dataroot=None, **options):
 def stored_for(want, data=None, version=None, dataroot=None, stride=1, **options):
     """the keyframes (every `stride`-th) of the sequences `want` (names) that the store of the current generator holds: the check before a
     training or an evaluation -> {"version", "scenes", "total", "have", "missing": [sample tokens]}; `python -m GtGenerator have`"""
-    from .suite import DATA, current_signature, scene_tokens
+    from .suite import current_signature, scene_tokens
     version, root = _find(list(want), version, dataroot)
     toks = [t for s in want for t in scene_tokens(s, version, root)[::stride]]
-    stored = held(os.path.join(data or DATA, current_signature(**options)), nonempty=True)        # a zero-byte file is no keyframe: the check before a training must not pass on it
+    stored = held(os.path.join(data or where.root(), current_signature(**options)), nonempty=True)        # a zero-byte file is no keyframe: the check before a training must not pass on it
     missing = [t for t in toks if t not in stored]
     return {"version": version, "scenes": len(list(want)), "total": len(toks), "have": len(toks) - len(missing), "missing": missing}
 

@@ -7,6 +7,31 @@ problem's code.
 
 Agents: [`AGENTS.md`](AGENTS.md) describes every field and the rules for using it. This page: make the GT, name it, extend the generator.
 
+## The interface
+`problems/`, `autoresearch/` and `datasets/` reach the ground truth through `import GtGenerator` and its public names, or through `python -m GtGenerator COMMAND` (below), and through nothing below
+them: no module or file of this folder, no folder or file name below the store root (the root itself and the folder of a key's part are answers of the interface: `store_root()`,
+`key.part(name).path`), no file format, no version table. The public names are the table `_PUBLIC` in `__init__.py` (it is `GtGenerator.__all__`); the docstring there has one
+contract line per name (what goes in, what comes back as numpy / dict / str), [`AGENTS.md`](AGENTS.md) section 1 says what each is for.
+
+| kind | public names |
+|---|---|
+| where the GT is, which GT it is | `store_root`, `current_signature`, `lane_signature`, `current_version`, `version_of_key`, `version_names`, `gt_key`, `GtKey` |
+| read stored GT | `load`, `missing`, `load_lane`, `lane_tokens`, `scene_tokens` |
+| make GT | `GtGenerator` (the class: the generator object of a loader, and one static method per command), `generate`, `generate_bev_gt`, `generate_lane_gt` |
+| raw nuScenes as the GT reads it | `light_nuscenes`, `pose_matrix` |
+| definitions shared with a network and its tests | `GridSpec`, `AREAS`, `LINES`, `OBJECTS`, `DIST_MAX`, `cell_centres`, `occlusion`, `radar_cells`, `coverage_for`, `shares_in`, `mask_for` |
+| pictures | `lane_camera_image` |
+| the rule | `check_imports` |
+
+- A cache name or a record carries the key of the STORE (`current_signature()`, `lane_signature(rig)`, `store_signature()` of a generator object), never a code signature: an edit that changes no GT
+  (`same_gt_as`) then invalidates no cache and no comparison.
+- A name a problem needs and the table lacks is added to the table (with its contract line and its row in `AGENTS.md`), not imported from below.
+- On the class and on a key only the members of `_MEMBERS` (`__init__.py`) are the interface. The class also carries one static method per command (`versions(update=True)` writes
+  `versions.csv`, `clean(delete=True)` deletes reports): those belong to the command line.
+- The test is `interface_selftest.py` (`selftest --only interface`, seconds, no nuScenes): `check_imports` on a planted file with one line per way of going below the interface, the table
+  against these documents, the store root and the readers on a made-up store, and the three folders of the tree. Its `PENDING` lists the lines of the tree that still reach below the
+  interface; the list can only shrink. The full `selftest` runs it without the scan of the tree (it is the gate of a signature step and must not depend on a file another session edits).
+
 ## Minimal example
 From the repository root (WSL, conda env `gcar`); one mini sequence:
 ```python
@@ -48,7 +73,8 @@ on one thread.
 
 ## Where the data is
 - Raw nuScenes: the views `~/data/nuscenes_full` (trainval) and `~/data/nuscenes` (mini), see [`datasets/nuscenes/`](../datasets/nuscenes/README.md). Never written to.
-- Stores, not in git, below `<data root>/groundtruth` (`where.py`: the data root is `RESEARCH_DATA`, else `data` of the machine file, shown by `research machine`; without either `<repository>/data/autogt`):
+- Stores, not in git, below `<data root>/groundtruth` (`where.py`: the data root is `RESEARCH_DATA`, else `data` of the machine file, shown by `research machine`; `<repository>/data/autogt` only on a machine without any machine file: a
+  machine file that is named or exists and cannot be read or names no data root is an error, never that fallback):
   `<signature>/<token>.npz` + `index.json` (front), `lane/<signature>/<token>.pkl.gz` + `masks/` (lane), `cache/` (the tables of the light nuScenes reader), `reports/`.
 - Stores are derived data and can be rebuilt. One writer per folder at a time. A folder written with another resolution or supersampling is never continued.
 - The `index.json` of a front store is its manifest: sequences, stride, `complete`, resolution, `gt_version`, git `commit` and `dirty`, library versions, data identity and `release` (complete, a released
@@ -64,7 +90,8 @@ on one thread.
   source trees, `digest --compare A.json B.json`, then the new signature under `same_as` of that store in `front_digests.json`. Lane: checked on stored frames; the digests in `lane_l6_digest.json` pin the
   current graphs. The self-test enforces the pins.
 - A **GT key** (`gt_api.py`) is the data identity (`data_identity` of `datasets/nuscenes/manifest.json` as recorded by the store, not a hash of the `dataroot` given), the signature, store, version and
-  commit of each part, and the release. Two keys with the same `id` are the same GT. `complete` is never guessed; frames written under two manifests give the identity `mixed`.
+  commit of each part, and the release. Two keys with the same `id` are the same GT: the id is over the data identity and the stores, not over the code signatures. `complete` is never guessed
+  (`key.command` is the shell line that makes what is missing); frames written under two manifests give the identity `mixed`.
 - **An old version** is rebuilt from its tag: `git worktree add temp/gt_v9 autogt/v9`, then in that folder `python -m autogt generate <nuScenes> --out <folder>`. The tags v3 - v5 hold the package in
   `bev_fusion/autogt` and know only `build` (`PYTHONPATH=bev_fusion python -m autogt build --dataroot <nuScenes> --version v1.0-trainval --out <folder>`); v1 and v2 are `bev_fusion/training/gt_bev.py`.
   Check first that `import autogt; print(autogt.__file__)` points into the worktree.
@@ -77,6 +104,7 @@ on one thread.
 | a derived product (not hashed) | like `lane_raster.py` (reads a store, packs its own cache) | for a mask kind of the key: `gt_api.KINDS`; bump `RASTER_VERSION` when cells change |
 | a dataset | an adapter that builds `Track`, `Ego`, `RadarFrame` for `flow.estimate_flow`, and a generator for the static layers | `flow.py`, `layers.py`, `grid.py`, `coverage.py` need no nuScenes; `store.write_keyframe` / `load_keyframe` keep the files; give the generator its own signature files |
 | a command | a static method in `api.py`, its parser in `cli.py` | a row above; `cli_selftest.py` |
+| a public name (a problem needs something) | a row of `_PUBLIC` in `__init__.py` with its contract line in the docstring | name it in the table above and in `AGENTS.md` section 1; `selftest --only interface` |
 | a module | not hashed: list it in `versions.NOT_GENERATOR` | put it in a box of `architecture.json`: `python autoresearch/reporter/archdraw.py render GtGenerator/architecture.json` |
 
 ## Architecture

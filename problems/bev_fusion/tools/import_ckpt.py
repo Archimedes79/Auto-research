@@ -2,7 +2,7 @@
 config's "_import" (relative to the problem's data folder, e.g. "runs/t21_ctl_s{seed}") is copied, byte for byte, into this run's folder, where the
 evaluation step reads it. A copy that is there and equal is kept; one that differs is refused.
 
-    python tools/import_ckpt.py <the run's config.json>"""
+    python -P -m bev_fusion.tools.import_ckpt <the run's config.json>"""
 import glob
 import hashlib
 import json
@@ -10,8 +10,7 @@ import os
 import shutil
 import sys
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "net"))
-import netpath  # noqa: E402
+from bev_fusion.net import netpath
 
 
 def sha256(path):

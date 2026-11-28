@@ -1,18 +1,19 @@
-"""The folders of the model on the import path (the project imports its modules flat): net/prep, net/model, net/loss. Use it after `net/` is on the path:
+"""Where the BEV code finds its data, from the data root of the machine (RESEARCH_DATA from the research worker, else `data` of the machine file):
 
-    sys.path.insert(1, <bev_fusion>/net); import netpath
-
-The folders are APPENDED, so a pinned run snapshot at the front of the path wins; in a flat snapshot (runs/<name>/code) they do not exist and nothing is added."""
+    SITE                  <data root>/bev_fusion, the folder the code works in. It holds data/cache, models/pretrained and a link runs -> the problem's run
+                          root, so the relative paths of every config stay valid. A script that reads such a path changes into it (`os.chdir(netpath.SITE)`)
+                          in its entry function, never at import time.
+    nuscenes_root(mini)   the raw nuScenes data as the code reads it (datasets/nuscenes/README.md): the view <data root>/nuscenes (trainval) or
+                          <data root>/nuscenes_mini; where that view is not there, the link of older set-ups to the same folder, ~/data/nuscenes_full or
+                          ~/data/nuscenes (what the stored configs name as data_root), and one printed line says so.
+"""
+import json
 import os
-import sys
 
-_NET = os.path.dirname(os.path.abspath(__file__))
+VIEWS = {False: ("nuscenes", "~/data/nuscenes_full"), True: ("nuscenes_mini", "~/data/nuscenes")}      # mini? -> (view of the data root, the older link)
 
 
-def _site():
-    """the folder the BEV code works in: <data root>/bev_fusion (RESEARCH_DATA from the research worker, else the machine file); it holds data/cache,
-    models/pretrained and a link runs -> the problem's run root, so the relative paths of every config stay valid"""
-    import json
+def _data_root():
     data = os.environ.get("RESEARCH_DATA", "")
     if not data:
         try:
@@ -20,11 +21,28 @@ def _site():
                 data = json.load(f).get("data", "")
         except (OSError, ValueError):
             data = ""
-    return os.path.join(data, "bev_fusion") if data else os.path.dirname(_NET)
+    return data
+
+
+def _site():
+    data = _data_root()
+    return os.path.join(data, "bev_fusion") if data else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+_SAID = set()                                                    # the fallbacks already reported (one line per root and process)
+
+
+def nuscenes_root(mini=False):
+    view, link = VIEWS[bool(mini)]
+    data = _data_root()
+    path = os.path.join(data, view)
+    if data and os.path.isdir(path):
+        return path
+    old = os.path.expanduser(link)
+    if old not in _SAID:
+        _SAID.add(old)
+        print(f"nuScenes: {'no view ' + path if data else 'no data root'}; reading {old}", flush=True)
+    return old
 
 
 SITE = _site()
-for _d in ("prep", "model", "loss"):
-    _p = os.path.join(_NET, _d)
-    if os.path.isdir(_p) and _p not in sys.path:
-        sys.path.append(_p)

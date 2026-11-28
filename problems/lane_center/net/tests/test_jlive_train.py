@@ -32,8 +32,7 @@ KT = 64                                                                         
 
 MUTANTS = [
     ("the head's live_inputs is not checked", "        if m.head.live_inputs != live:\n", "        if False:\n"),
-    ("a zero gradient of the head's loss on the node head is accepted in s4", "            if live and not n_h > 0:\n", "            if False:\n"),
-    ("arm b accepts a head whose loss reaches the node head", "            if not live and n_h != 0:\n", "            if False:\n"),
+    ("a zero gradient of the head's loss on the node head is accepted in s4", "            if not n_h > 0:\n", "            if False:\n"),
     ("B' is not a submodule (not clipped, not checkpointed)", "        self.head, self.src = head, src\n", "        self.head = head\n        object.__setattr__(self, \"src\", src)\n"),
     ("one joint clip over both groups", "nh, nn_, np_ = (torch.nn.utils.clip_grad_norm_([p for p in ps if p.grad is not None], CLIP) for ps in (self.heads, self.nodes, self.pyrs))",
      "nh = nn_ = np_ = torch.nn.utils.clip_grad_norm_([p for p in self.heads + self.nodes + self.pyrs if p.grad is not None], CLIP)"),
@@ -57,9 +56,9 @@ MUTANTS = [
     ("the pyramid check counts B''s loss as the head's (E393)", "gp = torch.autograd.grad(loss_h, pyrs,", "gp = torch.autograd.grad(loss_h + loss_b, pyrs,"),
     ("the active-cell count is the capped valid count (E393)", "        m.rec[\"nact\"].append(float(n_act))\n", "        m.rec[\"nact\"].append(win[-1][4] / win[-1][5])\n"),
     ("B' trains in z", "LLT.LiveSource(args[\"b_run\"], K, train_nodes=bool(args[\"train_nodes\"]),", "LLT.LiveSource(args[\"b_run\"], K, train_nodes=True,"),
-    ("the head run's none weight is ignored", "none_weight=g(\"none_weight\") if a.none_weight is None", "none_weight=1.0 if a.none_weight is None"),
+    ("the head run's none weight is ignored", "if h.get(\"none_weight\") is None else h[\"none_weight\"],", "if h.get(\"none_weight\") is None else 1.0,"),
     ("the data order is B''s seed", "seed=args[\"head_seed\"], args=args,", "seed=a.seed, args=args,"),
-    ("no share at the last step", "if tn and live and (i % SHARE_EVERY == 0 or i == steps):", "if tn and live and i % SHARE_EVERY == 0:"),
+    ("no share at the last step", "if tn and (i % SHARE_EVERY == 0 or i == steps):", "if tn and i % SHARE_EVERY == 0:"),
     ("the share takes the clipped gradient", "        if cur.get(\"gb\") is not None:\n            sh = shares(", "        nh, nn_ = (torch.nn.utils.clip_grad_norm_([p for p in ps if p.grad is not None], CLIP) for ps in (self.heads, self.nodes))\n        if cur.get(\"gb\") is not None:\n            sh = shares("),
     ("the share counts B''s gradient as the head's", "        hd = p.grad - b\n", "        hd = p.grad\n"),
     ("a non-finite loss is not a kill", "        if not (math.isfinite(float(loss_h)) and math.isfinite(float(loss_b))):\n", "        if False:\n"),
@@ -80,13 +79,11 @@ MUTANTS = [
     ("the moving labels of one batch", "collections.deque(maxlen=LOG_EVERY), dict(last=None, checked=False)", "collections.deque(maxlen=1), dict(last=None, checked=False)"),
     ("nn_min counts a token with itself", " & ~torch.eye(v.shape[1], dtype=torch.bool, device=v.device)", ""),
     ("pos_grad_max is never set", "                tk[\"pos\"].register_hook(", "                (lambda f_: None)("),
-    ("a head-run option stored as None is kept", "g = lambda k: h[k] if h.get(k) is not None else JKT.ARCH_DEFAULTS.get(k)", "g = lambda k: h.get(k, JKT.ARCH_DEFAULTS.get(k))"),
-    ("the head run's rounds are not carried (E392)", "rounds=g(\"rounds\"), wire_weight=", "rounds=0, wire_weight="),
-    ("the head run's wire weight is not carried (E392)", "wire_weight=g(\"wire_weight\"), msg=", "wire_weight=0.0, msg="),
-    ("the head run's msg is not carried (E392)", "msg=g(\"msg\"),\n", "msg=\"real\",\n"),
-    ("the wire weight is not passed to the head's loss (E392)", "pos_loss=args[\"pos_loss\"], wire_w=args[\"wire_weight\"])", "pos_loss=args[\"pos_loss\"])"),
-    ("the recipe lacks the E392 options", "\"lr\", \"rounds\", \"wire_weight\", \"msg\",\n", "\"lr\",\n"),
-    ("a config of before does not resume (E392)", "(c.get(\"args\") or {}).get(k, RECIPE_DEFAULTS.get(k, JKT.ARCH_DEFAULTS.get(k)))", "(c.get(\"args\") or {}).get(k)"),
+    ("a head-run option stored as None is kept", "JKT.ARCH_DEFAULTS[\"none_weight\"] if h.get(\"none_weight\") is None else h[\"none_weight\"]", "h.get(\"none_weight\", JKT.ARCH_DEFAULTS[\"none_weight\"])"),
+    ("a head run of a removed option is trained without it", "    JKT.check_removed(h, f\"the head run {a.head_run}\")\n", ""),
+    ("a stored run of a removed option is resumed", "        JKT.check_removed(c.get(\"args\") or {}, folder)\n", ""),
+    ("the removed arm b (--train-nodes 1 --live-inputs 0) is accepted", "    assert a.live_inputs or not a.train_nodes,", "    assert True,"),
+    ("B' is built without the guard of its stored args", "    m = QG.from_args(ck[\"b_args\"])\n", "    m = QG.QGraph(width=int(ck[\"b_args\"].get(\"width\", 48)), soft_nms=ck[\"b_args\"].get(\"soft_nms\"))\n"),
     ("a config of before E393 does not resume", "RECIPE_DEFAULTS.get(k, JKT.ARCH_DEFAULTS.get(k))", "JKT.ARCH_DEFAULTS.get(k)"),
     ("the recipe lacks the E393 keys", ",\n          \"b_state_from\", \"b_state_sha256\", \"train_pyr\", \"pyr_lr_mult\")", ")"),
     ("the start state is not loaded (E393)", "        src.model.load_state_dict(torch.load(p, map_location=\"cpu\", weights_only=False)[\"b_state\"])\n", "        pass\n"),
@@ -101,7 +98,7 @@ MUTANTS = [
     ("the token-count kill is off (E393)", "    if len(na) > WIN and", "    if False and"),
     ("the coverage of a step is not recorded (E393)", "        m.rec[\"cov\"].append(win[-1][2] / win[-1][3] if win[-1][3] > 0 else float(\"nan\"))\n", "        pass\n"),
     ("a skipped step leaves no NaN in cov / nact (E393)", "            for k in (\"b\", \"h\", \"cov\", \"nact\"):\n", "            for k in (\"b\", \"h\"):\n"),
-    ("--train-pyr is accepted without a live node head (E393)", "    assert not a.train_pyr or (a.train_nodes and a.live_inputs),", "    assert True,"),
+    ("--train-pyr is accepted without a trained node head (E393)", "    assert not a.train_pyr or a.train_nodes,", "    assert True,"),
 ]
 
 
@@ -180,20 +177,6 @@ def world(tmp):
             t = LLT.toy_table(tk["pos"][f][[i, j]].double().numpy(), [(0, 1)], [False])
             t["dirv"] = tk["dirv"][f][[i, j]].double().numpy()
         items.append(dict(x=xs[f], token=f"f{f}", row=f, table=t))
-    headr = JK.JTokenHead(rounds=1)                                                         # E392: a rounds head run "hr" (live messages: the zero start moved), early-read weight 0.5
-    headr.set_step(12000)
-    with torch.no_grad():
-        headr.rounds[0].mlp[2].weight.normal_(std=0.1)
-    os.makedirs(os.path.join(tmp, "hr"))
-    torch.save(dict(state=headr.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=1, wire_weight=0.5, msg="uniform"), steps=12000), os.path.join(tmp, "hr", "model.pt"))
-    headn = JK.JTokenHead(rounds=1, msg="none")                                             # E392: a msg none head run "hnx" (deep supervision, the champion's parameters), early-read weight 0.5
-    headn.set_step(12000)
-    os.makedirs(os.path.join(tmp, "hnx"))
-    torch.save(dict(state=headn.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=1, wire_weight=0.5, msg="none"), steps=12000), os.path.join(tmp, "hnx", "model.pt"))
-    heads = JK.JTokenHead(rounds=2, msg="self")                                             # E392: a msg self head run "hsx" (the capacity null: the rounds on each token's own features), early-read weight 0.5
-    heads.set_step(12000)
-    os.makedirs(os.path.join(tmp, "hsx"))
-    torch.save(dict(state=heads.state_dict(), args=dict(seed=0, ident="e292_a", none_weight=0.25, head_seed=2, rounds=2, wire_weight=0.5, msg="self"), steps=12000), os.path.join(tmp, "hsx", "model.pt"))
     import jtoken_train as JKT
     st = {k: v.clone() for k, v in m.state_dict().items()}                                  # E393: a start run "bst" (a jlive model.pt) whose b_state differs from the B' file in the node head AND the pyramid
     with torch.no_grad():
@@ -238,107 +221,6 @@ def direct(T, w, tmp, train_nodes, live=1, steps=1, head="h"):
     hook = T.StepHook(run, joint)
     joint.train()
     return joint, T.make_loss(run, joint, args, hook), hook, run, args
-
-
-def rounds_head(T, w, tmp):
-    """E392: the stage-2 trainer carries the head run's rounds / msg / wire weight. `resolve` hands them on (a head run without them: the defaults), the head is built with them and loaded strictly, the step's loss is the head's loss with the early
-    reads (info nll1_s, nll1_l) + B''s, the recipe and model.pt's args hold them, `load_model` rebuilds the head, a config of before (without them) resumes, a rounds head trains one step through `train` (the log row carries nll1_s)"""
-    import numpy as np
-    import torch
-    import jtoken as JK
-    import loss_jtoken as LJK  # noqa: E402
-    import jtoken_train as JKT
-    import lane_live_tok as LLT
-    B = w["B"]
-    a0, a1 = (T.resolve(T.parse_args(cli(w, "d", 1, 1, steps=1, extra=["--head-run", h])), tmp) for h in ("h", "hr"))
-    assert (a0["rounds"], a0["wire_weight"], a0["msg"]) == (0, 0.0, "real") and (a1["rounds"], a1["wire_weight"], a1["msg"]) == (1, 0.5, "uniform"), (a0, a1)
-    joint, lf, hook, run, args = direct(T, w, tmp, 1, 1, head="hr")
-    assert len(joint.head.rounds) == 1 and joint.head.msg == "uniform" and joint.head.live_inputs
-    ref = copy.deepcopy(joint)
-    loss, info = lf(joint, B)
-    assert "nll1_s" in info and "nll1_l" in info and "nll2_s" not in info, sorted(info)
-    no, tk = ref.src.tokens(B["x"])
-    lbatch = ref.src.labelled(tk, B["table"], B["token"], B["row"], gate=False)
-    out_r = ref.head(LLT.head_inputs(tk))
-    lh, ih = LJK.jtoken_loss(out_r, lbatch, none_weight=0.25, pos_loss="sum", wire_w=0.5)
-    lh0 = LJK.jtoken_loss(out_r, lbatch, none_weight=0.25, pos_loss="sum")[0]
-    lb, _ = LLT.b_loss(no, B["targets"])
-    assert float(lh) > float(lh0) + 1e-3 and abs(float(loss) - float(lh + lb)) < 1e-6 and abs(info["nll1_s"] - ih["nll1_s"]) < 1e-6 and abs(info["head"] - float(lh)) < 1e-6, "the head run's wire weight is not in the loss of the step"
-    with Built(T, [B]) as bt:
-        T.train(T.parse_args(cli(w, "rr", 1, steps=1, extra=["--head-run", "hr"])), runs=tmp, ckpt_every=500)
-    last = [json.loads(x) for x in open(os.path.join(tmp, "rr", "log.jsonl"))][-1]
-    assert math.isfinite(last["nll1_s"]) and math.isfinite(last["nll1_l"]) and math.isfinite(last["head"]), last
-    cfg = json.load(open(os.path.join(tmp, "rr", "config.json")))["args"]
-    assert (cfg["rounds"], cfg["wire_weight"], cfg["msg"]) == (1, 0.5, "uniform")
-    ck = torch.load(os.path.join(tmp, "rr", "model.pt"), weights_only=False)
-    assert (ck["args"]["rounds"], ck["args"]["wire_weight"], ck["args"]["msg"]) == (1, 0.5, "uniform")
-    hm, _ = JKT.load_model("rr", "cpu", tmp)
-    assert len(hm.rounds) == 1 and hm.msg == "uniform" and hm.live_inputs and all(torch.equal(hm.state_dict()[k], bt.joints[0].head.state_dict()[k].cpu()) for k in hm.state_dict()), "load_model does not rebuild the trained rounds head"
-    h0 = torch.load(os.path.join(tmp, "hr", "model.pt"))["state"]
-    assert any(not torch.equal(hm.state_dict()[k], h0[k]) for k in h0 if k.startswith("rounds.")), "the rounds head did not train"
-    assert JKT.build_head(ck["args"]).state_dict().keys() == hm.state_dict().keys()
-    folder = os.path.join(tmp, "rr")
-    T.check_start(cfg, folder)                                                              # the same recipe resumes; the head run's options are in the recipe
-    for k, v in (("rounds", 2), ("wire_weight", 0.25), ("msg", "real")):
-        refuses(lambda: T.check_start(dict(cfg, **{k: v}), folder), "of another run")
-    os.makedirs(os.path.join(tmp, "oldcfg"))                                               # a config of before the options (no rounds / wire_weight / msg) resumes as the defaults
-    json.dump(dict(design="jlive", args={k: v for k, v in cfg.items() if k not in ("rounds", "wire_weight", "msg") + tuple(T.RECIPE_DEFAULTS)}), open(os.path.join(tmp, "oldcfg", "config.json"), "w"))
-    T.check_start(dict(cfg, rounds=0, wire_weight=0.0, msg="real", **T.RECIPE_DEFAULTS), os.path.join(tmp, "oldcfg"))   # (E393: and without its four keys)
-    refuses(lambda: T.check_start(cfg, os.path.join(tmp, "oldcfg")), "of another run")
-    print(f"rounds head through jlive_train: resolve carries rounds / wire weight / msg from the head run (a head run without them: 0 / 0 / real), the step's loss = the head's loss with the early read ({float(lh):.4f} against {float(lh0):.4f} without) + B''s, "
-          f"one step trains (nll1_s {last['nll1_s']:.4f} in the log row), the three options in the recipe, config and model.pt, load_model rebuilds the head, a config of before resumes as the defaults", flush=True)
-
-
-def none_head(T, w, tmp):
-    """E392 msg none (deep supervision without exchange) through the stage-2 trainer: `resolve` carries rounds 1 / wire weight 0.5 / msg none of the head run, the head is built with no round module and the champion's parameters (the strict load of the run's
-    state), it trains one step through `train` (in training mode: the log row carries nll1_s of the early read), model.pt's args hold msg none, `load_model` rebuilds the champion-shaped head whose eval forward has no early read"""
-    import torch
-    import jtoken as JK
-    import loss_jtoken as LJK  # noqa: E402
-    import jtoken_train as JKT
-    a = T.resolve(T.parse_args(cli(w, "d", 1, 1, steps=1, extra=["--head-run", "hnx"])), tmp)
-    assert (a["rounds"], a["wire_weight"], a["msg"]) == (1, 0.5, "none"), a
-    with Built(T, [w["B"]]) as bt:
-        T.train(T.parse_args(cli(w, "nx", 1, steps=1, extra=["--head-run", "hnx"])), runs=tmp, ckpt_every=500)
-    head = bt.joints[0].head
-    assert len(head.rounds) == 0 and head.n_early == 1 and head.msg == "none" and JK.count_params(head) == 127131, "the head of a msg none run is not the champion-shaped head with one early read"
-    last = [json.loads(x) for x in open(os.path.join(tmp, "nx", "log.jsonl"))][-1]
-    assert math.isfinite(last["nll1_s"]) and math.isfinite(last["nll1_l"]) and math.isfinite(last["head"]) and "nll2_s" not in last, last
-    ck = torch.load(os.path.join(tmp, "nx", "model.pt"), weights_only=False)
-    assert (ck["args"]["rounds"], ck["args"]["wire_weight"], ck["args"]["msg"]) == (1, 0.5, "none")
-    hm, _ = JKT.load_model("nx", "cpu", tmp)
-    h0 = torch.load(os.path.join(tmp, "hnx", "model.pt"))["state"]
-    assert len(hm.rounds) == 0 and hm.n_early == 1 and hm.msg == "none" and list(hm.state_dict()) == list(JK.JTokenHead().state_dict()) and not hm.training, "load_model does not rebuild the msg none head"
-    assert any(not torch.equal(hm.state_dict()[k], h0[k]) for k in h0 if k != "step"), "the msg none head did not train"
-    with torch.no_grad():
-        assert "logp_rounds" not in hm(JK.synthetic_batch(2, 48, seed=0)), "the msg none head reads early in eval mode"
-    print(f"msg none head through jlive_train: resolve carries rounds / wire weight / msg none from the head run, the champion-shaped head (127131 parameters, no round module) trains one step in training mode (nll1_s {last['nll1_s']:.4f} in the log row), "
-          f"model.pt holds msg none, load_model rebuilds it, its eval forward has no early read", flush=True)
-
-
-def self_head(T, w, tmp):
-    """E392 msg self (the capacity null) through the stage-2 trainer: `resolve` carries rounds 2 / wire weight 0.5 / msg self of the head run, the head is built with the two round modules (168603 parameters, the strict load of the run's state), it trains
-    one step through `train` (the log row carries nll1_s and nll2_s), model.pt's args hold msg self, `load_model` rebuilds the head whose eval forward has no early read and whose rounds act"""
-    import torch
-    import jtoken as JK
-    import loss_jtoken as LJK  # noqa: E402
-    import jtoken_train as JKT
-    a = T.resolve(T.parse_args(cli(w, "d", 1, 1, steps=1, extra=["--head-run", "hsx"])), tmp)
-    assert (a["rounds"], a["wire_weight"], a["msg"]) == (2, 0.5, "self"), a
-    with Built(T, [w["B"]]) as bt:
-        T.train(T.parse_args(cli(w, "sx", 1, steps=1, extra=["--head-run", "hsx"])), runs=tmp, ckpt_every=500)
-    head = bt.joints[0].head
-    assert len(head.rounds) == 2 and head.n_early == 2 and head.msg == "self" and JK.count_params(head) == 168603, "the head of a msg self run is not the two-round head"
-    last = [json.loads(x) for x in open(os.path.join(tmp, "sx", "log.jsonl"))][-1]
-    assert all(math.isfinite(last[k]) for k in ("nll1_s", "nll1_l", "nll2_s", "nll2_l", "head")), last
-    ck = torch.load(os.path.join(tmp, "sx", "model.pt"), weights_only=False)
-    assert (ck["args"]["rounds"], ck["args"]["wire_weight"], ck["args"]["msg"]) == (2, 0.5, "self")
-    hm, _ = JKT.load_model("sx", "cpu", tmp)
-    assert len(hm.rounds) == 2 and hm.msg == "self" and not hm.training and all(torch.equal(hm.state_dict()[k], head.state_dict()[k].cpu()) for k in hm.state_dict()), "load_model does not rebuild the msg self head"
-    with torch.no_grad():
-        assert "logp_rounds" not in hm(JK.synthetic_batch(2, 48, seed=0)), "the msg self head reads early in eval mode"
-    print(f"msg self head through jlive_train: resolve carries rounds 2 / wire weight 0.5 / msg self from the head run, the two-round head (168603 parameters) trains one step (nll1_s {last['nll1_s']:.4f}, nll2_s {last['nll2_s']:.4f} in the log row), "
-          f"model.pt holds msg self, load_model rebuilds it, its eval forward has no early read", flush=True)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ the rules by hand
@@ -395,21 +277,20 @@ def rules(T):
 def steps_by_hand(T, w, tmp):
     import numpy as np
     import torch
-    import jtoken as JK
     import loss_jtoken as LJK  # noqa: E402
     import lane_live_tok as LLT
     B = w["B"]
-    for tn, live in ((1, 1), (0, 1), (1, 0)):
+    for tn, live in ((1, 1), (0, 1), (0, 0)):
         joint, lf, hook, run, args = direct(T, w, tmp, tn, live)
         ref = copy.deepcopy(joint)
         loss, info = lf(joint, B)
         no, tk = ref.src.tokens(B["x"])
         lbatch = ref.src.labelled(tk, B["table"], B["token"], B["row"], gate=False)
-        lh, _ = LJK.jtoken_loss(ref.head(LLT.head_inputs(tk)), lbatch, none_weight=0.25, pos_loss="sum")
+        lh, _ = LJK.jtoken_loss(ref.head(LLT.head_inputs(tk)), lbatch, none_weight=0.25)
         lb, _ = LLT.b_loss(no, B["targets"])
         want = lh + lb if tn else lh
-        assert abs(float(loss) - float(want)) < 1e-6 and abs(info["head"] - float(lh)) < 1e-6 and abs(info["b_loss"] - float(lb)) < 1e-6, f"arm {T.arm(tn, live)}: the loss of a step is not the head's loss {'+ B''s' if tn else 'alone'} ({float(loss)} {float(want)})"
-        assert loss.requires_grad and (not tn or not live or any("> 0: s4" in x for x in run.lines)) and (live or any("0: arm b" in x for x in run.lines)), (T.arm(tn, live), run.lines)
+        assert abs(float(loss) - float(want)) < 1e-6 and abs(info["head"] - float(lh)) < 1e-6 and abs(info["b_loss"] - float(lb)) < 1e-6, f"arm {T.arm(tn)}: the loss of a step is not the head's loss {'+ B''s' if tn else 'alone'} ({float(loss)} {float(want)})"
+        assert loss.requires_grad and (not tn or any("> 0: s4" in x for x in run.lines)), (T.arm(tn), run.lines)
         assert hook.cur["i"] == 1 and hook.cur["info"] is info and hook.cur["logged"] and any("step 1 frames ['f2', 'f3']" in x for x in run.lines)
         if tn and live:                                                                     # the share step: the gradient handed to the hook is B''s (b_weight 1) on the node head, not the head's
             want_gb = torch.autograd.grad(lb, ref.src.trainable(), retain_graph=True, allow_unused=True)
@@ -417,12 +298,12 @@ def steps_by_hand(T, w, tmp):
             assert all((x is None and y is None) or torch.allclose(x, y, rtol=1e-5, atol=1e-7) for x, y in zip(hook.cur["gb"], want_gb)), "the hook's g_b is not the gradient of B''s loss"
         else:
             assert hook.cur["gb"] is None
-        # the hazards of the step: nn_min by hand (exact pairwise distances); pos_grad_max NaN until the backward, then the head's largest |gradient| on the positions (s4; NaN in z and b)
+        # the hazards of the step: nn_min by hand (exact pairwise distances); pos_grad_max NaN until the backward, then the head's largest |gradient| on the positions (s4; NaN in z)
         want_nn = min(float(torch.cdist(p_, p_, compute_mode="donot_use_mm_for_euclid_dist").add(torch.eye(len(p_), dtype=torch.float64) * 1e9).min()) for p_ in (tk["pos"][f][tk["valid"][f].bool()].detach().double() for f in range(2)))
         assert abs(info["nn_min"] - want_nn) < 1e-9 and want_nn > 0 and math.isnan(info["pos_grad_max"]), (info["nn_min"], want_nn)
         want_pg = float(torch.autograd.grad(lh, tk["pos"], retain_graph=True)[0].abs().max()) if tn and live else float("nan")
         loss.backward()
-        assert abs(info["pos_grad_max"] - want_pg) < 1e-5 * max(1.0, want_pg) if tn and live else math.isnan(info["pos_grad_max"]), (T.arm(tn, live), info["pos_grad_max"], want_pg)
+        assert abs(info["pos_grad_max"] - want_pg) < 1e-5 * max(1.0, want_pg) if tn and live else math.isnan(info["pos_grad_max"]), (T.arm(tn), info["pos_grad_max"], want_pg)
         # the moving labels over the last 100 steps of the process: B, then A (no GT; A alone would give pair_cov = gt_cov = 0)
         lab = lbatch["lab"]
         lab_a = ref.src.labelled(ref.src.tokens(w["A"]["x"])[1], w["A"]["table"], w["A"]["token"], w["A"]["row"], gate=False)["lab"]
@@ -438,22 +319,26 @@ def steps_by_hand(T, w, tmp):
     # a head-run option stored as None means the default (as `jtoken_train.arch` reads it)
     ck = torch.load(os.path.join(tmp, "h", "model.pt"), weights_only=False)
     os.makedirs(os.path.join(tmp, "hn"))
-    torch.save(dict(ck, args=dict(ck["args"], none_weight=None, pos_loss=None)), os.path.join(tmp, "hn", "model.pt"))
+    torch.save(dict(ck, args=dict(ck["args"], none_weight=None)), os.path.join(tmp, "hn", "model.pt"))
     an = T.resolve(T.parse_args(["--name", "x", "--seed", "0", "--head-run", "hn", "--b-run", w["b_dir"], "--train-nodes", "1"]), tmp)
-    assert an["none_weight"] == 1.0 and an["pos_loss"] == "sum", an
-    # a head run of an option removed in D117 (E377's near weight, the c-rule teacher) is refused, not trained without it (`check_removed`)
-    for n_, extra in (("hr1", dict(none_weight_near=0.73)), ("hr2", dict(teacher="rule"))):
+    assert an["none_weight"] == 1.0 and not {"pos_loss", "rounds", "wire_weight", "msg", "K", "cache"} & set(an), an          # (a new run names no removed option)
+    # a head run of a removed option (D117: E377's near weight, the c-rule teacher; the tag v1: E392's rounds, E395's position head, E383's K, E376's pos_loss) is refused by name and tag, not trained without it (`check_removed`)
+    d117 = "archive/jtoken-before-simplify-2026-11-17"
+    for n_, extra, tag in (("hr1", dict(none_weight_near=0.73), d117), ("hr2", dict(teacher="rule"), d117), ("hr3", dict(rounds=1), "v1"), ("hr4", dict(pos_head=True), "v1"), ("hr5", dict(K=384), "v1"), ("hr6", dict(pos_loss="max"), "v1")):
         os.makedirs(os.path.join(tmp, n_))
         torch.save(dict(ck, args=dict(ck["args"], **extra)), os.path.join(tmp, n_, "model.pt"))
-        refuses(lambda: T.resolve(T.parse_args(["--name", "x", "--seed", "0", "--head-run", n_, "--b-run", w["b_dir"], "--train-nodes", "1"]), tmp), "options removed in D117")
-    # the live check every step: s4 with a head that cuts its inputs, b with a live head
+        refuses(lambda: T.resolve(T.parse_args(["--name", "x", "--seed", "0", "--head-run", n_, "--b-run", w["b_dir"], "--train-nodes", "1"]), tmp), f"{extra}: options that no longer exist (the tag {tag} keeps them)")
+    os.makedirs(os.path.join(tmp, "hoff"))                                                  # the off values of the removed options (a head run of before 2026-11-28 stores them): the same run
+    torch.save(dict(ck, args=dict(ck["args"], pos_loss="sum", rounds=0, wire_weight=0.0, msg="real", pos_head=False, K=None, cache=None)), os.path.join(tmp, "hoff", "model.pt"))
+    assert T.resolve(T.parse_args(["--name", "x", "--seed", "0", "--head-run", "hoff", "--b-run", w["b_dir"], "--train-nodes", "1"]), tmp)["none_weight"] == 0.25
+    # the live check every step: s4 with a head that cuts its inputs, z (--live-inputs 0) with a live head
     joint, lf, *_ = direct(T, w, tmp, 1, 1)
     joint.head.live_inputs = False
     kills(lambda: lf(joint, B), "live_inputs")
-    joint, lf, *_ = direct(T, w, tmp, 1, 0)
+    joint, lf, *_ = direct(T, w, tmp, 0, 0)
     joint.head.live_inputs = True
     kills(lambda: lf(joint, B), "live_inputs")
-    # the start check: s4 whose head's loss does not reach B (the tokens cut before the head), b whose head's loss does (the head's cut switched off)
+    # the start check: s4 whose head's loss does not reach B (the tokens cut before the head)
     old = LLT.head_inputs
     LLT.head_inputs = lambda tk: {k: v.detach() for k, v in old(tk).items()}
     try:
@@ -461,13 +346,6 @@ def steps_by_hand(T, w, tmp):
         kills(lambda: lf(joint, B), "refused at the start")
     finally:
         LLT.head_inputs = old
-    oc = JK._const
-    JK._const = lambda t: t
-    try:
-        joint, lf, *_ = direct(T, w, tmp, 1, 0)
-        kills(lambda: lf(joint, B), "arm b: the head's loss reaches")
-    finally:
-        JK._const = oc
     # the hook: a frozen tensor of B' with a gradient at the first update (z: the node head), a zero head update on a logged step
     joint, lf, hook, run, _ = direct(T, w, tmp, 0, 1)
     opt = torch.optim.AdamW(list(joint.head.parameters()), lr=1e-4)
@@ -573,7 +451,7 @@ def runs(T, w, tmp):
     assert 0 < last["ushare"] < 1 and 0 < last["gshare"] < 0.1 and last["upd_head"] > 0 and last["overflow"] == 0, last                    # the toy's B loss dominates the node head's gradient
     assert last["nn_min"] > 0 and last["pos_grad_max"] > 0 and math.isfinite(last["pos_grad_max"]), last
     cfg = json.load(open(os.path.join(tmp, "s4", "config.json")))
-    assert cfg["design"] == "jlive" and cfg["seed"] == 2 and cfg["clip"] == 0 and cfg["clip_per_group"] == 3.0 and cfg["args"]["none_weight"] == 0.25 and cfg["args"]["pos_loss"] == "sum" and cfg["args"]["head_seed"] == 2, cfg
+    assert cfg["design"] == "jlive" and cfg["seed"] == 2 and cfg["clip"] == 0 and cfg["clip_per_group"] == 3.0 and cfg["args"]["none_weight"] == 0.25 and "pos_loss" not in cfg["args"] and cfg["args"]["head_seed"] == 2, cfg
     assert [id(p) for p in seen["fit_kw"]["params"]] == [id(p) for p in list(j4.head.parameters()) + j4.src.trainable()] and seen["fit_kw"]["sched"] == "cosine" and seen["fit_kw"]["lr"] == 1e-4, "fit optimises the head and the node head, nothing frozen"
     tx = text("s4")
     assert "jlive arm s4" in tx and "live_inputs True" in tx and "head h" in tx and w["b_dir"] in tx and "step 1 frames ['f2', 'f3']" in tx and "step 2 frames ['f2', 'f3']" in tx and "> 0: s4" in tx and "step 2: update share" in tx, tx[-1500:]
@@ -590,10 +468,18 @@ def runs(T, w, tmp):
     assert moved("s4") == (["nodes"], True), moved("s4")
     with Built(T, [w["B"]]) as bt:
         T.train(T.parse_args(cli(w, "z", 0)), runs=tmp, ckpt_every=500)
-        T.train(T.parse_args(cli(w, "bb", 1, live=0)), runs=tmp, ckpt_every=500)
-    assert moved("z") == ([], True) and moved("bb") == (["nodes"], True), (moved("z"), moved("bb"))
-    assert "ushare" not in rd("z")[-1] and "ushare" not in rd("bb")[-1] and rd("z")[-1]["b_loss"] > 0 and "jlive arm z" in text("z") and "jlive arm b" in text("bb") and "0: arm b" in text("bb"), "z and b: no share; B''s loss logged"
-    assert not JKT.load_model("bb", "cpu", tmp)[0].live_inputs
+    assert moved("z") == ([], True), moved("z")
+    assert "ushare" not in rd("z")[-1] and rd("z")[-1]["b_loss"] > 0 and "jlive arm z" in text("z"), "z: no share; B''s loss logged"
+    # B''s stored args (`qgraph.from_args`): the removed loss switches and the end head at their off values (the args of the stored B' runs) load, another value is refused by name with the tag
+    import qgraph as QG
+    os.makedirs(os.path.join(tmp, "bx"))
+    for extra, why in ((dict(QG.REMOVED), None), (dict(ends=True), "{'ends': True}: options of the lane head that no longer exist (the tag v1 keeps them)"), (dict(node_loss="zone"), "{'node_loss': 'zone'}"),
+                       (dict(tier_w=[1.0, 0.5, 0.2]), "'tier_w'"), (dict(soft_nms=[1.5, 0.1, 3]), "E277 (radius, tau, passes) no longer exists (the tag v1 keeps it)")):
+        torch.save(dict(ck, b_args=dict(ck["b_args"], **extra)), os.path.join(tmp, "bx", "model.pt"))
+        if why is None:
+            assert all(torch.equal(v, ck["b_state"][k]) for k, v in T.load_b("bx", "cpu", tmp).state_dict().items()), "B' with the removed options at their off values is not the stored B'"
+        else:
+            refuses(lambda: T.load_b("bx", "cpu", tmp), why)
     # the stage of a research run: a name with a folder ("<run>/stage2", `lane_train.py`) is exported and read back too
     with Built(T, [w["B"]]):
         T.train(T.parse_args(cli(w, "nest/stage2", 1, steps=1)), runs=tmp, ckpt_every=500)
@@ -665,11 +551,20 @@ def runs(T, w, tmp):
     cfg, folder = json.load(open(os.path.join(tmp, "st", "config.json")))["args"], os.path.join(tmp, "st")
     T.check_start(cfg, folder)
     ch = dict(seed=lambda v: v + 1, head_run=lambda v: v + "x", head_sha256=lambda v: "0" * 64, b_run=lambda v: v + "x", b_sha256=lambda v: "0" * 64, train_nodes=lambda v: 1 - v, live_inputs=lambda v: 1 - v, b_weight=lambda v: v * 2,
-              none_weight=lambda v: v * 2, pos_loss=lambda v: "max", head_seed=lambda v: v + 1, bs=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2, rounds=lambda v: v + 1, wire_weight=lambda v: v + 0.5, msg=lambda v: "uniform",
+              none_weight=lambda v: v * 2, head_seed=lambda v: v + 1, bs=lambda v: v + 1, steps=lambda v: v + 1, lr=lambda v: v * 2,
               b_state_from=lambda v: "bst", b_state_sha256=lambda v: "0" * 64, train_pyr=lambda v: 1 - v, pyr_lr_mult=lambda v: v * 2)
     assert set(ch) == set(T.RECIPE), f"a recipe key without a refusal test: {set(ch) ^ set(T.RECIPE)}"
     for k in ch:
         refuses(lambda: T.check_start(dict(cfg, **{k: ch[k](cfg[k])}), folder), "of another run")
+    # a stored config of before E393's four keys resumes as their defaults; one that names removed options at their off values too (every run of before 2026-11-28); at another value it is refused by name and tag
+    old = {k: v for k, v in cfg.items() if k not in T.RECIPE_DEFAULTS}
+    os.makedirs(os.path.join(tmp, "oldcfg"))
+    for extra, why in ((dict(pos_loss="sum", rounds=0, wire_weight=0.0, msg="real", K=512, cache=None), None), (dict(rounds=1), "{'rounds': 1}: options that no longer exist (the tag v1 keeps them)")):
+        json.dump(dict(design="jlive", args=dict(old, **extra)), open(os.path.join(tmp, "oldcfg", "config.json"), "w"))
+        if why is None:
+            T.check_start(cfg, os.path.join(tmp, "oldcfg"))
+        else:
+            refuses(lambda: T.check_start(cfg, os.path.join(tmp, "oldcfg")), why)
 
 
 def pyr_arms(T, w, tmp):
@@ -684,7 +579,7 @@ def pyr_arms(T, w, tmp):
     text = lambda n: open(os.path.join(tmp, n, "train.log"), encoding="utf-8").read()  # noqa: E731
     P = ["--b-state-from", "bst", "--train-pyr", "1", "--pyr-lr-mult", "0.1"]
     refuses(lambda: T.parse_args(cli(w, "x", 0, extra=["--train-pyr", "1"])), "needs --train-nodes 1")
-    refuses(lambda: T.parse_args(cli(w, "x", 1, live=0, extra=["--train-pyr", "1"])), "needs --train-nodes 1")
+    refuses(lambda: T.parse_args(cli(w, "x", 1, live=0)), "E372's control arm b: B''s node head on its own loss only) no longer exists (the tag v1 keeps it)")
     refuses(lambda: T.parse_args(cli(w, "x", 1, extra=["--pyr-lr-mult", "0.1"])), "only with --train-pyr 1")
     # the start state
     a = T.resolve(T.parse_args(cli(w, "x", 1, extra=["--b-state-from", "bst"])), tmp)
@@ -844,9 +739,6 @@ def selftest(train_path=TRAIN):
     with tempfile.TemporaryDirectory(dir=BP.SCRATCH) as tmp:
         w = world(tmp)
         steps_by_hand(T, w, tmp)
-        rounds_head(T, w, tmp)
-        none_head(T, w, tmp)
-        self_head(T, w, tmp)
         runs(T, w, tmp)
         pyr_arms(T, w, tmp)
     print("jlive_train selftest ok", flush=True)

@@ -1,17 +1,20 @@
 """A synthetic cached batch for the tiny model (CachedBEVFusionModel on a small grid): front-camera features of the kind the config names, five radars as on
-the car, ego motion. `batch_for` is the one of v1 tests/test_slots.py (the slot contract test, not kept in v2), copied unchanged.
-    from synthetic_batch import batch_for          # tests/support and the model folders net/{prep,model,loss} on sys.path
+the car, ego motion.
+    from bev_fusion.tests.support.synthetic_batch import batch_for
     batch = batch_for(model.cfg)                   # B 2, 3 frames, seed 0"""
 import math
 
 import torch
 
-from bevfusion_camera import DEPTHS, bevfusion_ida
-from camera_encoder import nuscenes_front_ida
-from feature_cache import FEAT_HW, N_CTX, N_PROB
-from interface import RADAR_FIELDS
-from lift_pd import _front_camera
-from nuscenes_dataset import DST_HW
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.tests.support import synthetic_world as sw
+
+from bev_fusion.net.model.bevfusion_camera import DEPTHS, bevfusion_ida
+from bev_fusion.net.model.camera_encoder import nuscenes_front_ida
+from bev_fusion.net.prep.feature_cache import FEAT_HW, N_CTX, N_PROB
+from bev_fusion.net.model.interface import RADAR_FIELDS
+from bev_fusion.net.model.lift_pd import _front_camera
+from bev_fusion.net.prep.nuscenes_dataset import DST_HW
 
 
 def batch_for(cfg, B=2, Fn=3, seed=0):
@@ -40,3 +43,15 @@ def batch_for(cfg, B=2, Fn=3, seed=0):
     if cfg.camera_student:                                       # t22: the student reads the current key-frame image
         b["lane_img"] = torch.randint(0, 256, (B, 3, *DST_HW), dtype=torch.uint8, generator=g)
     return b
+
+
+def keyframe(cfg, i):
+    """keyframe i of one synthetic scene as an item of the cached dataset: camera features and radar of `batch_for`, the ego steps, and the GT of the
+    synthetic world at the keyframe before, now and after (0.5 s apart)"""
+    b = batch_for(cfg, B=1, seed=i)
+    scene, grid = sw.demo_scene().step(0.5 * i), Grid()
+    frames = [{"img": torch.zeros(1), "cam_vec": torch.zeros(1), "K": b["K"][0, f], "T_cam_car": b["T_cam_car"][0, f], "prob": b["prob"][0, f],
+               "ctx": b["ctx"][0, f], "steps": [tuple(float(x) for x in s) for s in b["steps"][f]]} for f in range(3)]
+    return {"token": f"k{i}", "frames": frames, "radar": {k: v for k, v in b["radar"].items() if k != "b"}, "radar_poses": b["radar_poses"][0], "ida": b["ida"],
+            "gap_steps": {key: [(sign / 12, 8.0, 0.05)] * 6 for key, sign in (("prev", -1), ("next", 1))}, "ego": {"v": 8.0, "omega": 0.05},
+            "gt": {key: sw.synthetic_gt(scene.step(dt), grid) for key, dt in (("prev", -0.5), ("cur", 0.0), ("next", 0.5))}}

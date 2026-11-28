@@ -82,8 +82,11 @@
    "kind": "frozen",
    "col": 1,
    "row": 0,
-   "code": [],
-   "note": "camera + radar -> 39 channels at 200 x 200 cells of 0.5 m (decoder PCA 32 + 7 map logits), extracted once; the champion starts from the cached features",
+   "code": [
+    "net/prep/foundation/gcar_features.py",
+    "net/prep/foundation/check_features.py"
+   ],
+   "note": "camera + radar -> 39 channels at 200 x 200 cells of 0.5 m (decoder PCA 32 + 7 map logits), extracted once; the champion starts from the cached features. The code makes them again from raw nuScenes with the foundation's code and weights from outside the repository; a new extraction is close, not bit-identical (net/prep/foundation/README.md)",
    "why": "extracted once with frozen weights (about 0.4 s per frame on the RTX 3060): the 16.2 ms of the chain start from the cached features, so the delivered system from raw sensors is not that fast",
    "replace_with": "an image-radar BEV encoder trained inside the chain, or a small student distilled from GaussianCaR (the direction of the bev_fusion student encoder)",
    "catch": "any replacement has to fit the speed budget (R3); the cache is what keeps the loop cheap; R1 names it as frozen today"
@@ -349,12 +352,10 @@
    "row": 6,
    "code": [
     "net/prep/lane_gt_data.py",
-    "net/prep/lane_gtgeom_data.py",
     "net/prep/frames.py",
     "net/prep/polylines.py",
     "net/prep/qtargets.py",
-    "net/prep/qraster.py",
-    "net/prep/qzones.py"
+    "net/prep/qraster.py"
    ],
    "note": "the 39 frozen channels of a frame and the targets drawn from the lane GT (nodes on a 2 m grid, links, pixel maps); rows, normalisation and the stored per-part files come through net/prep/frames.py, which the old chain reads too (p16_data, p8_lib)"
   },
@@ -442,16 +443,14 @@
   },
   {
    "id": "ref_j",
-   "label": "E284 junction end head and the junction ends GT\n(measured, not adopted)",
+   "label": "The ends of the junction GT of E284\n(measured, not adopted)",
    "kind": "alt",
    "col": 2,
    "row": 9,
    "code": [
-    "net/model/qendnet.py",
-    "net/loss/loss_qendnet.py",
     "net/prep/qends.py"
    ],
-   "note": "the E284 end head and the ends of the junction GT (qends), measured and not adopted; the gate's turn limit (qendnet.COS_TURN) and the maneuver count of the read-out (qends.cluster) still read them; the rest of the junction thread (E285 - E363) is in the tag v1",
+   "note": "the ends of the junction GT (qends) of E284, measured and not adopted; the maneuver count of the read-out (qends.cluster) still reads them; the E284 end head and the rest of the junction thread (E285 - E363) are in the tag v1",
    "w": 2,
    "hpx": 52
   },
@@ -720,6 +719,8 @@
   "net/tests/test_jtoken.py": "test of the token head (jtoken.py)",
   "net/tests/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
   "net/tests/test_lane_tokcache.py": "test of the token cache and its loader",
-  "net/tests/test_net_layering.py": "test of the layer order of net/ (DESIGN R13)"
+  "net/tests/test_lane_train.py": "test of the stage entry (lane_train.py) and the base config: every trainer setting is a key a card can set",
+  "net/tests/test_net_layering.py": "test of the layer order of net/ (DESIGN R13)",
+  "net/tests/test_foundation.py": "test of the foundation extraction and its check (net/prep/foundation)"
  }
 }

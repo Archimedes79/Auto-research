@@ -7,7 +7,7 @@ a row is `<data>/lane_center/b123/feats/{train,val}_tokens.json[row]` (`bflc_pat
 stored (yet) is left out of the dataset (`missing` says how many; `strict=True` raises instead).
 Item (numpy -> torch): x (39, 200, 200) float16 (normalised as `GridData`); node targets `qtargets.grid_targets` on the 50 x 50 grid of 2 m cells: exists, flags (8), offset (m), dirv, sstart,
 piece (int, index into the GT pieces of the frame, -1 none), uout, uin; links `lk` (L, 4) int cells (iu, ju, iv, jv) + `lk_long` + `lk_scale` (L, 2) the fitted Hermite handle scales of the long links (NaN for short ones); pixel targets `qraster.pixel_targets` (lines_mask / lines_dist
-(3, 200, 200), g05 / t05 for the 1 m centre loss, events1 (6, 100, 100), road2 (2, 50, 50); the intersection polygons are grown by `dilate` = 2 m (Mirko: slightly enlarged; the GT itself is undilated: stop / exit events lie 1-3 m before the polygon edge)); the map `map_sim.make_map` with its piece targets (`piece_map`: GT piece -> map pieces,
+(3, 200, 200), g05 / t05 for the 1 m centre loss, events1 (6, 100, 100), road2 (2, 50, 50); the intersection polygons are grown by `dilate` = 2 m (the owner: slightly enlarged; the GT itself is undilated: stop / exit events lie 1-3 m before the polygon edge)); the map `map_sim.make_map` with its piece targets (`piece_map`: GT piece -> map pieces,
 `piece_road`).
 `collate` stacks the fixed arrays and pads the variable ones (links with -1, g05 with 1e4, the map to the largest K / T of the batch, with masks `kmask`, `tmask`).
 Run the self-test: python lane_gt_data.py
@@ -24,12 +24,9 @@ for sub in ("training/data", "training/data/prep", "net/prep", "net/model", "net
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
 import map_sim as MS  # noqa: E402
 import frames as FR  # noqa: E402
-import qends as QEND  # noqa: E402
 import qtargets as QT  # noqa: E402
-import qzones as QZ  # noqa: E402
 
 BOX = 48.0
-ZONE_NAMES = ("zone", "zone_kind", "zone_gt", "exists_dense", "offset_dense", "dirv_dense")          # E282: the maps of `qzones.zone_maps` (only with zone=True)
 
 
 def lane_store():
@@ -38,18 +35,9 @@ def lane_store():
 
 
 class QData(torch.utils.data.Dataset):
-    DEFAULT_SPARSE = None                                          # E276: set by `qgraph_train.py --sparse EPS CHORD` so that the train loader AND the gates (they build their own QData) see the same targets
-    DEFAULT_ZONE = False                                           # E282: set by `qgraph_train.py --node-loss zone`: the batch also carries the zone maps (needs a sparse target)
-    DEFAULT_ENDS = False                                         # E284: set by `qgraph_train.py --phases 8`: the batch also carries the junction ends and the true pairs (`qends.end_table`)
-
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, sparse=None, zone=None, ends=None):
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0):
         self.bd = FR.Frames(split, ks=ks)
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
-        sparse = QData.DEFAULT_SPARSE if sparse is None else sparse
-        self.sparse = None if sparse is None else (float(sparse[0]), float(sparse[1]))                   # E276: the sparse node target (eps, max chord) in metres, None = a node in every 2 m cell
-        self.zone = QData.DEFAULT_ZONE if zone is None else bool(zone)
-        self.ends = QData.DEFAULT_ENDS if ends is None else bool(ends)
-        assert not self.zone or self.sparse is not None, "the zone maps need the sparse node target"
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{FR.D}/feats/{part}_tokens.json"))
         self.lg, d = lane_store()
@@ -76,7 +64,7 @@ class QData(torch.utils.data.Dataset):
         x = np.concatenate([np.asarray(m[row], np.float32) for m in self.mm], 0)
         x = ((x - self.bd.mean[:39, None, None]) / self.bd.std[:39, None, None]).astype(np.float16)
         g = self.lg.load(token)
-        nt = QT.node_table(g, sparse=self.sparse)
+        nt = QT.node_table(g)
         t = QT.grid_targets(nt)
         lk, lk_long = QT.link_array(nt)
         lk_scale = QT.fit_long_scales(nt).astype(np.float32)
@@ -84,11 +72,6 @@ class QData(torch.utils.data.Dataset):
         out = dict(x=torch.from_numpy(x), row=row, k=k, token=token, lk=torch.from_numpy(lk), lk_long=torch.from_numpy(lk_long), lk_scale=torch.from_numpy(lk_scale),
                    piece_map=MS.piece_targets(g, mp), piece_road=MS.road_targets(g, mp), mp=mp, n_pieces=len(g["pieces"]))
         out.update({n: torch.from_numpy(v) for n, v in t.items()})
-        if self.zone:                                                                                  # E282: zones of the sparse target + the DENSE offset / direction of every cell's node
-            out.update({n: torch.from_numpy(np.ascontiguousarray(v)) for n, v in QZ.zone_maps(QZ.zones(g, self.sparse)).items()})
-        if self.ends:                                                                                 # E284: the GT ends of the junctions (lane frame x, y, tx, ty) and the true (entry, exit) pairs
-            et = QEND.end_table(g) or QEND.empty_table()
-            out.update(ent=torch.from_numpy(et["ent"]).float().reshape(-1, 4), ext=torch.from_numpy(et["ext"]).float().reshape(-1, 4), pairs=torch.from_numpy(et["pairs"]).long().reshape(-1, 2))
         if self.pixels:
             import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
@@ -99,9 +82,9 @@ class QData(torch.utils.data.Dataset):
 def collate(b):
     B = len(b)
     out = dict(row=torch.tensor([o["row"] for o in b]), k=torch.tensor([o["k"] for o in b]), token=[o["token"] for o in b])
-    for n in ("x", "exists", "flags", "offset", "dirv", "sstart", "piece", "uout", "uin", "tier", "vis", "ztier"):        # tier / vis / ztier: E276 (l4 labels, zeros / ones without them)
+    for n in ("x", "exists", "flags", "offset", "dirv", "sstart", "piece", "uout", "uin"):
         out[n] = torch.stack([o[n] for o in b])
-    for n in ("lines_mask", "lines_dist", "events1", "road2") + ZONE_NAMES:
+    for n in ("lines_mask", "lines_dist", "events1", "road2"):
         if n in b[0]:
             out[n] = torch.stack([o[n] for o in b])
     if "g05" in b[0]:
@@ -111,14 +94,6 @@ def collate(b):
             n = len(o["g05"])
             g05[i, :n], t05[i, :n], m05[i, :n] = o["g05"], o["t05"], 1.0
         out.update(g05=g05, t05=t05, m05=m05)
-    if "ent" in b[0]:                                                                                  # E284: ends and true pairs, padded (masks ent_m / ext_m, pairs -1)
-        E, X, P_ = (max(1, max(len(o[k]) for o in b)) for k in ("ent", "ext", "pairs"))
-        ent, ext, pairs = torch.zeros(B, E, 4), torch.zeros(B, X, 4), -torch.ones(B, P_, 2, dtype=torch.long)
-        ent_m, ext_m = torch.zeros(B, E, dtype=torch.bool), torch.zeros(B, X, dtype=torch.bool)
-        for i, o in enumerate(b):
-            ent[i, :len(o["ent"])], ext[i, :len(o["ext"])], pairs[i, :len(o["pairs"])] = o["ent"], o["ext"], o["pairs"]
-            ent_m[i, :len(o["ent"])], ext_m[i, :len(o["ext"])] = True, True
-        out.update(ent=ent, ext=ext, ent_m=ent_m, ext_m=ext_m, pairs=pairs)
     L =max(1, max(len(o["lk"]) for o in b))
     lk, lkl, lks = -torch.ones(B, L, 4, dtype=torch.long), torch.zeros(B, L, dtype=torch.bool), torch.full((B, L, 2), float("nan"))
     for i, o in enumerate(b):
@@ -145,8 +120,8 @@ def collate(b):
     return out
 
 
-def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False, sparse=None, zone=None, ends=None):
-    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict, sparse=sparse, zone=zone, ends=ends)
+def loader(split="train", bs=4, workers=3, shuffle=True, ks=None, map_mode="train", pixels=True, strict=False):
+    ds = QData(split, ks=ks, map_mode=map_mode, pixels=pixels, strict=strict)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle,
                                            persistent_workers=workers > 0, prefetch_factor=2 if workers > 0 else None)
 

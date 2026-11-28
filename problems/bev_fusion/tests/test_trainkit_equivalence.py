@@ -4,7 +4,7 @@ synthetic clips, and must give the pinned losses, run record and weights bit for
 does; when that is meant, pin the new values (--pin prints them) and say why in the commit. After the golden run it runs the engine's own rules
 (trainkit.selftest).
 
-    python tests/test_trainkit_equivalence.py [--pin]      (from the problem folder, with the module path of problem.json; CPU, 2 threads, about half a minute)
+    python -P -m bev_fusion.tests.test_trainkit_equivalence [--pin]      (from the problem folder, with its module path; CPU, 2 threads, about half a minute)
 """
 import functools
 import hashlib
@@ -17,17 +17,15 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-for sub in ("tests/support", "training", "net/prep", "net/model", "net/loss"):
-    sys.path.insert(0, os.path.join(ROOT, sub))
-import train as T  # noqa: E402
-import losses as L  # noqa: E402
-import synthetic_world as sw  # noqa: E402
-from lift_pd import Grid  # noqa: E402
-from synthetic_batch import batch_for  # noqa: E402
-from trainkit import control  # noqa: E402
+from bev_fusion.training import train as T
+from bev_fusion.net.model.model import ModelConfig
+from bev_fusion.tests.support import synthetic_batch
+from trainkit import control
 
-GOLDEN = {"train totals": [29.28260326385498, 23.38815450668335, 27.408717155456543], "val totals": [33.12045764923096, 25.308552742004395],      # steps 1, 2, 4 (3 is skipped); 2, 4
-          "run record": "95d4cae6f6b425d0", "weights": "4bed3499a2ffe731"}                                                                        # files, log, incidents, config
+# steps 1, 2, 4 (3 is skipped); 2, 4
+GOLDEN = {"train totals": [29.28260326385498, 23.38815450668335, 27.408717155456543], "val totals": [33.12045764923096, 25.308552742004395],
+          # files, log, incidents, config (the config without the removed key uwso_T: the same run)
+          "run record": "fc39674bad178264", "weights": "4bed3499a2ffe731"}
 MODEL =dict(pretrained="", trunk_pretrained="", oversample=1, c_cam=8, c_rad=64, c_fuse=16, trunk_width=0.25, radar_kind="delta_slots", motion_block=True)
 CONFIG = dict(name="golden", device="cpu", workers=0, batch_size=1, accum=2, steps=4, warmup=2, lr=2e-3, ema=0.2, grad_clip=1.0, grad_clip_split=("motion_block",),
               lr_groups={"radar": {"lr": 1e-3, "warmup": 3}}, freeze=("aux_rad",), log_every=1, eval_every=2, save_every=2, keep=1, eval_batches=2, seq_len=2,
@@ -38,15 +36,7 @@ WALL = ("t", "s_per_step", "t_data", "t_step", "time")          # wall-clock fie
 
 @functools.lru_cache(maxsize=None)
 def keyframe(i):
-    """keyframe i of one synthetic scene as an item of the cached dataset: camera features and radar of synthetic_batch, the ego steps, and the GT of the
-    synthetic world at the keyframe before, now and after"""
-    b = batch_for(T.ModelConfig(**MODEL), B=1, seed=i)
-    scene, grid = L._demo_scene(sw).step(0.5 * i), Grid()
-    frames = [{"img": torch.zeros(1), "cam_vec": torch.zeros(1), "K": b["K"][0, f], "T_cam_car": b["T_cam_car"][0, f], "prob": b["prob"][0, f],
-               "ctx": b["ctx"][0, f], "steps": [tuple(float(x) for x in s) for s in b["steps"][f]]} for f in range(3)]
-    return {"token": f"k{i}", "frames": frames, "radar": {k: v for k, v in b["radar"].items() if k != "b"}, "radar_poses": b["radar_poses"][0], "ida": b["ida"],
-            "gap_steps": {key: [(sign / 12, 8.0, 0.05)] * 6 for key, sign in (("prev", -1), ("next", 1))}, "ego": {"v": 8.0, "omega": 0.05},
-            "gt": {key: L.synthetic_gt(scene.step(dt), grid) for key, dt in (("prev", -0.5), ("cur", 0.0), ("next", 0.5))}}
+    return synthetic_batch.keyframe(ModelConfig(**MODEL), i)
 
 
 class Keyframes(torch.utils.data.Dataset):

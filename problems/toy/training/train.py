@@ -1,10 +1,10 @@
 """Training of the toy network on the problem-independent engine trainkit (autoresearch/trainkit/README.md).
 
-    python training/train.py <config.json>             train into <out_root>/<name>; the same command again resumes from the newest checkpoint
-    python training/train.py --check <config.json>     the static check: every key known, the values sane
+    python -P -m toy.training.train <config.json>             train into <out_root>/<name>; the same command again resumes from the newest checkpoint
+    python -P -m toy.training.train --check <config.json>     the static check: every key known, the values sane
 
 In a run of the research system the worker composes the config (the base config, the arm's settings, the seed, the run's folders) and starts
-this script from the run's snapshot.
+this module from the run's snapshot; by hand `python` is `python3 -m research py toy` (the problem's interpreter and module path).
 """
 import argparse
 import sys
@@ -13,10 +13,10 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 
-from gt import generate as GT
-from net.loss.loss import DiscLoss
-from net.model.net import DiscNet
-from net.prep import shards as S
+from toy.gt import generate as GT
+from toy.net.loss.loss import DiscLoss
+from toy.net.model.net import DiscNet
+from toy.net.prep import shards as S
 from trainkit.config import Config, read_config
 from trainkit.data import EpochLoader
 from trainkit.loop import fit

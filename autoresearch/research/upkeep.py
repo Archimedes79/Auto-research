@@ -1,9 +1,12 @@
-"""tests, anchor, compare, clean: the upkeep of a problem's code and runs.
+"""tests, py, anchor, compare, clean: the upkeep of a problem's code and runs.
 
-tests    the problem's own tests (problem.json "tests") and, when it has a training/architecture.json, the drawing check against the code
-         (reporter/archdraw.py check), each with the problem's interpreter and module path from its folder, in a session of its own; passed =
+tests    the problem's own tests (problem.json "tests": modules of the problem, started with -P -m) and, when it has a
+         training/architecture.json, the drawing check against the code (reporter/archdraw.py check), each with the problem's interpreter
+         and module path (paths.module_path of the working tree) from its folder, in a session of its own; passed =
          exit 0 and no "Traceback (most recent call last)" in the output (a script can die with exit 0 behind a wrapper, so a test that prints
          an expected traceback fails); past the timeout the test and all it started are killed; after any change of the problem's code
+py       python by hand as a test gets it: the problem's interpreter and the module path of the working tree, from the caller's folder;
+         with -P when the problem is a package, without when it is none yet (a script then finds the modules next to it, as in `tests`)
 anchor  a finished run evaluated again with the code of the working tree, into a fresh folder: do its numbers still come out? (the champion's
          check after any change of the problem's code; research/anchor.py does the work with the problem's interpreter)
 compare  two finished runs side by side: the paired scene bootstrap of the score and the guards (a diagnostic, never a verdict)
@@ -29,8 +32,8 @@ from typing import Any, Dict, List, Optional
 
 from research import gates, spec
 from research.launch import load_problem
-from research.paths import (CORE, RUN_ID, ResearchError, child_env, interpreter, module_path, parse_run, problem_dir, read_json, record_dir, rel,
-                            repo, runs_root, write_json)
+from research.paths import (CORE, RUN_ID, ResearchError, child_env, core_step, interpreter, is_package, module_path, parse_run, problem_dir,
+                            read_json, record_dir, rel, repo, runs_root, write_json)
 from research.worker import step_alive
 
 DRAWING = "training/architecture.json"                                  # a problem's system drawing (reporter/archdraw.py)
@@ -51,7 +54,8 @@ def tests(problem: str, only: str = "", timeout: float = 3600) -> Dict[str, Any]
     rows = []
     for name, args in checks:
         t0 = time.time()
-        proc = subprocess.Popen([interpreter(p["python"]), *args], cwd=problem_dir(problem), env=_env(problem), stdout=subprocess.PIPE,
+        start = [] if args[0].endswith(".py") else ["-P", "-m"]     # a module of the problem; a script: the drawing check, a problem that is no package yet
+        proc = subprocess.Popen([interpreter(p["python"]), *start, *args], cwd=problem_dir(problem), env=_env(problem), stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, start_new_session=True)
         try:
             out, code = proc.communicate(timeout=timeout)[0].decode("utf-8", "replace"), proc.returncode
@@ -65,10 +69,19 @@ def tests(problem: str, only: str = "", timeout: float = 3600) -> Dict[str, Any]
     return {"problem": problem, "passed": all(r["passed"] for r in rows), "tests": rows}
 
 
+def py(problem: str, args: List[str]) -> int:
+    """work by hand: the problem's interpreter with the module path of the working tree (what a test gets), from the caller's folder ->
+    its exit code. A package starts with -P (the given roots only); a problem that is none yet starts as its tests do, so a script still
+    finds the modules next to it. A diagnostic by definition: no RESEARCH_RUN reaches it, so a holdout split stays closed and no record
+    is written"""
+    start = ["-P"] if is_package(repo(), problem) else []
+    return subprocess.call([interpreter(load_problem(problem)["python"]), *start, *args], env=_env(problem))
+
+
 def anchor(problem: str, rid: str, tolerance: Optional[float] = None) -> Dict[str, Any]:
     p = load_problem(problem)
     tol = p["evaluate"].get("anchor_tolerance", 0.0) if tolerance is None else tolerance
-    r = subprocess.run([interpreter(p["python"]), "-m", "research.anchor", problem, rid, "--tolerance", str(tol)], cwd=problem_dir(problem),
+    r = subprocess.run(core_step(p["python"], "research.anchor", problem, rid, "--tolerance", str(tol)), cwd=problem_dir(problem),
                        env=_env(problem), capture_output=True)
     lines = [ln for ln in r.stdout.decode("utf-8", "replace").splitlines() if ln.strip()]
     try:
@@ -90,7 +103,7 @@ def compare(problem: str, a: str, b: str, boot: int = 2000) -> Dict[str, Any]:
         except (OSError, KeyError, ValueError):
             raise ResearchError(f"{rid} has no result.json") from None
     q = {"score": p["score"]["metric"], "guards": [g["metric"] for g in p.get("guards", [])], "boot": boot, "control": {"0": ids[a]}, "variant": {"0": ids[b]}}
-    r = subprocess.run([interpreter(p["python"]), "-m", "research.compute"], cwd=problem_dir(problem), env=_env(problem), input=json.dumps(q).encode(),
+    r = subprocess.run(core_step(p["python"], "research.compute"), cwd=problem_dir(problem), env=_env(problem), input=json.dumps(q).encode(),
                        capture_output=True)
     if r.returncode != 0:
         raise ResearchError(f"the comparison failed: {r.stderr.decode('utf-8', 'replace')[-1500:]}")

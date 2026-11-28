@@ -7,7 +7,7 @@ and what it returns (BEVOutputs), written down once with names, shapes, units an
 Both stay plain dicts (the layout of nuscenes_dataset.collate / feature_cache.collate_cached and of BEVFusionModel.forward), so the
 trainer, the evaluation and every stored checkpoint keep working; the tables below are the contract a slot can rely on. Frames:
 the vehicle frame of the current keyframe (x forward, y left, metres); B samples, F camera frames (0 = now, then older), X x Y grid.
-Run the self-test: python net/model/interface.py
+Tests: tests/test_interface.py
 """
 import torch
 
@@ -44,12 +44,7 @@ INPUTS = {
     "vis_radar": (False, "(B, 1, X, Y) cells the radar rig can see, the fans (precompute.py; D36)"),
     "vis_fusion": (False, "(B, 1, X, Y) the fusion area = vis_cam x vis_radar (precompute.py; D37: fusion results are scored here)"),
     "radar_hits": (False, "(B, 1, X, Y) cells with radar detections of this frame (precompute.py): the radar memory's write mask"),
-    "radar_static": (False, "(B, 1, X, Y) the same cells weighted by how static their detections are by the measured Doppler (precompute.py): "
-                            "the radar memory's write mask with rad_static_gate"),
-    "host": (False, "dict of CPU tensors: the batch's K, T_cam_car, ida and flip as they were BEFORE the move to the GPU (train.host_side; D54). Same values as the entries of the same name: "
-                    "the network reads from them what it needs as Python numbers (the projection-table cache key of the lift, 'any sample flipped?') without waiting for the GPU. "
-                    "BEVFusionModel.forward drops the key unless ModelConfig.sync_free is on; precompute.py and advance() read it wherever it is present (same result); a batch without it works as before"),
-    "gt": (False, "list (B) of GT dicts; read inside the network only by the refiner option (training)"),
+    "gt": (False, "list (B) of GT dicts: the loss reads it, the network never does"),
     "tokens": (False, "list (B) of sample tokens (bookkeeping)"),
     "steps_raw": (False, "per sample the steps as python floats (bookkeeping)"),
 }
@@ -58,28 +53,15 @@ RADAR_FIELDS = {"x": "m, vehicle frame of now", "y": "m", "b": "sample index in 
                 "psi": "ray direction in the vehicle frame, rad", "vr": "radial velocity (Doppler, ego-compensated), m/s",
                 "rcs": "radar cross section, dBsm", "dt": "age of the sweep, s"}
 # only frame 0 of K and T_cam_car is read today (the lift and the visibility of the current frame); the per-frame entries are kept
-CALL = {
-    "dts": "target times (s, either sign) the heads decode; the output keys are these nominal dt",
-    "state": "per-branch temporal states of the previous call ({'cam': ..., 'rad': ...}) or None",
-    "step": "the ego step (dt, v, omega) since the previous call, scalars or (B,) tensors, or None",
-    "ego": "{nominal dt: (dt, v, omega)} as (B,) tensors: the true gap to the target keyframe and the gap-mean ego motion, or None",
-}
 # per target time dt: name -> meaning; plus the call-level keys
 OUTPUTS_PER_DT = {
     "sem": "(B, L, X, Y) map head: layer_spec channels (area / line logits, distances in metres, ...)",
     "obj": "dict of object head maps: hm (B, G, X, Y) logits, off, size, rot, rad, vel (+ dir, mov)",
     "mass": "(B, 1, X, Y) splat mass of the time mover at dt",
 }
-OPTIONAL_PER_DT = {"boxes": "dense box output (extract.dense_boxes): peak weight w (B, G, X, Y) and the box parameters per cell",
-                   "lines": "soft line map (B, n_lines, X, Y) from the distance channels (extract.soft_line_map)",
-                   "v_hat": "velocity field at dt = 0", "v_levels": "motion block (t15): the coarser levels' fields at dt = 0, dict l0, l1, ... (coarse to fine) of (B, 2, X, Y)",
+OPTIONAL_PER_DT = {"v_hat": "velocity field at dt = 0", "v_levels": "motion block (t15): the coarser levels' fields at dt = 0, dict l0, l1, ... (coarse to fine) of (B, 2, X, Y)",
                    "cam_aux": "camera aux head (training)", "radar_aux": "radar aux head (training)",
-                   "obj_feat": "refiner features", "obj_dt": "refiner dt", "refine": "refiner training targets",
                    "sem_1m": "centreline_1m option (D48): the 1 m centre-line head, logits (B, C, X/2, Y/2), channels from losses.layer_spec_1m"}
-OPTIONAL_OUTPUTS = {"radar_side": "radar_kind 'delta_slots': {'features': (B, C, X, Y) encoder output, 'state': (B, 61, X, Y) lossless slot raster}, "
-                                  "read by the radar side loss (train.py) and the kept-fraction monitor",
-                    "student_side": "camera_student (t22): the student's current-frame outputs p<k> / c<k> / l<k> (probabilities, context, logits) and the cached teacher's t_p<k> / t_c<k> "
-                                    "(detached) for k = 16 (DualBEV) and 8 (BEVFusion); read by the anchor loss (train.py, student_encoder.anchor_terms)"}
 OUTPUTS = {"out": "{dt: per-dt dict}", "state": "{'cam': ..., 'rad': ...} temporal states for the next call",
            "features": "(B, C, X, Y) BEV features S after the backbone (and neck)"}
 
@@ -120,7 +102,7 @@ def check_inputs(batch, dts=(0.0,), state=None, step=None, ego=None, raise_on=Fa
             errs.append(f"lane_img_old: leading shape {tuple(batch['lane_img_old'].shape[:2])} != (B, F - 1) = {(B, Fn - 1)}")
         if "radar_poses" in batch and tuple(batch["radar_poses"].shape[1:]) != (5, 4, 4):
             errs.append(f"radar_poses: shape {tuple(batch['radar_poses'].shape)} != (B, 5, 4, 4)")
-        for k in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits", "radar_static"):
+        for k in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits"):
             if k in batch and tuple(batch[k].shape[:2]) != (B, 1):
                 errs.append(f"{k}: leading shape {tuple(batch[k].shape[:2])} != (B, 1) = {(B, 1)}")
         if "steps" in batch and len(batch["steps"]) != Fn:
@@ -159,53 +141,9 @@ def check_outputs(res, dts, raise_on=False):
             shape = shape or s
             if s != shape:
                 errs.append(f"dt {dt}: sem (B, X, Y) {s} != {shape}")
-        for k, v in list(p.items()) + list((p.get("obj") or {}).items()) + list((p.get("boxes") or {}).items()) + list((p.get("v_levels") or {}).items()):
+        for k, v in list(p.items()) + list((p.get("obj") or {}).items()) + list((p.get("v_levels") or {}).items()):
             if torch.is_tensor(v) and v.is_floating_point() and not torch.isfinite(v).all():
                 errs.append(f"dt {dt}: {k} not finite")
     if raise_on and errs:
         raise ValueError("BEVOutputs: " + "; ".join(errs))
     return errs
-
-
-def _selftest():
-    B, Fn = 2, 3
-    z = torch.zeros
-    radar = dict({f: z(5) for f in RADAR_FIELDS}, b=torch.tensor([0, 0, 1, 1, 1]))
-    batch = {"K": z(B, Fn, 3, 3), "T_cam_car": z(B, Fn, 4, 4), "ida": None, "v": z(B), "omega": z(B),
-             "steps": [[] for _ in range(Fn)], "radar": radar,
-             "prob": z(B, Fn, 4, 2, 3), "ctx": z(B, Fn, 80, 2, 3), "hw": (16, 24), "tokens": ["a", "b"]}
-    assert check_inputs(batch) == [], check_inputs(batch)
-    e = check_inputs(dict(batch, radar={k: v for k, v in radar.items() if k != "vr"}))
-    assert any("'vr'" in x for x in e), e
-    assert any("lengths" in x for x in check_inputs(dict(batch, radar=dict(radar, rcs=z(4)))))
-    assert check_inputs(dict(batch, radar_seq=[radar] * Fn)) == []                               # radar_per_frame: one set per camera frame
-    e = check_inputs(dict(batch, radar_seq=[radar, {k: v for k, v in radar.items() if k != "vr"}]))
-    assert any("2 radar sets != F = 3" in x for x in e) and any("radar_seq[1]: missing field 'vr'" in x for x in e), e
-    bad = dict(batch, v=z(B + 1), extra=1)
-    del bad["omega"]
-    e = check_inputs(bad)
-    assert any("omega" in x for x in e) and any("extra" in x for x in e) and any("v:" in x for x in e), e
-    bad = dict(batch, ctx=torch.full((B, Fn, 80, 2, 3), float("nan")))
-    assert any("not finite" in x for x in check_inputs(bad))
-    assert check_inputs(dict(batch, lane_img_old=z(B, Fn - 1, 3, 4, 4), img_jitter={"u": z(4, B), "strength": 1.0, "noise_seed": 0})) == [], "t26 student_frames 'all': one older image per older frame"
-    assert any("lane_img_old" in x for x in check_inputs(dict(batch, lane_img_old=z(B, Fn, 3, 4, 4)))) and any("lane_img_old" in x for x in check_inputs(dict(batch, lane_img_old=z(B + 1, Fn - 1, 3, 4, 4)))), \
-        "lane_img_old: a wrong number of older frames or of samples is named"
-    try:
-        check_inputs(dict(batch, radar=dict({f: z(1) for f in RADAR_FIELDS}, b=torch.tensor([3]))), raise_on=True)
-        raise AssertionError("no raise")
-    except ValueError as ex:
-        assert "sample index" in str(ex)
-    p = {"sem": z(B, 12, 8, 6), "obj": {"hm": z(B, 3, 8, 6)}, "mass": z(B, 1, 8, 6)}
-    res = {"out": {0.0: dict(p, v_hat=z(B, 2, 8, 6)), 0.5: p}, "state": {}, "features": z(B, 4, 8, 6)}
-    assert check_outputs(res, (0.0, 0.5)) == [], check_outputs(res, (0.0, 0.5))
-    assert any("times" in x for x in check_outputs(res, (0.0,)))
-    res2 = {"out": {0.0: {"sem": z(B, 12, 8, 6), "obj": {}, "foo": 1}}, "state": {}, "features": None}
-    e = check_outputs(res2, (0.0,))
-    assert any("mass" in x for x in e) and any("foo" in x for x in e) and any("v_hat" in x for x in e), e
-    bad_boxes = {"out": {0.5: dict(p, boxes={"w": torch.full((B, 3, 8, 6), float("inf"))})}, "state": {}, "features": None}
-    assert any("w not finite" in x for x in check_outputs(bad_boxes, (0.5,))), "the dense boxes are checked"
-    print("interface selftest passed: input and output contracts checked (missing, unknown, shape, finite)")
-
-
-if __name__ == "__main__":
-    _selftest()

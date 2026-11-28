@@ -145,6 +145,28 @@ def _cache_checks():
         assert LR.build_mask_cache(store, borders=(0.0, 0.5), force=True, verbose=False)["made"], "force makes it again"
 
 
+def _command_checks():
+    """`GtKey.command`: nothing for a key whose parts are stored, else the shell line that makes them, which the command line reads back as the same system, sequences and store root"""
+    import shlex
+    from . import cli, gt_api, where
+
+    def key(system, set_name, parts, out=None):
+        made = tuple(gt_api.Part(name, "c" * 10, "s" * 10, None, None, None, complete, "/x") for name, complete in parts)
+        return gt_api.GtKey(system, "v1.0-trainval", set_name, "d" * 12, None, made, out or where.root(), "i" * 12)
+
+    def read_back(k):
+        a = cli._parser().parse_args(shlex.split(k.command)[3:])
+        return a.cmd, getattr(a, "rig", None), a.version, a.set_name, a.scenes_file, a.out
+    done = key("bev_fusion", "full", [("front", True), ("lane", True), ("masks", True)])
+    assert done.command == "" and "make it" not in str(done)
+    bev = key("bev_fusion", "full", [("front", True), ("lane", True), ("masks", False)])
+    assert bev.command == "python -m GtGenerator generate-bev DATAROOT --version v1.0-trainval --set full" and str(bev).endswith("INCOMPLETE: masks | make it: " + bev.command)
+    assert read_back(bev) == ("generate-bev", None, "v1.0-trainval", "full", None, None)
+    lane = key("lane_center", "scenes:ab12", [("lane", False)], "/tmp/gt")
+    assert read_back(lane) == ("generate-lane", "lane_center", "v1.0-trainval", None, "FILE", "/tmp/gt"), lane.command
+    assert read_back(key("bev_fusion", "all", [("lane", False)])) == ("generate-lane", "bev_fusion", "v1.0-trainval", None, None, None), "the lane part alone, every sequence of the folder"
+
+
 def _mini_checks(root, GtGenerator, lane_gt):
     """the mask of the stored polygons against a raster made straight from the nuScenes map (road_segment polygons with is_intersection: the way the BEV chat first drew it, PIL at 4x supersampling,
     which has a bias of about 1 % of the cells at the polygon edges; this mask is exact)"""
@@ -290,13 +312,27 @@ def _api_checks(root, lane_gt):
         small = gt_api.key_of("bev_fusion", "v1.0-mini", "small", d, dataroot=root)
         assert not small.complete and small.id == key.id and "INCOMPLETE" in str(small), "the id names the code and the data, completeness is a separate fact"
         assert not gt_api.key_of("bev_fusion", "v1.0-mini", "custom", os.path.join(d, "nothing"), scenes=["scene-0061"]).complete, "no store, not complete"
-        # the id changes with the code and not with the data identity of the day (the store recorded it); the key says where its data came from
-        real_code, real_data = lane_gt.code_signature, gt_api.data_identity
+        # the id names the GT, not the code: code without a version row fills its own store (another id), code that the table says makes the GT of this store (same_gt_as) keeps the id;
+        # the data identity of the day does not change it (the store recorded it); the key says where its data came from
+        real_code, real_store, real_data = lane_gt.code_signature, lane_gt.store_of, gt_api.data_identity
         try:
             lane_gt.code_signature = lambda **p: "f" * 10
-            assert gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"]).id != key.id, "another code signature, another id"
+            assert gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"]).id != key.id, "code without a row: another store, another id"
+            lane_gt.store_of = lambda sig: key.part("lane").store
+            same = gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"])
+            assert same.part("lane").signature == "f" * 10 and same.part("lane").store == key.part("lane").store and same.id == key.id, "new code, the GT of the same store: the same id"
         finally:
-            lane_gt.code_signature = real_code
+            lane_gt.code_signature, lane_gt.store_of = real_code, real_store
+        from . import suite as suite_mod                                    # the same for the front part
+        real_front, real_front_store = suite_mod.code_signature, suite_mod.current_signature
+        try:
+            suite_mod.code_signature = lambda **o: "e" * 10
+            assert gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"]).id != key.id, "front code without a row: another store, another id"
+            suite_mod.current_signature = lambda **o: key.part("front").store
+            same = gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"])
+            assert same.part("front").signature == "e" * 10 and same.part("front").store == key.part("front").store and same.id == key.id, "new front code, the GT of the same store: the same id"
+        finally:
+            suite_mod.code_signature, suite_mod.current_signature = real_front, real_front_store
         try:
             gt_api.data_identity = lambda: "unknown"
             again = gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"])
@@ -420,6 +456,7 @@ def run(root=None, verbose=True):
     root = os.path.expanduser(root or "~/data/nuscenes")
     _raster_checks()
     _cache_checks()
+    _command_checks()
     msg_mini = _mini_checks(root, GtGenerator, lane_gt)
     msg_key = _api_checks(root, lane_gt)
     msg = f"gt_api / lane_raster selftest ok: toy raster (orientation, exact edges, hole, nested areas, exact border, empty areas, refused windows), packed cache (round trip, resume, growth, rasteriser, empty frame); {msg_mini}; generate_bev_gt / generate_lane_gt on scene-0061, {msg_key}; the store audit finds a missing file, a tier that is none, vis and occ at one point and a point outside the window"

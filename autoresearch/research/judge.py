@@ -25,7 +25,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from research import gitio, spec
 from research.launch import load_card, load_problem
-from research.paths import (CORE, ResearchError, child_env, experiment_dir, interpreter, module_path, read_json, record_dir, rel, repo, runs_root,
+from research.paths import (CORE, ResearchError, child_env, core_step, experiment_dir, interpreter, module_path, read_json, record_dir, rel, repo, runs_root,
                             write_json)
 from research.worker import ensure_code
 
@@ -172,7 +172,7 @@ def _snapshot_env(problem: str, code: str) -> Dict[str, str]:
 
 
 def _compute(problem: str, code: str, p: Dict[str, Any], query: Dict[str, Any]) -> Dict[str, Any]:
-    r = subprocess.run([interpreter(p["python"]), "-m", "research.compute"], cwd=os.path.join(code, "problems", problem), env=_snapshot_env(problem, code),
+    r = subprocess.run(core_step(p["python"], "research.compute"), cwd=os.path.join(code, "problems", problem), env=_snapshot_env(problem, code),
                        input=json.dumps(query).encode(), capture_output=True)
     if r.returncode != 0:
         raise ResearchError(f"the computation of the numbers failed: {r.stderr.decode('utf-8', 'replace').strip()[-1500:]}")

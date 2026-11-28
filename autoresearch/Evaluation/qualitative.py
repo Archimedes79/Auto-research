@@ -11,11 +11,10 @@ from .render import figure, taps as tapmod
 class DebugView(View):
     """the generic look into the network: one panel per tap (by kind) and a table of their statistics with the plausibility flags"""
     name = "debug"
-    description = "network parts: tap pictures, statistics and plausibility flags"
     needs_taps = True
 
     def render(self, sample: Sample, pred: Prediction, ctx: ViewContext) -> Page:
-        panels = tapmod.tap_panels(pred.taps, ctx.taps, ctx.wanted_taps)
+        panels = tapmod.tap_panels(pred.taps, ctx.taps)
         panels.append(tapmod.stats_table(pred.taps, ctx.flags))
         return Page(title="debug: network parts", panels=panels, ncols=4, panel_size=(3.6, 3.4))
 

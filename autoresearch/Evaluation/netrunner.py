@@ -1,5 +1,4 @@
-"""The default Runner: a trained network run on frames, as ONE class (until 2026-11-27 the BEV project's runner/runner.py, which had nothing of
-BEV in it). Every project that names no "runner" in evaluation/evaluation.json gets it (Evaluation.api.load_runner).
+"""The Runner: a trained network run on frames, as ONE class, the same for every project. `Evaluation.runner` is one (api.py).
 
     r = Runner(project)                                              # the project's evaluation adapter (evaluation/evaluation.json) says what a network and its data are
     r.plan(net, "val");  r.predict(net, "val", taps=["fused"])     # the network on the frames that are not stored yet, no ground truth; -> {results: "<net>@r<hash>", ...}
@@ -8,7 +7,7 @@ BEV in it). Every project that names no "runner" in evaluation/evaluation.json g
 A network with a memory always runs warm (D70): whole scenes in time order from the scene's own start, the frames asked for only decide which
 results are kept. The run reads no ground truth and computes no validation loss (D72): the adapter's `free_source` / `free_subject` give a Source
 whose frames have no reference and a Subject that only predicts (without them the labelled pair is used). What is stored is the ResultSet of
-Evaluation/results.py, the same whoever asks (the identity rules of Evaluation/api.py); `Evaluation.score` scores it later. The health of a
+results.py, the same whoever asks (the identity of predictions: project.py); `Evaluation.score` scores it later. The health of a
 carried memory (the adapter's MEMORY_TAP, the mean of that tap per frame) is a warning in the result, never an error. `time` and `probe` are
 here because they execute the network."""
 from __future__ import annotations
@@ -21,20 +20,15 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import numpy as np
 
-from Evaluation.api import CARRY, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES, MEMORY_START_MAX, EvaluationError, Frames, Helpers, names
-from Evaluation.contracts import FrameRef, Prediction
-from Evaluation.results import Locked, ResultSet, result_id, writer_lock
-from Evaluation.runner import Runner as FrameRunner     # the frame iterator of the engine (a Subject over a Source, scene by scene)
+from .contracts import FrameRef, Prediction
+from .project import CARRY, EvaluationError, Frames, Helpers, names
+from .results import Locked, ResultSet, result_id, writer_lock
+from .runner import Runner as FrameRunner               # the frame iterator of the engine (a Subject over a Source, scene by scene)
 
-RunnerError = EvaluationError                                       # the data, the checkpoint, the memory: the errors are the evaluation's, one class for both
+MEMORY_START_MAX, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES = 0.05, 0.02, 4        # the health of a carried memory (D70): empty at the first frame of a scene, filling over its frames
 
 
 class Runner(Helpers):
-    METHODS = ("predict", "plan", "list_results", "tap", "time", "probe")         # every one is a command; resolve and stored (from Helpers) are helpers of the Evaluation
-
-    def __init__(self, project: Optional[str] = None, adapter: Any = None):
-        super().__init__(project, adapter)
-
     # ---------------------------------------------------------------------------------------- run
     def predict(self, network: str, frames: str = "val", taps: Sequence[str] = (), device: str = "cuda", workers: int = 2, control: str = "", progress: int = 50) -> Dict[str, Any]:
         """run the network on the frames that are not stored yet (whole scenes in time order, warm: D70) and store what it predicts, with the intermediate results `taps` when asked; no ground truth is read. -> the id of the predictions, what was done and the warnings of the memory's health"""
@@ -127,7 +121,7 @@ class Runner(Helpers):
         if not name:
             return {"results": results, "frame": ref.label, "taps": rs.tap_names(ref)}
         if name not in rs.tap_names(ref):
-            raise EvaluationError(f"{frame} of {results} has no tap {name!r}; it has {rs.tap_names(ref)} (ask for it with `predict --taps {name}`)")
+            raise EvaluationError(f"{frame} of {results} has no tap {name!r}; it has {rs.tap_names(ref)} (ask for it with `run ... --taps {name}`)")
         arr = np.load(rs.tap_path(ref, name), mmap_mode="r")
         return {"results": results, "frame": ref.label, "tap": name, "path": rs.tap_path(ref, name), "shape": list(arr.shape), "dtype": str(arr.dtype)}
 

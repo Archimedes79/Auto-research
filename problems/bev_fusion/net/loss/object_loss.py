@@ -1,16 +1,11 @@
-"""The targets and the losses of the object head (CenterPoint style: heat map, offset, size, heading, velocity, moving) and of the refiner's steps."""
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
+"""The targets and the losses of the object head (CenterPoint style: heat map, offset, size, heading, velocity, moving)."""
 import math
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-import launch_saving as LS
-from object_head import DIR_OFFSET, GROUPS, MOVING_SPEED, bev_iou, residual_targets
+from bev_fusion.net.model.object_head import DIR_OFFSET, GROUPS, MOVING_SPEED
 
 
 def gaussian_radius(h, w, min_overlap=0.1):
@@ -29,9 +24,8 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
     rad, vel, is_box, dir). `mask` is the box's `loss_w` (default 1); when any box carries `vel_known` (LossConfig.hygiene_2026_11_02) the dict also
     has `known` (1 where the velocity of the object is known). The per-box fields are made for a whole frame at once in numpy and handed over with one
     torch.from_numpy per field (the version before made a torch.tensor per field per box: 3.6 x slower); the Gaussian windows of a frame are
-    exponentiated in ONE torch.exp call, and torch.exp stays: numpy's exp differs from it in the last bit for ~40 % of the values, so the heatmaps are
-    bit-identical to the old version (tests/test_host_targets.py checks all tensors with torch.equal against a copy of the old function, including
-    loss_w / vel_known, the cap, unknown groups outside the grid and the inputs that used to raise)."""
+    exponentiated in ONE torch.exp call, and torch.exp stays: numpy's exp differs from it in the last bit for ~40 % of the values, so the heatmaps keep
+    torch's bits."""
     B, G, X, Y = len(boxes_batch), len(groups), grid.nx, grid.ny
     gidx = {name: i for i, (name, _) in enumerate(groups)}
     box_kind = np.array([k == "box" for _, k in groups])
@@ -57,7 +51,8 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
             continue
         fx, fy, ix, iy = fx[sel], fy[sel], ix[sel], iy[sel]
         bb = [boxes[i] for i in sel]
-        g = np.array([gidx[bx["group"]] for bx in bb])                             # only for the boxes that are kept (an unknown group outside the grid is skipped)
+        # only for the boxes that are kept (an unknown group outside the grid is skipped)
+        g = np.array([gidx[bx["group"]] for bx in bb])
         isb = box_kind[g]
         length = f64([bx["length"] if k else 1.0 for bx, k in zip(bb, isb)])
         width = f64([bx["width"] if k else 1.0 for bx, k in zip(bb, isb)])
@@ -70,7 +65,8 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
         r = np.maximum(min_radius, r.astype(np.int64))
         sigma = (2 * r + 1) / 6
         args, wins = [], []
-        for cx_, cy_, r_, s_ in zip(ix.tolist(), iy.tolist(), r.tolist(), sigma.tolist()):      # python numbers: float32 stays float32 (numpy 2 would promote an int64 scalar)
+        # python numbers: float32 stays float32 (numpy 2 would promote an int64 scalar)
+        for cx_, cy_, r_, s_ in zip(ix.tolist(), iy.tolist(), r.tolist(), sigma.tolist()):
             x0, x1, y0, y1 = max(0, cx_ - r_), min(X, cx_ + r_ + 1), max(0, cy_ - r_), min(Y, cy_ + r_ + 1)
             gx = np.arange(x0, x1, dtype=np.float32)[:, None]
             gy = np.arange(y0, y1, dtype=np.float32)[None, :]
@@ -101,7 +97,8 @@ def build_targets(boxes_batch, grid, groups=GROUPS, max_obj=64, min_radius=2):
 
 
 def focal_loss(logits, target, weight=None):
-    """CenterNet focal loss (alpha 2, beta 4), normalised by the number of peaks. weight (B, 1, X, Y) or None: a per-cell weight (LossConfig.hygiene_2026_11_02); the sums are then weighted and
+    """CenterNet focal loss (alpha 2, beta 4), normalised by the number of peaks. weight (B, 1, X, Y) or None: a per-cell weight
+    (LossConfig.hygiene_2026_11_02); the sums are then weighted and
     the normaliser is the weighted number of peaks. None = the plain loss, bit for bit."""
     p = torch.sigmoid(logits).clamp(1e-4, 1 - 1e-4)
     pos = target.eq(1).float()
@@ -125,11 +122,13 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0, cell_w=None):
     loss min(L1(r, t), L1(r, -t)) and 'dir' the BCE of the direction class (weight w_dir, SECOND's 0.2). With out['mov']
     (ObjectHead(moving=True)): 'mov' the BCE of moving (|vel| > MOVING_SPEED) at every centre (weight w_mov), and 'vel'
     the L1 on the moving centres only (a hurdle model: the static ones no longer pull the regression to 0).
-    LossConfig.hygiene_2026_11_02 (all three absent = the plain loss, bit for bit): cell_w (B, 1, X, Y) weights the focal loss per cell; t["mask"] may hold a weight per object (build_targets: the
-    `loss_w` of a box dict), which then weights every regression term; t["known"] (1 where the velocity of the object is known) takes the objects of unknown velocity out of the moving / static
+    LossConfig.hygiene_2026_11_02 (all three absent = the plain loss, bit for bit): cell_w (B, 1, X, Y) weights the focal loss per cell; t["mask"] may hold a
+    weight per object (build_targets: the
+    `loss_w` of a box dict), which then weights every regression term; t["known"] (1 where the velocity of the object is known) takes the objects of unknown
+    velocity out of the moving / static
     BCE and of the velocity L1 (their velocity target is 0, which would read as "static")."""
     dev = out["hm"].device
-    t = {k: LS.to_dev(v, dev) for k, v in t.items()}         # D54: with the sync switch on, from pinned memory without a wait for the GPU; else v.to(dev)
+    t = {k: v.to(dev) for k, v in t.items()}
     m = t["mask"].unsqueeze(-1)
     mb = (t["mask"] * t["is_box"]).unsqueeze(-1)
     mc = (t["mask"] * (1 - t["is_box"])).unsqueeze(-1)
@@ -155,23 +154,3 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0, cell_w=None):
         losses["mov"] = w_mov * (bce * mk).sum() / mk.sum().clamp(min=1)
     losses["total"] = sum(losses.values())
     return losses
-
-
-def refine_loss(steps, gt, matched, valid, group, groups=GROUPS, w_vel=0.2, w_q=1.0):
-    """S5c loss, summed over the iterations: L1 of the residuals against the targets GT - input box (matched
-    candidates; circles without width and yaw; velocity weighted w_vel) + BCE of the quality logit against the BEV IoU
-    of the input box with its GT (0 for unmatched candidates; all valid candidates). Ignored candidates (near an
-    unobserved GT box, refine_candidates) have valid = matched = 0 and contribute nothing."""
-    dev = gt.device
-    circle = torch.tensor([k == "circle" for _, k in groups], device=dev)[group]
-    wb = torch.tensor([1, 1, 1, 1, 1, w_vel, w_vel], dtype=gt.dtype, device=dev)
-    wc = torch.tensor([1, 1, 1, 0, 0, w_vel, w_vel], dtype=gt.dtype, device=dev)
-    w = torch.where(circle[..., None], wc, wb) * matched[..., None]
-    reg, qual = 0.0, 0.0
-    for st in steps:
-        tgt = residual_targets(st["box_in"].detach(), gt, circle)
-        reg = reg + (F.l1_loss(st["delta"], tgt, reduction="none") * w).sum() / matched.sum().clamp(min=1)
-        iou = bev_iou(st["box_in"], gt, group, matched, groups).to(dev)
-        bce = F.binary_cross_entropy_with_logits(st["quality"], iou, reduction="none")
-        qual = qual + w_q * (bce * valid).sum() / valid.sum().clamp(min=1)
-    return {"reg": reg, "quality": qual, "total": reg + qual}

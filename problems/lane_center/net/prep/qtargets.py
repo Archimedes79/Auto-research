@@ -73,42 +73,11 @@ def _groups(events, tol=0.3):
     return groups
 
 
-def _sparse_keep(nodes, pts, off, eps, max_chord):
-    """E276 sparse node target: the set of global point ids of the NORMAL nodes to keep. Per piece the anchors are the event nodes and the first and the last node; between two anchors
-    the straight chord must stay within `eps` metres of every point of the piece in between and be at most `max_chord` metres long, else the candidate node nearest to the point of the
-    largest deviation (or, for a long chord, to the middle) is kept and both halves are checked again (Douglas-Peucker restricted to the candidate nodes)"""
-    keep = set()
-    for i in range(len(off) - 1):
-        ids = sorted(gd for gd in nodes if off[i] <= gd < off[i + 1])
-        if not ids:
-            continue
-        anchors = sorted({gd for gd in ids if nodes[gd]["ev"]} | {ids[0], ids[-1]})
-        keep.update(gd for gd in anchors if not nodes[gd]["ev"])
-        cand_all = [gd for gd in ids if not nodes[gd]["ev"] and gd not in anchors]
-        stack = [(a, b) for a, b in zip(anchors[:-1], anchors[1:])]
-        while stack:
-            a, b = stack.pop()
-            cand = [c for c in cand_all if a < c < b]
-            if not cand:
-                continue
-            seg = pts[a:b + 1]
-            ch = pts[b] - pts[a]
-            L = float(np.linalg.norm(ch))
-            dev = np.linalg.norm(seg - pts[a], axis=1) if L < 1e-9 else np.abs((seg - pts[a]) @ np.array([-ch[1], ch[0]]) / L)
-            if dev.max() <= eps and L <= max_chord:
-                continue
-            k = a + int(dev.argmax()) if dev.max() > eps else (a + b) // 2
-            c = min(cand, key=lambda x: abs(x - k))
-            keep.add(c)
-            stack += [(a, c), (c, b)]
-    return keep
-
-
-def node_table(g, marker_dist=0.0, short=SHORT, sparse=None):
+def node_table(g, marker_dist=0.0, short=SHORT):
     """-> dict: nodes (M): cell (M, 2) int, pos (M, 2), dirv (M, 2), flags (M, 8) bool, piece (M,) index into g["pieces"], j (M,) point index in the piece, ev (M,) bool, sstart (M,) bool,
     tier (M,) uint8 (1 / 2 / 3 of the node's point, 0 = the graph has no l4 labels), vis (M,) bool = DEMANDED (a camera sees it, or it lies within NEAR_BLIND m of the ego and no box hides it; True without labels);
     links: src (L,), dst (L,) node indices, long (L,) bool, path (L,) lists of global point ids; points: pts (P, 2), pid (P,), pj (P,), supp (P,) bool, off (n pieces + 1), ptier (P,), pvis (P,);
-    stats. `sparse` = None (a node in every 2 m cell, E273) or (eps, max_chord) metres (E276: `_sparse_keep`; events, the first and the last node of a piece always stay)"""
+    stats. A node in every 2 m cell (E273; the sparse node target of E276 is in the tag v1)"""
     pieces = g["pieces"]
     idx = {p["id"]: i for i, p in enumerate(pieces)}
     off = np.zeros(len(pieces) + 1, int)
@@ -195,12 +164,6 @@ def node_table(g, marker_dist=0.0, short=SHORT, sparse=None):
     for c, (d, gid) in per_cell.items():
         nodes[gid] = dict(flags=set(), pos=pts[gid].copy(), ev=False)
     n_dropped = n_cand - len(per_cell) - sum(1 for (i, c) in best if c in cell_event)
-    n_sparse = 0
-    if sparse is not None:                                                                       # E276: keep only the nodes the geometry needs
-        keep = _sparse_keep(nodes, pts, off, float(sparse[0]), float(sparse[1]))
-        for gd in [gd for gd, v in nodes.items() if not v["ev"] and gd not in keep]:
-            del nodes[gd]
-            n_sparse += 1
     gids = sorted(nodes)
     M = len(gids)
     node_of = {gid: m for m, gid in enumerate(gids)}
@@ -248,7 +211,7 @@ def node_table(g, marker_dist=0.0, short=SHORT, sparse=None):
                 tier=ptier[gids] if M else np.zeros(0, np.uint8), vis=pvis[gids] if M else np.zeros(0, bool), ptier=ptier, pvis=pvis,
                 src=src, dst=dst, long=dist > short, dist=dist, path=paths, pts=pts, tan=tan, pid=pid, pj=pj, supp=supp, off=off, gid=np.array(gids, int),
                 stats=dict(nodes=M, events=int(sum(nodes[gd]["ev"] for gd in gids)), dropped=int(n_dropped), cand=int(n_cand), ev_merged=n_ev_merged, links=len(src),
-                           long=int((dist > short).sum()), sparse_dropped=n_sparse))
+                           long=int((dist > short).sum())))
 
 
 def grid_targets(nt, n=N):

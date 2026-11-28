@@ -3,7 +3,7 @@
 Panel kinds: image | raster | rgb | text | table | bars (see contracts.Panel). The error colour code is the same everywhere:
 a cell both predicted and in the ground truth is grey, predicted but not in the ground truth is grey mixed with GREEN (false positive), in the
 ground truth but not predicted is grey mixed with BLUE (false negative), not evaluated is cream, correct background is white
-(`error_rgb`, `ERROR_LEGEND`). Subtle on purpose and never red: red belongs to moving targets (Mirko, 2026-11-04).
+(`error_rgb`, `ERROR_LEGEND`). Subtle on purpose and never red: red belongs to moving targets.
 """
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from typing import Optional, Tuple
 
 import numpy as np
 
+from ..comparison.maps import confusion
 from ..contracts import Page, Panel, Shape
 
 TP_COLOR = (0.70, 0.70, 0.70)
@@ -41,7 +42,6 @@ def error_rgb(pred, gt, valid=None, colors=None) -> np.ndarray:
 
 def error_counts(pred, gt, valid=None) -> Tuple[int, int, int]:
     """(tp, fp, fn) cell counts of the same comparison (for captions); the counting is `comparison.maps.confusion`"""
-    from ..comparison.maps import confusion
     tp, fp, fn, _ = confusion(np.asarray(pred).astype(bool), np.asarray(gt).astype(bool), None if valid is None else np.asarray(valid).astype(bool))
     return int(tp), int(fp), int(fn)
 

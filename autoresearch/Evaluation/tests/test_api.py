@@ -7,8 +7,10 @@ the stored predictions; a new ground truth is scored from them without the netwo
 anything runs; the reading methods and the pictures work from what is stored; the command line runs them."""
 from __future__ import annotations
 
+import ast
 import contextlib
 import copy
+import functools
 import io
 import json
 import os
@@ -23,7 +25,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from .. import cli, minimal
+from .. import cli, defaults, minimal
 from .. import results as results_mod
 from ..api import Evaluation, EvaluationError, Frames, load_adapter
 from ..contracts import FrameRef, Prediction, Sample, TapSpec
@@ -461,22 +463,114 @@ def _():
     shutil.rmtree(STATE.root, ignore_errors=True)
 
 
-@check("api adapter: a \"runner\" key in evaluation.json and an adapter function `inputs` are refused, not silently ignored")
+@check("api adapter: a \"runner\" key in evaluation.json and an adapter function `inputs` are refused, not silently ignored; an evaluation.json that is no json object is an error "
+       "with the file and what is wrong, a missing one is not")
 def _():
     project = tempfile.mkdtemp()
     os.makedirs(os.path.join(project, "evaluation"))
+    cfg = os.path.join(project, "evaluation", "evaluation.json")
 
     def config(**keys):
-        with open(os.path.join(project, "evaluation", "evaluation.json"), "w") as f:
+        with open(cfg, "w") as f:
             json.dump({"adapter": __name__, **keys}, f)
     config(runner="mine:Runner")
     for adapter in (None, ME):                                         # also when the adapter is passed in
         raises(EvaluationError, '"runner" is not supported', Evaluation, project, adapter)
     config()
     assert Evaluation(project).ad.sets is sets
+    for text, problem in (('{"adapter": ', "cannot be read: JSONDecodeError: Expecting value: line 1 column 13"), ('["' + __name__ + '"]', "must hold a json object")):
+        with open(cfg, "w") as f:
+            f.write(text)
+        for adapter in (None, ME):                                     # the file is the project's: broken is broken whoever names the adapter
+            raises(EvaluationError, f"{cfg} {problem}", Evaluation, project, adapter)
+    os.remove(cfg)
+    raises(EvaluationError, "no adapter: pass one", Evaluation, project)
+    assert Evaluation(project, ME).ad.sets is sets, "no evaluation.json and an adapter passed in"
     hooked = SimpleNamespace(**{f: getattr(ME, f) for f in FUNCTIONS}, inputs=lambda source: {})
     raises(EvaluationError, "`inputs`, which is not supported", Evaluation, None, hooked)
     shutil.rmtree(project, ignore_errors=True)
+
+
+@check("holdout: a split of problem.json's `holdout` is refused by run, check and guard before anything is read: without a gate, with the variables of a TEST run set by hand, "
+       "and a gate of the caller's own is not taken; the other splits stay open")
+def _():
+    fresh()
+    project = tempfile.mkdtemp()
+    with open(os.path.join(project, "problem.json"), "w") as f:
+        json.dump({"holdout": ["test"]}, f)
+    held = SimpleNamespace(**{f: getattr(ME, f) for f in FUNCTIONS}, METRICS=METRICS, reference=reference)
+    held.sets = lambda: {"val": 3, "test": 3, "small.test": 1}
+    ev = Evaluation(project, held)
+    variables = ("RESEARCH_RUN", "RESEARCH_HOLDOUT_RUN", "RESEARCH_PROBLEM")
+    saved, gate = {k: os.environ.pop(k, None) for k in variables}, defaults._holdout_gate
+
+    def closed(why):
+        for frames in ("test", "small.test", "scenes:demo-0:test"):
+            raises(EvaluationError, "is a holdout split", ev.run, "runs/thr0.5", frames, progress=0)
+        chk = ev.check("runs/thr0.5", "test")
+        assert not chk["ok"] and "is a holdout split" in chk["problems"][0], (why, chk)
+        raises(PermissionError, "is a holdout split", defaults.guard, "test", project)
+        assert not defaults.holdout_open() and STATE.calls == STATE.loads == STATE.free_loads == 0, why
+    try:
+        defaults._holdout_gate = None                                  # as in every process the research core did not hand its gate to
+        closed("no gate, no TEST run")
+        os.environ.update(RESEARCH_RUN="E1.a_s0", RESEARCH_HOLDOUT_RUN="E1.a_s0", RESEARCH_PROBLEM="toy")
+        closed("the variables of a TEST run set by hand")
+        def test_refusal(problem, run):                                # a yes of the caller's own, dressed as the gate of the research core
+            return ""
+        test_refusal.__module__ = "research.gates"
+
+        class Yes:
+            __module__ = "research.gates"
+
+            def __init__(self):
+                self.__name__ = "test_refusal"
+
+            def __call__(self, problem, run):
+                return ""
+        for own in (lambda problem, run: "", test_refusal, functools.wraps(test_refusal)(lambda problem, run: ""), Yes()):
+            raises(PermissionError, "the holdout gate is research.gates.test_refusal", defaults.set_holdout_gate, own)
+            closed(f"a gate of the caller's own: {own!r}")
+        assert ev.run("runs/thr0.5", "val", progress=0)["n_frames"] == 18 and defaults.guard("val", project) is None, "a split that is no holdout is open"
+    finally:
+        defaults._holdout_gate = gate
+        for k in variables:
+            os.environ.pop(k, None)
+            if saved[k] is not None:
+                os.environ[k] = saved[k]
+    shutil.rmtree(project, ignore_errors=True)
+    shutil.rmtree(STATE.root, ignore_errors=True)
+
+
+@check("imports: no module of the package imports the research core (by statement, by a named import_module, or when it is loaded), and none imports a module of the package "
+       "inside a function (there is no import cycle to work around)")
+def _():
+    package = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    bad, modules = [], []
+    for folder, dirs, files in os.walk(package):
+        dirs[:] = [d for d in dirs if d not in ("tests", "__pycache__")]
+        for name in (f for f in files if f.endswith(".py")):
+            where = os.path.relpath(os.path.join(folder, name), package)
+            if name not in ("__init__.py", "__main__.py", "selftest.py"):      # (selftest.py loads the tests)
+                modules.append("Evaluation." + where[:-3].replace(os.sep, "."))
+            with open(os.path.join(folder, name), encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            top = {id(n) for n in tree.body}
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call) and getattr(node.func, "attr", getattr(node.func, "id", "")) in ("import_module", "__import__"):
+                    mods, own = [a.value for a in node.args[:1] if isinstance(a, ast.Constant) and isinstance(a.value, str)], False
+                elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                    mods = [node.module or ""] if isinstance(node, ast.ImportFrom) else [a.name for a in node.names]
+                    own = isinstance(node, ast.ImportFrom) and node.level > 0 or any(m.split(".")[0] == "Evaluation" for m in mods)
+                else:
+                    continue
+                if any(m.split(".")[0] == "research" for m in mods) or (own and id(node) not in top):
+                    bad.append(f"{where}:{node.lineno}")
+    assert not bad and len(modules) > 15, (bad, modules)
+    loaded = ("import importlib, sys\nfor m in sys.argv[1:]:\n    importlib.import_module(m)\n"
+              "print(sorted(m for m in sys.modules if m.split('.')[0] == 'research'))\n")
+    r = subprocess.run([sys.executable, "-c", loaded] + modules, cwd=os.path.dirname(package), capture_output=True, text=True)      # from autoresearch/: `research` could be imported
+    assert r.returncode == 0 and r.stdout.strip() == "[]", (r.stdout, r.stderr[-500:])
 
 
 @check("api reading: numbers, splits, worst frames, cost, report, counts for the judge, listing - and a picture drawn from the stored prediction (no network), refused without it")

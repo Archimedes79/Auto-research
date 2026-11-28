@@ -1,10 +1,8 @@
 """The BEV Task of the evaluation suite (Evaluation): what the outputs of the chain mean.
 
     BevSegMetric   maps: tolerant IoU per layer / range bin / dt / subset and line zero-crossing F1 (metrics.SegMeter); a model with the 1 m centre-line
-                   head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad); `--junction-free` adds the two divider layers again without the
-                   map's intersection cells under the masks `fovj` / `fovjb` (D66, bev_junction.py)
-    BevDetMetric  boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows; 'det' = plain decode,
-                   'detr' = boxes refined by S5c)
+                   head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad)
+    BevDetMetric   boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows of the decoded boxes)
     BevLossMetric  the training loss of the frame (means over frames; per-frame totals rank frames)
     BEVTask        the three plus the views of bev_views.py and the plausibility checks of a frame
 
@@ -24,18 +22,16 @@ import numpy as np
 
 from Evaluation import Flag, Metric, Prediction, Sample, Task, View
 from Evaluation.qualitative import DebugView
-from evaluation import bev_junction
-from evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
-from evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
+from bev_fusion.evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
+from bev_fusion.evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
 
 MASKS = ("fov", "seen", "out", "obj")
 
 
 # ------------------------------------------------------------------------------------------------ maps
-def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None, junction=None) -> None:
-    """all SegMeter updates of one sample at one dt; meters: {"fov": SegMeter, "seen": SegMeter, "obj": SegMeter}. direction: layer -> (2, X, Y) predicted (cos, sin)
-    of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model.
-    junction: {mask name of bev_junction.MASKS: (X, Y) intersection cells}, the divider layers scored again without them (D66) under that mask's meter; None = not"""
+def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None) -> None:
+    """all SegMeter updates of one sample at one dt; meters: {"fov": SegMeter, "seen": SegMeter, "obj": SegMeter}. direction: layer -> (2, X, Y) predicted (cos,
+    sin) of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model."""
     k = layer_index(spec)
     m = masks(g)
     areas = {n: prob[n] for n, (_, kind, _) in k.items() if kind in ("area", "line")}       # line = the 1-cell mask head
@@ -49,9 +45,6 @@ def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None, junction=N
         if direction:
             meters[mname].add_directions(direction, {n: np.asarray(g[n + "_dir"], np.float32) for n in direction}, gt_a, mask=m[mname], mass=mass, dt=dt)
     meters["obj"].add(objs, gt_o, mask=m["obj_fov"], mass=mass, dt=dt)
-    for mname, inter in (junction or {}).items():                  # the dividers without the map's intersection cells (prediction, GT and scored cells alike)
-        pj, gj, fj = bev_junction.junction_free(areas, gt_a, m["fov"], inter)
-        meters[mname].add(pj, gj, mask=fj, mass=mass, dt=dt)
 
 
 def _ikey(mname, dt, layer, subset, b) -> str:
@@ -68,22 +61,21 @@ class BevSegMetric(Metric):
     HEAD = {"drivable_iou": "fov/dt+0.00/drivable_area/all/all/iou@0", "walkway_iou": "fov/dt+0.00/walkway/all/all/iou@0",
             "lane_divider_iou": "fov/dt+0.00/lane_divider/all/all/iou@0.5", "lane_divider_f1": "fov/dt+0.00/lane_divider:zc/all/all/f1@0.5",
             "vehicle_iou": "obj/dt+0.00/vehicle/all/all/iou@0"}
-    # the paired bootstrap of `Evaluation.compare` (D48): the headline plus the rows the t20 card and the weak-spot table name; HEAD and score() stay as they were
+    # the paired bootstrap of `Evaluation.compare` (D48): the headline plus the rows the t20 card and the weak-spot table name; HEAD and score() stay as they
+    # were
     headline = tuple(HEAD.values()) + ("fov/dt+0.00/lane_divider/all/all/iou@1", "fov/dt+0.00/carpark_area/all/all/iou@0",
                                        "fov/dt+0.00/ped_crossing/all/all/iou@0", "fov/dt+0.00/road_divider/all/all/iou@1")
     better = {}                                                          # higher is better, but for the distance-field error (direction)
 
-    def __init__(self, grid, spec, junction=None):
-        self.grid, self.spec, self.junction = grid, spec, junction       # junction: bev_junction.JunctionMasks = also the junction-free divider rows, None = not
-        if junction is not None:
-            self.headline = type(self).headline + bev_junction.HEADLINE
+    def __init__(self, grid, spec):
+        self.grid, self.spec = grid, spec
 
     def frame(self, sample: Sample, pred: Prediction):
-        meters = {m: SegMeter(self.grid) for m in MASKS + (tuple(bev_junction.MASKS) if self.junction else ())}
+        meters = {m: SegMeter(self.grid) for m in MASKS}
         for dt, o in pred.outputs["dt"].items():
             mass = o["mass"] if (o["mass"] is not None and abs(dt) > 1e-6) else None
             g = sample.reference[dt]
-            add_sample(meters, o["prob"], o["dist"], g, self.spec, dt, mass, o.get("dir"), self.junction(g) if self.junction else None)
+            add_sample(meters, o["prob"], o["dist"], g, self.spec, dt, mass, o.get("dir"))
         keys, cnt, n_gt, err, n_err = [], [], [], [], []
         for mname, m in meters.items():
             for (dt, name, sname, b), acc in m.c.items():
@@ -122,7 +114,7 @@ class BevSegMetric(Metric):
     def reduce(self, counts, keys: Optional[Sequence[str]] = None):
         want = None if keys is None else {_flat_to_ikey(k) for k in keys}
         acc = self._accumulate(counts, want)
-        meters = {m: SegMeter(self.grid) for m in MASKS + tuple(bev_junction.MASKS)}      # the junction masks are empty (no key) in a store made without `--junction-free`
+        meters = {m: SegMeter(self.grid) for m in MASKS}
         for key, (cnt, n_gt, err, n_err) in acc.items():
             mname, dt, layer, subset, b = key.split("|")
             meters[mname].c[(round(float(dt), 3), layer, subset, b)] = {"cnt": cnt, "n_gt": n_gt, "err": err, "n_err": n_err}
@@ -157,7 +149,8 @@ class BevDetMetric(Metric):
     HEADLINE = ("vehicle/all/ap@1", "vehicle/all/ap@2", "pedestrian/all/ap@1", "pedestrian/all/ap@2", "vehicle/all/ave_skill_moving")
     better = {"ate": "low", "fp_hi": "low"}
     LOW = ("ate", "ase", "aoe", "ave", "mATE", "mASE", "mAOE", "mAVE", "ave_moving", "ave_static", "ave0_moving", "ave0_static",
-           "ave_slow_moving")                                      # the last part of a number's name: errors (and the share of moving boxes predicted to stand) are better low
+           # the last part of a number's name: errors (and the share of moving boxes predicted to stand) are better low
+           "ave_slow_moving")
 
     def __init__(self, groups: Sequence[str], name: str = "det", source: str = "dets"):
         self.name, self.source, self.groups = name, source, list(groups)
@@ -257,68 +250,53 @@ class BevLossMetric(Metric):
 
 
 # ------------------------------------------------------------------------------------------------ checks and Task
-GUIDE = """Panels of the overview: camera with the ground truth drawn in (3D boxes: vehicle red, pedestrian magenta, two-wheeler orange, grey = no lidar/radar point;
-lines: lane dividers yellow, road dividers orange, centre-lines cyan); bird's-eye maps with x forward and +y on the left; error maps: grey = right,
-RED = false, BLUE = missed, cream = not evaluated (outside the camera's view). Stages (debug view): 1 input, 2-3 camera head depth and uncertainty,
-4 radar points, 5-6 lift, 7-8 camera BEV before / after temporal fusion, 9 what the past supplies, 10-11 radar, 12 trunk, 25-26 the 1 m centre-line head (only a model
-with it): presence against the GT, direction arrows GT cyan / predicted amber. Red flags: black input,
-flat depth, energy outside the camera wedge, energy that does not follow the GT boxes, features without raster dots, one single colour in the trunk,
-large red or blue regions, boxes in empty space, objects that do not move at dt +-0.5 s."""
-
-
 def _gt_in_front(g, groups):
     return [b for b in gt_boxes(g, groups) if in_front(b)]
 
 
 class BEVTask(Task):
     name = "bev"
-    default_video_view = "dashboard"
 
-    def __init__(self, grid, spec, groups: Sequence[str], depth_centres=None, z_levels: Sequence[float] = (), refine: bool = False):
+    def __init__(self, grid, spec, groups: Sequence[str], depth_centres=None, z_levels: Sequence[float] = ()):
         self.grid, self.spec, self.groups = grid, spec, list(groups)
-        self.depth_centres, self.z_levels, self.refine = depth_centres, tuple(z_levels), refine
+        self.depth_centres, self.z_levels = depth_centres, tuple(z_levels)
 
     def metrics(self) -> List[Metric]:
-        ms: List[Metric] = [BevSegMetric(self.grid, self.spec, self.junction), BevDetMetric(self.groups, "det", "dets")]
-        if self.refine:
-            ms.append(BevDetMetric(self.groups, "detr", "detr"))
+        ms: List[Metric] = [BevSegMetric(self.grid, self.spec), BevDetMetric(self.groups, "det", "dets")]
         if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
-            from evaluation.bev_curves import BevCurveMetric
+            from bev_fusion.evaluation.bev_curves import BevCurveMetric
             ms.append(BevCurveMetric(self.spec, self.groups))
-        if getattr(self, "fusion", False):                                    # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers; bev_eval.task switches it on by default (D31), a Task built by hand does not
-            from evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
+        # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers; bev_eval.task switches it on by default (D31), a Task built by
+        # hand does not
+        if getattr(self, "fusion", False):
+            from bev_fusion.evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
             ms += [BevFusionDetMetric(self.groups, "detf"), BevFusionDetMetric(self.groups, "detfp", include_partial=True), BevCoverageMetric(self.groups, self._pts())]
         if getattr(self, "velocity", False):                                  # field / box-centre velocity per cell set (bev_velocity.py), off by default
-            from evaluation.bev_velocity import BevVelocityMetric
+            from bev_fusion.evaluation.bev_velocity import BevVelocityMetric
             ms.append(BevVelocityMetric(self.grid, self.groups))
         ms.append(BevLossMetric())
         return ms
 
-    junction = None          # a bev_junction.JunctionMasks = also the junction-free divider rows (D66); None = not (bev_eval._task_only sets None; no entry point sets it now)
-
     _PTS = []
 
     def _pts(self):
-        """token -> (lidar, radar points) of the annotation table (loaded once); None when it was not built or cannot be read: the radar classes of `cov` are then left out,
-        and that is said on the console"""
+        """token -> (lidar, radar points) of the annotation table (loaded once); None when it was not built or cannot be read: the radar classes of `cov` are
+        then left out, and that is said on the console"""
         if not self._PTS:
-            from evaluation.bev_annotation_pts import OUT, load
+            from bev_fusion.evaluation.bev_annotation_pts import OUT, load
             try:
                 self._PTS.append(load() if os.path.exists(OUT) else None)
             except Exception as ex:                                           # a damaged table must not stop an evaluation
                 print(f"WARNING: annotation table unreadable ({type(ex).__name__}: {ex})", flush=True)
                 self._PTS.append(None)
             if self._PTS[0] is None:
-                print(f"WARNING: no annotation table ({OUT}): `cov` leaves out the radar classes (cam_radar, cam_only, radar_only, neither); build it with `python evaluation/bev_annotation_pts.py build`", flush=True)
+                print(f"WARNING: no annotation table ({OUT}): `cov` leaves out the radar classes (cam_radar, cam_only, radar_only, neither); build it with `python -P -m bev_fusion.evaluation.bev_annotation_pts build`", flush=True)
         return self._PTS[0]
 
     def views(self) -> Dict[str, View]:
         stages = StagesView(self)
         return {"overview": OverviewView(self), "outputs": OutputsView(self), "stages": stages, "debug": stages,
                 "dashboard": DashboardView(self), "taps": DebugView()}
-
-    def guide(self) -> str:
-        return GUIDE
 
     def checks(self, sample: Sample, pred: Prediction) -> List[Flag]:
         """plausibility of the OUTPUTS of one frame (heuristic thresholds: they flag, a human judges)"""

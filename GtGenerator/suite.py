@@ -45,10 +45,10 @@ def current_version(**options):
     return base + ("+" + ",".join(f"{k}={v!r}" for k, v in sorted(options.items())) if options else "")
 
 
-def missing(tokens, data=DATA, **options):
+def missing(tokens, data=None, **options):
     """the sample tokens of `tokens` without a stored GT for the current source and options ([] = the store covers them): the check
-    before a training starts, so that nothing has to be generated in a data-loader worker"""
-    sig_dir = os.path.join(data, current_signature(**options))
+    before a training starts, so that nothing has to be generated in a data-loader worker. `data`: the store root (default where.root(), read at the call)"""
+    sig_dir = os.path.join(data or where.root(), current_signature(**options))
     tokens = list(tokens)
     if len(tokens) > 50:                                                  # one listing of the folder instead of a stat per token (2 ms each on the 9p mounts); a zero-byte file is no keyframe
         from .store import front_keys
@@ -63,9 +63,10 @@ def missing(tokens, data=DATA, **options):
     return [t for t in tokens if not stored(t)]
 
 
-def load(token, data=DATA, **options):
+def load(token, data=None, **options):
     """the stored GT of one keyframe (written by `python -m GtGenerator generate` / `report`) for the current source and options:
-    dict of float32 layers + meta, no nuScenes needed. Raises FileNotFoundError that names the folders that do exist."""
+    dict of float32 layers + meta, no nuScenes needed. `data`: the store root (default where.root(), read at the call). Raises FileNotFoundError that names the folders that do exist."""
+    data = data or where.root()
     sig_dir = os.path.join(data, current_signature(**options))
     try:
         return load_keyframe(sig_dir, token)
@@ -103,13 +104,15 @@ def scene_tokens(scene, version="v1.0-mini", dataroot=None):
 
 
 class GtGenerator(NuScenesGT, Interface):
-    """GtGenerator(dataroot, version, grid=GridSpec(), ss=4, **options).
+    """GtGenerator(dataroot, version, *, grid=GridSpec(), ss=4, light=False, scenes=None, nusc=None, **options): everything after `version` by keyword
+    (a third positional argument was the grid here and the devkit in NuScenesGT: it is refused instead of guessed).
 
     keyframe(token)          every layer of one keyframe: dict of float32 arrays [ix, iy] + meta (see nuscenes_gt.py)
     training_sample(token)   {"prev", "cur", "next"} keyframes with meta["dt"] and meta["steps"] (ego v, omega per 12 Hz frame)
     keyframes(scene_name)    sample tokens of a scene in time order
     scenes()                 scene names
-    signature()              cache key of the generator (source + options)
+    signature()              the key of the CODE: a hash of the generator source and the options
+    store_signature()        the key of the GT: the folder of the store this code fills and reads (cache names, records)
     options: use_flow, use_radar, flow_config (GtGenerator.flow.Config), boxes_at ("camera" = moving
     boxes moved to the camera time by v * dt, default; "annotation" = as annotated)
     light=True: a memory-light devkit (CAM_FRONT + radars only, GtGenerator/light_nusc.py); scenes=[names]: only these sequences are
@@ -119,7 +122,7 @@ class GtGenerator(NuScenesGT, Interface):
     `GtGenerator.gt_key(system)`, `GtGenerator.generate`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
     """
 
-    def __init__(self, dataroot, version, grid=None, ss=4, light=False, scenes=None, **options):
+    def __init__(self, dataroot, version, *, grid=None, ss=4, light=False, scenes=None, **options):
         dataroot = os.path.expanduser(dataroot)
         if light:
             from .light_nusc import light_nuscenes
@@ -132,6 +135,12 @@ class GtGenerator(NuScenesGT, Interface):
 
     def training_sample(self, sample_token, grid=None, ss=None):
         return super().training_sample(sample_token, grid or self.grid, ss or self.ss)
+
+    def store_signature(self):
+        """the folder name of the stored GT this generator makes: its own signature, or that of the older version whose GT it makes byte for byte (`same_gt_as` in
+        versions.csv). A cache name or a record carries this one, so that an edit that changes no GT invalidates no cache"""
+        from .versions import canonical
+        return canonical(self.signature())
 
     def scenes(self):
         return [s["name"] for s in self.nusc.scene]

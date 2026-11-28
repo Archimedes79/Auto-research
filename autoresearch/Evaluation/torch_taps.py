@@ -123,7 +123,7 @@ def count_ops(fn: Callable[[], Any], depth: int = 2) -> Dict[str, Any]:
     """Operations of ONE call of fn() (a forward pass on one frame), counted by torch's FlopCounterMode, in GMACs (a MAC is 2 FLOPs).
     It is exact for what torch can see - convolutions, matrix products (linear layers), attention - and blind to everything else:
     element-wise ops, norms, interpolation, grid_sample, scatter / splat, custom CUDA ops, numpy / numba code. The result says so in
-    `note`; add what is missing with `cost.with_estimate`. `parts` = GMACs per module, from the children of the root module down to
+    `note`; a Subject that knows the rest adds its own estimate and says so (`Subject.ops`). `parts` = GMACs per module, from the children of the root module down to
     `depth` levels below it (a nested module is also counted in its parent; operations outside every module are only in the total).
     Call it with the model in eval() mode: a forward pass in train mode updates the BatchNorm statistics.
     -> {"gmacs", "method": "measured", "note", "parts"}; use it from `Subject.ops`."""

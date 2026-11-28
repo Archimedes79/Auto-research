@@ -29,6 +29,11 @@ A module of the project, named in `<project>/evaluation/evaluation.json` as `{"a
 `Source.describe()` must give `gt_signature` and `evaluator_hash` (the hash of every file that shapes a number); without either nothing is
 scored. Its other keys say what the network is fed and are part of the identity of the predictions (not: class, set, ground truth, counts).
 
+An `evaluation.json` that is there must hold a json object; one that cannot be read is an error that names the file. Holdout: the splits of
+`problem.json` `holdout` stay closed (README, "What holds"); a reader of the problem's own asks `defaults.guard(split, <problem folder>)`.
+A step of the problem's own that reads a holdout split in a TEST run (`test_steps`), and a worker process started by spawn, hands the
+gate over first, as the evaluation step does: `defaults.set_holdout_gate(research.gates.test_refusal)`; no other function is taken.
+
 ## 2. The boxes (`contracts.py`)
 | box | methods |
 |---|---|

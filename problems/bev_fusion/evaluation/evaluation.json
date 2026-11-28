@@ -1,1 +1,1 @@
-{"adapter": "evaluation.bev_eval"}
+{"adapter": "bev_fusion.evaluation.bev_eval"}

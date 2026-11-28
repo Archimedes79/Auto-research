@@ -4,10 +4,10 @@ A scene is a disc that drifts through a 32 x 32 picture for a few frames. A raw 
 annotation of the disc (cx, cy, r), the scene name and the frame index. The manifest (dataset/manifest.json, a text record in git) names every shard with its
 split, size and sha256; the shards are derived data (<data root>/toy/raw/, not in git). The step `prepare` (gt/generate.py make) calls this first.
 
-    python dataset/make_data.py make --config F     write the shards that are missing and compare every one with the manifest
-    python dataset/make_data.py have --config F     exit 0: every shard of the manifest is there with its hash, 1: not
-    python dataset/make_data.py manifest            write the manifest from the recipe below (only after a change of the recipe)
-Exit codes: 0 done, 1 not there, 2 wrong arguments or another content than the manifest says (nothing is overwritten).
+    python -P -m toy.dataset.make_data make --config F     write the shards that are missing and compare every one with the manifest
+    python -P -m toy.dataset.make_data have --config F     exit 0: every shard of the manifest is there with its hash, 1: not
+    python -P -m toy.dataset.make_data manifest            write the manifest from the recipe below (only after a change of the recipe)
+By hand `python` is `python3 -m research py toy` (the problem's interpreter and module path). Exit codes: 0 done, 1 not there, 2 wrong arguments or another content than the manifest says (nothing is overwritten).
 """
 import argparse
 import hashlib
@@ -18,7 +18,7 @@ import sys
 
 import numpy as np
 
-from net.prep import shards as S
+from toy.net.prep import shards as S
 
 RECIPE = {"dataset": "toy-disc", "seed": 7, "size": 32, "frames_per_scene": 4, "noise": 0.7, "splits": {"train": {"shards": 16, "scenes": 10}, "val": {"shards": 4, "scenes": 10}}}
 

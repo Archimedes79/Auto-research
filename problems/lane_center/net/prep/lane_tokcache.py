@@ -373,7 +373,7 @@ def build(a, load_model, pair_geometry):
                 for name_, shp in _shapes(a.K, d_tok, d_f2).items():
                     np.lib.format.open_memmap(_path(out, name_), mode="w+", dtype=FIELDS[name_], shape=(n_all,) + shp).flush()
                 _atomic_json(os.path.join(out, "meta.json"), dict(run=a.run, run_sha=_sha(os.path.join(run, "model.pt")), split=split, K=a.K, f2=bool(a.f2), r=R_NEAR, cos=COS_NEAR, version=VERSION, lane_gt=sig,
-                                                                  table_version=LT.TABLE_VERSION, node_stage="mnms" if m.mnms else ("soft" if m.soft_nms else "plain"), kst=list(KST), types=list(TYPES),
+                                                                  table_version=LT.TABLE_VERSION, node_stage="mnms" if m.mnms else "plain", kst=list(KST), types=list(TYPES),
                                                                   type_priority="split > merge > stop > exit > boundary (start, end, win_in, win_out) > lane point",
                                                                   env=build_env()))                                                  # who built it: the live path's GPU parity rule (lane_live_tok) asks
                 fresh = False

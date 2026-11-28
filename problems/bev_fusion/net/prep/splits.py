@@ -1,17 +1,19 @@
 """The scene lists of the training splits (`../splits/<name>.json`) and what a run records of them. Standard library only.
 
-    python net/prep/splits.py resolve                  stdin: a config (json) -> stdout: the config with the lists of its "split" filled in
-                                                       (training/build_image_cache.py calls resolve(); the research core does not: base.json carries its lists)
-    python net/prep/splits.py names NAME               the scene names of a split, one per line (train, then val)
-    python net/prep/splits.py manifest RUN_DIR [--card RUN_JSON]
+    python -P -m bev_fusion.net.prep.splits resolve                  stdin: a config (json) -> stdout: the config with the lists of its "split" filled in
+                                                       (what the config readers do: net/chain.py read_raw)
+    python -P -m bev_fusion.net.prep.splits names NAME               the scene names of a split, one per line (train, then val)
+    python -P -m bev_fusion.net.prep.splits manifest RUN_DIR [--card RUN_JSON]
                                                        writes RUN_DIR/manifest.json: the split, GT, code and card of a run, read from the files it wrote
-    python net/prep/splits.py split-json RUN_DIR OUT_DIR
+    python -P -m bev_fusion.net.prep.splits split-json RUN_DIR OUT_DIR
                                                        writes OUT_DIR/split.json (the scene lists of the run, nulls and a note when it wrote no config.json)
 
-A config says `"split": "large"` instead of carrying 500 scene names. `resolve` replaces the key by `train_scenes` / `val_scenes` (and the comment key `_split`, which
-`train.read_config` ignores), so the config the trainer reads, and copies into `runs/<id>/config.json`, holds the exact lists: the run is pinned to them, not to the file.
-A config without `"split"` is returned as it is (old configs with inline lists keep working); `"split": null` drops the key and keeps whatever the config has; a split and inline
-lists together are refused (which one would win?). `train.py` itself does not know the key: a config with `split` that was not resolved stops there with "unknown key".
+A config says `"split": "large"` instead of carrying 500 scene names (the base config does). `resolve` replaces the key by `train_scenes` / `val_scenes` (and
+the comment key `_split`, which the config classes ignore); both config readers call it (net/chain.py read_raw), so the trainer and the evaluation see the exact
+lists, and the config the trainer copies into the run folder holds them.
+A config without `"split"` is returned as it is (stored configs with inline lists keep working); `"split": null` drops the key and keeps the lists the config
+has (without a list it is refused: the run would silently take the whole official split); a split and a non-empty list together are refused (which one would
+win?), empty lists next to a split are no lists.
 """
 import argparse
 import hashlib
@@ -49,7 +51,10 @@ def resolve(cfg, splits_dir=SPLITS):
         return cfg
     out = {k: v for k, v in cfg.items() if k != "split"}
     name = cfg["split"]
-    if name is None:                                                # "split": null = no split, the config keeps its own lists (e.g. a base with a split + a preset that brings a small set)
+    # "split": null = no split, the config keeps its own lists (e.g. a base with a split + a preset that brings a small set)
+    if name is None:
+        if not any(out.get(k) for k in LISTS):
+            raise ValueError("split null and no train_scenes / val_scenes: the run would take the whole official split; name a split or give the lists")
         return out
     if not isinstance(name, str):
         raise ValueError(f"split must be a split name (a string) or null, got {name!r}")
@@ -94,39 +99,35 @@ def _write(path, obj):
     os.replace(path + ".tmp", path)
 
 
-def _run_files(run_dir):
+def _run_files(run_dir, splits_dir=SPLITS):
     """(config, gt) of a run folder: the config the trainer ran with and gt.json ({} when the run has none)"""
     cfg = _read(os.path.join(run_dir, "config.json"))
     if cfg is None:
         raise ValueError(f"{run_dir}: no readable config.json")
-    return cfg, _read(os.path.join(run_dir, "gt.json")) or {}
+    return resolve(cfg, splits_dir), _read(os.path.join(run_dir, "gt.json")) or {}
 
 
 def manifest(run_dir, card=None, splits_dir=SPLITS):
-    """the minimal manifest of a run, from the files it wrote: config.json (the resolved config, so the lists), gt.json, code/SNAPSHOT.txt (commit and tag of a v1
-    run's code snapshot); `card` = the run's record (its run.json) adds hypothesis / prediction / rule, else null"""
-    cfg, gt = _run_files(run_dir)
+    """the minimal manifest of a run, from the files it wrote: config.json (the resolved config, so the lists) and gt.json; `card` = the run's record (its
+    run.json) adds hypothesis / prediction / rule, else null"""
+    cfg, gt = _run_files(run_dir, splits_dir)
     train, val = cfg.get("train_scenes") or [], cfg.get("val_scenes") or []
-    try:
-        with open(os.path.join(run_dir, "code", "SNAPSHOT.txt"), encoding="utf-8") as f:
-            m = re.match(r"commit (\w+).*?tag (\S+?)\)", f.read())
-    except OSError:
-        m = None
     rec = _read(card) if card else None
     return {"run": os.path.basename(os.path.normpath(run_dir)),
             "split": {"name": name_of(train, val, splits_dir), "train": {"n": len(train), "hash": list_hash(train)}, "val": {"n": len(val), "hash": list_hash(val)}},
             "gt": {"signature": gt.get("gt_signature"), "version": gt.get("gt_version")},
-            "code": {"commit": m.group(1) if m else None, "tag": m.group(2) if m and m.group(2) != "none" else None},
             "card": {k: rec.get(k) for k in ("hypothesis", "prediction", "rule")} if rec else None}
 
 
 def write_split_json(run_dir, out_dir, frames=None, splits_dir=SPLITS):
-    """OUT_DIR/split.json: the scene lists the run trained and validated on (from its config.json), the split name, the GT version and the official nuScenes split names;
-    `frames` = the keys of the evaluation frames when the caller has them (the evaluation card holds their count and hash only), else null. A run folder without config.json
-    (an older run that wrote none) gets nulls for the lists and the split and a `note`; a folder that does not exist is refused (ValueError). -> the path"""
+    """OUT_DIR/split.json: the scene lists the run trained and validated on (from its config.json), the split name, the GT version and the official nuScenes
+    split names; `frames` = the keys of the evaluation frames when the caller has them (the evaluation card holds their count and hash only), else null. A run
+    folder without config.json (an older run that wrote none) gets nulls for the lists and the split and a `note`; a folder that does not exist is refused
+    (ValueError). -> the path"""
     if not os.path.isdir(run_dir):
         raise ValueError(f"{run_dir}: no run folder")
     cfg = _read(os.path.join(run_dir, "config.json"))
+    cfg = resolve(cfg, splits_dir) if cfg is not None else None      # a config that names its split (a run that only imported a network)
     gt = _read(os.path.join(run_dir, "gt.json")) or {}
     train, val = (cfg.get("train_scenes") or [], cfg.get("val_scenes") or []) if cfg is not None else (None, None)
     cfg = cfg or {}
@@ -144,7 +145,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("resolve", help="stdin: a config (json) -> stdout: the config with the lists of its split")
-    p = sub.add_parser("names", help="the scene names of a split (train, then val), one per line: the format of gt_scenes.py names and GtGenerator --scenes-file")
+    p = sub.add_parser("names", help="the scene names of a split (train, then val), one per line: the format of GtGenerator --scenes-file")
     p.add_argument("split")
     p = sub.add_parser("manifest", help="write RUN_DIR/manifest.json")
     p.add_argument("run_dir")

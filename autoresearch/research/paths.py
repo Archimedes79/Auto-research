@@ -133,15 +133,31 @@ def expand(value: Any, problem: str) -> Any:
     return value
 
 
+def is_package(code_root: str, problem: str) -> bool:
+    """is the problem of this tree (the checkout or a snapshot) a package: does its folder hold an __init__.py?"""
+    return os.path.isfile(os.path.join(code_root, "problems", problem, "__init__.py"))
+
+
+def core_step(python: str, module: str, *args: str) -> list:
+    """the command of one of the core's own steps (research.evaluate, compute, anchor, draw) with a problem's interpreter: -P, so the
+    module path is the given roots only and the working folder, the problem folder, is not on it"""
+    return [interpreter(python), "-P", "-m", module, *args]
+
+
 def module_path(code_root: str, problem: str) -> str:
-    """PYTHONPATH of a process that runs a problem's code from `code_root` (the checkout or a snapshot): the problem folder, the folders its
-    problem.json lists under "pythonpath" (flat imports of older code), autoresearch/ and the root (GtGenerator)"""
+    """PYTHONPATH of a process that runs a problem's code from `code_root` (the checkout or a snapshot). A problem that is a package (its
+    folder holds an __init__.py) is imported as <problem>.<...>: the roots are problems/, autoresearch/ and the root (GtGenerator). A
+    snapshot of before the packages gets what it was written for: instead of problems/ the problem folder and the folders its problem.json
+    lists under "pythonpath" """
     pdir = os.path.join(code_root, "problems", problem)
+    shared = [os.path.join(code_root, "autoresearch"), code_root]
+    if is_package(code_root, problem):
+        return os.pathsep.join([os.path.join(code_root, "problems")] + shared)
     try:
         extra = read_json(os.path.join(pdir, "problem.json")).get("pythonpath", [])
     except (OSError, ValueError):
         extra = []
-    return os.pathsep.join([pdir] + [os.path.join(pdir, d) for d in extra] + [os.path.join(code_root, "autoresearch"), code_root])
+    return os.pathsep.join([pdir] + [os.path.join(pdir, d) for d in extra] + shared)
 
 
 DROP_ENV = ("BFLC_ROOT", "AR_PROJECT", "PYTHONHOME", "PYTHONSTARTUP", "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE")

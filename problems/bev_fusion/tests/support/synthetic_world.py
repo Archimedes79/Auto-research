@@ -1,4 +1,4 @@
-"""Synthetic world for the block tests of bev_fusion (plan.md section 10.1): one scene, all sensors and the GT consistent.
+"""Synthetic world for the block tests of bev_fusion: one scene, all sensors and the GT consistent.
 
 A scene is a set of static lane lines and boxes (centre, length, width, height, heading, velocity, class) in the ego
 frame (x forward, y left, z up), plus the ego speed v and yaw rate omega. From it:
@@ -8,16 +8,19 @@ frame (x forward, y left, z up), plus the ego speed v and yaw rate omega. From i
   road edges), position (vehicle frame), range, azimuth (sensor frame), Doppler = object ground velocity on the line
   of sight (ego-compensated, as nuScenes vx_comp / vy_comp), RCS by class, measurement noise
 - gt_bev(grid): layers (lane lines, vehicles, pedestrians) as coverage per cell, a velocity field per cell, a box id map
+- synthetic_gt(scene, grid): a ground-truth dict in the layout the dataset gives (GtGenerator's layers) from a scene; demo_scene(): the sample of the tests
 - step(dt): the same world dt later, in the new ego frame: objects moved by their velocity, everything transformed by
   the EXACT constant-turn-rate ego motion, headings and velocity vectors rotated into the new axes
-Run the self-test: python tests/support/synthetic_world.py   (from the bev_fusion folder)
+Tests: tests/test_synthetic_world.py
 """
-import os
 import math
 import random
 from dataclasses import dataclass, field, replace
 
+import numpy as np
 import torch
+
+from GtGenerator import DIST_MAX, cell_centres, occlusion
 
 CLASSES = {"car": (4.5, 1.8, 1.5, 10.0), "truck": (8.0, 2.5, 3.0, 20.0), "pedestrian": (0.6, 0.6, 1.8, -5.0)}  # L W H RCS
 
@@ -227,49 +230,55 @@ def gt_bev(scene, grid, ss=4):
     return {"lanes": lanes, "vehicles": veh, "pedestrians": ped, "velocity": vel, "box_id": bid}
 
 
-# ----------------------------------------------------------------------------------------------- self-test
-def _selftest():
-    import sys
-    sys.path.insert(0, "training")
-    sys.path[1:1] = [os.path.join("training", os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
-    from lift_pd import Grid
-    rng = random.Random(3)
-    sc = Scene([Box(20.0, 0.0, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0),
-                Box(35.0, -6.0, 4.5, 1.8, 1.5, math.pi / 2, 0.0, 5.0, "car", 10.0)], v=10.0, omega=0.2)
-    K, T, hw = front_camera()
-    img, depth, cls = camera(sc, K, T, hw)
-    # 1 the image centre column looks at the first box's rear face: depth = 20 - 2.25 - 1.5 (camera at x = 1.5)
-    h, w = hw
-    col = cls[:, w // 2]
-    rows = (col == 3).nonzero()
-    assert len(rows) > 0, "box visible in the centre column"
-    assert abs(depth[rows[len(rows) // 2, 0], w // 2].item() - (20 - 2.25 - 1.5)) < 1e-3, "box depth"
-    # 2 a road pixel: depth along the optical axis = analytic ground depth f h / (v - cy)
-    r = h - 5
-    assert cls[r, 10] == 1 and abs(depth[r, 10].item() - 560.0 * 1.5 / (r - (h - 1) / 2)) < 1e-3, "ground depth"
-    # 3 radar Doppler = object velocity on the line of sight; clutter Doppler 0
-    det = radar(sc, rng=rng, sigma_r=0.0, sigma_phi_deg=0.0)
-    for i in range(len(det["range"])):
-        k = det["box"][i].item()
-        x, y = det["xy"][i].tolist()
-        ux, uy = (x - 3.5) / math.hypot(x - 3.5, y), y / math.hypot(x - 3.5, y)
-        exp = 0.0 if k < 0 else sc.boxes[k].vx * ux + sc.boxes[k].vy * uy
-        assert abs(det["doppler"][i].item() - exp) < 1e-4, "Doppler"
-    assert (det["box"] >= 0).sum() > 0 and (det["box"] < 0).sum() > 0
-    # 4 step: a static lane point and a moving box follow the exact motion; velocity rotates with the frame
-    s1 = sc.step(0.5)
-    th = 0.2 * 0.5
-    assert abs(s1.boxes[0].heading + th) < 1e-12 and abs(math.hypot(s1.boxes[0].vx, s1.boxes[0].vy) - 8.0) < 1e-9
-    # 5 GT: the box footprint carries its velocity, the lane layer has the lines
-    g = gt_bev(sc, Grid())
-    assert g["vehicles"].sum() > 2 * 4.5 * 1.8 * 4 * 0.9 and torch.allclose(g["velocity"][0][g["box_id"] == 0], torch.tensor(8.0))
-    assert g["lanes"].sum() > 0
-    rs = random_scene(rng)
-    camera(rs, K, T, hw)
-    gt_bev(rs.step(1 / 12), Grid())
-    print("synthetic_world selftest ok: box and ground depth exact, Doppler = v . u, step with exact ego motion, GT "
-          "velocity field, random scenes")
+def demo_scene():
+    """the synthetic sample of the self-tests: one moving car, a parked car, a parked truck, a walking pedestrian"""
+    B_ = Box
+    return Scene([B_(20.0, -1.75, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0),
+                     B_(28.0, -5.5, 4.5, 1.8, 1.5, 0.0, 0.0, 0.0, "car", 10.0),
+                     B_(38.0, 3.5, 8.0, 2.5, 3.0, 0.05, 0.0, 0.0, "truck", 20.0),
+                     B_(15.0, 8.5, 0.6, 0.6, 1.8, math.pi / 2, 0.0, 1.2, "pedestrian", -5.0)],
+                    lanes=[-5.25, -1.75, 1.75, 5.25], v=10.0, omega=0.1)
 
 
-if __name__ == "__main__":
-    _selftest()
+def synthetic_gt(scene, grid):
+    """A GT dict in the gt_bev layout from a synthetic-world scene : road band = drivable
+    area, inner lines = lane dividers, outer lines = road dividers, lane centres = centre-lines, a walkway band, boxes;
+    camera fan +-50 deg from (1.5, 0), radar fan +-60 deg from (3.5, 0) up to 70 m; radar_stationary = parked boxes +
+    a 1 m band inside the drivable edge (the 8.4 proxy)."""
+    gx, gy = cell_centres(grid)
+    base = gt_bev(scene, grid)
+    x0, y0, yaw = scene.lane_pose
+    yl = -math.sin(yaw) * (gx - x0) + math.cos(yaw) * (gy - y0)
+    edge = max(abs(v) for v in scene.lanes) + 1.5
+    f32 = np.float32
+    g = {"drivable_area": (np.abs(yl) <= edge).astype(f32),
+         "walkway": ((np.abs(yl) > edge) & (np.abs(yl) <= edge + 3)).astype(f32)}
+    for k in ("ped_crossing", "stop_line", "carpark_area", "two_wheeler"):
+        g[k] = np.zeros(gx.shape, f32)
+    inner = [v for v in scene.lanes if abs(v) < 3]
+    outer = [v for v in scene.lanes if abs(v) >= 3]
+    for name, ys in (("lane_divider", inner), ("road_divider", outer)):
+        d = np.minimum(np.min([np.abs(yl - v) for v in ys], 0), DIST_MAX).astype(f32)
+        g[name + "_dist"], g[name] = d, (d <= grid.res / 2).astype(f32)
+    ls = sorted(scene.lanes)
+    cl = np.min([np.abs(yl - (a + b) / 2) for a, b in zip(ls[:-1], ls[1:])], 0) <= grid.res / 2
+    g["centreline"] = cl.astype(f32)
+    g["centreline_dir"] = np.stack([np.full(gx.shape, math.cos(yaw)), np.full(gx.shape, math.sin(yaw))]).astype(f32) * cl
+    g["vehicle"], g["pedestrian"] = base["vehicles"].numpy(), base["pedestrians"].numpy()
+    g["velocity"], g["instance"] = base["velocity"].numpy(), base["box_id"].numpy()
+    cam = (gx > 2.0) & (np.abs(np.arctan2(gy, gx - 1.5)) < math.radians(50))
+    rad = (np.hypot(gx - 3.5, gy) <= 70) & (np.abs(np.arctan2(gy, gx - 3.5)) <= math.radians(60))
+    fps = [np.array(b.corners()) for b in scene.boxes]
+    g["camera"], g["radar"] = cam.astype(f32), rad.astype(f32)
+    g["occluded"] = occlusion(gx, gy, (1.5, 0.0), fps).astype(f32)
+    g["undefined"] = (~cam & ~rad).astype(f32)
+    parked = np.zeros(gx.shape, bool)
+    for k, b in enumerate(scene.boxes):
+        if math.hypot(b.vx, b.vy) < 0.5:
+            parked |= g["instance"] == k
+    g["radar_stationary"] = (parked | ((np.abs(yl) <= edge) & (np.abs(yl) > edge - 1))).astype(f32)
+    g["meta"] = {"res": grid.res, "boxes": [
+        {"group": "pedestrian" if b.cls == "pedestrian" else "vehicle", "corners": fp,
+         "center": np.array([b.cx, b.cy, 0.0]), "size": [b.width, b.length, b.height], "yaw": b.heading,
+         "vel": np.array([b.vx, b.vy])} for b, fp in zip(scene.boxes, fps)]}
+    return g

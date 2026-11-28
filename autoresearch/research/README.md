@@ -29,7 +29,8 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 ## Upkeep
 | verb | what |
 |---|---|
-| `tests <p> [--only text]` | the problem's own tests (`problem.json` `tests`) with its interpreter and module path and, when it has `training/architecture.json`, the drawing against the code; after any change of the problem's code |
+| `tests <p> [--only text]` | the problem's own tests (`problem.json` `tests`: modules of its package, started with `-P -m`) with its interpreter and module path and, when it has `training/architecture.json`, the drawing against the code; after any change of the problem's code |
+| `py <p> [python arguments]` | python by hand as a test gets it: the problem's interpreter and the module path of the working tree, from any folder (`py toy -m toy.tests.test_toy --quick`), with `-P` when the problem is a package (one that is none yet starts without, so a script finds the modules next to it); a diagnostic, never a run |
 | `anchor <p> <run>` | a finished run's evaluation step run again with the working tree: do its numbers come out (`anchor_tolerance`)? It covers what that step runs: a problem that predicts in a step of its own (`lane_center`) re-scores the stored predictions, so a change of its network needs a new run |
 | `compare <p> <run> <run>` | two finished runs side by side: a diagnostic, never a verdict |
 | `clean <p>` | writes the run folders nothing needs any more to a list file in the run root, with a hash. The owner confirms that list with a decided row that names the hash; `clean <p> --delete <list> --decision D<n>` then deletes its runs, each checked again: finished, no live step, a verdict with no arm KEEP, INCONCLUSIVE, TIE or MEASURED, named by no card (`from`, `needs`, a `{runs}/<run>` setting), no champion or comparison seed |
@@ -44,7 +45,8 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 ## Files a problem writes
 | file | what |
 |---|---|
-| `problem.json` | name, tag prefix, python environment, base config, steps (a step that writes into a subfolder of the run folder names it, `dir`: its `log.jsonl` and `CONTROL` are there), default steps, score, guards, control floor, evaluation split and metrics, holdout, protected files, the module path of flat imports (`pythonpath`), its tests (`tests`). Schema: `spec.py`, `PROBLEM_KEYS` |
+| `problem.json` | name, tag prefix, python environment, base config, steps (a step that writes into a subfolder of the run folder names it, `dir`: its `log.jsonl` and `CONTROL` are there), default steps, score, guards, control floor, evaluation split and metrics, holdout, protected files, its tests (`tests`). Schema: `spec.py`, `PROBLEM_KEYS` |
+| `__init__.py`, empty, in the problem folder and every code folder | the problem is one package named like its folder: `from <problem>.net.model.net import DiscNet`; steps and tests are modules (`{python} -P -m <problem>.<module>`), nothing edits `sys.path`. Checked by `pkgcheck.py`, which the problem's own test calls. A problem that is no package yet (no `__init__.py`) keeps script paths and the key `pythonpath`; in a package that key is refused |
 | the base config | every setting an arm may change; has `name`, `seed`, `out_root` |
 | `training/train.py` (or other steps) | reads one composed config (json path as its argument), writes `log.jsonl` and checkpoints into its run folder; exit 0 done, 75 stopped (`trainkit` keeps this contract) |
 | `evaluation/adapter.py` + `evaluation/evaluation.json` | the `Evaluation` adapter: source, subject, task (metrics with additive counts, views); the core gives defaults for the rest (`Evaluation/defaults.py`) |
@@ -66,6 +68,14 @@ in a process with the problem's interpreter. Exit 0 done, 1 refused or failed (`
 - Callers of `new` in one checkout get different experiment numbers; two clones can still pick the same one.
 - A run executes its snapshot, never the working tree. A second `start` of the same experiment reuses its tag; more seeds: append them to
   the card's `seeds`, then `start`.
+- Code is linked per process, never installed: a step, a test and the judge's computation get the module path `paths.module_path` builds
+  from ONE tree (a run: its snapshot): `problems/`, `autoresearch/` and the top of the repository. The core's own steps (the evaluation,
+  the judge's computation, `anchor`, `compare`, report pictures) start python with `-P` (`paths.core_step`); a problem's steps start as
+  its `problem.json` writes them, which for a package is `-P -m` (`pkgcheck.py` refuses another form), and its tests and `research py`
+  get `-P` when it is a package. The evaluation step refuses when a module of the problem's package, `Evaluation`, `trainkit`,
+  `research` or `GtGenerator` was loaded from outside the snapshot: before it predicts, and again before it writes its record (what it
+  stored is then removed). `Evaluation` refuses an adapter that was imported from outside its project folder. An install of a problem
+  or of the core into the environment would make the working tree importable by every process; it is not done.
 - Only the worker of a registered run writes records: the evaluation step refuses to run outside a worker. `start` refuses uncommitted code
   of the problem and the core (records and `literature/` are not code).
 - Identity = code, config, weights, ground truth, data. Stored predictions are reused only under the same identity.

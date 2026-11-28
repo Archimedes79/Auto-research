@@ -87,7 +87,7 @@
 <text x="309.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">cached</text>
 <text x="309.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">nuscenes_dataset.py::Fr</text>
 </g>
-<g><title>pre_ego: net/prep/batches.py::gap_ego_motion; net/prep/batches.py::batch_ego; training/train.py::clip_step; net/prep/nuscenes_dataset.py::FrontRadarDataset</title><rect x="234" y="327.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<g><title>pre_ego: net/prep/batches.py::gap_ego_motion; net/prep/batches.py::batch_ego; net/prep/nuscenes_dataset.py::FrontRadarDataset; net/prep/batches.py::clip_step</title><rect x="234" y="327.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
 <text x="309.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ego steps,</text>
 <text x="309.0" y="356.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">calibration</text>
 <text x="309.0" y="371.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">(dt, v, omega), K, T</text>
@@ -103,16 +103,16 @@
 <text x="499.0" y="301.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">steps, gaps, flip</text>
 <text x="499.0" y="315.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">interface.py::check_inp</text>
 </g>
-<g><title>cam_enc: net/model/cached_model.py; net/model/lift_pd.py::LiftPD; net/model/model.py::BEVFusionModel.camera_bevs; net/model/model.py::BEVFusionModel.camera_visibility; net/model/blocks_new.py::ZSumReduce; net/model/student_encoder.py::StudentEncoder</title><rect x="614" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>cam_enc: net/model/cached_model.py; net/model/lift_pd.py::LiftPD; net/model/model.py::BEVFusionModel.camera_bevs; net/model/model.py::BEVFusionModel.camera_visibility; net/model/student_encoder.py::StudentEncoder</title><rect x="614" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="689.0" y="141.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Camera BEV encoder</text>
 <text x="689.0" y="156.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">lift + collapse;</text>
 <text x="689.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">student (option)</text>
-<text x="689.0" y="185.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">cached_model.py +5</text>
+<text x="689.0" y="185.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">cached_model.py +4</text>
 </g>
-<g><title>rad_enc: net/model/radar_bev.py::RadarBEV; net/model/radar_bev.py::rasterize; net/model/blocks_new.py::RadarPillars; net/model/radar_encoder.py::RadarEncoder</title><rect x="614" y="227.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>rad_enc: net/model/radar_bev.py::RadarBEV; net/model/radar_bev.py::rasterize; net/model/radar_encoder.py::RadarEncoder</title><rect x="614" y="227.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="689.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Radar BEV encoder</text>
 <text x="689.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">raster | delta slots</text>
-<text x="689.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">| pillars | off</text>
+<text x="689.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">| off</text>
 <text x="689.0" y="285.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">radar_bev.py::RadarBEV </text>
 </g>
 <g><title>temporal: net/model/temporal_fusion.py::TemporalFusion; net/model/temporal_fusion.py::recentre; net/model/splat.py::splat_window</title><rect x="804" y="127.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
@@ -121,16 +121,15 @@
 <text x="879.0" y="171.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">radar</text>
 <text x="879.0" y="185.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">temporal_fusion.py::Tem</text>
 </g>
-<g><title>fusion: net/model/fusion.py::ConcatFusion; net/model/fusion.py::GateFusion; net/model/fusion.py::drop_modality</title><rect x="994" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>fusion: net/model/fusion.py::ConcatFusion; net/model/fusion.py::drop_modality</title><rect x="994" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="1069.0" y="198.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Fusion</text>
-<text x="1069.0" y="213.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">concat | gate</text>
+<text x="1069.0" y="213.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">concat</text>
 <text x="1069.0" y="227.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">fusion.py::ConcatFusion</text>
 </g>
-<g><title>backbone: net/model/bev_trunk.py::BEVTrunk; net/model/blocks_new.py::SecondTrunk</title><rect x="1184" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
-<text x="1259.0" y="191.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEV backbone + neck</text>
-<text x="1259.0" y="206.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResNet + FPN |</text>
-<text x="1259.0" y="221.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">SECOND</text>
-<text x="1259.0" y="235.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::BEVTrunk </text>
+<g><title>backbone: net/model/bev_trunk.py::BEVTrunk</title><rect x="1184" y="127.0" width="150" height="162" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<text x="1259.0" y="198.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEV backbone + neck</text>
+<text x="1259.0" y="213.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">ResNet + FPN</text>
+<text x="1259.0" y="227.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::BEVTrunk</text>
 </g>
 <g><title>motion: net/model/timed_head.py::TimeMover; net/model/splat.py::splat_bev</title><rect x="1374" y="327.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="1449.0" y="348.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Time mover</text>
@@ -142,7 +141,7 @@
 <text x="1449.0" y="163.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">layers per dt</text>
 <text x="1449.0" y="177.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_trunk.py::SemanticH</text>
 </g>
-<g><title>obj_head: net/model/object_head.py::ObjectHead; net/model/object_head.py::BoxRefiner</title><rect x="1374" y="227.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
+<g><title>obj_head: net/model/object_head.py::ObjectHead</title><rect x="1374" y="227.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="1449.0" y="241.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Object head</text>
 <text x="1449.0" y="256.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">CenterPoint maps per</text>
 <text x="1449.0" y="271.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">dt</text>
@@ -175,25 +174,25 @@
 <text x="1829.0" y="363.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">metrics, prototype</text>
 <text x="1829.0" y="377.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">bev_adapter.py::predict</text>
 </g>
-<g><title>gt: ../../GtGenerator/; net/prep/gt_cache_build.py; training/gt_scenes.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>gt: ../../GtGenerator/; net/prep/gt_cache_build.py</title><rect x="234" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="309.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Ground truth</text>
 <text x="309.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">GtGenerator, cached</text>
-<text x="309.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">GtGenerator/ +2</text>
+<text x="309.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">GtGenerator/ +1</text>
 </g>
 <g><title>data: net/prep/feature_cache.py::CachedFrontRadarDataset; net/prep/batches.py::ClipDataset; net/prep/augment.py::flip_batch</title><rect x="424" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="499.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Datasets, caches</text>
 <text x="499.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">clips, mirror</text>
 <text x="499.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">feature_cache.py::Cache</text>
 </g>
-<g><title>trainer: training/build_image_cache.py; training/train.py::train; ../../autoresearch/trainkit/; training/freeze.py; net/model/model.py::check_config; net/prep/feature_cache.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>trainer: training/build_image_cache.py; training/train.py::train; ../../autoresearch/trainkit/; training/freeze.py; net/model/model.py::check_config; net/chain.py::build; net/chain.py::load_weights; net/chain.py::forward_loss; net/model/cached_model.py::CachedBEVFusionModel</title><rect x="804" y="527.0" width="340" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="974.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Trainer + trainkit</text>
 <text x="974.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">slot tables, check_config</text>
-<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">build_image_cache.py +5</text>
+<text x="974.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">build_image_cache.py +8</text>
 </g>
-<g><title>loss: net/loss/object_loss.py; net/loss/radar_loss.py; net/loss/motion_loss.py; net/prep/targets.py; net/loss/losses.py::BEVLoss; net/loss/loss_extras.py</title><rect x="1374" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
+<g><title>loss: net/loss/object_loss.py; net/loss/radar_loss.py; net/loss/motion_loss.py; net/prep/targets.py; net/loss/losses.py::BEVLoss; net/loss/loss_extras.py; net/loss/train_terms.py; net/loss/student_loss.py</title><rect x="1374" y="527.0" width="150" height="62" rx="7" fill="#f3e8ff" stroke="#7c3aed" stroke-width="1.4"/>
 <text x="1449.0" y="548.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Loss</text>
 <text x="1449.0" y="563.5" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">BEVLoss + Kendall</text>
-<text x="1449.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_loss.py +5</text>
+<text x="1449.0" y="577.5" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">object_loss.py +7</text>
 </g>
 <g><title>lane: net/model/lane_branch.py::LaneBranch</title><rect x="804" y="327.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="879.0" y="341.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Lane add-on (option)</text>
@@ -207,11 +206,11 @@
 <text x="1449.0" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">line map</text>
 <text x="1449.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">extract.py::dense_boxes</text>
 </g>
-<g><title>vis: net/prep/geometry.py; net/prep/precompute.py::Precompute; net/prep/precompute.py::radar_hits; net/prep/precompute.py::radar_static; net/prep/geometry.py::camera_visibility</title><rect x="234" y="427.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
+<g><title>vis: net/prep/geometry.py; net/prep/precompute.py::Precompute; net/prep/precompute.py::radar_hits; net/prep/geometry.py::camera_visibility</title><rect x="234" y="427.0" width="150" height="62" rx="7" fill="#e5e7eb" stroke="#6b7280" stroke-width="2.2"/>
 <text x="309.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Visibility maps</text>
 <text x="309.0" y="456.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">camera, radar fan,</text>
 <text x="309.0" y="471.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">fusion area</text>
-<text x="309.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">geometry.py +4</text>
+<text x="309.0" y="485.0" font-size="10" text-anchor="middle" fill="#475569" font-family="Consolas, Menlo, monospace">geometry.py +3</text>
 </g>
 <g><title>mblock: net/model/motion_block.py::MotionBlock; net/model/motion_block.py::block_inputs</title><rect x="804" y="427.0" width="150" height="62" rx="7" fill="#dbeafe" stroke="#2563eb" stroke-width="2.2"/>
 <text x="879.0" y="441.0" font-size="12.5" font-weight="600" text-anchor="middle" fill="#0f172a">Motion block M</text>

@@ -1,5 +1,5 @@
 """Known-answer tests of the comparison core (`comparison/maps.py`, `boxes.py`, `metrics.py`). Run with the tests of the evaluation
-(`python -m Evaluation selftest comparison`).
+(`python -m Evaluation.selftest comparison`).
 
 Every function is checked three ways: by a hand calculation, against an independent brute-force implementation written here in plain
 loops (no code shared with the core), and - for what the BEV system used before the core existed - against `_REF`, a frozen copy of

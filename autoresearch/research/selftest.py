@@ -4,7 +4,7 @@ this checkout and no machine state is touched).
     python -m research.selftest [--quick]        (from autoresearch/, with the interpreter that has torch; --quick: the parts only, seconds)
 
 The chain: new -> check -> start (snapshot, tag, workers) -> runs from the snapshot -> judge (verdict, ledger, commit) -> adopt (anchor) and the
-refusals: a card changed after its start, an adoption whose anchor test or commit fails or whose run folder is gone (base config and
+refusals: code from outside the snapshot (the working tree raises while the runs go; a second root on the module path), a card changed after its start, an adoption whose anchor test or commit fails or whose run folder is gone (base config and
 champions/ put back), an untrained control (INVALID), a kill rule (also on a later row, in a step's own folder), stop and resume, a
 registration without a DONE verdict, a holdout read (also with the variables of a TEST run but no log row), an evaluation by hand, an edit of
 a protected file or the state folder without and with a grant (also with a broken gates.py), clean (a list, then exactly it under the
@@ -14,6 +14,7 @@ from __future__ import annotations
 import glob
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -48,6 +49,11 @@ def parts(tmp: str) -> None:
     assert any("unknown key 'scroe'" in e for e in spec.problem_errors(bad, "toy"))
     stage = lambda d: dict(p, steps=dict(p["steps"], stage={"run": ["{python}", "x.py"], "dir": d}))      # noqa: E731
     assert spec.problem_errors(stage("stage1"), "toy") == [] and any("subfolder" in e for e in spec.problem_errors(stage("../x"), "toy"))
+    tests = lambda *t: spec.problem_errors(dict(p, tests=list(t)), "toy")                                           # noqa: E731
+    assert tests("toy.tests.test_toy --quick", "tests/test_toy.py") == [], "a test is a module of the problem, or a script of one that is no package yet"
+    assert len(tests("tests.test_toy", "toys.tests.test_toy", "../x.py", 3)) == 4
+    listed = dict(p, pythonpath=["net"])                             # the search path of a problem that is no package: refused in one that is
+    assert spec.problem_errors(listed, "toy") == [] and any("pythonpath" in e for e in spec.problem_errors(listed, "toy", packaged=True))
     base = json.load(open(os.path.join(REPO, "problems", "toy", "training", "configs", "base.json"), encoding="utf-8"))
     card = {"id": "E1", "title": "t", "question": "q", "hypothesis": "h", "prediction": 0.02, "control": "c", "seeds": [0, 1],
             "arms": {"c": {"set": {"width": 4}}, "a": {"set": {"widht": 8}}}}
@@ -199,6 +205,17 @@ def parts(tmp: str) -> None:
         finally:
             os.mkdir = mkdir
         assert made.endswith("E005_c") and sorted(os.listdir(experiments)) == [".E2.claim", "E001_a", "E003_b", "E004_other", "E005_c"], (made, os.listdir(experiments))
+        # research py: a problem that is no package starts without -P, so a script finds the module next to it (as its tests do); a
+        # package starts with -P, and the script's folder is not on the module path
+        sub = os.path.join(root, "problems", "x", "sub")
+        os.makedirs(sub)
+        open(os.path.join(sub, "sib.py"), "w").close()
+        with open(os.path.join(sub, "tool.py"), "w") as f:
+            f.write("import sys\ntry:\n    import sib\nexcept ImportError:\n    sys.exit(7)\n")
+        assert upkeep.py("x", [os.path.join(sub, "tool.py")]) == 0
+        open(os.path.join(root, "problems", "x", "__init__.py"), "w").close()
+        assert upkeep.py("x", [os.path.join(sub, "tool.py")]) == 7
+        os.remove(os.path.join(root, "problems", "x", "__init__.py"))
         # research tests: a test past its timeout is killed with everything it started
         with open(os.path.join(root, "problems", "x", "hang.py"), "w") as f:
             f.write("import subprocess, time\nopen('child.pid', 'w').write(str(subprocess.Popen(['sleep', '60']).pid))\ntime.sleep(60)\n")
@@ -239,13 +256,101 @@ def parts(tmp: str) -> None:
     gated = lambda **keys: [e for e in spec.problem_errors(dict(p, steps=dict(p["steps"], train=dict(p["steps"]["train"], **keys)))) if "gpu_mb" in e]   # noqa: E731
     assert gated(gpus=1, gpu_mb=6000) == [] and gated(gpu_mb=6000) and gated(gpus=1, gpu_mb=0) and gated(gpus=1, gpu_mb="6000")
     scored_by_the_snapshot(tmp, p, card)
+    packages(tmp)
     for tool, said in (("topic_table.py --selftest", "topic_table selftest passed"), ("code_digest.py selftest", "selftest ok")):
         name, *args = tool.split()
         r = subprocess.run([sys.executable, os.path.join(CORE, "literature", name), *args], capture_output=True, text=True, timeout=300)
         assert r.returncode == 0 and said in r.stdout, (tool, r.stdout[-1500:], r.stderr[-1500:])
     say("parts: schemas and typos, compose, run ids, the standard rule, the control check, kill rules, a needed run, decisions, the TEST log, "
         "protected paths, stream names, a step's environment, the references clean keeps, experiment numbers, a test past its timeout, a GPU "
-        "slot's device, the snapshot's card, the literature tools' own tests")
+        "slot's device, the snapshot's card, the module path of a package and of a problem that is none yet, the style check of a package "
+        "(every planted violation found), the literature tools' own tests")
+
+
+def packages(tmp: str) -> None:
+    """the module path of a problem (a package: the three roots; one that is none yet: the list of before, element for element), and the
+    style check of a package: a clean one passes, every planted violation is found and nothing else, what is loaded twice is named"""
+    from research import pkgcheck
+    from research.paths import module_path
+    root = os.path.join(tmp, "repo_p")
+    old, pk = os.path.join(root, "problems", "old"), os.path.join(root, "problems", "pk")
+    os.makedirs(old)
+    shared, join = [os.path.join(root, "autoresearch"), root], os.pathsep.join
+    assert module_path(root, "old") == join([old] + shared), "no problem.json: the problem folder, autoresearch/, the root"
+    json.dump({"pythonpath": ["net", "net/prep"]}, open(os.path.join(old, "problem.json"), "w"))
+    assert module_path(root, "old") == join([old, os.path.join(old, "net"), os.path.join(old, "net/prep")] + shared), "no package: the list of before"
+    open(os.path.join(old, "__init__.py"), "w").close()
+    assert module_path(root, "old") == join([os.path.join(root, "problems")] + shared), "a package: problems/ instead, whatever problem.json lists"
+    good = {"steps": {"train": {"run": ["{python}", "-P", "-m", "pk.a.m", "{config}"]}, "evaluate": {"run": "evaluate"}}, "tests": ["pk.a.n --quick"]}
+    clean = {"__init__.py": "", "a/__init__.py": "", "a/n.py": "import json\n\nimport pk.a.m\nfrom pk.a import m\nfrom pk.a.m import X\n",
+             "a/m.py": '"""PYTHONPATH in a docstring is prose"""\nimport os\n\nX = 1\n\n\ndef go():\n    os.chdir("/")\n\n\nif __name__ == "__main__":\n    os.chdir("/")\n',
+             "experiments/E001_a/judge.py": "import sys\nsys.path.insert(0, 'x')\n", "temp/scratch.py": "import m\n", "problem.json": good}
+
+    def package(**changed) -> str:
+        shutil.rmtree(pk, ignore_errors=True)
+        for rel_, text in {**clean, **changed}.items():
+            os.makedirs(os.path.dirname(os.path.join(pk, rel_)), exist_ok=True)
+            with open(os.path.join(pk, rel_), "w", encoding="utf-8") as f:
+                f.write(text if isinstance(text, str) else json.dumps(text))
+        return pk
+
+    assert pkgcheck.check(package()) == [], pkgcheck.check(pk)
+    assert pkgcheck.imports(pk) == {"a/m.py": [], "a/n.py": ["pk.a.m"]}, pkgcheck.imports(pk)
+    n = "a/n.py"
+    planted = [(n, "import m\n", "is flat"), (n, "from a.m import X\n", "from the problem folder"), (n, "from . import m\n", "is relative"),
+               (n, "from problems.pk.a import m\n", "through the repository"), (n, "import autoresearch.Evaluation\n", "through the repository"),
+               (n, "from old.a import m\n", "another problem's package"), (n, "from pk.b import x\n", "no such module"),
+               (n, "import sys\nsys.path.insert(0, 'x')\n", "sys.path"), (n, "import site\nsite.addsitedir('x')\n", "addsitedir"),
+               (n, "import os\nROOT = os.environ['BFLC_ROOT']\n", "BFLC_ROOT"), (n, "import os\nenv = dict(os.environ, PYTHONPATH='x')\n", "PYTHONPATH"),
+               (n, "import importlib.util\nspec = importlib.util.spec_from_file_location('m', 'p')\n", "spec_from_file_location"),
+               (n, "import runpy\n\n\ndef go():\n    runpy.run_path('p')\n", "run_path"), (n, "import imp\n", "the module imp"),
+               (n, "import sys as s\ns.path.insert(0, 'x')\n", ": sys.path:"), (n, "import os\nos.sys.path.insert(0, 'x')\n", "os.sys.path"),
+               (n, "from sys import path\npath.insert(0, 'x')\n", ": sys.path:"), (n, "import runpy as r\n\n\ndef go():\n    r.run_path('p')\n", "runpy.run_path"),
+               (n, "from importlib.machinery import SourceFileLoader\nm = SourceFileLoader('m', 'p')\n", "SourceFileLoader"),
+               (n, "import pk\npk.__path__.append('x')\n", "pk.__path__"), (n, "CMD = 'PYTHONPATH=x python t.py'\n", "PYTHONPATH"),
+               (n, "import importlib\nm = importlib.import_module('a.m')\n", "import of a.m is from the problem folder"),
+               (n, "from os import chdir\nchdir('/')\n", "os.chdir at import time"), (n, "from pk.a import nope\n", "import of pk.a is no such module"),
+               ("a/json.py", "X = 1\n", "import of json is flat"),              # a module of the tree named like one of the standard library
+               (n, "import os\nos.chdir('/')\n", "os.chdir at import time"), ("a/b/c.py", "X = 1\n", "a/b/: modules and no __init__.py"),
+               ("a/__init__.py", "X = 1\n", "a/__init__.py: not empty"), ("problem.json", dict(good, pythonpath=["a"]), "pythonpath"),
+               ("problem.json", dict(good, steps={"train": {"run": ["{python}", "a/m.py", "{config}"]}}), "steps.train"),
+               ("problem.json", dict(good, steps={"train": {"run": ["{python}", "-m", "pk.a.m"]}}), "steps.train"),
+               ("problem.json", dict(good, tests=["a/n.py --quick"]), "tests: 'a/n.py --quick'")]
+    for rel_, text, want in planted:
+        found = pkgcheck.check(package(**{rel_: text}))
+        assert len(found) == 1 and want in found[0], (rel_, text, want, found)
+    passes = ("import sys\nsys.path.insert(0, 'x')  # path work: the clone of a foreign code base\n",       # a marked line may
+              "HELP = 'PYTHONPATH is what research gives'\n",                                               # a text that only mentions the name
+              "import numpy.m\nfrom m.zoo import x\n")                                                      # another package's m: no module of this tree
+    for text in passes:
+        assert pkgcheck.check(package(**{n: text})) == [], (text, pkgcheck.check(pk))
+    # the core's own steps start with -P: a folder `research` in the working folder does not take the place of the core's, and every one
+    # of them is built by paths.core_step
+    from research import paths
+    for place, said in (("shadow", "SHADOW"), ("real", "REAL")):
+        os.makedirs(os.path.join(tmp, place, "research"))
+        open(os.path.join(tmp, place, "research", "__init__.py"), "w").close()
+        with open(os.path.join(tmp, place, "research", "probe.py"), "w") as f:
+            f.write(f"print({said!r})\n")
+    saved = os.environ.get("RESEARCH_MACHINE")
+    os.environ["RESEARCH_MACHINE"] = os.path.join(tmp, "machine_p", "machine.json")
+    try:
+        step = paths.core_step("gcar", "research.probe")
+    finally:
+        os.environ.pop("RESEARCH_MACHINE") if saved is None else os.environ.update(RESEARCH_MACHINE=saved)
+    started = lambda cmd: subprocess.run(cmd, cwd=os.path.join(tmp, "shadow"), env=dict(os.environ, PYTHONPATH=os.path.join(tmp, "real")),        # noqa: E731
+                                         capture_output=True, text=True).stdout.strip()
+    assert started(step) == "REAL" and started([w for w in step if w != "-P"]) == "SHADOW", (step, started(step))
+    for module in ("worker", "judge", "upkeep", "report"):
+        source = open(os.path.join(CORE, "research", f"{module}.py"), encoding="utf-8").read()
+        assert "core_step(" in source and '"-m", "research.' not in source, f"research/{module}.py starts a step of the core without paths.core_step"
+    # what is loaded: every module once and under its package's name; a module reached from the problem folder as well is named
+    loaded = lambda first, *roots: subprocess.run(                                                                   # noqa: E731
+        [sys.executable, "-P", "-c", f"{first}; from research import pkgcheck; print(pkgcheck.identity_errors({package()!r}))"],
+        env=dict(os.environ, PYTHONPATH=join([*roots, os.path.join(root, "problems"), CORE])), capture_output=True, text=True, check=True).stdout.strip()
+    assert loaded("pass") == "[]", loaded("pass")
+    twice = loaded("import a.m", pk)
+    assert "is loaded as a.m, not as pk.<...>" in twice and "is loaded as a.m and pk.a.m" in twice, twice
 
 
 def scored_by_the_snapshot(tmp: str, p: dict, card: dict) -> None:
@@ -271,19 +376,48 @@ def scored_by_the_snapshot(tmp: str, p: dict, card: dict) -> None:
     saved, here, real = dict(os.environ), os.getcwd(), sys.modules.get("Evaluation")
     sys.modules["Evaluation"] = type(sys)("Evaluation")
     sys.modules["Evaluation"].Evaluation = Probe
-    try:
-        os.environ.update(RESEARCH_RECORD=record, RESEARCH_RUN="E1.a_s0", RESEARCH_RUN_DIR=os.path.join(tmp, "snapshot"))
-        os.chdir(os.path.join(tmp, "snapshot"))
-        evaluate.main("toy", "E1.a_s0")
-    except Asked as asked:
-        assert str(asked) == "train", asked
-    else:
-        raise AssertionError("the evaluation step did not ask for frames")
+    run_dir, elsewhere = os.path.join(tmp, "snapshot"), os.path.join(tmp, "elsewhere", "trainkit", "late.py")
+    kept = [os.path.join(run_dir, "eval", *d.split("/")) for d in ("suite/quant/other", "results/other")]
+
+    class Late(Probe):
+        """an evaluation that stores predictions and counts and, while it runs, loads a module of a shared package from another tree"""
+        ad = type("Adapter", (), {"out": staticmethod(lambda net: os.path.join(net, "eval"))})
+
+        def resolve(self, net):
+            return net
+
+        def run(self, out, frames, **k):
+            for d in ("suite/quant/e1", "suite/quant/other", "results/r1", "results/other"):
+                os.makedirs(os.path.join(out, "eval", *d.split("/")))
+            sys.modules["trainkit.late"] = type(sys)("trainkit.late")
+            sys.modules["trainkit.late"].__file__ = elsewhere
+            return {"id": "snapshot@e1", "results": "snapshot@r1"}
+
+    try:                                                         # RESEARCH_CODE: this checkout, which the core of this process is loaded from
+        os.environ.update(RESEARCH_RECORD=record, RESEARCH_RUN="E1.a_s0", RESEARCH_RUN_DIR=run_dir, RESEARCH_CODE=REPO)
+        os.chdir(run_dir)
+        try:
+            evaluate.main("toy", "E1.a_s0")
+            raise AssertionError("the evaluation step did not ask for frames")
+        except Asked as asked:
+            assert str(asked) == "train", asked
+        # a module from outside the snapshot that the evaluation itself loaded: no record, and what it stored is removed (a resumed run
+        # would reuse it under the snapshot's identity); the stores of other evaluations of the run stay
+        sys.modules["Evaluation"].Evaluation = Late
+        said = expect_error(evaluate.main, "the run imported code outside its snapshot", "toy", "E1.a_s0")
+        assert elsewhere in said and os.listdir(record) == [] and all(os.path.isdir(d) for d in kept), (said, os.listdir(record))
+        assert sorted(os.listdir(os.path.join(run_dir, "eval", "results")) + os.listdir(os.path.join(run_dir, "eval", "suite", "quant"))) == ["other", "other"]
+        # the guard names the problem's own package and the shared ones, by their files; a module below the snapshot and other names pass
+        for name, file in (("toy.leak", "/elsewhere/problems/toy/leak.py"), ("toy.fine", os.path.join(REPO, "problems", "toy", "fine.py")), ("toyish", "/elsewhere/toyish.py")):
+            sys.modules[name] = type(sys)(name)
+            sys.modules[name].__file__ = file
+        assert evaluate.outside_snapshot(REPO, "toy") == ["/elsewhere/problems/toy/leak.py", elsewhere], evaluate.outside_snapshot(REPO, "toy")
     finally:
         os.chdir(here)
         os.environ.clear()
         os.environ.update(saved)
-        sys.modules.pop("Evaluation")
+        for name in ("Evaluation", "trainkit.late", "toy.leak", "toy.fine", "toyish"):
+            sys.modules.pop(name, None)
         if real is not None:
             sys.modules["Evaluation"] = real
 
@@ -315,22 +449,24 @@ def research(args, env, ok=(0,)):
 
 STAGE_PROBE = '''"""selftest: a step that writes its log into <run>/stage1 (problem.json step "dir") and stops when CONTROL appears there"""
 import json, os, sys, time
-d = os.path.join(sys.argv[1], "stage1")
-os.makedirs(d, exist_ok=True)
-with open(os.path.join(d, "log.jsonl"), "w") as f:
-    f.write("".join(json.dumps(r) + "\\n" for r in ({"step": 10, "total": 0.1}, [1, 2], {"step": 15, "total": "n/a"}, {"step": 20, "total": 0.9})))
-end = time.time() + 60
-while time.time() < end:
-    if os.path.exists(os.path.join(d, "CONTROL")):
-        sys.exit(75)
-    time.sleep(0.2)
+if __name__ == "__main__":
+    d = os.path.join(sys.argv[1], "stage1")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "log.jsonl"), "w") as f:
+        f.write("".join(json.dumps(r) + "\\n" for r in ({"step": 10, "total": 0.1}, [1, 2], {"step": 15, "total": "n/a"}, {"step": 20, "total": 0.9})))
+    end = time.time() + 60
+    while time.time() < end:
+        if os.path.exists(os.path.join(d, "CONTROL")):
+            sys.exit(75)
+        time.sleep(0.2)
 '''
 
 
 DEVICE_PROBE = '''"""selftest: a GPU step that writes which devices it was shown into a file of its run folder"""
 import os, sys
-with open(os.path.join(sys.argv[1], sys.argv[2]), "w") as f:
-    f.write(os.environ.get("CUDA_VISIBLE_DEVICES", ""))
+if __name__ == "__main__":
+    with open(os.path.join(sys.argv[1], sys.argv[2]), "w") as f:
+        f.write(os.environ.get("CUDA_VISIBLE_DEVICES", ""))
 '''
 
 
@@ -342,9 +478,10 @@ def make_repo(tmp: str) -> str:
     toy = os.path.join(root, "problems", "toy")
     shutil.copytree(os.path.join(REPO, "problems", "toy"), toy, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
     prob = json.load(open(os.path.join(toy, "problem.json"), encoding="utf-8"))
-    prob["steps"]["stage"] = {"run": ["{python}", "stage_probe.py", "{run_dir}"], "dir": "stage1", "note": "selftest: a step with its own folder"}
+    module = ["{python}", "-P", "-m"]                             # the probes are modules of the toy, started as its own steps are
+    prob["steps"]["stage"] = {"run": [*module, "toy.stage_probe", "{run_dir}"], "dir": "stage1", "note": "selftest: a step with its own folder"}
     for name, gpus in (("one", 1), ("all", 2)):
-        prob["steps"][name] = {"run": ["{python}", "device_probe.py", "{run_dir}", f"{name}.txt"], "gpus": gpus, "note": "selftest: a GPU step"}
+        prob["steps"][name] = {"run": [*module, "toy.device_probe", "{run_dir}", f"{name}.txt"], "gpus": gpus, "note": "selftest: a GPU step"}
     prob["steps"]["one"]["gpu_mb"] = 1                           # selftest: the step asks for free GPU memory before it starts
     json.dump(prob, open(os.path.join(toy, "problem.json"), "w", encoding="utf-8"), indent=1)
     for name, text in (("stage_probe.py", STAGE_PROBE), ("device_probe.py", DEVICE_PROBE)):
@@ -441,11 +578,14 @@ def chain(tmp: str) -> None:
     assert sorted(started["started"]) == ["E1.a_s0", "E1.a_s1", "E1.c_s0", "E1.c_s1"] and started["tag"] == "toy/E1", started
     snap = subprocess.run(["git", "rev-parse", "toy/E1^{commit}"], cwd=root, capture_output=True, text=True).stdout.strip()
     assert snap and subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True, text=True).stdout.strip() != snap
+    # from here until after the judge the checkout's network module raises (uncommitted): neither the runs nor the judge's computation import it
+    open(net_py, "a", encoding="utf-8").write("raise RuntimeError('the working tree was imported')\n")
     st = wait(root, e1, started["started"])
     assert set(st.values()) == {"ok"}, (st, run_trace(tmp, root, e1, "E1.c_s0"))
-    res = json.load(open(os.path.join(root, e1, "runs", "E1.a_s0", "result.json")))
+    rec_a0 = os.path.join(root, e1, "runs", "E1.a_s0", "result.json")
+    res = json.load(open(rec_a0))
     assert res["identity"]["commit"] == snap and res["split"] == "val" and res["frames"] == 160 and "seg.iou" in res["numbers"], res
-    say(f"start: one snapshot {started['tag']}, four runs from it, results (E1.a_s0 IoU {res['score']['value']:.3f})")
+    say(f"start: one snapshot {started['tag']}, four runs from it while the working tree's network raises, results (E1.a_s0 IoU {res['score']['value']:.3f})")
     # a second start of the same experiment starts nothing and keeps the tag
     again = json.loads(research(["start", "toy", "E1"], env).stdout)
     assert again["started"] == [] and len(again["skipped"]) == 4 and again["commit"] == snap[:12]
@@ -464,6 +604,11 @@ def chain(tmp: str) -> None:
     assert "verdict" in log and "problems/toy/ledger.csv" in log and "verdict.json" in log, log
     assert json.loads(research(["index", "toy", "--check"], env).stdout)["current"]
     say(f"judge: {arm['verdict']} (gain {arm['gain']:+.3f} [{arm['interval'][0]:+.3f}, {arm['interval'][1]:+.3f}]), verdict.json, ledger, one commit")
+    open(net_py, "w", encoding="utf-8").write(keep)                  # the working tree is whole again
+    foreign_code(tmp, root, env, snap, rec_a0)
+    code = os.path.join(tmp, "runs", "toy", "_code", snap[:12])
+    toy_code, run_a0 = os.path.join(code, "problems", "toy"), os.path.join(tmp, "runs", "toy", "E1.a_s0")
+    from research.paths import module_path
     # adopt (by hand when it was no KEEP): the anchor evaluates again with the working tree's code and must agree bit for bit; an anchor test
     # that dies (here: a record is missing) puts the base config back
     by_hand = [] if arm["verdict"] == "KEEP" else ["--by-hand", "the selftest adopts whatever won"]
@@ -479,7 +624,6 @@ def chain(tmp: str) -> None:
         assert "does not come out of the records" in refused and open(base_json, encoding="utf-8").read() == before, refused[-2000:]
         open(verdict_json, "w", encoding="utf-8").write(judged)
     anyway = ["--by-hand", "the selftest looks at what comes after the verdict"]     # a KEEP would be judged again first
-    rec_a0 = os.path.join(root, e1, "runs", "E1.a_s0", "result.json")
     os.replace(rec_a0, rec_a0 + ".away")
     died = research(["adopt", "toy", "E1", "a", "--decision", "D1", *anyway], env, ok=(1,))
     os.replace(rec_a0 + ".away", rec_a0)
@@ -541,25 +685,53 @@ def chain(tmp: str) -> None:
     assert "no DONE verdict" in research(["register", "toy", "E4", "m", "--decision", "D1", "--role", "comparison"], env, ok=(1,)).stderr
     say("stop (exit 75, status stopped) and resume (the finished steps skipped, the training continued) to the end; a measurement")
     # holdout, an evaluation by hand, TEST without a log row
-    hand = sh([sys.executable, "-m", "research.evaluate", "toy", "E1.a_s0"], os.path.join(root, "problems", "toy"), dict(env, PYTHONPATH=os.pathsep.join([os.path.join(root, "problems", "toy"), core])), ok=(1,))
+    hand = sh([sys.executable, "-m", "research.evaluate", "toy", "E1.a_s0"], os.path.join(root, "problems", "toy"), dict(env, PYTHONPATH=module_path(root, "toy")), ok=(1,))
     assert "inside a worker" in hand.stderr
     assert "TEST refused" in research(["test", "toy", "E1.a_s0"], env, ok=(1,)).stderr
-    code = os.path.join(tmp, "runs", "toy", "_code", snap[:12])
-    probe = ("import os,sys; from Evaluation import Evaluation\n"
-             "try:\n    Evaluation(project=os.getcwd()).run(sys.argv[1], 'test', metrics=('seg',), device='cpu')\n"
-             "except Exception as e:\n    print('REFUSED', e); sys.exit(0)\nsys.exit(1)\n")
-    penv = dict(env, PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", "toy"), os.path.join(code, "autoresearch")]), RESEARCH_RUNS=os.path.join(tmp, "runs", "toy"))
-    read_test = lambda e: sh([sys.executable, "-c", probe, os.path.join(tmp, "runs", "toy", "E1.a_s0")], os.path.join(code, "problems", "toy"), e).stdout  # noqa: E731
+    read = ("    Evaluation(project=os.getcwd()).run(sys.argv[1], 'test', metrics=('seg',), device='cpu')\n"
+            "except Exception as e:\n    print('REFUSED', e); sys.exit(0)\nsys.exit(1)\n")
+    guarded = "    try:\n        defaults.guard('test', os.getcwd())\n        print('GUARD OPEN', what)\n    except PermissionError:\n        print('GUARD CLOSED', what)\n"
+    own_yes = ("import functools, os, sys; from Evaluation import defaults; from research import gates\n"          # a yes of the script's own, dressed as the gate
+               "def forged(problem, run): return ''\n"
+               "forged.__module__, forged.__name__, forged.__qualname__ = 'research.gates', 'test_refusal', 'test_refusal'\n"
+               "class Yes:\n    __module__ = 'research.gates'\n    def __init__(self): self.__name__ = 'test_refusal'\n    def __call__(self, problem, run): return ''\n"
+               "for what, gate in (('lambda', lambda problem, run: ''), ('forged', forged), ('wraps', functools.wraps(gates.test_refusal)(lambda problem, run: '')), ('object', Yes())):\n"
+               "    try:\n        defaults.set_holdout_gate(gate)\n    except PermissionError as e:\n        print('NOT TAKEN', what, e)\n" + guarded)
+    probes = {"alone": "import os,sys; from Evaluation import Evaluation\ntry:\n" + read,                         # a problem's own script
+              "own yes": own_yes,
+              "handed": "import os,sys; from Evaluation import Evaluation, defaults; from research import gates\ndefaults.set_holdout_gate(gates.test_refusal)\n"
+                        "for what in ('handed',):\n" + guarded + "try:\n" + read}
+    penv = dict(env, PYTHONPATH=module_path(code, "toy"), RESEARCH_RUNS=os.path.join(tmp, "runs", "toy"))
+    read_test = lambda e, how="alone": sh([sys.executable, "-c", probes[how], run_a0], toy_code, e).stdout  # noqa: E731
     assert "is a holdout split" in read_test(penv)
     as_test = dict(penv, RESEARCH_REPO=root, RESEARCH_PROBLEM="toy", RESEARCH_RUN="E1.a_s0", RESEARCH_HOLDOUT_RUN="E1.a_s0")      # set by hand
-    assert "is a holdout split" in read_test(as_test), "the variables of a TEST run without a row of the TEST log"
+    for how in ("alone", "handed"):
+        assert "is a holdout split" in read_test(as_test, how), f"the variables of a TEST run without a row of the TEST log ({how})"
+    assert "GUARD CLOSED handed" in read_test(as_test, "handed")
+    step_env = dict(as_test, RESEARCH_RECORD=os.path.dirname(rec_a0), RESEARCH_RUN_DIR=run_a0, RESEARCH_CODE=code)
+    step = lambda: sh([sys.executable, "-P", "-m", "research.evaluate", "toy", "E1.a_s0", "--test"], toy_code, step_env, ok=(1,)).stderr  # noqa: E731
+    assert "TEST refused" in step()
     test_log = os.path.join(root, "problems", "toy", "TEST_LOG.md")
     keep_log = open(test_log, encoding="utf-8").read()
     open(test_log, "a", encoding="utf-8").write("| 2026-11-27 | E1.a_s0 | D1 | selftest |\n")
-    opened = read_test(as_test)
-    open(test_log, "w", encoding="utf-8").write(keep_log)
-    assert "REFUSED" in opened and "is a holdout split" not in opened, opened         # the gate opens; the toy has no test shard to read
-    say("refused: an evaluation step by hand, TEST without a log row, a holdout read outside a TEST run or without a row of the TEST log")
+    try:
+        with_row = {how: read_test(as_test, how) for how in probes}
+        no_run = read_test({k: v for k, v in as_test.items() if k != "RESEARCH_HOLDOUT_RUN"}, "handed")
+        in_step = step()
+    finally:
+        open(test_log, "w", encoding="utf-8").write(keep_log)
+    assert "is a holdout split" in with_row["alone"], "the row opens nothing for a process that was not handed the gate of the research core"
+    assert "is a holdout split" in no_run and "GUARD CLOSED" in no_run, "the gate and the row open nothing outside a run of research test"
+    for what in ("lambda", "forged", "wraps", "object"):                                                        # the row is there: only the gate is the script's own
+        assert f"NOT TAKEN {what} the holdout gate is research.gates.test_refusal" in with_row["own yes"] and f"GUARD CLOSED {what}" in with_row["own yes"], (what, with_row["own yes"])
+    assert "GUARD OPEN" not in with_row["own yes"] + with_row["alone"] + no_run
+    # the real gate opens: the guard lets the split through and the read goes on to the toy's own answer (its manifest has no test shard)
+    assert "GUARD OPEN handed" in with_row["handed"] and "REFUSED set 'test': not one of" in with_row["handed"], with_row["handed"]
+    assert "the holdout gate is" not in with_row["handed"] and "is a holdout split" not in with_row["handed"], with_row["handed"]
+    assert "set 'test': not one of" in in_step and not any(t in in_step for t in ("TEST refused", "is a holdout split", "the holdout gate is")), in_step   # the step hands the gate over itself
+    assert not os.path.exists(os.path.join(root, e1, "runs", "E1.a_s0", "test.json"))
+    say("refused: an evaluation step by hand, TEST without a log row, a holdout read outside a TEST run, without the gate of the research core, with a gate of "
+        "its own, or without a row of the TEST log; with all three the evaluation step opens it")
     # the hook: a protected file without and with a grant
     hook = os.path.join(core, "research", "hook.py")
     ev = {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(root, "problems", "toy", "problem.json")}, "cwd": root}
@@ -601,7 +773,7 @@ def chain(tmp: str) -> None:
     st = research(["status", "toy"], env).stdout
     assert "E1.a_s0" in st and "E4.m_s0" in st
     tr = json.loads(research(["tests", "toy"], env).stdout)
-    assert tr["passed"] and [t["test"] for t in tr["tests"]] == ["tests/test_toy.py --quick", "archdraw check training/architecture.json"], tr
+    assert tr["passed"] and [t["test"] for t in tr["tests"]] == ["toy.tests.test_toy --quick", "archdraw check training/architecture.json"], tr
     drawing = os.path.join(root, "problems", "toy", "training", "architecture.svg")
     keep_svg = open(drawing, encoding="utf-8").read()
     open(drawing, "a", encoding="utf-8").write("<!-- edited by hand -->\n")
@@ -690,6 +862,58 @@ def chain(tmp: str) -> None:
     push_check(tmp, root, env)
 
 
+def foreign_code(tmp: str, root: str, env: dict, snap: str, rec_a0: str) -> None:
+    """hard rule 3 around a finished run: code of another tree on the module path of a step, of a hand-started python and of an Evaluation"""
+    from research.paths import module_path
+    core, code = os.path.join(root, "autoresearch"), os.path.join(tmp, "runs", "toy", "_code", snap[:12])
+    toy_code, run_a0 = os.path.join(code, "problems", "toy"), os.path.join(tmp, "runs", "toy", "E1.a_s0")
+    as_step = dict(env, RESEARCH_REPO=root, RESEARCH_PROBLEM="toy", RESEARCH_RUN="E1.a_s0", RESEARCH_RECORD=os.path.dirname(rec_a0), RESEARCH_RUN_DIR=run_a0,
+                   RESEARCH_RUNS=os.path.join(tmp, "runs", "toy"), RESEARCH_DATA=os.path.join(tmp, "data"), RESEARCH_COMMIT=snap, RESEARCH_CODE=code)
+    # the evaluation step with another tree ahead of the snapshot's (what an install or a path of the checkout does) writes no record and
+    # names the foreign file: the core's root (the guard of the step), the problem's root alone (the adapter is not the project's)
+    record, stored = open(rec_a0, "rb").read(), sorted(glob.glob(os.path.join(run_a0, "eval", "**"), recursive=True))
+    for ahead, said, named in ((core, "the run imported code outside its snapshot", os.path.join(core, "Evaluation")),
+                               (os.path.join(root, "problems"), "outside the project", os.path.join(root, "problems", "toy", "evaluation", "adapter.py"))):
+        leaked = sh([sys.executable, "-P", "-m", "research.evaluate", "toy", "E1.a_s0"], toy_code,
+                    dict(as_step, PYTHONPATH=os.pathsep.join([ahead, module_path(code, "toy")])), ok=(1,)).stderr
+        assert said in leaked and named in leaked and open(rec_a0, "rb").read() == record, (ahead, leaked)
+    assert sorted(glob.glob(os.path.join(run_a0, "eval", "**"), recursive=True)) == stored, "a refusal before the evaluation stores nothing"
+    # a module that only the working tree has is not importable from a step: not on the step's module path, and not with the working tree's
+    # roots behind it either (a package is bound to one folder); ahead of it, it would be - the probe sees a leak when there is one
+    only = os.path.join(root, "problems", "toy", "net", "model", "only_in_work.py")
+    probe = ("import toy.net.model as m; print(m.__file__)\ntry:\n    import toy.net.model.only_in_work\n    print('LEAK')\n"
+             "except ModuleNotFoundError as e:\n    print(e)\n")
+    seen = lambda *roots: sh([sys.executable, "-P", "-c", probe], toy_code, dict(as_step, PYTHONPATH=os.pathsep.join(roots))).stdout.splitlines()   # noqa: E731
+    snapshot_only = [os.path.join(toy_code, "net", "model", "__init__.py"), "No module named 'toy.net.model.only_in_work'"]
+    open(only, "w", encoding="utf-8").write("WHERE = 'the working tree'\n")
+    try:
+        assert seen(module_path(code, "toy")) == snapshot_only, seen(module_path(code, "toy"))
+        assert seen(module_path(code, "toy"), module_path(root, "toy")) == snapshot_only, "the working tree behind the snapshot adds nothing"
+        assert seen(module_path(root, "toy"), module_path(code, "toy"))[1] == "LEAK", "the probe is blind"
+    finally:
+        os.remove(only)
+    # by hand: python as a test gets it (the working tree's module path, -P for a package, no run), from any folder
+    by_hand = sh([sys.executable, "-m", "research", "py", "toy", "-c", "import os, sys, Evaluation; print(os.environ.get('RESEARCH_RUN'), sys.path[0]); sys.exit(3)"],
+                 tmp, dict(as_step, PYTHONPATH=core), ok=(3,)).stdout.split()
+    assert by_hand == ["None", module_path(root, "toy").split(os.pathsep)[0]], by_hand
+    assert "toy tests passed" in sh([sys.executable, "-m", "research", "py", "toy", "-m", "toy.tests.test_toy", "--quick"], tmp, dict(env, PYTHONPATH=core)).stdout
+    # an Evaluation by hand finds the adapter from the project folder alone; a copy under another name whose adapter still carries the
+    # package name of the original would score with the original's code: refused
+    adapter = json.load(open(os.path.join(toy_code, "evaluation", "evaluation.json"), encoding="utf-8"))["adapter"]
+    load = ("import sys; from Evaluation.project import load_adapter\ntry:\n    load_adapter(None, sys.argv[1]); print(sys.modules[sys.argv[2]].__file__)\n"
+            "except Exception as e:\n    print(type(e).__name__, e)\n")
+    found = lambda project, *roots: sh([sys.executable, "-P", "-c", load, project, adapter], tmp,                                               # noqa: E731
+                                       dict(env, PYTHONPATH=os.pathsep.join([*roots, os.path.join(code, "autoresearch")]))).stdout.strip()
+    assert found(toy_code) == os.path.join(toy_code, "evaluation", "adapter.py"), found(toy_code)
+    other = os.path.join(tmp, "copied", "other")
+    shutil.copytree(toy_code, other)
+    copied = found(other, os.path.join(code, "problems"))
+    assert copied.startswith("EvaluationError") and "outside the project" in copied and toy_code in copied, copied
+    say("another tree ahead of the snapshot's: the evaluation step refuses before it stores anything and writes no record; a module that only the "
+        "working tree has is not importable from a step; `research py`: the problem's module path, no run; an Evaluation by hand finds the "
+        "project's adapter and refuses one from outside the project")
+
+
 def push_check(tmp: str, root: str, env: dict) -> None:
     """push-check against a bare remote: the branch, the tags the remote lacks (a snapshot is on no branch) and the private patterns"""
     git = lambda *a: subprocess.run(["git", *a], cwd=root, check=True, capture_output=True, text=True).stdout.strip()     # noqa: E731
@@ -771,13 +995,17 @@ def push_check(tmp: str, root: str, env: dict) -> None:
 
 def new_problem(tmp: str, root: str, env: dict, quick: dict) -> None:
     """the extension recipe of EXTENDING.md: the toy copied under a new name (problem.json name and tag prefix, the data root of the base
-    config) is a problem of its own - nothing in the core or the copy names the toy"""
+    config, the package name `toy.` in its code and json files) is a problem of its own - nothing in the core or the copy names the toy"""
     new = os.path.join(root, "problems", "disc")
     shutil.copytree(os.path.join(root, "problems", "toy"), new, ignore=shutil.ignore_patterns("__pycache__", "experiments", "ledger.csv"))
     for path, change in ((os.path.join(new, "problem.json"), {"name": "disc", "tag_prefix": "disc"}),
                          (os.path.join(new, "training", "configs", "base.json"), {"name": "disc", "data_root": "{data}/disc"})):
         cfg = json.load(open(path, encoding="utf-8"))
         json.dump(cfg | change, open(path, "w", encoding="utf-8"), indent=1)
+    for path in (p for ext in ("py", "json") for p in glob.glob(os.path.join(new, "**", f"*.{ext}"), recursive=True)):
+        text = open(path, encoding="utf-8").read()                   # the package is named like its folder: imports, steps, tests, the adapter
+        if re.search(r"\btoy\.", text):
+            open(path, "w", encoding="utf-8").write(re.sub(r"\btoy\.", "disc.", text))
     for cmd in (["git", "add", "problems/disc"], ["git", "commit", "-qm", "a second problem"]):
         subprocess.run(cmd, cwd=root, check=True, capture_output=True)
     e = json.loads(research(["new", "disc", "first", "the copy runs"], env).stdout)["folder"]

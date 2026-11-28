@@ -2,12 +2,12 @@
 hash of the raw data's manifest) with an index of shard hashes; a second run writes only what is missing, and a stored shard that differs from
 a fresh rasterisation is refused, never re-recorded. The ground truth is made from the raw annotations, never edited by hand.
 
-    python gt/generate.py make     --config F     raw shards (dataset/make_data.py) and the ground truth: what is missing is written, all is checked
-    python gt/generate.py have     --config F     exit 0: raw data and the store of this signature are complete, 1: not
-    python gt/generate.py key      [--config F]   the signature
-    python gt/generate.py check    --config F     known answers, and every stored shard against a fresh one
-    python gt/generate.py view     --config F --out picture.png      eight val frames with the ground truth outlined (needs matplotlib)
-Exit codes: 0 done, 1 not there or incomplete, 2 wrong arguments or a stored file that is not what it must be.
+    python -P -m toy.gt.generate make     --config F     raw shards (dataset/make_data.py) and the ground truth: what is missing is written, all is checked
+    python -P -m toy.gt.generate have     --config F     exit 0: raw data and the store of this signature are complete, 1: not
+    python -P -m toy.gt.generate key      [--config F]   the signature
+    python -P -m toy.gt.generate check    --config F     known answers, and every stored shard against a fresh one
+    python -P -m toy.gt.generate view     --config F --out picture.png      eight val frames with the ground truth outlined (needs matplotlib)
+By hand `python` is `python3 -m research py toy` (the problem's interpreter and module path). Exit codes: 0 done, 1 not there or incomplete, 2 wrong arguments or a stored file that is not what it must be.
 """
 import argparse
 import hashlib
@@ -17,9 +17,9 @@ import sys
 
 import numpy as np
 
-from dataset import make_data
-from gt import raster
-from net.prep import shards as S
+from toy.dataset import make_data
+from toy.gt import raster
+from toy.net.prep import shards as S
 
 SUPERSAMPLE = 4
 

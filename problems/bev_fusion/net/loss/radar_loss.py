@@ -1,12 +1,8 @@
 """The side loss of the delta-slot radar encoder and its weight over the steps."""
-import os as _os
-import sys as _sys
-_sys.path.insert(1, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))  # net/ (a flat run snapshot holds netpath.py next to this file)
-import netpath  # noqa: E402,F401
 import torch
 import torch.nn.functional as F
 
-from radar_encoder import slot_width
+from bev_fusion.net.model.radar_encoder import slot_width
 
 
 def aux_weight(step, start=1.0, floor=0.05, half_life=3000):

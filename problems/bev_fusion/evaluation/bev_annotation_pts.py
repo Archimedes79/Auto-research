@@ -1,14 +1,15 @@
 """Lidar / radar point counts of every nuScenes annotation (box), as a small lookup table: token -> (num_lidar_pts, num_radar_pts).
 
-Why: our rig is a front camera plus radar. Whether a GT box is observed by the RADAR (at least one radar return inside it) is the label that separates "things the
-camera can see" from "things camera and radar can see" in the evaluation (the `cov` rows, evaluation/bev_fusion_area.py); the GT cache does not store the counts (it stores only
-`observed` = lidar OR radar). The counts are fields of the nuScenes annotation file, read once, kept as derived data (not in git):
+Why: our rig is a front camera plus radar. Whether a GT box is observed by the RADAR (at least one radar return inside it) is the label that separates "things
+the camera can see" from "things camera and radar can see" in the evaluation (the `cov` rows, evaluation/bev_fusion_area.py); the GT cache does not store the
+counts (it stores only `observed` = lidar OR radar). The counts are fields of the nuScenes annotation file, read once, kept as derived data (not in git):
 
-    python evaluation/bev_annotation_pts.py build        reads <NUSC_ROOT>/v1.0-trainval/sample_annotation.json in chunks (about 600 MB: minutes, I/O bound) ->
-                                                         <site>/data/cache/annotation_pts.npz (a few tens of MB; the site = net/netpath.SITE)
-    from evaluation.bev_annotation_pts import load; pts = load(); pts("<annotation token>") -> (lidar, radar) or None
+    python -P -m bev_fusion.evaluation.bev_annotation_pts build
+        reads <NUSC_ROOT>/v1.0-trainval/sample_annotation.json in chunks (about 600 MB: minutes, I/O bound) -> <site>/data/cache/annotation_pts.npz (a few tens
+        of MB; the site = net/netpath.SITE)
+    from bev_fusion.evaluation.bev_annotation_pts import load; pts = load(); pts("<annotation token>") -> (lidar, radar) or None
 
-NUSC_ROOT defaults to ~/data/nuscenes_full (the same WSL view the rest of the code reads). `num_radar_pts` counts the points of ALL five radars of the keyframe
+NUSC_ROOT defaults to the view of the raw data the rest of the code reads (net/netpath.nuscenes_root). `num_radar_pts` counts the points of ALL five radars of the keyframe
 sweep inside the box, so a box can have 0 although a radar looked at it (small or far objects, pedestrians: no return)."""
 from __future__ import annotations
 
@@ -20,16 +21,14 @@ from typing import Optional, Tuple
 import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-if os.path.join(ROOT, "net") not in sys.path:
-    sys.path.insert(1, os.path.join(ROOT, "net"))                         # netpath: the site folder that holds the data
-import netpath  # noqa: E402
+from bev_fusion.net import netpath
 
 OUT = os.path.join(netpath.SITE, "data", "cache", "annotation_pts.npz")
 PAT = re.compile(r'"token": "([0-9a-f]{32})".{0,2500}?"num_lidar_pts": (\d+),\s*"num_radar_pts": (\d+)', re.S)
 
 
 def source_path(version: str = "v1.0-trainval") -> str:
-    return os.path.join(os.environ.get("NUSC_ROOT", os.path.expanduser("~/data/nuscenes_full")), version, "sample_annotation.json")
+    return os.path.join(os.environ.get("NUSC_ROOT") or netpath.nuscenes_root(), version, "sample_annotation.json")
 
 
 def build(path: Optional[str] = None, out: str = OUT) -> int:
@@ -59,7 +58,8 @@ def build(path: Optional[str] = None, out: str = OUT) -> int:
 def load(path: str = OUT):
     d = np.load(path)
     raw, lid, rad = d["tokens"], d["lidar"], d["radar"]
-    by = np.frombuffer(raw.tobytes(), np.uint8).reshape(-1, 16)               # (numpy's S16 comparison strips trailing zero bytes: tokens ending in "00" would not be found)
+    # (numpy's S16 comparison strips trailing zero bytes: tokens ending in "00" would not be found)
+    by = np.frombuffer(raw.tobytes(), np.uint8).reshape(-1, 16)
     hi = by[:, :8].copy().view(">u8").ravel()                                  # big-endian halves: the table is sorted by bytes, i.e. by (hi, lo)
     lo = by[:, 8:].copy().view(">u8").ravel()
 

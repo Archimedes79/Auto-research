@@ -41,23 +41,34 @@ exit 0 done, 1 `check` found problems, 2 an error. The evaluations of research r
 | `draw-frame ID SCENE/INDEX [--view debug]` | one picture from the stored prediction |
 | `list-sets`, `list NETWORK`, `tap RESULTS FRAME [--name T]` | the sets, what is stored, a stored intermediate result |
 | `time NETWORK`, `probe NETWORK` | the adapter's timing per module and module probe |
-| `methods`, `selftest [word]` | every command with its arguments; the tests |
+| `methods` | every command with its arguments |
+
+The tests: `python -m Evaluation.selftest [word]` (a word filters the checks by name).
 
 ## What holds
 - **Ids**: `<network>@r<hash>` are predictions (network: checkpoint, config, code; the data it was fed), `<network>@e<hash>` an evaluation
   (predictions, frames, ground truth, metrics, evaluator code). The same question gives the same id and costs no network.
 - **Frames**: `val`, `small.val`, `spread:N[:SET]`, `random:N[:SEED][:SET]`, `scenes:a,b[:SET]`, `frames:scene/3,scene/7[:SET]`.
 - **Memory**: a network always runs whole scenes in time order from its own start (D70); the frames asked for decide what is kept and scored.
-- **Numbers** are reductions of summed counts, never means of per-frame numbers. A holdout split opens only in a run of `research test`.
-- One network per process: run each network on its own and compare by ids. `run` here writes no research record; a number that feeds a
-  verdict comes from the evaluation step of a registered run (`research/evaluate.py`).
+- **Numbers** are reductions of summed counts, never means of per-frame numbers.
+- **Holdout**: a split that the project's `problem.json` lists under `holdout` is closed here, for `run`, `check`, `score`, `draw-frame`
+  and a problem's own reader (`defaults.guard(split, project)`). It opens only in the evaluation step of a run of `research test`: the
+  research core hands its reader of the TEST log to `defaults.set_holdout_gate`, and that reader is asked again at every read. The gate
+  is per process: a TEST step other than the core's `evaluate`, and a worker process started by spawn (a data loader's), that reads a
+  holdout split through `guard` or `Evaluation` hands it over itself (`defaults.set_holdout_gate(research.gates.test_refusal)`), else
+  it is refused; no other function is taken.
+- Several networks can run in one process, as in the example, unless the project's adapter refuses it (BEV imports a network's code
+  snapshot once: there each network runs in its own process and the evaluations are compared by their ids).
+- `run` here writes no research record; a number that feeds a verdict comes from the evaluation step of a registered run
+  (`research/evaluate.py`).
 
 ## Files
 | file | what |
 |---|---|
-| `api.py`, `cli.py` | the class `Evaluation` and `Frames`; the command line generated from the class |
+| `api.py`, `cli.py` | the class `Evaluation`; the command line generated from the class |
+| `project.py` | what the Evaluation and the Runner share: `Frames`, `EvaluationError`, the adapter loader, names and identities |
 | `netrunner.py`, `results.py` | the Runner; the stored predictions (`ResultSet`) |
-| `suite.py`, `quantitative.py`, `store.py` | the counting engine: counts per frame (`RunStore`), numbers, outliers, comparison |
+| `suite.py`, `quantitative.py`, `store.py` | the counting engine (`EvalSuite`): counts per frame (`RunStore`), numbers, outliers, comparison, the html report |
 | `stats.py` | the one paired scene bootstrap of the repository |
 | `contracts.py`, `runner.py`, `sampling.py` | the boxes `Source`, `Subject`, `Task`; frame order and memory state; seeded subsets |
 | `comparison/` | where a prediction meets the ground truth (its README) |

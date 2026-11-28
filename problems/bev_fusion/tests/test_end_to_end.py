@@ -1,10 +1,10 @@
-"""End-to-end gate of the whole chain on real data (plan.md section 10.1, last gate before training runs).
+"""End-to-end gate of the whole chain on real data (the last gate before training runs).
 
 One nuScenes mini keyframe (front camera now + 2 past frames, 5 radars, GT of k-1 / k / k+1) through
 net/model/model.py with net/loss/losses.py BEVLoss, overfitted for N steps (Adam, lr 5e-4, clipping). The chain
 can learn if: the total loss falls by at least half, the drivable-area IoU (evaluation/metrics.py, camera cells, 0 m
 tolerance) reaches 0.8 at dt 0 and 0.7 at dt +0.5 s, and the motion and object terms fall. A failure names the block.
-Run from the problem folder: ~/miniconda3/envs/gcar/bin/python tests/test_end_to_end.py [--steps 150] [--cpu]
+Run from the problem folder: ~/miniconda3/envs/gcar/bin/python -P -m bev_fusion.tests.test_end_to_end [--steps 150] [--cpu]
 GPU when one is free (>= 4 GB, at most 2-3 jobs; CLAUDE.md), else CPU (slow). It works in the site folder (net/netpath.SITE), which holds models/pretrained.
 """
 import argparse
@@ -15,15 +15,11 @@ import time
 import torch
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
-sys.path.insert(0, os.path.join(ROOT, "training"))
-sys.path[1:1] = [os.path.join(os.path.join(ROOT, "training"), os.pardir, "net", d) for d in ("prep", "model", "loss")]   # the model: preprocessing, network, losses
-sys.path.insert(0, ROOT)
-sys.path.insert(1, os.path.join(ROOT, "net"))
-import netpath                                                       # noqa: E402
-from evaluation.metrics import SegMeter                              # noqa: E402
-from losses import BEVLoss, sample_targets                           # noqa: E402
-from model import BEVFusionModel, ModelConfig                        # noqa: E402
-from nuscenes_dataset import FrontRadarDataset, collate              # noqa: E402
+from bev_fusion.net import netpath
+from bev_fusion.evaluation.metrics import SegMeter
+from bev_fusion.net.loss.losses import BEVLoss, sample_targets
+from bev_fusion.net.model.model import BEVFusionModel, ModelConfig
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, collate
 
 
 def to_device(batch, dev):
@@ -70,7 +66,7 @@ def main():
     dev = "cpu"
     if not a.cpu and torch.cuda.is_available() and torch.cuda.mem_get_info()[0] > 4 * 2 ** 30:
         dev = "cuda"
-    ds = FrontRadarDataset(os.path.expanduser("~/data/nuscenes"), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
+    ds = FrontRadarDataset(netpath.nuscenes_root(mini=True), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
     batch = collate([ds[a.sample]])
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))

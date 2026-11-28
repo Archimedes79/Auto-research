@@ -1,24 +1,24 @@
 """Trainer of E372 (stage S4 of the token champion, D113): the JOINT fine-tune of the champion token head with B' in the loop (`training/train/lane_live_tok.LiveSource`: B''s tokens and the labels made live in every step). A run starts it through the research worker (`training/train/lane_train.py stage2`).
 
-    python training/train/jlive_train.py --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--none-weight W] [--pos-loss sum|max] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
+    python training/train/jlive_train.py --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
 
-Arms (card section 0): z = `--train-nodes 0` (B' frozen, the head's loss only), s4 = `--train-nodes 1` (B''s node head trains on the head's loss + b_weight x its own node loss `lane_live_tok.b_loss`), b = `--train-nodes 1 --live-inputs 0` (the same trainer, the head cuts its inputs:
-B''s node head trains on its own loss only). `--seed` = B''s seed (the default `--b-run` runs/e292_a_s<S>, the frame order of the E365 cache; the head run must be of the same seed), `--head-seed` = the data order (default: the head run's).
-One step: `no, tk = src.tokens(x)`; the head on `head_inputs(tk)` (queued before the labels: the overlap of lane_live_tok's PLAN); `src.labelled(tk, ..., token_drop=0, gate=False)`; loss = `jtoken.jtoken_loss` with the head run's options (none weight, pos loss, none weight near;
-`--none-weight` / `--pos-loss` override; the E392 options rounds / msg / wire weight are the head run's, no flag: the head is built with them, in the recipe and in model.pt's args) + b_weight x B''s node loss (s4, b; computed in float32 outside the autocast, logged in every arm, under no_grad in z). The head runs in fit's bf16 autocast as in S1, B' in float32 (LiveSource); no cudnn / TF32 flag is set.
+Arms (card section 0): z = `--train-nodes 0` (B' frozen, the head's loss only), s4 = `--train-nodes 1` (B''s node head trains on the head's loss + b_weight x its own node loss `lane_live_tok.b_loss`; the head keeps the graph of its inputs: `--live-inputs 0`
+with `--train-nodes 1`, E372's control arm b, is refused: the tag v1 has it). `--seed` = B''s seed (the default `--b-run` runs/e292_a_s<S>, the frame order of the E365 cache; the head run must be of the same seed), `--head-seed` = the data order (default: the head run's).
+One step: `no, tk = src.tokens(x)`; the head on `head_inputs(tk)` (queued before the labels: the overlap of lane_live_tok's PLAN); `src.labelled(tk, ..., token_drop=0, gate=False)`; loss = `loss_jtoken.jtoken_loss` with the head run's none weight (stage 2 takes
+stage 1's loss; a head run of a removed option is refused: `jtoken_train.check_removed`) + b_weight x B''s node loss (s4; computed in float32 outside the autocast, logged in every arm, under no_grad in z). The head runs in fit's bf16 autocast as in S1, B' in float32 (LiveSource); no cudnn / TF32 flag is set.
 `trainer.fit` trains `Joint` (the head + the LiveSource): its optimiser gets the head and B''s node head (the frozen tensors are left out), one cosine schedule (5 % warm-up), the same lr for both; its checkpoint holds both (resume, roll-back) and the record of the kill rules (extra state).
 fit's joint clip is OFF (clip=0: it only measures, `grad_norm` of the log); the CLIP IS PER GROUP: the head's gradients at 3.0 on their own, the node head's at 3.0 on their own (B''s node gradient is 8.7 - 17.6 against the head's ~0.5: one clip would scale the head's step
 by ~0.17 in s4 only), done in `StepHook`, torch's global optimiser pre-step hook (fit keeps its optimiser to itself: the hook runs after fit's backward, right before AdamW's step). The kill rules (card), each stops the run with `Kill` (non-zero exit):
-  live        the head's `live_inputs` is the arm's in every step (s4: a silent False would train B' on its own loss only; b: a silent True would let the head's loss reach B); at the first step of a process the head's loss gives the node head a gradient of norm > 0 (s4)
-              or exactly 0 (b); at the first update of a process no tensor of B' outside the trained node head (z: none of B') holds a gradient
+  live        the head's `live_inputs` is the arm's in every step (s4: a silent False would train B' on its own loss only); at the first step of a process the head's loss gives the node head a gradient of norm > 0 (s4);
+              at the first update of a process no tensor of B' outside the trained node head (z: none of B') holds a gradient
   finite      the head's loss and B''s node loss are finite in every step (fit alone would skip such a step)
   overflow    a frame over `lane_tokcache.PMAX` target pairs (`LabelOverflow`): the step is skipped (a NaN loss: fit's skip, no optimiser step) and counted; kill when the count exceeds 1 % of the steps done, from step 100 on
-  B rise      (s4, b) the mean of B''s node loss over the most recent 200 steps above 1.2 x its mean over steps 1 - 200, checked at every step after step 200
+  B rise      (s4) the mean of B''s node loss over the most recent 200 steps above 1.2 x its mean over steps 1 - 200, checked at every step after step 200
   learning    the head's update norm (AdamW's step from its state, the decoupled weight decay left out) finite and > 0 on every logged step; the mean of the HEAD's loss over steps 1500 - 2000 at most 1.10 x its mean over steps 1 - 200 (every arm)
 A kill writes its reason into the file KILLED and status.json (`killed`); such a folder is never resumed.
 Logs (every logged step, fit's row of log.jsonl): the head's loss parts, `head` (the head's loss), `b_loss` and its parts b_*, b_start / b_mean (the start mean and the running mean of B''s loss), h_start, overflow (the count), clip_head / clip_nodes (the two clip factors), upd_head (the
 head's update norm); over the last 100 steps of the process: label_s (seconds of the label loop per step) and the moving labels pair_cov (in-gate GT pairs / GT links), n_valid (valid tokens per frame), gt_cov (GT nodes with a token / GT nodes); of the step: nn_min (the smallest
-distance in m between two valid live tokens of a frame) and pos_grad_max (the largest |gradient| of the head's loss on the live token positions; s4 only, NaN in z and b); s4 every 200 steps and at the last step: ushare (the one-step
+distance in m between two valid live tokens of a frame) and pos_grad_max (the largest |gradient| of the head's loss on the live token positions; s4 only, NaN in z); s4 every 200 steps and at the last step: ushare (the one-step
 preconditioned share |g_head / (sqrt(v_hat) + eps)| / (that + |g_b / (sqrt(v_hat) + eps)|) on the node head, g_b = the gradient of b_weight x B''s loss, g_head = the full gradient - g_b, v_hat = AdamW's second moment of the state) and gshare (the same with the raw gradient norms).
 Pairing: the frame tokens of the first 5 batches are logged; a resume and a roll-back of fit's guard (lr x 0.7) are logged and listed in status.json (`resumed_at`, `rollbacks_at`): the pair with the twin arm is broken from there.
 model.pt: the head in the format of `jtoken_train` (state, args with live_inputs: `jtoken_train.load_model` rebuilds it) + b_state (the complete `QGraph` state of B' after training) + b_args (the B' run's args) + rec; `load_b` reads B'. It is written, read back and checked
@@ -52,7 +52,7 @@ import lane_live_tok as LLT  # noqa: E402
 import qgraph as QG  # noqa: E402
 import trainer as T  # noqa: E402
 
-RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "pos_loss", "head_seed", "bs", "steps", "lr", "rounds", "wire_weight", "msg",
+RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "head_seed", "bs", "steps", "lr",
           "b_state_from", "b_state_sha256", "train_pyr", "pyr_lr_mult")
 RECIPE_DEFAULTS = dict(b_state_from=None, b_state_sha256=None, train_pyr=0, pyr_lr_mult=1.0)        # E393's keys as a config of before them reads (the other keys: `jtoken_train.ARCH_DEFAULTS`)
 K = 512                     # tokens per frame, as the cache
@@ -72,8 +72,8 @@ class Kill(RuntimeError):
     """a kill rule of the card fired (module docstring): the run stops with a non-zero exit"""
 
 
-def arm(train_nodes, live_inputs):
-    return "z" if not train_nodes else ("s4" if live_inputs else "b")
+def arm(train_nodes):
+    return "s4" if train_nodes else "z"
 
 
 def parse_args(argv=None):
@@ -82,22 +82,21 @@ def parse_args(argv=None):
     ap.add_argument("--seed", type=int, default=0, help="B''s seed: the default --b-run, the frame order of its E365 cache; the head run must be of this seed")
     ap.add_argument("--head-run", required=True, dest="head_run", help="the champion head under runs/ (e.g. e373_cb_s0): the start weights and the loss options")
     ap.add_argument("--b-run", default=None, dest="b_run", help="B''s run folder relative to the problem folder (default runs/<the head run's ident>_s<seed>)")
-    ap.add_argument("--train-nodes", type=int, choices=(0, 1), required=True, dest="train_nodes", help="1: B''s node head trains (arms s4, b); 0: B' frozen (arm z)")
-    ap.add_argument("--live-inputs", type=int, choices=(0, 1), default=1, dest="live_inputs", help="1: the head keeps its inputs' graph (s4); 0: it cuts them (arm b with --train-nodes 1)")
+    ap.add_argument("--train-nodes", type=int, choices=(0, 1), required=True, dest="train_nodes", help="1: B''s node head trains (arm s4); 0: B' frozen (arm z)")
+    ap.add_argument("--live-inputs", type=int, choices=(0, 1), default=1, dest="live_inputs", help="1: the head keeps its inputs' graph (s4); 0: it cuts them (only with --train-nodes 0)")
     ap.add_argument("--steps", type=int, default=3000)
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-4)
-    ap.add_argument("--b-weight", type=float, default=1.0, dest="b_weight", help="the weight of B''s node loss in the loss (s4, b)")
+    ap.add_argument("--b-weight", type=float, default=1.0, dest="b_weight", help="the weight of B''s node loss in the loss (s4)")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--none-weight", type=float, default=None, dest="none_weight", help="default: the head run's")
-    ap.add_argument("--pos-loss", choices=("sum", "max"), default=None, dest="pos_loss", help="default: the head run's")
     ap.add_argument("--head-seed", type=int, default=None, dest="head_seed", help="the data order (default: the head run's head seed)")
     ap.add_argument("--b-state-from", default=None, dest="b_state_from", help="E393: a jlive run under runs/ whose b_state is the start B' (its base B' file must be --b-run's); default: --b-run's own state")
-    ap.add_argument("--train-pyr", type=int, choices=(0, 1), default=0, dest="train_pyr", help="E393: 1 = B''s pyramid trains too (on the loss of the step; it has no pixel loss here); needs --train-nodes 1 --live-inputs 1")
+    ap.add_argument("--train-pyr", type=int, choices=(0, 1), default=0, dest="train_pyr", help="E393: 1 = B''s pyramid trains too (on the loss of the step; it has no pixel loss here); needs --train-nodes 1")
     ap.add_argument("--pyr-lr-mult", type=float, default=1.0, dest="pyr_lr_mult", help="E393: the pyramid's lr = this x the schedule's (its own AdamW group); only with --train-pyr 1")
     a = ap.parse_args(argv)
     assert a.steps > 0 and a.bs > 0 and a.lr > 0 and a.b_weight >= 0, f"--steps {a.steps} --bs {a.bs} --lr {a.lr} --b-weight {a.b_weight}"
-    assert not a.train_pyr or (a.train_nodes and a.live_inputs), "--train-pyr 1 needs --train-nodes 1 --live-inputs 1 (the pyramid learns from the head's loss through the node head)"
+    assert a.live_inputs or not a.train_nodes, "--live-inputs 0 with --train-nodes 1 (E372's control arm b: B''s node head on its own loss only) no longer exists (the tag v1 keeps it)"
+    assert not a.train_pyr or a.train_nodes, "--train-pyr 1 needs --train-nodes 1 (the pyramid learns from the head's loss through the node head)"
     assert a.pyr_lr_mult > 0 and (a.train_pyr or a.pyr_lr_mult == 1.0), f"--pyr-lr-mult {a.pyr_lr_mult}: > 0, and only with --train-pyr 1"
     return a
 
@@ -107,14 +106,11 @@ def _abs(p):
 
 
 def resolve(a, runs):
-    """the run's args: the CLI + the head run's loss options and its E392 head options (rounds, wire_weight, msg: the head of the run is built and its early-read loss is added as the head run's; its removed options checked: `jtoken_train.check_removed`;
+    """the run's args: the CLI + the head run's none weight (its removed options checked: `jtoken_train.check_removed`, among them a cache root or K of its own: this trainer builds the tokens of the one cache at K;
     `build_head` builds the champion architecture) + the paths and sha256 of both start checkpoints"""
     h = torch.load(os.path.join(runs, a.head_run, "model.pt"), map_location="cpu", weights_only=False)["args"]
-    g = lambda k: h[k] if h.get(k) is not None else JKT.ARCH_DEFAULTS.get(k)  # noqa: E731   (a key stored as None means the default, as `jtoken_train.arch` reads it)
     assert h.get("seed") == a.seed, f"--seed {a.seed}: the head run {a.head_run} learned on the tokens of B' seed {h.get('seed')}"
     JKT.check_removed(h, f"the head run {a.head_run}")
-    assert not h.get("pos_head"), f"the head run {a.head_run} has a position head (E395): the stage-2 trainer neither builds it nor trains its loss (no GT geometry in the live batch)"
-    assert h.get("K") in (None, K) and not h.get("cache"), f"the head run {a.head_run} was trained on K {h.get('K')} / cache root {h.get('cache')}: this trainer builds the tokens of the default cache at K {K}"
     b_run = a.b_run or f"runs/{h.get('ident') or 'e292_a'}_s{a.seed}"
     b_sha = JKT.file_sha256(os.path.join(_abs(b_run), "model.pt"))
     s_sha = None
@@ -124,20 +120,21 @@ def resolve(a, runs):
         assert "b_state" in s, f"--b-state-from {a.b_state_from}: its model.pt carries no b_state"
         assert s["args"].get("b_sha256") == b_sha, f"--b-state-from {a.b_state_from}: its base B' file (b_sha256 {str(s['args'].get('b_sha256'))[:12]}) is not --b-run {b_run} ({b_sha[:12]})"
         s_sha = JKT.file_sha256(p)
-    return dict(vars(a), ident=h.get("ident") or "e292_a", cache=h.get("cache"), K=K,
-                none_weight=g("none_weight") if a.none_weight is None else a.none_weight, pos_loss=g("pos_loss") if a.pos_loss is None else a.pos_loss,
+    return dict(vars(a), ident=h.get("ident") or "e292_a",
+                none_weight=JKT.ARCH_DEFAULTS["none_weight"] if h.get("none_weight") is None else h["none_weight"],          # (a key stored as None means the default, as `jtoken_train.arch` reads it)
                 head_seed=a.head_seed if a.head_seed is not None else (h["seed"] if h.get("head_seed") is None else h["head_seed"]),
-                rounds=g("rounds"), wire_weight=g("wire_weight"), msg=g("msg"),
                 b_run=b_run, head_sha256=JKT.file_sha256(os.path.join(runs, a.head_run, "model.pt")), b_sha256=b_sha, b_state_sha256=s_sha)
 
 
 def check_start(args, folder):
-    """before anything is written: a folder that a kill rule stopped (its KILLED file) is never resumed; a folder that already holds a run is only RESUMED (the same recipe), never another run's"""
+    """before anything is written: a folder that a kill rule stopped (its KILLED file) is never resumed; a folder that already holds a run is only RESUMED (the same recipe), never another run's; a run of a removed
+    option is refused (`jtoken_train.check_removed`)"""
     killed = os.path.join(folder, "KILLED")
     assert not os.path.exists(killed), f"{folder} was stopped by a kill rule ({open(killed, encoding='utf-8').read().strip()}): it is not resumed, use another --name"
     held = [f for f in ("config.json", "ckpt.pt", "model.pt") if os.path.exists(os.path.join(folder, f))]
     if held:
         c = json.load(open(os.path.join(folder, "config.json"))) if "config.json" in held else {}
+        JKT.check_removed(c.get("args") or {}, folder)
         old = {k: (c.get("args") or {}).get(k, RECIPE_DEFAULTS.get(k, JKT.ARCH_DEFAULTS.get(k))) for k in RECIPE}                    # a run of before an option has its default
         assert c.get("design") == "jlive" and old == {k: args.get(k) for k in RECIPE}, f"{folder} holds {held} of another run ({c.get('design')}, {old}): use another --name"
 
@@ -160,7 +157,7 @@ class Joint(nn.Module):
 
 
 def build(args, runs):
-    """-> (Joint: the head of the head run with the arm's live_inputs and its weights, B' of the B' run with the node head trainable in s4 / b (and its pyramid with train_pyr), its state the b_state of `b_state_from` when given (strict); B''s run args)"""
+    """-> (Joint: the head of the head run with the arm's live_inputs and its weights, B' of the B' run with the node head trainable in s4 (and its pyramid with train_pyr), its state the b_state of `b_state_from` when given (strict); B''s run args)"""
     head = JKT.build_head(args)
     head.load_state_dict(torch.load(os.path.join(runs, args["head_run"], "model.pt"), map_location="cpu", weights_only=False)["state"])
     b_args = torch.load(os.path.join(_abs(args["b_run"]), "model.pt"), map_location="cpu", weights_only=False).get("args") or {}
@@ -314,7 +311,7 @@ def flag(run, key, step, text):
 
 def make_loss(run, joint, args, hook):
     """the loss of one step (module docstring) with the kill rules and the log; the head's loss and its log lines (first loss, clock, peak memory) are `jtoken_train.make_loss`'s"""
-    base = JKT.make_loss(run, none_weight=args["none_weight"], pos_loss=args["pos_loss"], wire_w=args["wire_weight"])
+    base = JKT.make_loss(run, none_weight=args["none_weight"])
     tn, live, w, steps = bool(args["train_nodes"]), bool(args["live_inputs"]), args["b_weight"], args["steps"]
     b_rise = tn and w > 0                                                                       # B''s node loss is in the loss: its rise is a kill (E393 n / e: logged only)
     nodes, pyrs = joint.src.node_params(), joint.src.pyr_params()
@@ -328,7 +325,7 @@ def make_loss(run, joint, args, hook):
             flag(run, "rollbacks_at", i - 1, f"ROLL-BACK to step {i - 1} (fit's guard: weights and Adam moments of the checkpoint, lr x 0.7): the pair with the twin arm is broken from here")
         st["last"], hook.cur = i, None
         if m.head.live_inputs != live:
-            raise Kill(f"the head's live_inputs is {m.head.live_inputs}, arm {arm(tn, live)} needs {live}")
+            raise Kill(f"the head's live_inputs is {m.head.live_inputs}, arm {arm(tn)} needs {live}")
         no, tk = m.src.tokens(b["x"])
         out = m.head(LLT.head_inputs(tk))                                                       # queued before the labels
         n_act = (no["e"].detach().float().flatten(1).sigmoid() > LLT.LC.P_ACTIVE).sum(1).float().mean()     # the active cells per frame before the top-K cut (read back after the label step's sync)
@@ -353,13 +350,11 @@ def make_loss(run, joint, args, hook):
             raise Kill(f"step {i}: a loss is not finite (the head's {float(loss_h)}, B''s node loss {float(loss_b)})")
         loss = loss_h + w * loss_b if b_rise else loss_h                                        # (b_weight 0: B''s loss stays out of the backward, a non-finite gradient there cannot reach the step)
         gb = None
-        if tn and not st["checked"]:                                                            # the first step of the process: does the head's loss reach the node head (s4) / not (b)?
+        if tn and not st["checked"]:                                                            # the first step of the process: does the head's loss reach the node head (s4)?
             n_h = _norm(torch.autograd.grad(loss_h, nodes, retain_graph=True, allow_unused=True))
-            if live and not n_h > 0:
+            if not n_h > 0:
                 raise Kill(f"refused at the start: the head's loss gives B''s node head no gradient (norm {n_h}): the head is not live")
-            if not live and n_h != 0:
-                raise Kill(f"arm b: the head's loss reaches B''s node head (gradient norm {n_h:.4g})")
-            run.log(f"step {i}: the head's loss gives B''s node head a gradient of norm {n_h:.4g} ({'> 0: s4' if live else '0: arm b'})")
+            run.log(f"step {i}: the head's loss gives B''s node head a gradient of norm {n_h:.4g} (> 0: s4)")
             if pyrs:                                                                            # E393: the head's loss reaches the pyramid (its norm finite and > 0); the tensors it does not reach are listed (lines05, by design)
                 gp = torch.autograd.grad(loss_h, pyrs, retain_graph=True, allow_unused=True)
                 n_p = _norm(gp)
@@ -369,7 +364,7 @@ def make_loss(run, joint, args, hook):
                 zero = [n_ for n_, g_ in zip(pn, gp) if g_ is None or not bool(g_.ne(0).any())]
                 run.log(f"step {i}: the head's loss gives B''s pyramid a gradient of norm {n_p:.4g}; pyramid tensors without it: {zero}")
             st["checked"] = True
-        if tn and live and (i % SHARE_EVERY == 0 or i == steps):
+        if tn and (i % SHARE_EVERY == 0 or i == steps):
             gb = torch.autograd.grad(w * loss_b, nodes, retain_graph=True, allow_unused=True)
         logged = i % LOG_EVERY == 0 or i == steps
         hook.cur = dict(i=i, info=info, gb=gb, logged=logged)
@@ -397,10 +392,9 @@ def make_loss(run, joint, args, hook):
 
 # ------------------------------------------------------------------------------------------------------------------------------ model.pt
 def load_b(run, dev, runs=None, name="model.pt"):
-    """-> B' as a jlive run trained it: a `QGraph` in eval mode, built from the B' run's args as `qpredict.load_model` builds a run, with the run's b_state"""
+    """-> B' as a jlive run trained it: a `QGraph` in eval mode, built from the B' run's args as `qpredict.load_model` builds a run (`qgraph.from_args`), with the run's b_state"""
     ck = torch.load(os.path.join(runs or T.RUNS, run, name), map_location="cpu", weights_only=False)
-    a = ck["b_args"]
-    m = QG.QGraph(width=int(a.get("width", 48)), soft_nms=a.get("soft_nms"), ends=bool(a.get("ends")))
+    m = QG.from_args(ck["b_args"])
     m.load_state_dict(ck["b_state"])
     return m.to(dev).eval()
 
@@ -440,13 +434,13 @@ def train(a, runs=T.RUNS, ckpt_every=500):
         params = [dict(params=list(joint.head.parameters()) + joint.src.node_params()), dict(params=joint.src.pyr_params(), lr_mult=a.pyr_lr_mult)]
     else:
         params = list(joint.head.parameters()) + joint.src.trainable()
-    tn, live = bool(a.train_nodes), bool(a.live_inputs)
+    tn = bool(a.train_nodes)
     n_par = lambda ps: sum(p.numel() for p in ps)  # noqa: E731
-    run.log(f"jlive arm {arm(tn, live)}{' + pyramid' if a.train_pyr else ''}: head {a.head_run} (sha256 {args['head_sha256'][:12]}, head step {joint.head._step_py}), B' {args['b_run']} (sha256 {args['b_sha256'][:12]})"
+    run.log(f"jlive arm {arm(tn)}{' + pyramid' if a.train_pyr else ''}: head {a.head_run} (sha256 {args['head_sha256'][:12]}, head step {joint.head._step_py}), B' {args['b_run']} (sha256 {args['b_sha256'][:12]})"
             + (f", its state from {a.b_state_from} (b_state, sha256 {args['b_state_sha256'][:12]})" if a.b_state_from else "") + f", live_inputs {joint.head.live_inputs}, train_nodes {a.train_nodes}, train_pyr {a.train_pyr}; "
             f"trained: the head ({n_par(joint.head.parameters())} parameters)" + (f" + B''s node head ({n_par(joint.src.node_params())} parameters, {len(joint.src.node_params())} tensors)" if tn else ", B' frozen")
             + (f" + B''s pyramid ({n_par(joint.src.pyr_params())} parameters, {len(joint.src.pyr_params())} tensors, lr x {a.pyr_lr_mult}, its own clip group)" if a.train_pyr else "")
-            + f"; loss: the head's (none weight {args['none_weight']}, pos loss {args['pos_loss']})" + (f" + {a.b_weight} x B''s node loss" if tn else ", B''s node loss logged only")
+            + f"; loss: the head's (none weight {args['none_weight']})" + (f" + {a.b_weight} x B''s node loss" if tn else ", B''s node loss logged only")
             + f"; {a.steps} steps, bs {a.bs}, lr {a.lr} (cosine, 5 % warm-up, every group), clip {CLIP} per group (fit's joint clip off), head seed {args['head_seed']} (data order), B' seed {a.seed}, K {K}, token drop 0, label gate off")
     hook = StepHook(run, joint)
     handle = register_optimizer_step_pre_hook(hook)
