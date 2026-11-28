@@ -27,6 +27,6 @@
  "data": "data/splits.json",
  "pythonpath": ["evaluation", "evaluation/sparse_lanes", "net/prep", "net/model", "net/loss", "training", "training/train", "tools/viz"],
  "tests": ["evaluation/sparse_lanes/selftest.py", "evaluation/jtiming.py", "net/tests/merged_source.py","net/tests/test_jtoken.py", "net/tests/test_lane_tokcache.py", "net/tests/test_lane_live.py",
-           "net/tests/test_jlive_train.py", "evaluation/tests/test_jtoken_eval.py"],
+           "net/tests/test_jlive_train.py", "net/tests/test_lane_train.py", "net/tests/test_foundation.py", "evaluation/tests/test_jtoken_eval.py"],
  "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
 }
