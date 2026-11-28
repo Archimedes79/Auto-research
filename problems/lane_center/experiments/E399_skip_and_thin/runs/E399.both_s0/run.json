@@ -1,0 +1,29 @@
+{
+ "run": "E399.both_s0",
+ "problem": "lane_center",
+ "experiment": "E399",
+ "arm": "both",
+ "seed": 0,
+ "commit": "2fdf3b787828aa1a263a937d8e9e55dc4fd6dba9",
+ "tag": "lane_center/E399",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 136.2,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 152.1,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 02:04:24",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 02:04:45",
+ "ended": "2026-11-28 02:13:34"
+}
