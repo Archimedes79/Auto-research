@@ -1,11 +1,11 @@
-"""E292 (D82): the one-pass Matrix-NMS decay as a layer of the forward path on the 2 m node grid, the torch twin of `evaluation/qgraph_readout.matrix_nms` (E288: R 1.75 m, sigma 0.1 reproduces the hard close-node step of the delivered graph).
+"""E292 (D82): the one-pass Matrix-NMS decay as a layer of the forward path on the 2 m node grid, the torch twin of the hard numpy step `matrix_nms` kept in net/tests/test_qmnms.py (E288: R 1.75 m, sigma 0.1 reproduces the hard close-node step of the delivered graph).
 
     e_damped_logit = matrix_nms_logit(e_logit (B, H, W), pos (B, 2, H, W) metres, radius=1.75, sigma=0.1)
 
 For a cell i with the existence probability e_i, the stronger cells j are those of its 8 neighbours with e_j > e_i (a tie: the lower cell index is the stronger; a comparison without gradient, the order of the hard rule). Their overlap with i is
 o_ij = relu(1 - d_ij / radius) of the predicted node positions; the compensation of j is c_j = max over the cells k stronger than j of o_jk; the decay of i is the minimum over its stronger neighbours of
 exp(-(o_ij^2 - c_j^2) / sigma), capped at 1, and e'_i = e_i x decay_i. With radius <= 2 m only the 8 neighbour cells can overlap (a node lies within +-1 m of its cell centre, two cells apart the nodes are at least 2 m apart),
-so this equals the numpy function on the nodes with e >= thr exactly (tested against it in `python qmnms.py`). Differentiable in the node's own e and in the positions (through the overlaps and the compensation). NOT in the probability of the stronger neighbour: the decay depends on the overlaps only, the probabilities decide the
+so this equals the numpy function on the nodes with e >= thr exactly (tested against it in net/tests/test_qmnms.py). Differentiable in the node's own e and in the positions (through the overlaps and the compensation). NOT in the probability of the stronger neighbour: the decay depends on the overlaps only, the probabilities decide the
 order (a comparison without gradient), so unlike E277's product form the loss cannot raise the stronger node through the weaker one's decay. Returns the logit of e'.
 """
 import torch
@@ -45,54 +45,3 @@ def matrix_nms_logit(e_logit, pos, radius=1.75, sigma=0.1):
     ld = torch.where(has, -x, torch.full_like(x, -1.0))                                             # a safe value where nothing decays: the formula is not evaluated there, so no inf * 0 in the backward pass
     damped = ld - torch.logaddexp(torch.log(-torch.expm1(ld)), -z)
     return torch.where(has, damped, z)
-
-
-def _selftest():
-    import os
-    import sys
-    import numpy as np
-    root = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    sys.path.insert(0, os.path.join(root, "evaluation"))
-    import qgraph_readout as QR
-    torch.manual_seed(0)
-    B, H, W = 3, 50, 50
-    cell = torch.stack(torch.meshgrid(-50 + 2 * (torch.arange(H).float() + 0.5), -50 + 2 * (torch.arange(W).float() + 0.5), indexing="ij"), 0)[None]
-    for radius, sigma in ((1.75, 0.1), (1.5, 0.5), (2.0, 0.2)):
-        e_logit = torch.randn(B, H, W) * 2.5
-        pos = cell + (torch.rand(B, 2, H, W) * 2 - 1)                                               # the node lies within +-1 m of its cell centre
-        out = matrix_nms_logit(e_logit, pos, radius, sigma).sigmoid()
-        for b in range(B):
-            e = e_logit[b].sigmoid().flatten().numpy().astype(float)
-            ref = QR.matrix_nms(pos[b].flatten(1).t().numpy().astype(float), e, radius, thr=0.5, sigma=sigma)       # 0 below thr after the decay
-            mine = out[b].flatten().numpy().astype(float)
-            sel = e >= 0.5
-            ok = np.abs(np.where(ref > 0, ref, 0.0) - np.where(sel & (mine >= 0.5), mine, 0.0))[sel]
-            assert ok.max() < 2e-5, (radius, sigma, ok.max())
-    # a gradient reaches the weaker node's own probability and both positions (not the stronger node's probability: the order is a comparison)
-    e_logit = torch.zeros(1, 4, 4)
-    e_logit[0, 1, 1], e_logit[0, 1, 2] = 3.0, 2.0
-    e_logit.requires_grad_(True)
-    pos = (cell[:, :, :4, :4] + 0.0).clone().requires_grad_(True)
-    pos.data[0, 1, 1, 2] -= 1.8                                                                     # pull the second node onto the first (4 m grid: cells 2 m apart, offset -1.8 -> 0.2 m)
-    matrix_nms_logit(e_logit, pos).sigmoid()[0, 1, 2].backward()
-    assert e_logit.grad[0, 1, 2].abs() > 0 and e_logit.grad[0, 1, 1].abs() == 0 and pos.grad[0, :, 1, 2].abs().sum() > 0 and pos.grad[0, :, 1, 1].abs().sum() > 0, (e_logit.grad[0, 1, 2], e_logit.grad[0, 1, 1], pos.grad[0, :, 1, 2], pos.grad[0, :, 1, 1])
-    # no dead gradient at the extremes (the first version clamped e' at 1e-6): an isolated node returns its own logit with gradient 1 at any |logit|; a node under a stronger one at the same place
-    # returns about z + log(decay) (decay = exp(-1 / sigma)) with a finite, positive gradient even for a logit of -14.5 (e below 1e-6)
-    for v in (-30.0, -14.5, 14.5, 30.0):
-        lz = torch.tensor([[[v, -9.0]]], requires_grad=True)
-        pz = torch.zeros(1, 2, 1, 2)
-        pz[0, 1, 0, 1] = 5.0                                                                        # the second cell is far away: nothing to decay it
-        oz = matrix_nms_logit(lz, pz)
-        oz.sum().backward()
-        assert torch.allclose(oz.detach()[0, 0], lz.detach()[0, 0], atol=1e-4) and torch.allclose(lz.grad[0, 0], torch.ones(2), atol=1e-4), (v, oz, lz.grad)
-    for v in (-30.0, -14.5, -5.0, 3.0):
-        lz = torch.tensor([[[8.0, v]]], requires_grad=True)                                         # the weaker node (cell 1) shares the stronger one's position
-        oz = matrix_nms_logit(lz, torch.zeros(1, 2, 1, 2), 1.75, 0.1)
-        oz[0, 0, 1].backward()
-        assert torch.isfinite(oz).all() and torch.isfinite(lz.grad).all() and float(lz.grad[0, 0, 1]) > 0.0, (v, oz, lz.grad)
-        assert v > -14.0 or abs(float(oz[0, 0, 1]) - (v - (1.0 - 1e-4 / 1.75) ** 2 / 0.1)) < 1e-3, (v, float(oz[0, 0, 1]))                  # e is tiny: logit(e x decay) = z + log(decay), decay = exp(-o^2 / sigma)
-    print("qmnms selftest ok")
-
-
-if __name__ == "__main__":
-    _selftest()

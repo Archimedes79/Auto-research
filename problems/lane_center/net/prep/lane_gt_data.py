@@ -1,9 +1,9 @@
-"""Data of the lane head (E273): the 39 frozen BEV channels of a frame + everything the heads are trained on, drawn from the lane GT of GtGenerator (`GtGenerator.lane_gt`) in the data loader.
+"""Data of the lane head (E273): the 39 frozen BEV channels of a frame + everything the heads are trained on, drawn from the lane GT of GtGenerator (`GtGenerator.load_lane`) in the data loader.
 
     ds, dl = loader("train" | "val_clean", bs=4, workers=3, map_mode="train" | "error" | "exact")
 
 Frames = the project's splits through `frames.Frames` (TRAIN 8414, VAL 873 via its rows: the stored feature files also hold the TEST rows, which are never iterated); the sample token of
-a row is `<data>/lane_center/b123/feats/{train,val}_tokens.json[row]` (`bflc_paths.B123`); the lane GT of the token comes from the store of the lane GT of this checkout (`GtGenerator.lane_gt.load`). A frame whose graph is not
+a row is `<data>/lane_center/b123/feats/{train,val}_tokens.json[row]` (`bflc_paths.B123`); the lane GT of the token comes from the store of the lane GT of this checkout (`GtGenerator.load_lane`). A frame whose graph is not
 stored (yet) is left out of the dataset (`missing` says how many; `strict=True` raises instead).
 Item (numpy -> torch): x (39, 200, 200) float16 (normalised as `GridData`); node targets `qtargets.grid_targets` on the 50 x 50 grid of 2 m cells: exists, flags (8), offset (m), dirv, sstart,
 piece (int, index into the GT pieces of the frame, -1 none), uout, uin; links `lk` (L, 4) int cells (iu, ju, iv, jv) + `lk_long` + `lk_scale` (L, 2) the fitted Hermite handle scales of the long links (NaN for short ones); pixel targets `qraster.pixel_targets` (lines_mask / lines_dist
@@ -22,16 +22,12 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", "../.."):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
+import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
 import map_sim as MS  # noqa: E402
 import frames as FR  # noqa: E402
 import qtargets as QT  # noqa: E402
 
 BOX = 48.0
-
-
-def lane_store():
-    from GtGenerator import lane_gt
-    return lane_gt, os.path.join(lane_gt.DATA, lane_gt.signature())
 
 
 class QData(torch.utils.data.Dataset):
@@ -40,13 +36,12 @@ class QData(torch.utils.data.Dataset):
         self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{FR.D}/feats/{part}_tokens.json"))
-        self.lg, d = lane_store()
-        held = self.lg.held(d)
+        held = GtGenerator.lane_tokens()
         ks_all = [int(k) for k in self.bd.ks]
         self.ks = [k for k in ks_all if self.tokens[int(self.bd.rows[k])] in held]
         self.missing = len(ks_all) - len(self.ks)
         if strict and self.missing:
-            raise FileNotFoundError(f"{self.missing} of {len(ks_all)} frames have no stored lane GT in {d}")
+            raise FileNotFoundError(f"{self.missing} of {len(ks_all)} frames have no stored lane GT (store {GtGenerator.lane_signature()})")
         self.mm = None
 
     def __len__(self):
@@ -63,7 +58,7 @@ class QData(torch.utils.data.Dataset):
         token = self.tokens[row]
         x = np.concatenate([np.asarray(m[row], np.float32) for m in self.mm], 0)
         x = ((x - self.bd.mean[:39, None, None]) / self.bd.std[:39, None, None]).astype(np.float16)
-        g = self.lg.load(token)
+        g = GtGenerator.load_lane(token)
         nt = QT.node_table(g)
         t = QT.grid_targets(nt)
         lk, lk_long = QT.link_array(nt)

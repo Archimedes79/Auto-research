@@ -216,23 +216,11 @@ def node_table(g, marker_dist=0.0, short=SHORT):
 
 def grid_targets(nt, n=N):
     """the maps of the node head from a node table: exists (n, n), flags (8, n, n), offset (2, n, n) metres from the cell centre, dirv (2, n, n), sstart (n, n), piece (n, n) int (-1 = none),
-    uout / uin (n, n): the node starts / ends a long link; E276: tier (n, n) the tier of the node of the cell (0 = none or no l4 labels), vis (n, n) 1 where a camera sees the node (1 without
-    labels and in cells without a node), ztier (n, n) the lowest tier of the GT lane points within the cell dilated by 1 m (0 = no lane there; unlabelled points count as tier 3)"""
+    uout / uin (n, n): the node starts / ends a long link"""
     t = dict(exists=np.zeros((n, n), np.float32), flags=np.zeros((len(FLAGS), n, n), np.float32), offset=np.zeros((2, n, n), np.float32), dirv=np.zeros((2, n, n), np.float32),
-             sstart=np.zeros((n, n), np.float32), piece=-np.ones((n, n), np.int32), uout=np.zeros((n, n), np.float32), uin=np.zeros((n, n), np.float32),
-             tier=np.zeros((n, n), np.float32), vis=np.ones((n, n), np.float32), ztier=np.zeros((n, n), np.float32))
-    pt = np.asarray(nt["pts"], float)
-    if len(pt):
-        zt = np.where(nt["ptier"] > 0, nt["ptier"], 3).astype(np.float32)
-        z = np.full((n, n), 9.0, np.float32)
-        for dx in (-1.0, 0.0, 1.0):
-            for dy in (-1.0, 0.0, 1.0):
-                c = cell_of(pt + np.array([dx, dy]))
-                np.minimum.at(z, (c[:, 0], c[:, 1]), zt)
-        t["ztier"] = np.where(z < 9.0, z, 0.0).astype(np.float32)
+             sstart=np.zeros((n, n), np.float32), piece=-np.ones((n, n), np.int32), uout=np.zeros((n, n), np.float32), uin=np.zeros((n, n), np.float32))
     for m in range(len(nt["pos"])):
         i, j = nt["cell"][m]
-        t["tier"][i, j], t["vis"][i, j] = nt["tier"][m], float(nt["vis"][m])
         t["exists"][i, j] = 1
         t["flags"][:, i, j] = nt["flags"][m]
         t["offset"][:, i, j] = nt["pos"][m] - centre_of((i, j))

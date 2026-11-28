@@ -18,10 +18,10 @@ The model lives in `net/` in three layers, apart from the training system: `net/
 | module | job | code |
 |---|---|---|
 | 1 Foundation | camera + radar -> a BEV feature map (39 channels, 200 x 200, 0.5 m); frozen, cached | GaussianCaR (frozen) |
-| 2 Lane head B' | the pyramid and the node head: existence, position, heading and type flags of a node per 2 m cell | `net/model/qgraph.py` (`QGraph`), `net/model/pyramid.py` |
-| 3 Tokens | the top-K (512) nodes become tokens (position, direction, existence, node token) | stage 1 cached: `net/prep/lane_tokcache.py`; stage 2 live, node head trainable: `training/train/lane_live_tok.py` |
+| 2 Lane head B' | the pyramid and the node head: existence, position, heading and type flags of a node per 2 m cell | `net/model/qgraph.py` (`QGraph`), `net/model/pyramid.py`; the whole chain 2 - 5 as one module: `net/model/lane_net.py` (`LaneNet`) |
+| 3 Tokens | the top-K (512) nodes become tokens (position, direction, existence, node token) | `net/model/lane_net.py` (`LaneNet.tokens`: live, the node head trainable in stage 2); cached for stage 1: `net/prep/lane_tokcache.py` |
 | 4 Token head | three self-attention layers (relative-geometry bias, allowed-pair gate); per source a softmax over successors plus a `none` slot, for short (<= 8 m) and long links; a seven-way node-type softmax | `net/model/jtoken.py` (`JTokenHead`) |
-| 5 Read-out | link short 0.3, link long 0.2, node kept when p_none < 0.6, none gate off -> the graph | `evaluation/jtoken_eval.py` |
+| 5 Read-out | link short 0.3, link long 0.2, node kept when p_none < 0.6, none gate off -> the graph | `net/model/lane_readout.py` |
 | Losses (training) | the token likelihood with the `none` slot, node types and handle scales; B''s own node loss | `net/loss/loss_jtoken.py`, `net/loss/loss_qgraph.py` |
 
 Training: stage 1 trains the head on cached tokens (`training/train/jtoken_train.py`); stage 2 trains the head and the node head of B' together through the token loss (`training/train/jlive_train.py`).

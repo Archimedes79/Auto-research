@@ -6,12 +6,12 @@ The model is `net/model/jtoken.JTokenHead` (the whole trainable path: B' is cach
 (imported only when the loop starts): the ONE finished cache of the frozen head `--ident` (`e292_a` = B') and the seed under `runs/e365_cache`. `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache,
 no loader): the plumbing test and the memory check.
 The loop, the run-directory contract, the checkpoint every 500 steps with resume, the roll-back guard and the `clock` line are those of `trainer.fit`; AdamW lr 1e-3, 5 % warm-up, cosine to 0.
-The architecture is the champion's, a constant (`ARCH`: d 64, heads 4, layers 3, ffn 128; `arch`, `build_head`; `load_model` rebuilds it).
+The architecture is the champion's, a constant (`lane_net.ARCH`: d 64, heads 4, layers 3, ffn 128; built by `lane_net.build_head`, `lane_net.load_head` rebuilds it).
 `--none-weight W` (default 1) multiplies the loss of the sources whose GT successor set is empty (target: the none slot) and the type cross-entropy of the none class (`loss_jtoken.jtoken_loss`).
-`live_inputs` (the head keeps the graph of its inputs, `jtoken.JTokenHead(live_inputs=)`) has no flag here (the cached inputs carry no graph): `build_head` reads it from a run's args (absent = False), so a stage-2 run's
+`live_inputs` (the head keeps the graph of its inputs, `jtoken.JTokenHead(live_inputs=)`) has no flag here (the cached inputs carry no graph): `lane_net.build_head` reads it from a run's args (absent = False), so a stage-2 run's
 model.pt rebuilds with it; not in `arch` and not in the recipe. `--head-seed N` (default: --seed): the head's initialisation and the data order use N, `--seed` keeps choosing the B' cache (args['seed'] stays the cache
 seed, so the read-outs open the same cache); in the recipe.
-Options that no longer exist (`REMOVED`: the tag that keeps the code -> option -> the value a stored run must hold): a run's args that hold that value (or nothing) load and resume as before, another value is refused with the
+Options that no longer exist (`lane_net.REMOVED`: the tag that keeps the code -> option -> the value a stored run must hold): a run's args that hold that value (or nothing) load and resume as before, another value is refused with the
 option's name and the tag (`check_removed`). D117: the c-rule `prior` / `teacher`, `init`, the sizes d / heads / layers / ffn, `token_drop`, `none_weight_near`. The closed experiments (2026-11-28, tag v1): `pos_loss` max
 (E376), distillation (E379), input noise (E381), a cache root / K of one's own (E383), message rounds and early reads (E392), the position head and its curve loss (E395).
 The key-weight switch of the head counts the head's own training forwards (a buffer inside the checkpoint), so a resume or a roll-back keeps it right. The scored model is the final one (nothing is chosen on VAL).
@@ -19,7 +19,6 @@ A folder that holds another recipe is refused; the same recipe is resumed. `main
 are TEST-ONLY arguments (a run uses 500 / 384).
 """
 import argparse
-import hashlib
 import json
 import os
 import sys
@@ -31,16 +30,11 @@ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirna
 for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import jtoken as JK  # noqa: E402
+import lane_net as LN  # noqa: E402
 import loss_jtoken as LJK  # noqa: E402
 import trainer as T  # noqa: E402
 
 RECIPE = ("seed", "ident", "bs", "steps", "lr", "none_weight", "head_seed")
-ARCH_DEFAULTS = dict(none_weight=1.0, head_seed=None, live_inputs=False)   # what a run of before these options means (the head of the first build)
-ARCH = dict(d=64, heads=4, layers=3, ffn=128)                               # the champion's architecture (the head of the first build), a constant since D117
-# Options that no longer exist: the tag that keeps their code -> option -> the value a stored run must hold (or nothing): today's head and loss are then that run's (`check_removed`)
-REMOVED = {"archive/jtoken-before-simplify-2026-11-17": dict(prior="none", teacher="none", init=None, token_drop=0.0, none_weight_near=None, **ARCH),       # D117
-           "v1": dict(pos_loss="sum", distill_from=None, distill_weight=1.0, distill_sha256=None, noise_pos=0.0, noise_e=0.0, cache=None, K=512,            # E376, E379, E381, E383 (K: the one cache's)
-                      rounds=0, wire_weight=0.0, msg="real", pos_head=False, curve_w=0.0, node_w=0.0)}                                                       # E392, E395
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
 
 
@@ -53,52 +47,20 @@ def parse_args(argv=None):
     ap.add_argument("--bs", type=int, default=8)
     ap.add_argument("--lr", type=float, default=1e-3)
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--none-weight", type=float, default=ARCH_DEFAULTS["none_weight"], dest="none_weight", help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
+    ap.add_argument("--none-weight", type=float, default=LN.ARCH_DEFAULTS["none_weight"], dest="none_weight", help="W: multiplies the loss of the sources with an empty G(i) (target: none) and the type cross-entropy of the none class (1 = off)")
     ap.add_argument("--head-seed", type=int, default=None, dest="head_seed", help="the seed of the head's initialisation and the data order (default: --seed); --seed keeps choosing the B' cache")
     ap.add_argument("--smoke", action="store_true", help="20 steps on synthetic batches")
     return ap.parse_args(argv)
 
 
-def file_sha256(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for b in iter(lambda: fh.read(1 << 22), b""):
-            h.update(b)
-    return h.hexdigest()
-
-
-def check_removed(args, where):
-    """a run's args that hold an option of REMOVED at another value than the one named there are refused: that head or loss no longer exists (the message names the options and the tag that keeps them)"""
-    for tag, options in REMOVED.items():
-        held = {k: args[k] for k, v in options.items() if args.get(k) not in (None, v)}
-        assert not held, f"{where}: {held}: options that no longer exist (the tag {tag} keeps them)"
-
-
 def check_start(args, folder):
-    """before anything is written: a folder that already holds a run is only RESUMED (the same recipe), never another run's; a run of a removed option is refused (`check_removed`)"""
+    """before anything is written: a folder that already holds a run is only RESUMED (the same recipe), never another run's; a run of a removed option is refused (`lane_net.check_removed`)"""
     held = [f for f in ("config.json", "ckpt.pt", "model.pt") if os.path.exists(os.path.join(folder, f))]
     if held:
         c = json.load(open(os.path.join(folder, "config.json"))) if "config.json" in held else {}
-        check_removed(c.get("args") or {}, folder)
-        old = {k: (c.get("args") or {}).get(k, ARCH_DEFAULTS.get(k)) for k in RECIPE}                    # a run of before an option has its default
-        assert c.get("design") == "jtoken" and old == {k: args.get(k, ARCH_DEFAULTS.get(k)) for k in RECIPE}, f"{folder} holds {held} of another run ({c.get('design')}, {old}): use another --name"
-
-
-def to_device(b, dev):
-    return {k: (v.to(dev, non_blocking=True) if torch.is_tensor(v) else v) for k, v in b.items()}
-
-
-def build_head(args):
-    """the head of a run's args (live_inputs, skip_suppress and min_e (E399), close_gaps (E420): absent = the default; the architecture `arch`): the one place that builds it, for the trainer, `load_model` and the stage-2 trainer"""
-    d, heads, layers, ffn = arch(args)
-    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, skip=args.get("skip_suppress"), gap=args.get("close_gaps"), min_e=args.get("min_e"),
-                         live_inputs=bool(args.get("live_inputs", ARCH_DEFAULTS["live_inputs"])))
-
-
-def arch(args):
-    """(d, heads, layers, ffn) = the constants ARCH; the args of a removed option at another value are refused (`check_removed`)"""
-    check_removed(args, "the run's args")
-    return ARCH["d"], ARCH["heads"], ARCH["layers"], ARCH["ffn"]
+        LN.check_removed(c.get("args") or {}, folder)
+        old = {k: (c.get("args") or {}).get(k, LN.ARCH_DEFAULTS.get(k)) for k in RECIPE}                    # a run of before an option has its default
+        assert c.get("design") == "jtoken" and old == {k: args.get(k, LN.ARCH_DEFAULTS.get(k)) for k in RECIPE}, f"{folder} holds {held} of another run ({c.get('design')}, {old}): use another --name"
 
 
 def make_loss(run, none_weight=1.0):
@@ -108,7 +70,7 @@ def make_loss(run, none_weight=1.0):
 
     def loss_fn(m, b):
         n[0] += 1
-        b = to_device(b, next(m.parameters()).device)
+        b = LN.to_device(b, next(m.parameters()).device)
         loss, info = LJK.jtoken_loss(m(b), b, none_weight=none_weight)
         info.update(gpu_gb=gb(torch.cuda.max_memory_allocated), gpu_res_gb=gb(torch.cuda.max_memory_reserved))
         if n[0] == 1 and run is not None:                                       # the loss of the start weights (before the first update)
@@ -123,15 +85,6 @@ def make_loss(run, none_weight=1.0):
             mark[:] = [time.time(), n[0]]
         return loss, info
     return loss_fn
-
-
-def load_model(run, dev, runs=None):
-    """-> (the head of runs/<run>/model.pt in eval mode, its args)"""
-    ck = torch.load(os.path.join(runs or T.RUNS, run, "model.pt"), map_location="cpu", weights_only=False)
-    check_removed(ck["args"], f"run {run}")
-    m = build_head(ck["args"])
-    m.load_state_dict(ck["state"])
-    return m.to(dev).eval(), ck["args"]
 
 
 def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
@@ -149,8 +102,8 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
         batch_fn = None
     run = T.Run(a.name, root=runs)
     T.seed_all(hs)                                                          # the head's initialisation never depends on what drew before
-    model = build_head(args)
-    run.log(f"jtoken bs {a.bs}: {args['steps']} steps, lr {a.lr}, trainable {JK.count_params(model)} parameters ({JK.count_params(model) / 1e6:.3f} M: the whole head, d {ARCH['d']} layers {ARCH['layers']} heads {ARCH['heads']} ffn {ARCH['ffn']}; B' is cached), "
+    model = LN.build_head(args)
+    run.log(f"jtoken bs {a.bs}: {args['steps']} steps, lr {a.lr}, trainable {JK.count_params(model)} parameters ({JK.count_params(model) / 1e6:.3f} M: the whole head, d {LN.ARCH['d']} layers {LN.ARCH['layers']} heads {LN.ARCH['heads']} ffn {LN.ARCH['ffn']}; B' is cached), "
             f"cache seed {a.seed}, head seed {hs}{' (--head-seed)' if hs != a.seed or getattr(a, 'head_seed', None) is not None else ''}, "
             + (f"none weight {a.none_weight}, " if a.none_weight != 1.0 else "")
             + (f"synthetic batches, K {smoke_k}" if a.smoke else f"ident {a.ident}"))

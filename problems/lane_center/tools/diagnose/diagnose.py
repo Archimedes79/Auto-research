@@ -25,6 +25,7 @@ for sub in json.load(open(os.path.join(PROBLEM, "problem.json")))["pythonpath"]:
 sys.path.insert(0, os.path.join(REPO, "autoresearch"))
 sys.path.insert(0, REPO)
 
+import GtGenerator  # noqa: E402
 import matplotlib  # noqa: E402
 
 matplotlib.use("Agg")
@@ -56,9 +57,9 @@ def near(points, to):
     return np.full(len(to), np.inf) if not len(points) else cKDTree(points).query(to)[0]
 
 
-def intersection_flags(lane_gt, token, pts):
+def intersection_flags(token, pts):
     p, flag = [], []
-    for piece in lane_gt.load(token)["pieces"]:
+    for piece in GtGenerator.load_lane(token)["pieces"]:
         q = np.asarray(piece["pts"], float)[:, :2]
         f = np.zeros(len(q), bool)
         for s in piece["segments"]:
@@ -145,8 +146,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     import adapter as AD
     import bflc_paths as BP
-    import jtoken_eval as JE
-    from GtGenerator import lane_gt
+    import lane_readout as RO
     run_dir = os.path.join(BP.RUNS, a.run)
     cfg = json.load(open(os.path.join(run_dir, "config.json")))
     dec = cfg["decode"]
@@ -159,11 +159,11 @@ def main(argv=None):
     gpu = not a.no_gpu
     if gpu:
         import torch
-        import jlive_train as JLT
+        import lane_net as LN
         import lane_tok_data as TD
         data = TD.TokData(a.split, 2.0, feats=True)
         assert list(data.tokens) == [f.token for f in frames]
-        bm = JLT.load_b(a.run, "cuda", BP.RUNS)
+        net = LN.LaneNet.from_checkpoint(os.path.join(run_dir, "model.pt"), "cuda")[0]
         c1 = -49.5 + np.arange(100)
         GX, GY = np.meshgrid(c1, c1, indexing="ij")
     cov = {s: [] for s in STAGES}
@@ -175,12 +175,11 @@ def main(argv=None):
         if gpu and k % 4 == 0:
             x = torch.stack([data[i]["x"] for i in range(k, min(k + 4, len(frames)))]).cuda().float()
             with torch.no_grad():
-                P = bm.pyr(x)
-                no = bm.node_stage(P)
+                P = net.b.pyr(x)
+                no = net.tokens(x)[0]
             maps = dict(pix=P["centre1"][:, 0].float().sigmoid().cpu().numpy(), e=no["e"].float().sigmoid().cpu().numpy(), pos=no["pos"].float().cpu().numpy())
         t, v = d["tokens_np"], np.asarray(d["tokens_np"]["valid"], bool)
-        variant = JE.decode_variant(d, v, dec["link_thr"], dec["keep_thr"], dec["none_gate"], dec["link_thr_long"])
-        pred = JE.frame_prediction(t, variant, "rec", dec["keep_thr"])
+        pred = RO.graph(t, d, v, RO.Decode(**dec))
         graph, bk = QE.readout(pred, 0.5, 0.5)
         lines = [np.asarray(l, float)[:, :2] for l in QE.to_raw(graph)["pts"] if len(l) > 1]
         gt = [np.asarray(p, float)[:, :2] for p in fr.gt["pts"] if len(p) > 1]
@@ -198,7 +197,7 @@ def main(argv=None):
             sets["confident node"] = np.c_[maps["pos"][i, 0][conf], maps["pos"][i, 1][conf]]
         for s, q in sets.items():
             cov[s] += list(near(q, G) <= R_STAGE)
-        inter += list(intersection_flags(lane_gt, fr.token, G))
+        inter += list(intersection_flags(fr.token, G))
         per_frame.append(dict(k=k, scene=int(fr.scene), token=fr.token, covered=float(np.mean(near(delivered, G) <= 2.0)),
                               good=float(np.mean(near(np.vstack([resample(g, 0.25)[0] for g in gt]), delivered) <= 1.0)) if len(delivered) else 0.0))
         # positions of the delivered nodes against their 2 m cells
@@ -244,9 +243,9 @@ def main(argv=None):
     for n, w in enumerate(worst):
         fr, d = frames[w["k"]], dump[w["k"]]
         t, v = d["tokens_np"], np.asarray(d["tokens_np"]["valid"], bool)
-        pred = JE.frame_prediction(t, JE.decode_variant(d, v, dec["link_thr"], dec["keep_thr"], dec["none_gate"], dec["link_thr_long"]), "rec", dec["keep_thr"])
+        pred = RO.graph(t, d, v, RO.Decode(**dec))
         lines = [np.asarray(l, float)[:, :2] for l in QE.to_raw(QE.readout(pred, 0.5, 0.5)[0])["pts"] if len(l) > 1]
-        own = [(np.asarray(pc["pts"], float), np.asarray(pc.get("tier", []), int) == 1) for pc in lane_gt.load(fr.token)["pieces"]]
+        own = [(np.asarray(pc["pts"], float), np.asarray(pc.get("tier", []), int) == 1) for pc in GtGenerator.load_lane(fr.token)["pieces"]]
         picture(os.path.join(out_dir, f"worst_{n + 1}.png"), f"{a.run}, scene {w['scene']}, {str(fr.token)[:8]}: covered {w['covered']:.0%}, true length within 1 m {w['good']:.0%}",
                 [np.asarray(g, float)[:, :2] for g in fr.gt["pts"] if len(g) > 1], [(q, m) for q, m in own if len(m) and m.any()], lines)
     res = json.load(open(os.path.join(run_dir, "result.json"))) if os.path.exists(os.path.join(run_dir, "result.json")) else None

@@ -10,14 +10,13 @@ links src, dst (L,), long (L,) (chord > 8 m), scale (L, 2) the fitted handle sca
 of the lane GT points on the link's path are connector points (the link classes of E346: junction link = long and conn). flags / piece / sstart / cell / conn are for the read-out and the tables only: no model input reads them.
 Cache: runs/e357_cache/l<lattice>_<lane GT signature>_<TABLE_VERSION>/<split>/<token>.npz (derived data; the version is bumped by hand when the table code changes; a file is written whole and renamed; a table missing in the cache is computed and stored by whoever asks, also a loader worker).
 Batch (`collate`): x (B, 39, 200, 200), token, row, pos / dirv (B, N, 2) float32 and valid (B, N) with N = the most nodes of a frame of the batch, y (B, N, N) = 1 where i -> j is a GT link, ys (B, N, N, 2) the fitted scales
-of the long GT links (NaN elsewhere), table = the per-frame tables. Tests: through net/tests/test_lane_tokcache.py and test_lane_live.py (net/tests/test_jtok.py is in the tag v1)
+of the long GT links (NaN elsewhere), table = the per-frame tables. Tests: through net/tests/test_lane_tokcache.py and test_lane_net.py (net/tests/test_jtok.py is in the tag v1)
 """
 import argparse
 import json
 import os
 import sys
 import time
-import zlib
 
 import numpy as np
 import torch
@@ -26,6 +25,7 @@ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirna
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
+import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
 import lane_gt_data as LD  # noqa: E402
 import qtargets as QT  # noqa: E402
 
@@ -74,7 +74,7 @@ class TokData(torch.utils.data.Dataset):
         if split == "val":
             want = [int(r) for r in json.load(open(os.path.join(ROOT, "data", "splits.json")))["val"]]
             assert self.qd.missing == 0 and len(want) == 873 and self.rows == want, f"VAL is not the 873 rows of data/splits.json['val'] ({len(self.rows)} rows, {self.qd.missing} without lane GT)"
-        self.dir = None if cache is None else os.path.join(cache, f"l{self.res:g}_{os.path.basename(LD.lane_store()[1])}_{TABLE_VERSION}", split)
+        self.dir = None if cache is None else os.path.join(cache, f"l{self.res:g}_{GtGenerator.lane_signature()}_{TABLE_VERSION}", split)
         if self.dir:
             os.makedirs(self.dir, exist_ok=True)
 
@@ -93,7 +93,7 @@ class TokData(torch.utils.data.Dataset):
                 t = {k: z[k] for k in TABLE}
             assert np.array_equal(t["cell"], np.clip(np.floor((t["pos"] + QT.HALF) / self.res), 0, round(2 * QT.HALF / self.res) - 1)), f"{path} is not a table of the {self.res} m lattice"
             return t
-        t = frame_table(self.qd.lg.load(self.tokens[i]), self.res)
+        t = frame_table(GtGenerator.load_lane(self.tokens[i]), self.res)
         if path:
             _save(path, t)
         return t
@@ -108,12 +108,7 @@ class TokData(torch.utils.data.Dataset):
         return out
 
 
-# ------------------------------------------------------------------------------------------------------------------------------ degraded nodes
-def keep_nodes(token, n, drop, seed):
-    """(n,) bool, the nodes of a frame that stay: each is removed with probability `drop` by a generator seeded with (seed, the frame's token)"""
-    return np.ones(n, bool) if drop <= 0 else np.random.default_rng([seed, zlib.crc32(token.encode())]).random(n) >= drop
-
-
+# ------------------------------------------------------------------------------------------------------------------------------ the table of a node subset
 def sub_table(t, keep):
     """the table of the kept nodes. Links: a GT link between two kept nodes stays (with its scale and class); a chain of GT links through removed nodes becomes ONE link between its kept ends (conn = a link of the
     chain is on a connector path, no fitted scale), unless the direct link exists"""

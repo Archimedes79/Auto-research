@@ -1,11 +1,13 @@
 """The adapter of the lane problem for autoresearch/Evaluation (the evaluation step of a run, the anchor test, the pictures of a report).
 
-The network itself ran in the step `predict` (evaluation/lane_predict.py: the live dump of B' and the token head, at the batch sizes of its GPU
-parity). The Subject here only reads that dump and decodes it at the run's decode (config "decode": the link thresholds, the keep threshold,
-the none gate; jtoken_eval.decode_variant + frame_prediction): what the system delivers. The metric is the project's own scorer
+The network itself ran in the step `predict` (evaluation/lane_predict.py: the live dump of the lane network, at the batch sizes of its GPU
+parity). The Subject here only reads that dump (lane_dump.read_dump) and decodes it at the run's decode (config "decode": the link thresholds,
+the keep threshold, the none gate; net/model/lane_readout.py `graph`): what the system delivers. The metric is the project's own scorer
 (qgraph_eval.score_frames, lean, inside the 2 m lattice): its record of a frame is kept whole as the frame's counts, and the numbers of any set
-of frames are qgraph_eval.graph_numbers of their records - the same numbers as jtoken_eval's cards (sums of integer counts; the float length
-sums of vert100 only to the last bits). A scene is the scene number of poses_val.npz; VAL = 873 frames in 22 scenes."""
+of frames are qgraph_eval.graph_numbers of their records - the same numbers as the cards of the diagnostics (jtoken_eval.py; sums of integer
+counts; the float length sums of vert100 only to the last bits). A scene is the scene number of poses_val.npz; VAL = 873 frames in 22 scenes.
+Nothing of training/ and no network is imported here: only the dump's reader, the read-out and the scorer, and every one of those files is in
+the evaluator hash (EVALUATOR_FILES below)."""
 from __future__ import annotations
 
 import argparse
@@ -98,16 +100,16 @@ class LaneSubject(Subject):
     """the delivered graph of every frame, from the run's dump at the run's decode"""
 
     def __init__(self, net, split):
-        import jtoken_eval as JE
+        import lane_dump as DU
+        import lane_readout as RO
         cfg = json.load(open(os.path.join(net, "config.json"), encoding="utf-8"))
         a = argparse.Namespace(run=os.path.basename(os.path.normpath(net)), seed=cfg["seed"], split=split, live=True, every=1)
-        r = JE.read_dump(a, os.path.dirname(os.path.normpath(net)), 0)
-        JE.check_record(r["fr"], r["valid"])
+        r = DU.read_dump(a, os.path.dirname(os.path.normpath(net)), 0)
+        RO.check_record(r["fr"], r["valid"])
         d = cfg["decode"]
         self.decode, self.preds = d, {}
         for t, f, v in zip(r["toks"], r["fr"], r["valid"]):
-            dec = JE.decode_variant(f, v, d["link_thr"], d["keep_thr"], d["none_gate"], d["link_thr_long"])
-            self.preds[f["token"]] = JE.frame_prediction(t, dec, "rec", d["keep_thr"])
+            self.preds[f["token"]] = RO.graph(t, f, v, RO.Decode(**d))
         self.meta = {k: r["meta"].get(k) for k in ("bs_b", "bs_head", "device", "env", "tokens_exact")}
 
     def predict(self, sample, taps=()):
@@ -125,9 +127,9 @@ class LaneGraph(Metric):
     better = {k: ("low" if k in LOWER else "high") for k in HEADLINE}
 
     def frame(self, sample, pred):
-        import jtok as JT
+        import qtargets as QT
         QE = _qe()
-        with JT.lattice(LATTICE):
+        with QT.lattice(LATTICE):
             _, r = QE.score_frames([pred.outputs], [sample.reference], records=True, lean=True)
         return {"rec": np.frombuffer(pickle.dumps(r["graph"][0], protocol=4), np.uint8)}
 
@@ -188,9 +190,13 @@ def task(net, metrics=METRICS):
     return LaneTask()
 
 
-EVALUATOR_FILES = [os.path.abspath(__file__)] + [os.path.join(ROOT, "evaluation", f) for f in ("qgraph_eval.py", "jtoken_eval.py")] + \
-    [os.path.join(ROOT, "evaluation", "sparse_lanes", f) for f in ("bootstrap.py", "graph_eval.py", "sparse_metrics.py", "topo_metrics.py")] + \
-    [os.path.join(ROOT, "evaluation", "lane_task", "measures.py")]
+# The scored path, stored dump -> prediction -> numbers: every module of this problem that this file imports, directly or through another one
+# (evaluation/tests/test_evaluator_hash.py walks the imports and names the few modules where no scored number passes: its NOT_SCORED).
+EVALUATOR_FILES = [os.path.join(ROOT, *f.split("/")) for f in (
+    "evaluation/adapter.py", "evaluation/lane_dump.py", "evaluation/qgraph_eval.py", "evaluation/lane_suite.py",
+    "evaluation/sparse_lanes/bootstrap.py", "evaluation/sparse_lanes/graph_eval.py", "evaluation/sparse_lanes/sparse_metrics.py", "evaluation/sparse_lanes/topo_metrics.py",
+    "evaluation/lane_task/__init__.py", "evaluation/lane_task/geometry.py", "evaluation/lane_task/raster.py", "evaluation/lane_task/measures.py",
+    "net/model/lane_readout.py", "net/model/qformat.py", "net/prep/lane_ptok_data.py", "net/prep/lane_tokcache.py", "net/prep/polylines.py", "net/prep/qtargets.py")]
 
 
 def evaluator_now():
