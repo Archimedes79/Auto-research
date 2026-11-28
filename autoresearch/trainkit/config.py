@@ -36,7 +36,7 @@ class Config:
                                                  # even with slim_at_end (only the final one is written slim)
     slim_at_end: bool = False                   # True: a run that finishes keeps ONE checkpoint without optimiser state and RNG (about half
                                                  # the size, no older ones): it evaluates and warm-starts but cannot resume training.
-                                                 # False (default; Mirko 2026-11-01: keep the full data to resume later): `keep` complete ones
+                                                 # False (default; the owner, 2026-11-01: keep the full data to resume later): `keep` complete ones
     max_bad_steps: int = 20                     # consecutive non-finite steps before aborting
     seed: int = 0
     init_from: str = ""                          # checkpoint of another run to start from (checkpoint.warm_start; only while this run has
