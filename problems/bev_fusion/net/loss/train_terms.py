@@ -7,10 +7,10 @@
 `add` puts them into the loss dict of one batch (chain.forward_loss calls it); in validation it logs what stands in their place and leaves the total alone."""
 import torch
 
-from net.loss.loss_extras import cross_time_consistency
-from net.loss.losses import build_layer_targets
-from net.loss.radar_loss import aux_weight, slot_aux_loss
-from net.loss.student_loss import anchor_terms, anchor_weight
+from bev_fusion.net.loss.loss_extras import cross_time_consistency
+from bev_fusion.net.loss.losses import build_layer_targets
+from bev_fusion.net.loss.radar_loss import aux_weight, slot_aux_loss
+from bev_fusion.net.loss.student_loss import anchor_terms, anchor_weight
 
 
 def consistency_weight(cfg, step_frac):
@@ -21,8 +21,7 @@ def consistency_weight(cfg, step_frac):
 
 def consistency_term(model, loss, res, gts, gap_steps, device):
     """the cross-time consistency of the predictions at dt = 0 and dt = +-0.5 s: the layers whose kind is area / line / object, the visibility of the cells =
-    camera and not
-    occluded, the ego steps (batch["gap_steps"]) and the motion field of the batch. -> the result dict of cross_time_consistency."""
+    camera and not occluded, the ego steps (batch["gap_steps"]) and the motion field of the batch. -> the result dict of cross_time_consistency."""
     sel = [i for i, (_, kind, _) in enumerate(loss.spec) if kind in ("area", "line", "object")]
     out = res["out"]
     probs = {dt: torch.sigmoid(o["sem"][:, sel].float()) for dt, o in out.items()}
@@ -33,9 +32,8 @@ def consistency_term(model, loss, res, gts, gap_steps, device):
 
 def add(out, model, loss, res, gts, batch, cfg, step_frac, device, training):
     """in place, the train-only terms of one batch: `out` is the loss dict of BEVLoss, `res` the model's result, `batch` the batch on the device. training: each
-    term that
-    is on is added to out["total"] with its weight and logged under its name; validation (training False): the total stays the task loss, the radar side logs
-    the share of the
+    term that is on is added to out["total"] with its weight and logged under its name; validation (training False): the total stays the task loss, the radar
+    side logs the share of the
     detections its features hold (`radar_kept`), the student its distance to the teachers."""
     wc = consistency_weight(cfg, step_frac) if training and len(res["out"]) > 1 else 0.0
     if wc > 0:                                                                     # nothing is computed during the hold

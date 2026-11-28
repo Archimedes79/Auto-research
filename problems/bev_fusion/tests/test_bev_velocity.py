@@ -1,13 +1,13 @@
 """Tests of evaluation/bev_velocity.py (its former self-test).
 
-    python tests/test_bev_velocity.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_velocity      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 
 import numpy as np
 
 from Evaluation import Prediction, Sample
-from evaluation.bev_velocity import BevVelocityMetric, centre_index
+from bev_fusion.evaluation.bev_velocity import BevVelocityMetric, centre_index
 
 
 def selftest():

@@ -19,7 +19,7 @@ def load_image(root, sd_token):
     p = image_path(root, sd_token)
     if not os.path.exists(p):
         builder = "build-cache-older" if os.path.basename(os.path.normpath(root)) == OLDER else "build-cache"
-        raise FileNotFoundError(f"{p}: lane image cache incomplete (python training/build_image_cache.py {builder} <config>)")
+        raise FileNotFoundError(f"{p}: lane image cache incomplete (python -P -m bev_fusion.training.build_image_cache {builder} <config>)")
     return decode_jpeg(read_file(p))
 
 
@@ -75,15 +75,14 @@ def build_settings():
     """what the builder makes the JPEGs with, recorded in the marker: the quality and the resize + crop of the dataset's own image
     (nuscenes_dataset._image_uint8); a cache made with other ones is
     not the cache of this code"""
-    from net.prep.images import nuscenes_front_ida
-    from net.prep.nuscenes_dataset import DST_HW
+    from bev_fusion.net.prep.images import nuscenes_front_ida
+    from bev_fusion.net.prep.nuscenes_dataset import DST_HW
     return {"jpeg_quality": JPEG_QUALITY, "hw": list(DST_HW), "ida": [round(float(x), 6) for x in nuscenes_front_ida(dst_hw=DST_HW).flatten().tolist()]}
 
 
 def older_records(ds, sample_token):
     """the CAM_FRONT sample_data records of the older frames (k = 1 .. n_cam - 1) of one sample: the track of the scene, cam_stride records apart, clamped at
-    its start
-    (the rule of nuscenes_dataset._cam_frames and feature_cache.used_frames, so these are the frames the teacher caches hold)"""
+    its start (the rule of nuscenes_dataset._cam_frames and feature_cache.used_frames, so these are the frames the teacher caches hold)"""
     track = ds.gt.camera_track(sample_token)
     i0 = [x["token"] for x in track].index(ds.gt.cam(sample_token)["token"])
     return [track[max(0, i0 - k * ds.cam_stride)] for k in range(1, ds.n_cam)]
@@ -151,8 +150,7 @@ def _mark_built(folder, key, datasets):
 
 def build_cache(datasets, root, workers=1, older=False):
     """Write the current CAM_FRONT frame of every sample of the datasets (resumable); older=True: the older frames of the window into <root>/sweeps/ instead.
-    The finished-build marker
-    (BUILT.json of that folder) is written once every sample is through."""
+    The finished-build marker (BUILT.json of that folder) is written once every sample is through."""
     import multiprocessing as mp
     import time
     global _DS

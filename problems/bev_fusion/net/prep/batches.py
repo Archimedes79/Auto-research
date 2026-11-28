@@ -6,8 +6,8 @@ import os
 import numpy as np
 import torch
 
-from net.prep.feature_cache import CachedFrontRadarDataset, FeatureStore
-from net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
+from bev_fusion.net.prep.feature_cache import CachedFrontRadarDataset, FeatureStore
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
 
 
 def make_datasets(cfg):
@@ -107,9 +107,8 @@ def gap_ego_motion(steps):
 
 def _one_copy(rows, device):
     """float32 tensor of the nested Python lists `rows` on `device` with ONE host-to-device copy, made from pinned memory without waiting (D54). The values are
-    those of
-    torch.tensor(rows, dtype=torch.float32, device=device), which converts on the host as well; the old code made one tensor, i.e. one copy from pageable memory
-    (a copy that first waits until the GPU has finished everything queued) per element of the result: three per dt and three per clip step."""
+    those of torch.tensor(rows, dtype=torch.float32, device=device), which converts on the host as well; the old code made one tensor, i.e. one copy from
+    pageable memory (a copy that first waits until the GPU has finished everything queued) per element of the result: three per dt and three per clip step."""
     flat = torch.tensor(rows, dtype=torch.float32)
     if torch.device(device).type == "cuda":
         return flat.pin_memory().to(device, non_blocking=True)

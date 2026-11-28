@@ -2,8 +2,7 @@
 
     BevSegMetric   maps: tolerant IoU per layer / range bin / dt / subset and line zero-crossing F1 (metrics.SegMeter); a model with the 1 m centre-line
                    head adds the layer `centreline` (IoU) and `centreline:dir` (angle_mae, rad)
-    BevDetMetric  boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows; 'det' = plain decode,
-                   'detr' = boxes refined by S5c)
+    BevDetMetric   boxes: nuScenes-style AP, TP errors per class / bin / dt (metrics.DetMeter rows of the decoded boxes)
     BevLossMetric  the training loss of the frame (means over frames; per-frame totals rank frames)
     BEVTask        the three plus the views of bev_views.py and the plausibility checks of a frame
 
@@ -23,8 +22,8 @@ import numpy as np
 
 from Evaluation import Flag, Metric, Prediction, Sample, Task, View
 from Evaluation.qualitative import DebugView
-from evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
-from evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
+from bev_fusion.evaluation.metrics import DetMeter, SegMeter, dt_key, in_front
+from bev_fusion.evaluation.bev_views import (DashboardView, OutputsView, OverviewView, StagesView, gt_boxes, layer_index, masks)
 
 MASKS = ("fov", "seen", "out", "obj")
 
@@ -32,8 +31,7 @@ MASKS = ("fov", "seen", "out", "obj")
 # ------------------------------------------------------------------------------------------------ maps
 def add_sample(meters, prob, dist, g, spec, dt, mass, direction=None) -> None:
     """all SegMeter updates of one sample at one dt; meters: {"fov": SegMeter, "seen": SegMeter, "obj": SegMeter}. direction: layer -> (2, X, Y) predicted (cos,
-    sin)
-    of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model."""
+    sin) of a directed line layer (the 1 m centre-line head), scored on the GT cells of that layer (`<layer>_dir` of the GT); None for every other model."""
     k = layer_index(spec)
     m = masks(g)
     areas = {n: prob[n] for n, (_, kind, _) in k.items() if kind in ("area", "line")}       # line = the 1-cell mask head
@@ -259,24 +257,22 @@ def _gt_in_front(g, groups):
 class BEVTask(Task):
     name = "bev"
 
-    def __init__(self, grid, spec, groups: Sequence[str], depth_centres=None, z_levels: Sequence[float] = (), refine: bool = False):
+    def __init__(self, grid, spec, groups: Sequence[str], depth_centres=None, z_levels: Sequence[float] = ()):
         self.grid, self.spec, self.groups = grid, spec, list(groups)
-        self.depth_centres, self.z_levels, self.refine = depth_centres, tuple(z_levels), refine
+        self.depth_centres, self.z_levels = depth_centres, tuple(z_levels)
 
     def metrics(self) -> List[Metric]:
         ms: List[Metric] = [BevSegMetric(self.grid, self.spec), BevDetMetric(self.groups, "det", "dets")]
-        if self.refine:
-            ms.append(BevDetMetric(self.groups, "detr", "detr"))
         if getattr(self, "curves", False):                                    # PR / ROC / calibration / velocity regression (bev_curves.py), off by default
-            from evaluation.bev_curves import BevCurveMetric
+            from bev_fusion.evaluation.bev_curves import BevCurveMetric
             ms.append(BevCurveMetric(self.spec, self.groups))
         # scoring on the fusion area (D37 / D38, bev_fusion_area.py), next to the old numbers; bev_eval.task switches it on by default (D31), a Task built by
         # hand does not
         if getattr(self, "fusion", False):
-            from evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
+            from bev_fusion.evaluation.bev_fusion_area import BevCoverageMetric, BevFusionDetMetric
             ms += [BevFusionDetMetric(self.groups, "detf"), BevFusionDetMetric(self.groups, "detfp", include_partial=True), BevCoverageMetric(self.groups, self._pts())]
         if getattr(self, "velocity", False):                                  # field / box-centre velocity per cell set (bev_velocity.py), off by default
-            from evaluation.bev_velocity import BevVelocityMetric
+            from bev_fusion.evaluation.bev_velocity import BevVelocityMetric
             ms.append(BevVelocityMetric(self.grid, self.groups))
         ms.append(BevLossMetric())
         return ms
@@ -285,17 +281,16 @@ class BEVTask(Task):
 
     def _pts(self):
         """token -> (lidar, radar points) of the annotation table (loaded once); None when it was not built or cannot be read: the radar classes of `cov` are
-        then left out,
-        and that is said on the console"""
+        then left out, and that is said on the console"""
         if not self._PTS:
-            from evaluation.bev_annotation_pts import OUT, load
+            from bev_fusion.evaluation.bev_annotation_pts import OUT, load
             try:
                 self._PTS.append(load() if os.path.exists(OUT) else None)
             except Exception as ex:                                           # a damaged table must not stop an evaluation
                 print(f"WARNING: annotation table unreadable ({type(ex).__name__}: {ex})", flush=True)
                 self._PTS.append(None)
             if self._PTS[0] is None:
-                print(f"WARNING: no annotation table ({OUT}): `cov` leaves out the radar classes (cam_radar, cam_only, radar_only, neither); build it with `python evaluation/bev_annotation_pts.py build`", flush=True)
+                print(f"WARNING: no annotation table ({OUT}): `cov` leaves out the radar classes (cam_radar, cam_only, radar_only, neither); build it with `python -P -m bev_fusion.evaluation.bev_annotation_pts build`", flush=True)
         return self._PTS[0]
 
     def views(self) -> Dict[str, View]:

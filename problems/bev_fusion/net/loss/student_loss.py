@@ -1,13 +1,12 @@
 """The loss of the camera student (net/model/student_encoder.py) against the cached teachers: per cell the KL of the depth distribution and the cosine and
-squared
-error of the context, on both heads (stride 16 = DualBEV, stride 8 = BEVFusion). In the chain it is the anchor of a student that trains (train_terms.py)."""
+squared error of the context, on both heads (stride 16 = DualBEV, stride 8 = BEVFusion). In the chain it is the anchor of a student that trains
+(train_terms.py)."""
 import torch.nn.functional as F
 
 
 def cell_maps(out, tgt):
     """the per-cell terms, each (B, h, w): kl<k> = KL(teacher || student) over the 118 depth bins, cos<k> = cosine similarity of the 80 context channels, mse<k>
-    = their mean squared
-    error; k = 16 (DualBEV) and 8 (BEVFusion). The teacher probabilities are renormalised (they are stored as float16)."""
+    = their mean squared error; k = 16 (DualBEV) and 8 (BEVFusion). The teacher probabilities are renormalised (they are stored as float16)."""
     m = {}
     for k in ("16", "8"):
         t = tgt["p" + k].float()
@@ -30,8 +29,7 @@ def distill_terms(out, tgt):
 
 def anchor_terms(side):
     """distill_terms of the chain's `student_side` (the model result's entry): the student's logits and context of the current frame against the cached
-    teacher's
-    probabilities and context of the same frame; the anchor is its ["total"]"""
+    teacher's probabilities and context of the same frame; the anchor is its ["total"]"""
     out = {n + k: side[c + k] for k in ("16", "8") for n, c in (("logit", "l"), ("ctx", "c"))}
     tgt = {n + k: side["t_" + n + k] for k in ("16", "8") for n in ("p", "c")}
     return distill_terms(out, tgt)

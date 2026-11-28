@@ -25,7 +25,7 @@ Tests: tests/test_lift_pd.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from net.prep.geometry import Grid, build_table, camera_visibility, lift_key  # noqa: F401 (preprocessing geometry, read here by name)
+from bev_fusion.net.prep.geometry import Grid, build_table, camera_visibility, lift_key  # noqa: F401 (preprocessing geometry, read here by name)
 
 
 def frustum_table(table, feat_hw, image_hw):
@@ -94,10 +94,8 @@ class LiftPD(nn.Module):
 
     def forward(self, feat, depth_prob, K, T_cam_car, image_hw, ida=None, key=None):
         """key: the projection-table cache key of this calibration (`lift_key`), made by the caller from the host copies of K, T_cam_car and ida (D54: the key
-        made here
-        from GPU tensors waits for the GPU at every `.tolist()`); None: made here, as before. A wrong key gives a wrong table: pass only `lift_key` of the same
-        K, T_cam_car,
-        image_hw and ida."""
+        made here from GPU tensors waits for the GPU at every `.tolist()`); None: made here, as before. A wrong key gives a wrong table: pass only `lift_key` of
+        the same K, T_cam_car, image_hw and ida."""
         learned = isinstance(self.z_levels, nn.Parameter)
         if key is None:
             key = lift_key(K, T_cam_car, image_hw, ida)

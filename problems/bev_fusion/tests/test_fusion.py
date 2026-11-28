@@ -1,10 +1,10 @@
 """Tests of net/model/fusion.py (its former self-test).
 
-    python tests/test_fusion.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_fusion      (from the problem folder, with its module path)
 """
 import torch
 
-from net.model.fusion import ConcatFusion, drop_modality
+from bev_fusion.net.model.fusion import ConcatFusion, drop_modality
 
 
 def _selftest():

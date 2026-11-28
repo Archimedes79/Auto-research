@@ -9,8 +9,7 @@ at 20 m, a stride-4 cell 0.14 m x 2 m.
                                                                or an RGB CNN from scratch ("rgb", 64 ch)
       -> 1 x 1 conv to 32, BN, ReLU, 3 x 3 conv 32
       -> lift PD with the main branch's depth probabilities of that frame (stride 16: the lift samples both maps in
-         normalised image coordinates, so the features are read at stride 4 and the depth at stride 16), same heights;
-         `use_depth=False` (ModelConfig.lane_use_depth, t24) = lift P: the same table, the pull without the depth weight
+         normalised image coordinates, so the features are read at stride 4 and the depth at stride 16), same heights
       -> 1 x 1 conv over heights x channels to 16, BN, ReLU -> 1 x 1 conv to c_out, ZERO-initialised (the chain starts exactly
          as without the branch; ControlNet-style zero start)
 The model adds the output to the camera BEV after the temporal block (model.py, ModelConfig.lane_branch). With camera_features 'dual' (t20)
@@ -22,12 +21,11 @@ dataset's own resize + crop, one file per CAM_FRONT sample_data token; `CachedFr
 `collate_cached` stacks it as uint8 `batch["lane_img"]`, normalised here on the device.
 
 Tests: tests/test_lane_branch.py
-Image cache (net/prep/image_cache.py): python training/build_image_cache.py build-cache <config.json> [--workers 1]   (from the bev_fusion folder; > 1 forks
-copies of the devkit: memory)
-Older frames (t26, model.student_frames 'all': the student reads EVERY frame of the window): python training/build_image_cache.py build-cache-older
-<config.json> fills <lane_images>/sweeps
-with the JPEG of each older frame (0 is the key frame; n_cam 3, cam_stride 2: -2 and -4 camera sweeps). Once every sample is through, each builder writes its
-BUILT.json (scenes covered, the
+Image cache (net/prep/image_cache.py): python -P -m bev_fusion.training.build_image_cache build-cache <config.json> [--workers 1]   (from the bev_fusion
+folder; > 1 forks copies of the devkit: memory)
+Older frames (model.student_frames 'all': the student reads EVERY frame of the window): python -P -m bev_fusion.training.build_image_cache build-cache-older
+<config.json> fills <lane_images>/sweeps with the JPEG of each older frame (0 is the key frame; n_cam 3, cam_stride 2: -2 and -4 camera sweeps). Once every
+sample is through, each builder writes its BUILT.json (scenes covered, the
 builder's quality / crop; <root>/BUILT.json for the key frames, <root>/sweeps/BUILT.json per window); a crash half-way leaves none. check-cache /
 check-cache-older compare a few val frames
 with the dataset's own image and the marker with the config's scenes. A config's "split" is resolved first (splits/<name>.json); the builders read plain
@@ -38,8 +36,8 @@ import torch
 import torch.nn as nn
 import torchvision
 
-from net.model.camera_encoder import IMG_MEAN, IMG_STD
-from net.model.lift_pd import LiftPD
+from bev_fusion.net.model.camera_encoder import IMG_MEAN, IMG_STD
+from bev_fusion.net.model.lift_pd import LiftPD
 
 DUALBEV_CKPT = "models/pretrained/dualbev-r50-cbgs.pth"
 
@@ -81,16 +79,11 @@ class Res4Features(nn.Module):
 
 
 class LaneBranch(nn.Module):
-    def __init__(self, grid, depth_centres, c_mid=32, c_lane=16, c_out=64, oversample=4, pretrained=DUALBEV_CKPT, use_depth=True):
-        """use_depth: True = lift PD (the stride-4 features weighted by the main branch's depth probabilities, t7 / t20); False = lift P, the same projection
-        table
-        without the weight (t24): a ground cell takes the feature of the pixel it projects to, whatever the predicted depth there. No tensor is added or
-        changed."""
+    def __init__(self, grid, depth_centres, c_mid=32, c_lane=16, c_out=64, oversample=4, pretrained=DUALBEV_CKPT):
         super().__init__()
         self.features = Res4Features(pretrained)
         self.reduce = nn.Sequential(*_cbr(self.features.out_channels, c_mid, 1), nn.Conv2d(c_mid, c_mid, 3, padding=1))
-        # use_depth False = lift P: pull without the depth weight (t24); the tensors are the same either way
-        self.lift = LiftPD(grid, depth_centres, use_depth=use_depth, oversample=oversample)
+        self.lift = LiftPD(grid, depth_centres, use_depth=True, oversample=oversample)       # the stride-4 features weighted by the main branch's depth
         nz = len(grid.z_levels)
         self.collapse = nn.Sequential(*_cbr(nz * c_mid, c_lane, 1))
         self.mix = nn.Conv2d(c_lane, c_out, 1)
@@ -108,8 +101,7 @@ class LaneBranch(nn.Module):
     def forward(self, img, prob, K, T_cam_car, image_hw, ida=None):
         """img (B, 3, H, W) current frame; prob (B, D, h, w) its depth probabilities (any stride); K (B, 3, 3), T_cam_car
         (B, 4, 4) per sample -> (B, c_out, X, Y). keys: the projection-table cache key of each sample (lift_pd.lift_key of its K, T_cam_car, image_hw, ida, made
-        from the host
-        copies), or None: made from the GPU tensors, as before."""
+        from the host copies), or None: made from the GPU tensors, as before."""
         f = self.image_map(img)
         out = []
         for b in range(f.shape[0]):                              # one calibration per sample (scenes differ)

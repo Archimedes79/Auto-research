@@ -1,14 +1,14 @@
 """Tests of net/model/temporal_fusion.py (its former self-test).
 
-    python tests/test_temporal_fusion.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_temporal_fusion      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 
-from net.model.lift_pd import Grid
-from net.model.splat import grid_points
-from net.model.temporal_fusion import ego_to_memory, TemporalFusion, advance_pose, read_memory, recentre
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.splat import grid_points
+from bev_fusion.net.model.temporal_fusion import ego_to_memory, TemporalFusion, advance_pose, read_memory, recentre
 
 
 def _observe(pose, pts, x_fov, extra=None):

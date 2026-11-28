@@ -1,19 +1,19 @@
 """Tests of net/prep/gt_cache_build.py (its former self-test).
 
-    python tests/test_gt_cache_build.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_gt_cache_build      (from the problem folder, with its module path)
 """
 import os
 import tempfile
 
-from net import netpath
-from net.prep.gt_cache_build import prefill
-from net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
+from bev_fusion.net import netpath
+from bev_fusion.net.prep.gt_cache_build import prefill
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
 
 
 def _selftest():
     os.chdir(netpath.SITE)                                       # the data folder: a relative cache folder is below it
     from nuscenes.nuscenes import NuScenes
-    root = os.path.expanduser("~/data/nuscenes")
+    root = netpath.nuscenes_root(mini=True)
     nusc = NuScenes("v1.0-mini", dataroot=root, verbose=False)
     with tempfile.TemporaryDirectory() as tmp:
         ds = FrontRadarDataset(root, "v1.0-mini", available_scenes(nusc, "mini_train")[:1], with_gt=True, cache_dir=tmp, nusc=nusc)

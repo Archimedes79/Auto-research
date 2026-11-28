@@ -1,21 +1,18 @@
 """The sets the evaluation runs on: one definition, the one of the training (`splits/<name>.json`, read by `net/prep/splits.py`). No second list of scenes.
 
-    python evaluation/bev_sets.py [--list]       the sets that exist (name, scenes, GT version, what it is)
+    python -P -m bev_fusion.evaluation.bev_sets [--list]       the sets that exist (name, scenes, GT version, what it is)
 Tests: tests/test_bev_sets.py (known answers on the real files and on a throw-away splits folder)
 
 A set is `<split>.<part>`: the name of a training split (`small`, `large`, `xl`: the file the training config's `"split"` names) and its part, `train` or `val`
 (`small.val` = the 10 val scenes of splits/small.json). The bare names `val` and `train` (the default `val`) are the lists the run itself was trained and
-validated on
-(its `config.json`, as before): for a run trained on `large`, `val` and `large.val` are the same 82 scenes. A new set is a new split file in `splits/` (and then
-also usable
+validated on (its `config.json`, as before): for a run trained on `large`, `val` and `large.val` are the same 82 scenes. A new set is a new split file in
+`splits/` (and then also usable
 by the training), never a list in the evaluation. The TEST split is not a set, and `test` and `<split>.test` are refused here: no BEV TEST evaluation is built
-in v2 yet, so
-`research test bev_fusion` ends here (a TEST run needs this set, and the owner's row in TEST_LOG.md).
+in v2 yet, so `research test bev_fusion` ends here (a TEST run needs this set, and the owner's row in TEST_LOG.md).
 
 Where it is used: the set of an Evaluation (`Evaluation.run(RUN, "small.val")`, `spread:1000:small.val`; `val` / `train` as always); `bev_adapter.build(run,
-split=<set>)` puts
-the set's lists into the run's config before the data is made, so the run's checkpoint and caches are the run's own and only the scenes change. The set name and
-its hash
+split=<set>)` puts the set's lists into the run's config before the data is made, so the run's checkpoint and caches are the run's own and only the scenes
+change. The set name and its hash
 (`set_hash` of the Source's description) are part of the evaluation id, so evaluations of different sets are kept apart.
 """
 from __future__ import annotations
@@ -32,7 +29,7 @@ RESERVED = ("val", "train", "test")                      # the bare names and TE
 
 def _splits():
     """net/prep/splits.py: the one reader of the split files"""
-    from net.prep import splits
+    from bev_fusion.net.prep import splits
     return splits
 
 
@@ -67,8 +64,7 @@ def tag(name: str) -> str:
 
 def lists(name: str, own_train, own_val, splits_dir: str = None):
     """(train scenes, val scenes) to evaluate with: the run's own for a bare name, the lists of the split's file for `<split>.<part>` (both parts, so the
-    prior-map baseline
-    and the dataset see one consistent split). ValueError for a split that has no file"""
+    prior-map baseline and the dataset see one consistent split). ValueError for a split that has no file"""
     split, _ = parse(name)
     if split is None:
         return list(own_train), list(own_val)

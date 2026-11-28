@@ -16,8 +16,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from net.model.lift_pd import Grid
-from net.model.splat import VelocityHead, splat_bev
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.splat import VelocityHead, splat_bev
 
 
 def dt_embedding(dt, B, like):

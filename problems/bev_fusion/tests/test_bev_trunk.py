@@ -1,10 +1,10 @@
 """Tests of net/model/bev_trunk.py (its former self-test).
 
-    python tests/test_bev_trunk.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_trunk      (from the problem folder, with its module path)
 """
 import torch
 
-from net.model.bev_trunk import BEVTrunk
+from bev_fusion.net.model.bev_trunk import BEVTrunk
 
 
 def n_params(m):

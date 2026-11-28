@@ -1,10 +1,10 @@
 """Tests of net/model/interface.py (its former self-test).
 
-    python tests/test_interface.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_interface      (from the problem folder, with its module path)
 """
 import torch
 
-from net.model.interface import RADAR_FIELDS, check_inputs, check_outputs
+from bev_fusion.net.model.interface import RADAR_FIELDS, check_inputs, check_outputs
 
 
 def _selftest():

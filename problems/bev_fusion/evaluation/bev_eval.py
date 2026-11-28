@@ -5,21 +5,16 @@ frame are here.
                                                     (from autoresearch/; the whole interface: `python -m Evaluation methods`)
 
 It adds no logic of its own: the Source and the Subject are `bev_adapter.build`, the sets are `bev_sets.py` (the training's `splits/`), the Task is `_task_only`
-below (the metric
-definitions without a model; maps / boxes are always on, `curves`, `fusion`, `velocity` switch their families on, `board` is the score of the problem). A
-network is a run folder
-(its config.json and checkpoints; by path or by name in the run root, `Evaluation/defaults.py`); everything of an evaluation goes under its `eval/`
-(`eval/results/<id>` the
-predictions, `eval/suite/quant/<id>` the scored evaluation).
+below (the metric definitions without a model; maps / boxes are always on, `curves`, `fusion`, `velocity` switch their families on, `board` is the score of the
+problem). A network is a run folder (its config.json and checkpoints; by path or by name in the run root, `Evaluation/defaults.py`); everything of an
+evaluation goes under its `eval/` (`eval/results/<id>` the predictions, `eval/suite/quant/<id>` the scored evaluation).
 
 The memory is always carried (D70: whole scenes in time order from the network's own start, the frames asked for decide what is kept and scored), the
-predictions are stored, so a
-new GT is scored without the network, and the network is run by the Runner (D72, `Evaluation/netrunner.py`), which reads no ground truth: a prediction carries
-no validation loss,
-so `loss.*` / `val_loss/*` are not among the numbers of an Evaluation.
+predictions are stored, so a new GT is scored without the network, and the network is run by the Runner (D72, `Evaluation/netrunner.py`), which reads no ground
+truth: a prediction carries no validation loss, so `loss.*` / `val_loss/*` are not among the numbers of an Evaluation.
 Limits: the identity of a network reads its last checkpoint, so predictions of a run whose checkpoints were archived or slimmed are found under the identity of
-the file that was there, and a
-changed file is another network; a network is addressed by the name of its run folder (`runs/x` and `archive/x` would share the id `x@...`).
+the file that was there, and a changed file is another network; a network is addressed by the name of its run folder (`runs/x` and `archive/x` would share the
+id `x@...`).
 """
 from __future__ import annotations
 
@@ -42,13 +37,13 @@ _NET_FOLDERS = tuple(os.path.join(ROOT, d) for d in ("net", "net/prep", "net/mod
 
 
 def _A():
-    from evaluation import bev_adapter
+    from bev_fusion.evaluation import bev_adapter
     return bev_adapter
 
 
 def sets() -> Dict[str, Any]:
     """val / train (the run's own lists: no count here) and every `<split>.<part>` of splits/ with its number of scenes"""
-    from evaluation import bev_sets
+    from bev_fusion.evaluation import bev_sets
     return {"val": None, "train": None, **bev_sets.counts()}
 
 
@@ -71,9 +66,8 @@ def _tree_hash(*folders: str) -> str:
 
 def identity(net: str) -> Dict[str, Any]:
     """what the predictions of this network depend on, read without loading it: the last checkpoint (name and the hash of the whole file), the config, the code
-    of the network
-    (a hash of net/, which every run is evaluated with), and Subject.predict / the output decoding in bev_adapter.py and bev_free.py (the two paths give the
-    same predictions)"""
+    of the network (a hash of net/, which every run is evaluated with), and Subject.predict / the output decoding in bev_adapter.py and bev_free.py (the two
+    paths give the same predictions)"""
     net = _abs(net)
     ckpts = sorted(glob.glob(os.path.join(net, "ckpt_*.pt")))
     if not ckpts:
@@ -87,7 +81,7 @@ def identity(net: str) -> Dict[str, Any]:
 def source(net: str, of: str, workers: int = 2, control: str = ""):
     """the Source of the set `of` for this run (val / train: its own lists, `<split>.<part>`: a file of splits/); the Subject is built with it (on the CPU) and
     handed out by `subject`"""
-    from evaluation import bev_sets
+    from bev_fusion.evaluation import bev_sets
     bev_sets.parse(of)                                                  # TEST and malformed names are refused before anything is built
     src, subj, _ = _A().build(net, device="cpu", split=of, workers=workers, control=control)
     src._bev_subject = subj
@@ -122,7 +116,7 @@ def release(src) -> None:
 def free_source(net: str, of: str, workers: int = 2, control: str = ""):
     """the Source the Runner reads: the same set, frames and dataset keys as `source`, without the ground truth (bev_free.FreeSource); the Subject travels with
     it"""
-    from evaluation.bev_free import free_source as make
+    from bev_fusion.evaluation.bev_free import free_source as make
     built = source(net, of, workers, control)
     free = make(built)
     built._bev_subject = None                                           # the free Source holds it now
@@ -131,7 +125,7 @@ def free_source(net: str, of: str, workers: int = 2, control: str = ""):
 
 def free_subject(net: str, src, device: str):
     """the network without the validation loss (bev_free.FreeSubject over the BEVSubject `subject` hands out)"""
-    from evaluation.bev_free import FreeSubject
+    from bev_fusion.evaluation.bev_free import FreeSubject
     return FreeSubject(subject(net, src, device))
 
 
@@ -140,22 +134,20 @@ METRICS = ("maps", "boxes")
 
 def _task_only(run: str, curves: bool = False, fusion: bool = True, velocity: bool = False):
     """the Task of a run without loading its checkpoint (the metric definitions only)"""
-    from net import chain
-    from net import netpath
-    from evaluation import bev_adapter as B
-    from evaluation.bev_task import BEVTask
+    from bev_fusion.net import chain, netpath
+    from bev_fusion.evaluation import bev_adapter as B
+    from bev_fusion.evaluation.bev_task import BEVTask
     run = os.path.abspath(run)
     os.chdir(netpath.SITE)                                              # the data folder: the model's default weights are named relative to it
     model, _, _ = chain.build(chain.read_config(os.path.join(run, "config.json")))
-    t = BEVTask(model.grid, B.task_spec(model), [g for g, _ in B.NUSC_GROUPS], refine=bool(model.cfg.refine))
+    t = BEVTask(model.grid, B.task_spec(model), [g for g, _ in B.NUSC_GROUPS])
     t.curves, t.fusion, t.velocity = curves, fusion, velocity
     return t
 
 
 def task(net: str, metrics=METRICS):
     """the metric definitions of this run without loading it; `metrics` = maps, boxes, fusion (always on since D31; the name is still accepted), curves,
-    velocity
-    (and board, the score of the problem: always there, made of the maps and boxes counts)"""
+    velocity (and board, the score of the problem: always there, made of the maps and boxes counts)"""
     unknown = sorted(set(metrics) - {"maps", "boxes", "curves", "fusion", "velocity", "board"})
     if unknown:
         raise ValueError(f"unknown metrics {unknown}: maps, boxes, curves, fusion, velocity, board")
@@ -163,7 +155,7 @@ def task(net: str, metrics=METRICS):
     t = _task_only(net, "curves" in metrics, True, "velocity" in metrics)
     metrics_of = t.metrics
     def metrics_now():
-        from evaluation.bev_task import Board7Metric
+        from bev_fusion.evaluation.bev_task import Board7Metric
         ms = [m for m in metrics_of() if m.name != "loss"]                # the Runner reads no ground truth, so a prediction carries no validation loss (D72)
         return ms + [Board7Metric(next(m for m in ms if m.name == "seg"), next(m for m in ms if m.name == "det"))]
     t.metrics = metrics_now
@@ -179,7 +171,7 @@ def reference(src, ref):
 
 def time(net: str, n: int = 30) -> Dict[str, Any]:
     from Evaluation.api import EvaluationError
-    from evaluation import bev_timing
+    from bev_fusion.evaluation import bev_timing
     try:
         return bev_timing.run_timing(_abs(net), n=n)
     except SystemExit as ex:                                           # the idle-GPU guard refuses with a message
@@ -187,13 +179,13 @@ def time(net: str, n: int = 30) -> Dict[str, Any]:
 
 
 def probe(net: str, frames: int = 3, device: str = "cpu") -> Dict[str, Any]:
-    from evaluation import bev_modules
+    from bev_fusion.evaluation import bev_modules
     return bev_modules.probe(_abs(net), frames=frames, device=device)
 
 
 def evaluator_now():
     """the evaluator hash of the code as it is now (what a stored evaluation was scored with is in its record): `show_numbers` warns when they differ"""
-    from evaluation import bev_adapter
+    from bev_fusion.evaluation import bev_adapter
     return bev_adapter.evaluator_hash()
 
 

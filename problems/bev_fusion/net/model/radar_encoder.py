@@ -31,12 +31,8 @@ import math
 import torch
 import torch.nn as nn
 
-try:
-    from net.model import radar_bev as rb
-    from net.model.lift_pd import Grid
-except ImportError:  # imported as a package module
-    from . import radar_bev as rb
-    from .lift_pd import Grid
+from bev_fusion.net.model import radar_bev as rb
+from bev_fusion.net.model.lift_pd import Grid
 
 K_SLOTS = 3
 DR_SCALE, DPSI_SCALE, S_SCALE = 1.0, 0.05, 4.0           # metres, radians, metres: stored values are O(1)
@@ -207,16 +203,6 @@ class RadarEncoder(nn.Module):
         state = self.rasterize(det, B)
         f = self.net(state)
         return (f, state) if with_state else f
-
-    def new_decoder(self, C=None, identity_init=True):
-        """A fresh 1 x 1 decoder for probing frozen features (same start as the module's own decoder: a probe that has to find the
-        identity from a random start under-measures): the honest way to measure what a task-trained encoder kept."""
-        C = C or self.net[2].out_channels
-        dec = nn.Sequential(nn.Conv2d(C, C, 1), nn.LeakyReLU(0.5), nn.Conv2d(C, self.cin, 1)).to(self.w_slot.device)
-        if identity_init:
-            _pass_through_(dec[0])
-            _pass_through_(dec[2])
-        return dec
 
     @torch.no_grad()
     def kept_fraction(self, det, B, features=None, decoder=None):

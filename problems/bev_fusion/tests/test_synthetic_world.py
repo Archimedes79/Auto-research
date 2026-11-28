@@ -1,17 +1,17 @@
 """Tests of tests/support/synthetic_world.py (its former self-test).
 
-    python tests/test_synthetic_world.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_synthetic_world      (from the problem folder, with its module path)
 """
 import math
 import random
 
 import torch
 
-from tests.support.synthetic_world import Box, Scene, camera, front_camera, gt_bev, radar, random_scene
+from bev_fusion.tests.support.synthetic_world import Box, Scene, camera, front_camera, gt_bev, radar, random_scene
 
 
 def _selftest():
-    from net.model.lift_pd import Grid
+    from bev_fusion.net.model.lift_pd import Grid
     rng = random.Random(3)
     sc = Scene([Box(20.0, 0.0, 4.5, 1.8, 1.5, 0.0, 8.0, 0.0, "car", 10.0),
                 Box(35.0, -6.0, 4.5, 1.8, 1.5, math.pi / 2, 0.0, 5.0, "car", 10.0)], v=10.0, omega=0.2)

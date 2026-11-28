@@ -1,14 +1,14 @@
 """Tests of net/model/bevfusion_camera.py (its former self-test).
 
-    python tests/test_bevfusion_camera.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bevfusion_camera      (from the problem folder, with its module path)
 """
 import os
 
 import torch
 import torch.nn as nn
 
-from net.model.bevfusion_camera import BEVFusionImageSide, CKPT, PatchMerging, ShiftWindowMSA, SwinT, window_partition, window_reverse
-from net.prep.geometry import DEPTHS
+from bev_fusion.net.model.bevfusion_camera import BEVFusionImageSide, CKPT, PatchMerging, ShiftWindowMSA, SwinT, window_partition, window_reverse
+from bev_fusion.net.prep.geometry import DEPTHS
 
 
 def _selftest():

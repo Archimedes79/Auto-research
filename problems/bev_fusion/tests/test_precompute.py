@@ -1,18 +1,18 @@
 """Tests of net/prep/precompute.py (its former self-test).
 
-    python tests/test_precompute.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_precompute      (from the problem folder, with its module path)
 """
 
 import numpy as np
 import torch
 
-from net.prep.geometry import camera_visibility
-from net.prep.precompute import MAPS, Precompute, _FANS, _radar_cells
+from bev_fusion.net.prep.geometry import camera_visibility
+from bev_fusion.net.prep.precompute import MAPS, Precompute, _FANS, _radar_cells
 
 
 def _selftest():
-    from net.prep.geometry import depth_centres
-    from net.model.lift_pd import Grid, _front_camera
+    from bev_fusion.net.prep.geometry import depth_centres
+    from bev_fusion.net.model.lift_pd import Grid, _front_camera
     grid = Grid()
     K, T, hw = _front_camera(torch.float32)
     B = 2
@@ -31,7 +31,7 @@ def _selftest():
     assert out["vis_cam"].shape == (B, 1, grid.nx, grid.ny) and torch.equal(out["vis_cam"][0, 0], ref.float()), "camera map != lift_pd"
     assert 0.2 < ref.float().mean() < 0.9, ref.float().mean()
     gx, gy = np.meshgrid(grid.x_min + (np.arange(grid.nx) + 0.5) * grid.res, grid.y_min + (np.arange(grid.ny) + 0.5) * grid.res, indexing="ij")
-    assert torch.equal(out["vis_radar"][0, 0], torch.from_numpy(_radar_cells()(gx, gy, rig.numpy())).float()), "radar fan != GtGenerator.coverage"
+    assert torch.equal(out["vis_radar"][0, 0], torch.from_numpy(_radar_cells()(gx, gy, rig.numpy())).float()), "radar fan != the radar_cells of GtGenerator"
     assert 0.9 < out["vis_radar"].mean() <= 1.0, out["vis_radar"].mean()              # the five fans cover nearly the whole front grid
     assert torch.equal(out["vis_fusion"], out["vis_cam"] * out["vis_radar"]), "fusion area = camera x radar"
     one = pre(dict(batch, radar_poses=rig[:1].expand(B, 1, 4, 4).clone().repeat(1, 5, 1, 1)), ("vis_radar",))["vis_radar"][0, 0]
@@ -74,14 +74,14 @@ def _selftest():
     assert torch.equal(fl["vis_cam"][0], out["vis_cam"][0].flip(-1)) and torch.equal(fl["vis_cam"][1], out["vis_cam"][1])
     only = pre(dict(batch), keys=("vis_cam",))
     assert set(only) & set(MAPS) == {"vis_cam"}, "only the requested maps are made"
-    from net.model.cached_model import CachedBEVFusionModel
-    from net.model.model import ModelConfig
+    from bev_fusion.net.model.cached_model import CachedBEVFusionModel
+    from bev_fusion.net.model.model import ModelConfig
     for cf in ("dualbev", "bevfusion"):
         mcfg = ModelConfig(camera_features=cf, pretrained="", trunk_pretrained="")
         a = Precompute.from_config(mcfg)(dict(batch), ("vis_cam",))["vis_cam"]
         b = Precompute.from_model(CachedBEVFusionModel(mcfg))(dict(batch), ("vis_cam",))["vis_cam"]
         assert torch.equal(a, b), f"from_config != from_model ({cf})"
-    print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan = GtGenerator.coverage.radar_cells of the calibrated poses, fusion area = camera x radar, "
+    print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan = the radar_cells of GtGenerator on the calibrated poses, fusion area = camera x radar, "
           "radar hits from the detections, existing keys kept, maps mirrored, from_config = from_model")
 
 

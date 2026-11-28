@@ -16,13 +16,14 @@ from dataclasses import dataclass, field
 
 import torch
 
-from net.loss.loss_extras import group_gradient_cosines
-from net.loss.losses import BEVLoss, LossConfig, sample_targets
-from net.loss.train_terms import add as add_train_terms
-from net.model.cached_model import CachedBEVFusionModel
-from net.model.interface import check_inputs, check_outputs
-from net.model.model import CAMERAS, BEVFusionModel, ModelConfig
-from net.prep.batches import batch_ego, to_device
+from bev_fusion.net.loss.loss_extras import group_gradient_cosines
+from bev_fusion.net.loss.losses import BEVLoss, LossConfig, sample_targets
+from bev_fusion.net.loss.train_terms import add as add_train_terms
+from bev_fusion.net.model.cached_model import CachedBEVFusionModel
+from bev_fusion.net.model.interface import check_inputs, check_outputs
+from bev_fusion.net.model.model import CAMERAS, BEVFusionModel, ModelConfig
+from bev_fusion.net.prep import splits
+from bev_fusion.net.prep.batches import batch_ego, to_device
 
 AMP_DTYPES = {"bf16": torch.bfloat16, "fp16": torch.float16}
 
@@ -70,39 +71,52 @@ class ChainConfig:
     loss: dict = field(default_factory=dict)     # LossConfig fields
 
 
-# Options that left the code (they are in the git tag v1): where -> {key: its off value}. A stored config that names one at its off value still loads (the key
-# is
-# dropped: it had no effect), at any other value it is refused. A removed KIND of a slot that is still there (radar_kind 'pillars', lane_branch 'rgb', balancing
-# 'uwso') is refused where the kinds are checked (model.check_config, build).
+# Options that left the code (they are in the git tag v1): where ("" = the top level of a config, else its dict of that name) -> {key: its off value}. A stored
+# config that names one at its off value still loads (it had no effect), at any other value it is refused. A removed KIND of a slot that is still there
+# (radar_kind 'pillars', lane_branch 'rgb', balancing 'uwso') is refused where the kinds are checked (model.check_config, build).
 REMOVED = {"": {"uwso_T": 5.0},
            "model": {"trunk_kind": "dualbev", "cam_collapse": "zconv", "cam_adapter": False, "fusion": "concat", "share_mover": False, "splat_fused": False,
-                     "sync_free": False, "dense_outputs": False, "rad_static_gate": False, "rad_static_vr": 1.0},
-           "loss": {"sync_free": False}}
+                     "sync_free": False, "dense_outputs": False, "rad_static_gate": False, "rad_static_vr": 1.0, "refine": False, "refine_k": 50,
+                     "refine_jitter": 1, "lane_use_depth": True, "trunk_fpn_original": False},
+           "loss": {"sync_free": False, "line_bce": 0.0, "line_bce_pos": 3.0, "line_bce_ignore": 1.0, "consistency": False, "w_consistency": 0.1, "w_refine": 1.0}}
+
+
+def _switched_on(where, part):
+    """the REMOVED options the dict `part` names at another value than off, as texts"""
+    return [f"{where + '.' if where else ''}{key} = {part[key]!r}" for key, off in REMOVED[where].items() if key in part and part[key] != off]
+
+
+def _refuse(bad):
+    if bad:
+        raise ValueError("the config switches on options that were removed from the code (they are in the git tag v1): " + ", ".join(bad))
+
+
+def live(where, part):
+    """the dict `part` of a config ("model" or "loss") without the REMOVED options it names at their off value: the fields the code has; one named at another
+    value is a ValueError"""
+    _refuse(_switched_on(where, part))
+    return {k: v for k, v in part.items() if k not in REMOVED[where]}
 
 
 def drop_removed(raw):
-    """a config dict as read from json without the REMOVED options it names at their off value; one named at another value is a ValueError that lists them
-    all"""
-    out, bad = dict(raw), []
-    for where, table in REMOVED.items():
-        part = dict(out.get(where) or {}) if where else out
-        for key, off in table.items():
-            if key in part and part[key] != off:
-                bad.append(f"{where + '.' if where else ''}{key} = {part[key]!r}")
-            part.pop(key, None)
-        if where in out:
-            out[where] = part
-    if bad:
-        raise ValueError("the config switches on options that were removed from the code (they are in the git tag v1): " + ", ".join(bad))
-    return out
+    """a config as read from json, for a config class: one REMOVED option at another value than off is a ValueError that lists them all; the removed keys of
+    the top level are dropped (the classes do not know them). Those of `model` and `loss` stay in their dicts as the file names them, because a checkpoint
+    records these dicts and a resume compares them whole (trainkit.checkpoint.check_resume); `build` leaves them out (`live`)."""
+    _refuse([b for where in REMOVED for b in _switched_on(where, (raw.get(where) or {}) if where else raw)])
+    return {k: v for k, v in raw.items() if k not in REMOVED[""]}
+
+
+def read_raw(path):
+    """a config file as the config classes take it: the scene lists of its "split" filled in (net/prep/splits.py resolve; a config that carries its lists is
+    left as it is), the options that left the code dropped or refused (drop_removed)"""
+    with open(path, encoding="utf-8") as fh:
+        return drop_removed(splits.resolve(json.load(fh)))
 
 
 def read_config(path):
     """the ChainConfig of a stored run (its config.json): the keys ChainConfig names; the engine's and the trainer's own keys (steps, lr, workers, ...) and the
-    "_" comments
-    are left out, the trainer has checked them (training/train.py read_config refuses an unknown key)"""
-    with open(path, encoding="utf-8") as fh:
-        raw = drop_removed(json.load(fh))
+    "_" comments are left out, the trainer has checked them (training/train.py read_config refuses an unknown key)"""
+    raw = read_raw(path)
     names = {f.name for f in dataclasses.fields(ChainConfig)}
     return ChainConfig(**{k: v for k, v in raw.items() if k in names})
 
@@ -110,15 +124,14 @@ def read_config(path):
 # ------------------------------------------------------------------------------------------------ model and loss
 def build(cfg):
     """(model, loss, cached?). The head layout of the model follows the loss's layer spec: the flags that define it (centrelines, dense_objects,
-    radar_stationary,
-    centreline_1m) are taken from the LossConfig, so the two cannot disagree; the model returns predictions in the loss's layout (res["out"] = {dt: {"sem",
-    "obj", "mass", ...}})."""
-    lc = LossConfig(**{**cfg.loss, **({"task_weighting": "fixed"} if cfg.balancing == "fixed" else {})})
+    radar_stationary, centreline_1m) are taken from the LossConfig, so the two cannot disagree; the model returns predictions in the loss's layout
+    (res["out"] = {dt: {"sem", "obj", "mass", ...}})."""
+    lc = LossConfig(**{**live("loss", cfg.loss), **({"task_weighting": "fixed"} if cfg.balancing == "fixed" else {})})
     loss = BEVLoss(lc)
     if cfg.balancing not in ("kendall", "fixed"):
         raise ValueError(f"balancing {cfg.balancing!r}: kendall or fixed" + (" (uwso was removed in v2; tag v1)" if cfg.balancing == "uwso" else ""))
     layout = {"centrelines": lc.centrelines, "dense_objects": lc.dense_objects, "radar_stationary": lc.radar_stationary, "centreline_1m": lc.centreline_1m}
-    mcfg = ModelConfig(**{**layout, **cfg.model})
+    mcfg = ModelConfig(**{**layout, **live("model", cfg.model)})
     for k, v in layout.items():
         if getattr(mcfg, k) != v:
             raise ValueError(f"model.{k} = {getattr(mcfg, k)} but loss.{k} = {v}: the head layout must match the loss")
@@ -140,8 +153,7 @@ def build(cfg):
 def student_findings(cfg, mcfg):
     """what model.camera_student and its anchor need of the config, as messages (build raises them): the student replaces cached outputs of the current frame
     (student_frames 'all': of every frame of the window), so a feature cache and the key-frame image folder (lane_images); the anchor needs a student that
-    trains, and
-    a schedule that makes sense"""
+    trains, and a schedule that makes sense"""
     out = []
     if mcfg.camera_student and not cfg.feature_cache:
         out.append("model.camera_student replaces cached teacher outputs: it needs a feature_cache")
@@ -159,9 +171,8 @@ def student_findings(cfg, mcfg):
 # ------------------------------------------------------------------------------------------------ weights
 def external(model):
     """the state prefixes that are not in a checkpoint: the frozen camera heads (they come from the pre-trained file) and a frozen camera student
-    (model.student_trainable
-    false: it is loaded from student_init). With freeze_camera false the camera weights are trained, so they belong to the state: a resume must restore them,
-    not start them
+    (model.student_trainable false: it is loaded from student_init). With freeze_camera false the camera weights are trained, so they belong to the state: a
+    resume must restore them, not start them
     from the pre-trained file again; a student that trains is part of the state (checkpoints, resume, EMA)"""
     cfg = model.cfg
     return (("camera.",) if cfg.freeze_camera else ()) + (("student.",) if cfg.camera_student and not cfg.student_trainable else ())
@@ -169,9 +180,8 @@ def external(model):
 
 def load_weights(model, loss, path):
     """the weights a run is evaluated with, from its checkpoint `path` (the trainer's format: trainkit.checkpoint): the trained state of the model and the loss,
-    then the EMA
-    average over the model's (what the trainer validates under); the model is left in eval mode. A model key that the checkpoint lacks and that is not
-    `external`, or a key
+    then the EMA average over the model's (what the trainer validates under); the model is left in eval mode. A model key that the checkpoint lacks and that is
+    not `external`, or a key
     the model does not have, is a RuntimeError. -> the checkpoint's step"""
     ck = torch.load(path, map_location="cpu", weights_only=False)
     state = ck["state"]
@@ -204,12 +214,10 @@ _CONTRACT_CHECKED = []      # interface.check_inputs / check_outputs run on the 
 
 def forward(model, batch, dts, device, cfg, strict=False, state=None, step=None):
     """one batch (still on the host) through the model at the times `dts` -> (the model's result, the batch on the device). With cfg.gap_ego the model decodes
-    dt = +-0.5 s
-    with the TRUE gap of each sample and its gap-mean ego motion (batch["gap_steps"], made from the poses: no ground truth is read); strict: a dt without such a
-    gap is an
+    dt = +-0.5 s with the TRUE gap of each sample and its gap-mean ego motion (batch["gap_steps"], made from the poses: no ground truth is read); strict: a dt
+    without such a gap is an
     error (LossConfig.hygiene_2026_11_02). state / step: the model state of the previous keyframe and the ego step since then (batches.clip_step). The interface
-    contract
-    is checked on the first batch of the process (training, validation and the evaluation all pass here)."""
+    contract is checked on the first batch of the process (training, validation and the evaluation all pass here)."""
     ego = batch_ego(batch["gap_steps"], dts, device, strict=strict) if cfg.gap_ego else None
     batch = to_device(batch, device, non_blocking=cfg.pin_memory)
     kw = {k: v for k, v in (("ego", ego), ("state", state), ("step", step)) if v is not None}
@@ -226,9 +234,8 @@ def forward(model, batch, dts, device, cfg, strict=False, state=None, step=None)
 
 def forward_loss(model, loss, batch, step_frac, device, cfg, diag=False, train_terms=True, state=None, step=None):
     """-> (loss dict, model result, GT targets) of one batch: `forward` at the target times of the GT (0 and +-0.5 s), BEVLoss on the predictions cast to
-    float32, then the
-    train-only terms (train_terms.py; train_terms False = validation: the total stays the task loss). With diag the cosines of the task-group gradients at the
-    BEV feature
+    float32, then the train-only terms (train_terms.py; train_terms False = validation: the total stays the task loss). With diag the cosines of the task-group
+    gradients at the BEV feature
     are put into out['diag']."""
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))

@@ -1,6 +1,6 @@
 """Tests of net/prep/nuscenes_dataset.py (its former self-test).
 
-    python tests/test_nuscenes_dataset.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_nuscenes_dataset      (from the problem folder, with its module path)
 """
 import math
 import os
@@ -8,9 +8,10 @@ import os
 import numpy as np
 import torch
 
-from GtGenerator.nuscenes_adapter import pose_matrix
-from net.prep.geometry import Grid
-from net.prep.nuscenes_dataset import FrontRadarDataset, RADARS, _PCD_KINDS, collate, parse_radar_pcd, read_files
+from GtGenerator import pose_matrix
+from bev_fusion.net import netpath
+from bev_fusion.net.prep.geometry import Grid
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, RADARS, _PCD_KINDS, collate, parse_radar_pcd, read_files
 
 
 def _selftest_per_frame(ds, root):
@@ -43,8 +44,28 @@ def _selftest_per_frame(ds, root):
     return float(np.mean(n))
 
 
+def _selftest_gt_identity(ds):
+    """the GT identity in cache names and records is the STORE key of the generator (the GT, after `same_gt_as`), never its code signature; and it is the key
+    the files of the site's GT cache carry (a key that moved would leave 32,449 cached keyframes unread and fill the cache again) -> files that carry it"""
+    sig = ds.gt_signature()
+    # the key of the GT store of today (front v13): a new GT version changes this line together with the cache build
+    assert sig == "0.5_4_a107e0b4e8" == f"{ds.grid.res}_{ds.gt_ss}_{ds.gt.store_signature()}", sig
+    code, store = ds.gt.signature, ds.gt.store_signature
+    ds.gt.signature, ds.gt.store_signature = (lambda: "c0de"), (lambda: "5t0re")
+    try:
+        assert ds.gt_signature() == f"{ds.grid.res}_{ds.gt_ss}_5t0re", ds.gt_signature()
+    finally:
+        ds.gt.signature, ds.gt.store_signature = code, store
+    cache = os.path.join(netpath.SITE, "data", "cache", "gt")
+    assert os.path.isdir(cache), f"the GT cache {cache} is missing (README: what the tests need beside the code)"
+    names = [n for n in os.listdir(cache) if n.endswith(".npz")]
+    mine = [n for n in names if n.endswith(f"_{sig}.npz")]
+    assert len(mine) >= 32000, f"{len(mine)} of the {len(names)} files of {cache} carry the GT identity {sig} (e.g. {names[:1]}; 32,449 on 2026-11-28): the cache would be filled again"
+    return len(mine)
+
+
 def _selftest():
-    root = os.path.expanduser("~/data/nuscenes")
+    root = netpath.nuscenes_root(mini=True)
     ds = FrontRadarDataset(root, "v1.0-mini", grid=Grid(), n_cam=3, cam_stride=2, with_gt=True)
     assert len(ds) > 300, len(ds)
     it = ds[10]
@@ -88,7 +109,7 @@ def _selftest():
     assert set(rad["sensor"].unique().tolist()) <= set(range(5)) and len(rad["sensor"].unique()) >= 3
     # static compensation is exact: a static radar point of an older sweep, transformed by the poses, is consistent
     # with the steps chain of splat.py (first-order translation per frame) to a few centimetres
-    from net.model.splat import chain_positions
+    from bev_fusion.net.model.splat import chain_positions
     p = torch.tensor([[[30.0, 5.0]]], dtype=torch.float64)
     T_old = pose_matrix(ds.nusc.get("ego_pose", ds.nusc.get("sample_data", fr[2]["token"])["ego_pose_token"]))
     T_cur = pose_matrix(ds.nusc.get("ego_pose", ds.nusc.get("sample_data", fr[0]["token"])["ego_pose_token"]))
@@ -108,11 +129,13 @@ def _selftest():
     assert len(b["steps"]) == 3 and len(b["steps"][2]) == 4 and b["steps"][2][0][0].shape == (2,)
     assert int(b["radar"]["b"].max()) == 1 and len(b["radar"]["b"]) == len(b["radar"]["x"]) and "radar_seq" not in b and "radar_seq" not in it
     n_grid = _selftest_per_frame(ds, root)
+    n_cached = _selftest_gt_identity(ds)
     print(f"nuscenes_dataset selftest ok: {len(ds)} mini samples; 3 camera frames 0 / {dts[1]:.3f} / {dts[2]:.3f} s old "
           f"with 0 / 2 / 4 ego steps; {len(rad['x'])} radar detections from {len(rad['sensor'].unique())} radars, age <= "
           f"{float(rad['dt'].max()):.3f} s; pose transform = steps chain within {math.hypot(c[0] - q[0], c[1] - q[1]):.3f} m; "
           f"GT cur / prev / next; collation; radar_per_frame: one set per camera frame, frame 0 = the radar_window 0.09 set, "
-          f"{n_grid:.1f} points in the grid per keyframe")
+          f"{n_grid:.1f} points in the grid per keyframe; the GT identity is the generator's store key ({ds.gt_signature()}), "
+          f"{n_cached} files of the site's GT cache carry it")
 
 
 if __name__ == "__main__":

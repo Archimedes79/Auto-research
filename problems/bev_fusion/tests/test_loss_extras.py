@@ -1,13 +1,13 @@
 """Tests of net/loss/loss_extras.py (its former self-test).
 
-    python tests/test_loss_extras.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_loss_extras      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 
-from net.loss.loss_extras import cross_time_consistency, group_gradient_cosines
-from net.model.lift_pd import Grid
+from bev_fusion.net.loss.loss_extras import cross_time_consistency, group_gradient_cosines
+from bev_fusion.net.model.lift_pd import Grid
 
 
 def _blob(grid, cx, cy, s=1.2, device="cpu"):

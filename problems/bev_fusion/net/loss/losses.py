@@ -25,14 +25,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from net.model.layers import DIST_MAX, layer_table, pool_targets, source_keys
-from net.model.lift_pd import Grid
-from net.loss.loss_extras import _wcount, _wsum
-from net.model.layers import layer_spec, layer_spec_1m, radar_aux_spec  # noqa: F401
-from net.loss.motion_loss import motion_loss
-from net.loss.object_loss import _gather, build_targets, head_loss, refine_loss
-from net.loss.radar_loss import aux_weight, slot_aux_loss  # noqa: F401 (the radar side loss: one of the network's losses)
-from net.prep.targets import NUSC_GROUPS, head_box, refine_gt_boxes, sample_targets  # noqa: F401
+from bev_fusion.net.model.layers import DIST_MAX, layer_table, pool_targets, source_keys
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.loss.loss_extras import _wcount, _wsum
+from bev_fusion.net.model.layers import layer_spec, layer_spec_1m, radar_aux_spec  # noqa: F401
+from bev_fusion.net.loss.motion_loss import motion_loss
+from bev_fusion.net.loss.object_loss import build_targets, head_loss
+from bev_fusion.net.loss.radar_loss import aux_weight, slot_aux_loss  # noqa: F401 (the radar side loss: one of the network's losses)
+from bev_fusion.net.prep.targets import NUSC_GROUPS, head_box, sample_targets  # noqa: F401
 
 TASK_GROUPS = ("areas", "lines", "objects", "motion")
 EPS = 1e-6
@@ -52,13 +52,6 @@ class LossConfig:
     # per output
     w_area_iou: float = 0.5
     line_tolerance: int = 1            # cells of the dilated Dice
-    # t23: weight of a tolerance-aware BCE on the line presence (lane / road divider), added to the lines group; 0 = off = every stored run is reproduced.
-    # Positives: GT line cells (weight line_bce_pos); negatives: cells farther than line_bce_ignore metres from every GT line (weight 1); the band in between (1
-    # m by default, wider than the Dice's tolerance of line_tolerance cells = 0.5 m, on purpose: t23 card) is ignored, so a line found within that band costs
-    # nothing, a confident cell farther away costs as in any BCE
-    line_bce: float = 0.0
-    line_bce_pos: float = 3.0          # positive weight of that BCE (the lines are ~1.3 % of the cells)
-    line_bce_ignore: float = 1.0       # m: distance from a GT line below which a non-line cell is not a negative
     huber_delta: float = 0.5           # m
     dist_near: float = 1.0             # m: Huber weight 1 below, dist_w_far above
     dist_w_far: float = 0.25
@@ -71,12 +64,9 @@ class LossConfig:
     dense_objects: bool = True         # decision (2): footprint coverage in the semantic head
     w_obj_vel: float = 0.2             # object_head.head_loss velocity weight
     w_obj_mov: float = 1.0             # its moving / static BCE weight (only with model.object_moving, t11)
-    w_refine: float = 1.0              # S5c refinement loss in the objects group (when the model refines)
     max_obj: int = 128
     motion_min_speed: float = 1.0
     motion_w_background: float = 0.1
-    consistency: bool = False          # object head vel at the GT centres vs the motion field (arm)
-    w_consistency: float = 0.1
     w_cam_aux: float = 0.3
     w_radar_aux: float = 0.3
     # decision (3): the proxy target, used when the GT dict carries it. NO GT layer carries it (GtGenerator writes none), so its branch never runs and the radar
@@ -212,18 +202,6 @@ def tolerant_dice_loss(prob, target, w, tol=1):
     return torch.where(_wsum(g, w) > 0, 1 - num / den.clamp(min=EPS), torch.zeros_like(num))
 
 
-def line_bce_loss(logits, target, dist, w, pos=3.0, ignore=1.0):
-    """t23: BCE on the line presence with an ignore band -> (K,). Cell weights: GT line cell (target > 0.5) pos, non-line cell with the GT distance >= ignore
-    (m) 1,
-    the band in between 0 (the tolerance of the Dice: a line found there costs nothing); times the map weight w (B, 1, X, Y). Normalised by the weights it uses.
-    Unlike the Dice it punishes every confident cell far from a line, also in a channel without GT."""
-    assert ignore <= DIST_MAX, f"line_bce_ignore {ignore} m is beyond the truncated GT distance ({DIST_MAX} m): no cell could be a negative"
-    pos_m = (target > 0.5).to(logits.dtype)
-    neg_m = ((target <= 0.5) & (dist >= ignore)).to(logits.dtype)
-    ww = w * (pos * pos_m + neg_m)
-    return _wsum(F.binary_cross_entropy_with_logits(logits, target, reduction="none"), ww) / ww.sum((0, 2, 3)).clamp(min=EPS)
-
-
 def dist_huber(pred, target, w, delta=0.5, near=1.0, w_far=0.25, dist_max=DIST_MAX):
     """Huber (delta, metres) on the truncated distance field -> (K,); cell weight 1 below `near`, w_far above; where the
     GT is truncated (>= dist_max) a prediction beyond dist_max is not penalised."""
@@ -239,12 +217,10 @@ def direction_l1(pred, target, mask, w):
     return ((u - target).abs() * ww).sum() / (2 * ww.sum()).clamp(min=EPS)
 
 
-def map_terms(logits, T, spec, weights, cfg, line_bce=False):
+def map_terms(logits, T, spec, weights, cfg):
     """Losses of a semantic-type head (main or auxiliary) whose channels follow `spec`. weights: kind group -> (B, 1,
     X, Y) ('area', 'line', 'object', 'stationary'). Returns (terms, groups): per-channel terms and the group sums
-    (per-channel terms averaged inside a group, so a group is of order 1).
-    line_bce: the t23 BCE term (cfg.line_bce) is added to the line channels only when the caller asks for it; BEVLoss asks for the main head, not for the 1 m
-    centre-line head or the camera aux head."""
+    (per-channel terms averaged inside a group, so a group is of order 1)."""
     idx = {}
     for i, (_, kind, _) in enumerate(spec):
         idx.setdefault(kind, []).append(i)
@@ -271,11 +247,6 @@ def map_terms(logits, T, spec, weights, cfg, line_bce=False):
         for j, n in enumerate(names["dist"]):
             terms[f"line_huber.{n}"] = hub[j]
         groups["lines"] = dice.mean() + hub.mean()
-        if line_bce and cfg.line_bce > 0.0:                      # t23: presence channels and distance channels are in the same line order (layers.channels)
-            lb = line_bce_loss(ch("line"), tg("line"), tg("dist"), w, cfg.line_bce_pos, cfg.line_bce_ignore)
-            for j, n in enumerate(names["line"]):
-                terms[f"line_bce.{n}"] = lb[j]
-            groups["lines"] = groups["lines"] + cfg.line_bce * lb.mean()
     if "centreline" in idx:                                      # the first centre-line design: presence only, its direction follows
         w = weights["line"]
         dice = tolerant_dice_loss(torch.sigmoid(ch("centreline")), tg("centreline"), w, cfg.line_tolerance)[0]
@@ -341,9 +312,8 @@ def object_head_terms(out, boxes_batch, w_obj, grid, groups=NUSC_GROUPS, w_vel=0
 
 def motion_term(v_hat, T, cfg):
     """motion_loss on the cells where objects / velocity are supervised (w_obj > 0), normalised by their counts. LossConfig.hygiene_2026_11_02: the cells of a
-    box of unknown velocity
-    (flow_weight 0, GT velocity 0) are out of it, as the evaluation leaves them out, and w_obj weights the rest (it is 0 or 1 at dt 0 but at the ignore edges:
-    the weight acts at dt +-0.5 s)."""
+    box of unknown velocity (flow_weight 0, GT velocity 0) are out of it, as the evaluation leaves them out, and w_obj weights the rest (it is 0 or 1 at dt 0
+    but at the ignore edges: the weight acts at dt +-0.5 s)."""
     valid = T["w_obj"][:, 0] > 0
     if cfg.hygiene_2026_11_02 and "flow_weight" in T:
         valid = valid & (T["flow_weight"][:, 0] > 0)
@@ -352,13 +322,6 @@ def motion_term(v_hat, T, cfg):
         return x.permute(0, 2, 3, 1)[valid].t().reshape(1, x.shape[1], -1, 1)
     return motion_loss(sel(v_hat), sel(T["velocity"]), sel(T["obj_cells"]), cfg.motion_min_speed,
                            cfg.motion_w_background, weight=sel(T["w_obj"]) if cfg.hygiene_2026_11_02 else None)
-
-
-def consistency_term(obj_vel, v_hat, t):
-    """L1 between the object head's vel and the motion field at the GT centres (8.2 / 8.4 optional)."""
-    m = t["mask"].to(v_hat.device).unsqueeze(-1)
-    ind = t["ind"].to(v_hat.device)
-    return ((_gather(obj_vel, ind) - _gather(v_hat, ind)).abs() * m).sum() / (2 * m.sum()).clamp(min=1)
 
 
 # ------------------------------------------------------------------------------------------------ time, task groups
@@ -433,7 +396,7 @@ class BEVLoss(nn.Module):
             groups[g] = groups.get(g, 0.0) + v
         if "sem" in p:
             w = {"area": T["w_map"], "line": T["w_lines"], "object": T["w_obj"]}
-            t, g = map_terms(p["sem"], T, self.spec, w, cfg, line_bce=True)
+            t, g = map_terms(p["sem"], T, self.spec, w, cfg)
             terms.update(("sem." + k, v) for k, v in t.items())
             for k, v in g.items():
                 add(k, v)
@@ -451,21 +414,12 @@ class BEVLoss(nn.Module):
                                        cfg.max_obj, cfg.w_obj_mov, hygiene=cfg.hygiene_2026_11_02)
             terms.update(("objhead." + k, v) for k, v in lo.items())
             add("objects", lo["total"])
-        if "refine" in p:                                     # S5c, candidates built by the model (model.refine)
-            r = p["refine"]                                   # tensors only (the trainer casts every entry to float)
-            steps = [{k: r[k][i] for k in ("box_in", "delta", "quality")} for i in range(r["delta"].shape[0])]
-            lr = refine_loss(steps, r["gt"], r["matched"], r["valid"], r["group"].long(), self.groups, cfg.w_obj_vel)
-            terms["refine.reg"], terms["refine.quality"] = lr["reg"], lr["quality"]
-            add("objects", cfg.w_refine * lr["total"])
         if "v_hat" in p and abs(float(dt)) < 1e-6:
             terms["motion"] = motion_term(p["v_hat"], T, cfg)
             lv = [motion_term(v, T, cfg) for v in (p.get("v_levels") or {}).values()]
             for i, t in enumerate(lv):                           # t15: the motion block's coarser levels (deep supervision, as in t12)
                 terms[f"motion_l{i}"] = t
             add("motion", (terms["motion"] + sum(lv)) / (1 + len(lv)))   # the mean over the levels: the group keeps the weight of one head
-            if cfg.consistency and tt is not None:
-                terms["motion_consistency"] = consistency_term(p["obj"]["vel"], p["v_hat"], tt)
-                add("motion", cfg.w_consistency * terms["motion_consistency"])
         if "cam_aux" in p:
             wc = T["w_cam"]
             t, g = map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg)

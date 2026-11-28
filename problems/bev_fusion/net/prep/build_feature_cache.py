@@ -1,6 +1,6 @@
 """Builder of the feature caches (an offline step of the preprocessing that runs the frozen camera heads, hence it imports from net/model):
-    python net/prep/build_feature_cache.py build <dataroot> <version> <root> [--split train|val] [--device cpu]    the frozen-head feature cache
-    python net/prep/build_feature_cache.py radar <dataroot> <version> <root> [--workers 4]                         the radar cache
+    python -P -m bev_fusion.net.prep.build_feature_cache build <dataroot> <version> <root> [--split train|val] [--device cpu]    the frozen-head feature cache
+    python -P -m bev_fusion.net.prep.build_feature_cache radar <dataroot> <version> <root> [--workers 4]                         the radar cache
 Tests: tests/test_build_feature_cache.py, tests/test_feature_cache.py, tests/test_cached_model.py
 Reading the caches is net/prep/feature_cache.py."""
 import os
@@ -10,11 +10,11 @@ import time
 import numpy as np
 import torch
 
-from net.model.camera_encoder import FrontCameraEncoder
-from net.prep.feature_cache import (CHECKPOINT, FEAT_HW, N_CTX, N_PROB, CachedFrontRadarDataset, FeatureStore, build_radar_cache,
+from bev_fusion.net.model.camera_encoder import FrontCameraEncoder
+from bev_fusion.net.prep.feature_cache import (CHECKPOINT, FEAT_HW, N_CTX, N_PROB, CachedFrontRadarDataset, FeatureStore, build_radar_cache,
                            shard_complete, used_frames, write_shard)
-from net.prep.images import camera_vector
-from net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes, pose_matrix
+from bev_fusion.net.prep.images import camera_vector
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes, pose_matrix
 
 
 def frame_inputs(ds, sd_token):

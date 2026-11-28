@@ -2,10 +2,9 @@
 Evaluation`).
 
 Without option (CPU, seconds, no data): the adapter contract (what `api.load_adapter` returns: bev_eval defines `defaults.REQUIRED` itself, the defaults of
-`Evaluation/defaults.py`
-add name / out / network / resolve, bev_eval's own identity wins), and the command line lists its methods. The interface itself is tested on a toy project by
-`python -m Evaluation.selftest`.
-With --real [RUN] (a finished run with a checkpoint made after D76, in the site's run root `netpath.SITE/runs`, default runs/t21_ctl_s1; D81: older runs are not
+`Evaluation/defaults.py` add name / out / network / resolve, bev_eval's own identity wins), and the command line lists its methods. The interface itself is
+tested on a toy project by `python -m Evaluation.selftest`.
+With --real [RUN] (a finished run with a checkpoint made after D76, in the site's run root `netpath.SITE/runs`, default runs/E27.t21_s0; D81: older runs are not
 run any more; CPU, 4 frames,
 about 5 minutes; skips with a message without a checkpoint): the proof that the interface changes no number. On a copy of the run folder (config, GT identity,
 the checkpoint linked):
@@ -18,7 +17,7 @@ the checkpoint linked):
   3  `check` (the dry run, with the id it would give) and `list` name what is stored
 Without option it also tests the adapter's identity of a network (a retrained checkpoint of the same name is another identity), the run resolution, the refusal
 of TEST and of unknown metrics.
-Usage (from the problem folder): python tests/test_evaluation_api.py [--real [RUN]] [--scene scene-0106] [--index 3]
+Usage (from the problem folder): python -P -m bev_fusion.tests.test_evaluation_api [--real [RUN]] [--scene scene-0106] [--index 3]
 """
 import argparse
 import glob
@@ -35,7 +34,7 @@ NEED_GB = 18
 
 def quick():
     os.chdir(ROOT)
-    from evaluation import bev_eval
+    from bev_fusion.evaluation import bev_eval
     from Evaluation import defaults
     from Evaluation.api import Evaluation, load_adapter
     # the adapter evaluation.json names, with the defaults for what it does not define
@@ -50,7 +49,7 @@ def quick():
     assert hasattr(bev_eval, "free_source") and hasattr(bev_eval, "free_subject"), "the Runner's pair: both or none"
     from Evaluation.api import EvaluationError
     # an evaluator that cannot be hashed fails closed (a renamed file of NUMBER_PATHS)
-    from evaluation import bev_adapter
+    from bev_fusion.evaluation import bev_adapter
     assert "bev_eval.py" in {os.path.basename(p) for p in bev_adapter.NUMBER_PATHS}, "the adapter's own code is part of the evaluator hash (and so of the evaluation id)"
     saved_paths = bev_adapter.NUMBER_PATHS
     bev_adapter.NUMBER_PATHS = saved_paths + (os.path.join(ROOT, "evaluation", "no_such_file_renamed.py"),)
@@ -58,9 +57,9 @@ def quick():
         assert bev_eval.evaluator_now() is None
     finally:
         bev_adapter.NUMBER_PATHS = saved_paths
-    from net import netpath
+    from bev_fusion.net import netpath
     # derived data is read from the site, not from the problem folder
-    from evaluation import bev_annotation_pts
+    from bev_fusion.evaluation import bev_annotation_pts
     assert bev_annotation_pts.OUT == os.path.join(netpath.SITE, "data", "cache", "annotation_pts.npz"), bev_annotation_pts.OUT
     # counts read from sample_annotation.json by hand: (lidar, radar); the first token ends in "00"
     if os.path.exists(bev_annotation_pts.OUT):
@@ -71,7 +70,7 @@ def quick():
         print(f"SKIP the annotation table's known counts: no {bev_annotation_pts.OUT}")
     ev_ = Evaluation(project=ROOT)
     cfg = json.load(open(os.path.join(ROOT, "evaluation", "evaluation.json")))
-    assert cfg == {"adapter": "evaluation.bev_eval"}, cfg
+    assert cfg == {"adapter": bev_eval.__name__} and bev_eval.__name__ == "bev_fusion.evaluation.bev_eval", cfg     # the adapter by its package name
     s = bev_eval.sets()
     assert s["small.val"] == 10 and s["large.val"] == 82 and s["val"] is None and s["train"] is None, s
     # the identity of a network: its checkpoint (name, fingerprint), config, code and the adapter (bev_adapter.py and bev_free.py); a retrained checkpoint of
@@ -178,7 +177,7 @@ def available_gb():
 
 
 def real(run, scene, index):
-    from net import netpath
+    from bev_fusion.net import netpath
     src_run = os.path.join(netpath.SITE, run)                                           # the site holds the link runs -> the problem's run root
     if not glob.glob(os.path.join(src_run, "ckpt_*.pt")):
         print(f"SKIP real check: {src_run} has no checkpoint here")
@@ -189,7 +188,7 @@ def real(run, scene, index):
         print(f"SKIP real check: {free:.1f} GB available, it needs {NEED_GB} GB (wait until the other jobs are done)")
         return False
     os.chdir(ROOT)
-    from evaluation import bev_adapter as A
+    from bev_fusion.evaluation import bev_adapter as A
     from Evaluation import EvalSuite
     from Evaluation.api import Evaluation
     with tempfile.TemporaryDirectory() as tmp:
@@ -248,7 +247,7 @@ def real(run, scene, index):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--real", nargs="?", const="runs/t21_ctl_s1", default=None, metavar="RUN")
+    ap.add_argument("--real", nargs="?", const="runs/E27.t21_s0", default=None, metavar="RUN")
     ap.add_argument("--scene", default="scene-0106")
     ap.add_argument("--index", type=int, default=3)
     a = ap.parse_args()

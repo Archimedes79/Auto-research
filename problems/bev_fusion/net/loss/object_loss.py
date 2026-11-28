@@ -1,11 +1,11 @@
-"""The targets and the losses of the object head (CenterPoint style: heat map, offset, size, heading, velocity, moving) and of the refiner's steps."""
+"""The targets and the losses of the object head (CenterPoint style: heat map, offset, size, heading, velocity, moving)."""
 import math
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 
-from net.model.object_head import DIR_OFFSET, GROUPS, MOVING_SPEED, bev_iou, residual_targets
+from bev_fusion.net.model.object_head import DIR_OFFSET, GROUPS, MOVING_SPEED
 
 
 def gaussian_radius(h, w, min_overlap=0.1):
@@ -154,23 +154,3 @@ def head_loss(out, t, w_vel=0.2, w_dir=0.2, w_mov=1.0, cell_w=None):
         losses["mov"] = w_mov * (bce * mk).sum() / mk.sum().clamp(min=1)
     losses["total"] = sum(losses.values())
     return losses
-
-
-def refine_loss(steps, gt, matched, valid, group, groups=GROUPS, w_vel=0.2, w_q=1.0):
-    """S5c loss, summed over the iterations: L1 of the residuals against the targets GT - input box (matched
-    candidates; circles without width and yaw; velocity weighted w_vel) + BCE of the quality logit against the BEV IoU
-    of the input box with its GT (0 for unmatched candidates; all valid candidates). Ignored candidates (near an
-    unobserved GT box, refine_candidates) have valid = matched = 0 and contribute nothing."""
-    dev = gt.device
-    circle = torch.tensor([k == "circle" for _, k in groups], device=dev)[group]
-    wb = torch.tensor([1, 1, 1, 1, 1, w_vel, w_vel], dtype=gt.dtype, device=dev)
-    wc = torch.tensor([1, 1, 1, 0, 0, w_vel, w_vel], dtype=gt.dtype, device=dev)
-    w = torch.where(circle[..., None], wc, wb) * matched[..., None]
-    reg, qual = 0.0, 0.0
-    for st in steps:
-        tgt = residual_targets(st["box_in"].detach(), gt, circle)
-        reg = reg + (F.l1_loss(st["delta"], tgt, reduction="none") * w).sum() / matched.sum().clamp(min=1)
-        iou = bev_iou(st["box_in"], gt, group, matched, groups).to(dev)
-        bce = F.binary_cross_entropy_with_logits(st["quality"], iou, reduction="none")
-        qual = qual + w_q * (bce * valid).sum() / valid.sum().clamp(min=1)
-    return {"reg": reg, "quality": qual, "total": reg + qual}

@@ -1,12 +1,12 @@
 """Tests of net/model/radar_bev.py (its former self-test).
 
-    python tests/test_radar_bev.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_radar_bev      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 
-from net.model.radar_bev import Grid, RadarBEV, V_MAX, doppler_code, properties, rasterize, to_vehicle
+from bev_fusion.net.model.radar_bev import Grid, RadarBEV, V_MAX, doppler_code, properties, rasterize, to_vehicle
 
 
 def _det(b, x, y, r, psi, vr, rcs=0.0, dt=0.0):

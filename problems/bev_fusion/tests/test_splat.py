@@ -1,13 +1,13 @@
 """Tests of net/model/splat.py (its former self-test).
 
-    python tests/test_splat.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_splat      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 
-from net.model.lift_pd import Grid
-from net.model.splat import VelocityHead, chain_positions, ego_speed_yawrate, grid_points, splat, splat_bev, splat_positions, splat_window
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.splat import VelocityHead, chain_positions, ego_speed_yawrate, grid_points, splat, splat_bev, splat_positions, splat_window
 
 
 def _exact_ctrv(x, y, dt, v, w):

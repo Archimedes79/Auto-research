@@ -1,11 +1,11 @@
 """Tests of net/model/camera_encoder.py (its former self-test).
 
-    python tests/test_camera_encoder.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_camera_encoder      (from the problem folder, with its module path)
 """
 import torch
 
-from net.model.camera_encoder import FrontCameraEncoder
-from net.prep.images import camera_vector, nuscenes_front_ida
+from bev_fusion.net.model.camera_encoder import FrontCameraEncoder
+from bev_fusion.net.prep.images import camera_vector, nuscenes_front_ida
 
 
 def _selftest():

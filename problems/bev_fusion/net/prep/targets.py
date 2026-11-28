@@ -1,9 +1,4 @@
 """Ground truth -> what the heads and the losses read: the object class groups, the target time of each keyframe of a sample and the head-box targets."""
-import math
-
-import numpy as np
-
-
 NUSC_GROUPS = (("vehicle", "box"), ("two_wheeler", "box"), ("pedestrian", "circle"))   # object head groups (8.3)
 
 
@@ -39,23 +34,3 @@ def head_box(bx, groups=NUSC_GROUPS):
     else:
         d["radius"] = max(ln, w) / 2
     return d
-
-
-def refine_gt_boxes(g, grid, groups=NUSC_GROUPS):
-    """GT boxes of one gt_bev GT dict for the S5c candidates (object_head.refine_candidates): head_box dicts whose
-    'observed' is True only where stage 1 supervises the box too (a lidar / radar point AND its centre cell covered:
-    camera and not occluded, or radar), so every other box is ignored, not background. It does NOT follow
-    LossConfig.fusion_area_only."""
-    X, Y = np.asarray(g["camera"]).shape[-2:]
-    w = np.maximum(np.asarray(g["camera"]) * (1 - np.asarray(g["occluded"])), np.asarray(g["radar"]))
-    out = []
-    for bx in g.get("meta", {}).get("boxes", []):
-        hb = head_box(bx, groups)
-        if hb is None:
-            continue
-        ix = int(math.floor((hb["cx"] - grid.x_min) / grid.res))
-        iy = int(math.floor((hb["cy"] - grid.y_min) / grid.res))
-        inside = 0 <= ix < X and 0 <= iy < Y
-        hb["observed"] = bool(bx.get("observed", True)) and inside and float(w[ix, iy]) > 0
-        out.append(hb)
-    return out

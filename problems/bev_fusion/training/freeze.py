@@ -12,8 +12,7 @@ What "frozen" means here, and the traps it avoids:
 - `requires_grad = False` on the parameters, so no gradient is computed or stored for them and the optimiser never sees them. The plan only ever FREEZES more: a
 parameter
   that the model keeps frozen itself (the camera heads with freeze_camera, the res4 lane features) stays frozen, and a `train_only` prefix that selects only
-  such parameters
-  is an error (it would claim to train what it cannot train)
+  such parameters is an error (it would claim to train what it cannot train)
 - a parameter that has several names (a module registered under two parents, e.g. the TimeMover of the heads) is ONE parameter: it trains when any of its names
 is selected by
   `train_only` (or there is no `train_only`) and is frozen when any of its names is listed in `freeze`. Prefixes may use any of its names
@@ -129,13 +128,11 @@ def signature(train_only=(), freeze=()):
 
 def frozen_keys(model):
     """state_dict keys (under every name they have) that a plan keeps fixed: the parameters without gradient, the buffers of the modules whose parameters are
-    all frozen, and
-    every constant buffer (grids, depth bins: anything that is not the running statistics of a normalisation layer outside a frozen module). Their values must
-    stay what
+    all frozen, and every constant buffer (grids, depth bins: anything that is not the running statistics of a normalisation layer outside a frozen module).
+    Their values must stay what
     they were: the trainer's EMA skips them (an average of a constant is the constant only up to rounding, and 'rest frozen' should mean bit-equal in the EMA
-    weights that
-    are evaluated, too), and `snapshot` / `unchanged` watch them. Only the running statistics of normalisation layers in the TRAINED part are left out: they
-    change"""
+    weights that are evaluated, too), and `snapshot` / `unchanged` watch them. Only the running statistics of normalisation layers in the TRAINED part are left
+    out: they change"""
     frozen = {id(p) for p in model.parameters() if not p.requires_grad}
     in_frozen = set()
     for m in model.modules():

@@ -1,25 +1,25 @@
 """Tests of net/prep/build_feature_cache.py (its former self-test).
 
-    python tests/test_build_feature_cache.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_build_feature_cache      (from the problem folder, with its module path)
 """
 import os
 import time
 
 import torch
 
-from net import netpath
-from net.model.cached_model import CachedBEVFusionModel
-from net.prep.build_feature_cache import build
-from net.prep.feature_cache import FEAT_HW, N_CTX, N_PROB, CachedFrontRadarDataset, collate_cached, used_frames
-from net.prep.nuscenes_dataset import FrontRadarDataset, collate
+from bev_fusion.net import netpath
+from bev_fusion.net.model.cached_model import CachedBEVFusionModel
+from bev_fusion.net.prep.build_feature_cache import build
+from bev_fusion.net.prep.feature_cache import FEAT_HW, N_CTX, N_PROB, CachedFrontRadarDataset, collate_cached, used_frames
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, collate
 
 
 def _selftest():
     import tempfile
     os.chdir(netpath.SITE)                                       # the data folder: the default weights are named relative to it
-    from net.model.model import BEVFusionModel
+    from bev_fusion.net.model.model import BEVFusionModel
     torch.manual_seed(0)
-    root_nusc = os.path.expanduser("~/data/nuscenes")
+    root_nusc = netpath.nuscenes_root(mini=True)
     ds = FrontRadarDataset(root_nusc, "v1.0-mini", n_cam=3, cam_stride=2, with_gt=False)
     tokens = [ds.samples[10], ds.samples[200]]
     used = used_frames(ds, tokens)

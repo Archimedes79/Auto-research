@@ -81,8 +81,7 @@ def _build_table(grid, z_levels, K, T_cam_car, image_hw, depth_centres, ida=None
 
 def lift_key(K, T_cam_car, image_hw, ida=None):
     """The projection-table cache key: what decides whether the cached table (which image pixel and depth bin every BEV cell and height maps to) can be reused -
-    the camera
-    intrinsics K, the camera-to-car extrinsics T_cam_car, the image size and the crop / resize transform ida. Python numbers only. """
+    the camera intrinsics K, the camera-to-car extrinsics T_cam_car, the image size and the crop / resize transform ida. Python numbers only. """
     return (tuple(K.flatten().tolist()), tuple(T_cam_car.flatten().tolist()), tuple(image_hw),
             None if ida is None else tuple(ida.flatten().tolist()))
 

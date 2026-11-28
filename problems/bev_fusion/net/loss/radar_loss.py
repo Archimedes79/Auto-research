@@ -2,7 +2,7 @@
 import torch
 import torch.nn.functional as F
 
-from net.model.radar_encoder import slot_width
+from bev_fusion.net.model.radar_encoder import slot_width
 
 
 def aux_weight(step, start=1.0, floor=0.05, half_life=3000):

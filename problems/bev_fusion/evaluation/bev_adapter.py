@@ -25,18 +25,19 @@ from PIL import Image
 
 from Evaluation import FrameRef, Prediction, Sample, Source, Subject, TapSpec
 from Evaluation.torch_taps import Hook, TapRecorder, count_ops
-from evaluation import bev_sets
-from evaluation.bev_task import BEVTask
-from evaluation.metrics import ms_per_frame
-from GtGenerator.versions import version_of_key
-from net import chain, netpath
-from net.model.camera_encoder import FrontCameraEncoder
-from net.model.object_head import decode
-from net.prep.batches import clip_step, make_datasets, to_device
-from net.prep.feature_cache import collate_cached
-from net.prep.geometry import depth_centres
-from net.prep.nuscenes_dataset import collate
-from net.prep.targets import NUSC_GROUPS, sample_targets
+from bev_fusion.evaluation import bev_sets
+from bev_fusion.evaluation.bev_task import BEVTask
+from bev_fusion.evaluation.metrics import ms_per_frame
+from GtGenerator import version_of_key
+from bev_fusion.net import chain, netpath
+from bev_fusion.net.model.camera_encoder import FrontCameraEncoder
+from bev_fusion.net.model.object_head import decode
+from bev_fusion.net.prep.batches import clip_step, make_datasets, to_device
+from bev_fusion.net.prep.feature_cache import collate_cached
+from bev_fusion.net.prep.geometry import depth_centres
+from bev_fusion.net.prep import splits
+from bev_fusion.net.prep.nuscenes_dataset import collate
+from bev_fusion.net.prep.targets import NUSC_GROUPS, sample_targets
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 REPO = os.path.abspath(os.path.join(ROOT, "..", ".."))
@@ -103,11 +104,9 @@ def gt_version(sig) -> Optional[str]:
 # everything the evaluator is made of (the default of evaluator_tree_hash)
 EVALUATOR_PATHS = (os.path.join(ROOT, "evaluation"), os.path.join(AUTORESEARCH, "Evaluation"))
 # the files that shape the NUMBERS (the resume guard of a store): the metrics, the adapter that predicts, the task and its optional blocks, the Evaluation's
-# frame loop,
-# counts, sampling and comparison core, and the views (`bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`;
-# `bev_annotation_pts.py`
-# builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there changes the hash too;
-# `bev_eval.py` is the class interface's adapter: the reference and the metrics without the loss).
+# frame loop, counts, sampling and comparison core, and the views (`bev_views.py` holds `masks()`, every map's denominator, `gt_boxes()` and `layer_index()`;
+# `bev_annotation_pts.py` builds the point-count table that the `cov` metric loads; `bev_views.py` also holds the page rendering, so a picture-only edit there
+# changes the hash too; `bev_eval.py` is the class interface's adapter: the reference and the metrics without the loss).
 # Not the timing, the module probe or the README: an edit there changes no number and must not orphan a store that took 30 minutes
 NUMBER_PATHS = tuple(os.path.join(ROOT, "evaluation", f) for f in ("bev_adapter.py", "bev_task.py", "metrics.py", "bev_velocity.py", "bev_fusion_area.py", "bev_curves.py",
                                                                     "bev_views.py", "bev_annotation_pts.py", "bev_eval.py")) + \
@@ -178,19 +177,16 @@ def predictions_1m(p, b, spec_1m):
     return prob, direction
 
 
-def outputs_of(model, res, refine):
+def outputs_of(model, res):
     """the outputs of every dt of one model result (sample 0) the way both Subjects return them (BEVSubject here, bev_free.FreeSubject): maps as probabilities
-    and
-    distances, the decoded boxes (`dets`, and `detr` when the run refines), the velocity maps, and with a 1 m centre-line head its layers and direction"""
+    and distances, the decoded boxes (`dets`), the velocity maps, and with a 1 m centre-line head its layers and direction"""
     grid, spec = model.grid, model.spec
-    refined = ({dt: model.boxes(res, dt, k=100, threshold=0.05, rescore=True) for dt in res["out"]} if refine else {})
     dts = {}
     for dt, p in res["out"].items():
         prob, dist = predictions(p, 0, spec)
         dts[dt] = {"prob": prob, "dist": dist,
                    "mass": p["mass"][0, 0].float().cpu().numpy() if p.get("mass") is not None else None,
                    "dets": decode({k: v[:1].float().cpu() for k, v in p["obj"].items()}, grid, NUSC_GROUPS, k=100, threshold=0.05)[0],
-                   "detr": list(refined[dt][0]) if refine else None,
                    "vhat": p["v_hat"][0].float().cpu().numpy() if p.get("v_hat") is not None else None,
                    # the object head's raw velocity map (bev_velocity centres)
                    "objvel": p["obj"]["vel"][0].float().cpu().numpy() if "vel" in p["obj"] else None}
@@ -203,9 +199,8 @@ def outputs_of(model, res, refine):
 
 def task_spec(model):
     """the layer rows the Task scores: the model's own (the 0.5 m head) + the presence layers of its 1 m head as line layers of the 0.5 m grid, against the GT
-    mask
-    the pooled target comes from (key `centreline@1m` -> `centreline`); a model without the 1 m head: its spec itself. (Not the spec of `predictions`: these
-    rows have no channel in p["sem"].)"""
+    mask the pooled target comes from (key `centreline@1m` -> `centreline`); a model without the 1 m head: its spec itself. (Not the spec of `predictions`:
+    these rows have no channel in p["sem"].)"""
     return model.spec if not model.spec_1m else list(model.spec) + [(n, "line", key.split("@")[0]) for n, kind, key in model.spec_1m if _presence(kind)]
 
 
@@ -246,7 +241,8 @@ class BEVSource(Source):
         return {"class": "BEVSource", "dataset": "nuScenes " + self.cfg.version, "split": self.split, "scenes": len(self._frames),
                 "frames": len(self.ds), "feature_cache": self.cfg.feature_cache, "control": self.control or None,
                 "gt_signature": sig, "gt_version": gt_version(sig), "evaluator_hash": self.evaluator,
-                **({"set_hash": self.set_hash} if self.set_hash else {})}
+                # the scenes this Source really holds (splits.list_hash): a config names them by a split or a list, and a list can change under one name
+                "scenes_hash": splits.list_hash(self.scenes()), **({"set_hash": self.set_hash} if self.set_hash else {})}
 
     # -- read-ahead by worker processes (the Runner announces the frames it will load, in order)
     def prefetch(self, refs: Sequence[FrameRef]) -> None:
@@ -340,9 +336,8 @@ def bev_taps(grid):
 
 def output_taps(model, out0, arrays, names, device):
     """the taps that are not a module's output, added to `arrays` in place: `hurdle_mov` (the object head's moving logits per class of dt 0) and `radar_aux`
-    (the radar
-    auxiliary head, which only runs while training, applied here to the radar branch's output: the radar memory's when the memory is on, the radar encoder's
-    otherwise; with the memory on but its tap unreadable the tap is skipped, not fed with the wrong stage)"""
+    (the radar auxiliary head, which only runs while training, applied here to the radar branch's output: the radar memory's when the memory is on, the radar
+    encoder's otherwise; with the memory on but its tap unreadable the tap is skipped, not fed with the wrong stage)"""
     if "hurdle_mov" in names and "mov" in out0["obj"]:
         arrays["hurdle_mov"] = out0["obj"]["mov"][0].float().cpu().numpy()
     if "radar_aux" in names and getattr(model, "aux_rad", None) is not None:
@@ -403,7 +398,6 @@ class BEVSubject(Subject):
         self.warmup = max(0, int(self.cfg.seq_len) - 1)
         self.rec = TapRecorder(self.model, bev_hooks())
         self.state, self.prev = None, None
-        self.refine = bool(self.model.cfg.refine)
 
     def reset(self):
         self.state, self.prev = None, None
@@ -414,7 +408,7 @@ class BEVSubject(Subject):
     def describe(self):
         return {"class": "BEVSubject", "name": os.path.basename(os.path.normpath(self.run)), "run": self.run,
                 "checkpoint": os.path.basename(self.ckpt), "step": self.step, "weights": "EMA", "device": self.device,
-                "seq_len": self.cfg.seq_len, "refine": self.refine}
+                "seq_len": self.cfg.seq_len}
 
     def ops(self, sample):
         """GMACs of the cached chain at batch 1 with dts -0.5 / 0 / +0.5 (the path `benchmark` times), counted by torch; the pre-trained
@@ -440,23 +434,20 @@ class BEVSubject(Subject):
         with torch.no_grad():
             out, res, _ = chain.forward_loss(self.model, self.loss, batch, 1.0, self.device, self.cfg, train_terms=False, **self.carried())
             self.state, self.prev = res["state"], batch
-            dts = outputs_of(self.model, res, self.refine)
+            dts = outputs_of(self.model, res)
             arrays = read_taps(self, res, batch, names)
         loss = {k: float(v) for k, v in out.items() if k == "total" or k.startswith("group.")}
         return Prediction(outputs={"dt": dts}, taps=arrays, info={"loss": loss})
 
     def benchmark(self, sample, n=30, warmup=5):
         """ms per frame of the CACHED chain at batch 1 (the pre-trained camera heads are a fixed cost, timed separately):
-        dt 0 and (-0.5, 0, +0.5) [+ refined boxes]; only valid on an idle GPU (the load is recorded by the caller)"""
+        dt 0 and (-0.5, 0, +0.5); only valid on an idle GPU (the load is recorded by the caller)"""
         b1 = to_device(sample.inputs, self.device)
         out = {}
         with torch.no_grad():
             out["bev_dt0_median"] = ms_per_frame(lambda: self.model(b1, dts=(0.0,)), n=n, warmup=warmup, batch1=False)["median"]
             m3 = ms_per_frame(lambda: self.model(b1, dts=(-0.5, 0.0, 0.5)), n=n, warmup=warmup, batch1=False)
             out["bev_3dt_median"] = m3["median"]
-            if self.refine:
-                out["bev_dt0_refined_boxes_median"] = ms_per_frame(lambda: self.model.boxes(self.model(b1, dts=(0.0,)), 0.0), n=n,
-                                                                 warmup=warmup, batch1=False)["median"]
             cam = FrontCameraEncoder().to(self.device).eval()
             x, cv = torch.randn(1, 3, 256, 704, device=self.device), torch.zeros(1, 27, device=self.device)
             out["camera_heads_median"] = ms_per_frame(lambda: cam.image_features(x, cv), n=min(n, 30), warmup=5, batch1=False)["median"]
@@ -471,10 +462,8 @@ class BEVSubject(Subject):
 # ------------------------------------------------------------------------------------------------ entry
 def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, ckpt_dir: Optional[str] = None, control: str = "", evaluator: Optional[str] = None):
     """(Source, Subject, Task) of a training run. split: the set to evaluate on (evaluation/bev_sets.py): 'val' | 'train' = the run's own lists (the train one
-    is the
-    overfitting check), '<split>.<part>' (small.val) = the lists of that file of splits/ put into the config before the data is made. evaluator: the evaluator
-    hash of
-    the Source (default: taken now). Works in the problem's data folder (netpath.SITE): the configs name their files relative to it."""
+    is the overfitting check), '<split>.<part>' (small.val) = the lists of that file of splits/ put into the config before the data is made. evaluator: the
+    evaluator hash of the Source (default: taken now). Works in the problem's data folder (netpath.SITE): the configs name their files relative to it."""
     run = os.path.abspath(run)
     os.chdir(netpath.SITE)
     device = device if torch.cuda.is_available() else "cpu"
@@ -496,5 +485,5 @@ def build(run: str, device: str = "cuda", split: str = "val", workers: int = 2, 
                              f"not in the official {bev_sets.part_of(split)} split of nuScenes, or no front-camera files; its features / GT caches may still be missing too")
     subject = BEVSubject(run, device, ckpt_dir)
     task = BEVTask(subject.model.grid, task_spec(subject.model), [g for g, _ in NUSC_GROUPS], depth_centres=lambda: depth_centres().numpy(),
-                   z_levels=tuple(subject.model.cfg.z_levels), refine=subject.refine)
+                   z_levels=tuple(subject.model.cfg.z_levels))
     return source, subject, task

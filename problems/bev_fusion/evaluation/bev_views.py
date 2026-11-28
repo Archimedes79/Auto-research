@@ -10,9 +10,8 @@ Views (names as in `BEVTask.views()`):
     dashboard   one compact picture of every stage of one frame (the video frame)
 Bird's-eye maps are drawn with x forward (up) and +y (left of the car) on the left; arrays are (x, y) = (rows, columns).
 Colour scheme (the owner's, 2026-11-03): black plot background, dark-grey road with a black boundary, white lane lines, light-grey crossings, a calmer green for
-walkways, dark-red
-objects (vehicles, pedestrians, two-wheelers) and the same red translucent where they lie outside the observed area (camera x radar x not hidden); boxes: GT
-outline red
+walkways, dark-red objects (vehicles, pedestrians, two-wheelers) and the same red translucent where they lie outside the observed area (camera x radar x not
+hidden); boxes: GT outline red
 (translucent outside), the dashed GT outline on a prediction white, predicted boxes amber. The error maps (the owner's convention, 2026-11-04) use the same
 class colours: right = the class colour, false = mixed with green, missed = mixed with blue, black
 background, no red (`ERR`, `class_colors`).
@@ -28,12 +27,11 @@ import numpy as np
 from Evaluation import Page, Panel, Prediction, Sample, Shape, View, ViewContext
 from Evaluation.render.figure import error_counts
 from Evaluation.render.taps import energy, pca_rgb
-from evaluation.metrics import FRONT_HALF_FOV, MOVING_SPEED, angle_error, dilate, gt_boxes_from_meta, in_front, line_cells
+from bev_fusion.evaluation.metrics import FRONT_HALF_FOV, MOVING_SPEED, angle_error, dilate, gt_boxes_from_meta, in_front, line_cells
 
 # The colour scheme of the bird's-eye pictures (the owner's proposal of 2026-11-03): black plot background, dark-grey road with a black boundary, white lane
-# markings, light-grey
-# crossings, dark-red objects (vehicles, pedestrians, two-wheelers) and the same red, translucent, where they lie outside the observed area, a calmer green for
-# walkways.
+# markings, light-grey crossings, dark-red objects (vehicles, pedestrians, two-wheelers) and the same red, translucent, where they lie outside the observed
+# area, a calmer green for walkways.
 BG = (0.0, 0.0, 0.0)
 ROAD_EDGE = (0.0, 0.0, 0.0)
 DARK_RED, OUT_RED, OUT_ALPHA = (0.62, 0.04, 0.07), (0.95, 0.16, 0.16), 0.45
@@ -104,11 +102,11 @@ def observed_area(g) -> np.ndarray:
 
 def box_shapes(boxes, color, ls="-", lw=1.2, score_min=None, observed=None) -> List[Shape]:
     """box dicts (cx, cy, length, width, yaw | radius) -> overlay shapes in bird's-eye plot coordinates (horizontal = y). observed: a bool grid (observed_area)
-    -> `color` for a
-    box with at least half of its footprint inside, translucent GT_BOX_OUT for the others (the colour argument is then the one of the observed boxes)"""
+    -> `color` for a box with at least half of its footprint inside, translucent GT_BOX_OUT for the others (the colour argument is then the one of the observed
+    boxes)"""
     out = []
     if observed is not None:
-        from evaluation.bev_fusion_area import footprint_share
+        from bev_fusion.evaluation.bev_fusion_area import footprint_share
     for b0 in boxes:
         b = b0
         if score_min is not None and b.get("score", 1.0) < score_min:
@@ -138,10 +136,9 @@ def error_box_shapes(dets, gts_all, shares, area, thr: float = 2.0, min_score: f
       'no care' (D38: less than half of the footprint in the area the rig observes: such a box is neither a hit nor a miss nor a false alarm): violet, thin
       outside the scored window of the numbers (x < 60 m, +-32.3 deg): faint violet, not counted
     -> (shapes, counts {"tp","fp","fn","nocare"}): the counts are those of the window, as the numbers count. gts_all: EVERY annotated box of the scored classes
-    with its footprint
-    share (bev_fusion_area.gt_with_shares); the detections are drawn from score `min_score` on (what the pictures always did)."""
-    from evaluation.bev_errors import classify_frame
-    from evaluation.bev_fusion_area import prepare
+    with its footprint share (bev_fusion_area.gt_with_shares); the detections are drawn from score `min_score` on (what the pictures always did)."""
+    from bev_fusion.evaluation.bev_errors import classify_frame
+    from bev_fusion.evaluation.bev_fusion_area import prepare
     shown = [d for d in dets if d.get("score", 1.0) >= min_score]
     inside_d = [d for d in shown if in_front(d)]
     # as the metric: ALL annotated boxes, the ones beyond the window only neutralise
@@ -169,8 +166,7 @@ def box_caption(c) -> str:
 
 def past_box_shapes(boxes_then, meta_then, meta_now, alpha: float = 0.30, color=GT_OVERLAY) -> List[Shape]:
     """the boxes of an earlier frame (`boxes_then` in the ego frame of `meta_then`) moved into the ego frame of the current frame through the two recorded poses
-    (T_e2g) and
-    drawn faded: the history of the scene behind the present. Boxes that moved with the ego car stay where the world kept them."""
+    (T_e2g) and drawn faded: the history of the scene behind the present. Boxes that moved with the ego car stay where the world kept them."""
     T = np.linalg.inv(np.asarray(meta_now["T_e2g"], float)) @ np.asarray(meta_then["T_e2g"], float)
     dyaw = math.atan2(T[1, 0], T[0, 0])
     moved = []
@@ -182,9 +178,8 @@ def past_box_shapes(boxes_then, meta_then, meta_now, alpha: float = 0.30, color=
 
 def radar_points(rad) -> Shape:
     """the radar detections of the window as ONE point layer: colour = the direction of the radial velocity (cool blue = approaching, warm orange = receding,
-    grey = about
-    standing still; saturation grows with |vr| up to 6 m/s), transparency = the strength of the return (RCS, relative to this frame: at least 50 % opaque for
-    the weakest)"""
+    grey = about standing still; saturation grows with |vr| up to 6 m/s), transparency = the strength of the return (RCS, relative to this frame: at least 50 %
+    opaque for the weakest)"""
     vr = np.nan_to_num(np.asarray(rad["vr"], float), nan=0.0)                         # a Doppler that was not measured counts as standing
     k = np.clip(np.abs(vr) / 6.0, 0, 1)[:, None]                                      # 0 = standing (grey), 1 = 6 m/s and more (saturated)
     base = np.where((vr < 0)[:, None], np.asarray((0.15, 0.65, 1.0)), np.asarray((1.0, 0.50, 0.10)))
@@ -199,8 +194,7 @@ def radar_points(rad) -> Shape:
 
 def speed_dir_rgb(v, vmax: float) -> np.ndarray:
     """a velocity field (2, X, Y) m/s -> RGB (X, Y, 3): hue = the direction of travel (red +x ahead, green-cyan to the left, blue-violet behind, see the wheel
-    note), brightness =
-    the speed (black = standing still, full colour = `vmax` and faster)"""
+    note), brightness = the speed (black = standing still, full colour = `vmax` and faster)"""
     import matplotlib.colors as mc
     v = np.asarray(v, np.float32)
     sp = np.hypot(v[0], v[1])
@@ -217,8 +211,7 @@ def bce_map(p, g, eps: float = 1e-4) -> np.ndarray:
 
 def loss_overlay(base_rgb, loss, vmax: float = 2.0, strength: float = 0.85) -> np.ndarray:
     """a loss map as a transparent heat (a ramp without red: yellow, then white; opacity = the loss relative to `vmax`) over a picture: where the loss sits, on
-    the ground truth it
-    belongs to"""
+    the ground truth it belongs to"""
     t = np.clip(np.asarray(loss, np.float32) / vmax, 0, 1)
     yellow, white = np.asarray((0.95, 0.85, 0.15), np.float32), np.ones(3, np.float32)
     heat = np.where((t < 0.6)[..., None], yellow, yellow + (white - yellow) * ((t - 0.6) / 0.4)[..., None])
@@ -228,8 +221,7 @@ def loss_overlay(base_rgb, loss, vmax: float = 2.0, strength: float = 0.85) -> n
 
 def moving_layers(prob, vel, gt_prob, gt_vel, groups=OBJECT_LAYERS):
     """the moving objects as one pixel layer: (predicted, ground truth) boolean maps = a cell of any object class (prob > 0.5) whose velocity is above 0.5 m/s.
-    The stationary
-    objects are the object cells that are not moving."""
+    The stationary objects are the object cells that are not moving."""
     shape = np.asarray(gt_vel[0]).shape
 
     def objs(pr):
@@ -260,10 +252,8 @@ def _edge(mask: np.ndarray) -> np.ndarray:
 
 def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_width: float = 0.35, observed: Optional[np.ndarray] = None) -> np.ndarray:
     """RGB (X, Y, 3) on the black background: the areas (alpha = probability where the model says yes, i.e. >= 0.5, in the order of COLORS; below that the cell
-    stays
-    black, so the non-road area is black as in the ground-truth picture, the owner 2026-11-04), a black boundary along the drivable area, then crossings, the
-    object
-    layers (dark red; outside `observed`, a bool grid, the same red translucent) and the lines (from the distance field)"""
+    stays black, so the non-road area is black as in the ground-truth picture, the owner 2026-11-04), a black boundary along the drivable area, then crossings,
+    the object layers (dark red; outside `observed`, a bool grid, the same red translucent) and the lines (from the distance field)"""
     shape = next(iter(prob.values())).shape
     img = np.zeros(shape + (3,), np.float32) + np.asarray(BG, np.float32)
 
@@ -298,8 +288,7 @@ def composite(prob: Dict[str, np.ndarray], dist: Dict[str, np.ndarray], line_wid
 def tolerant_error_rgb(P, G, valid, tol_cells: float = 1.0, colors: Optional[Dict[str, tuple]] = None) -> Tuple[np.ndarray, Tuple[int, int, int]]:
     """error picture of two thin cell sets with a tolerance (a cell within tol_cells of the other set counts as found), in the colours of `colors`
     (default: the lane divider's, ERR): right = the class colour, false = predicted but nothing of the ground truth near (class colour + green), missed = ground
-    truth
-    without prediction near (class colour + blue), black background, dark grey = not evaluated. -> (rgb, (tp, fp, fn))"""
+    truth without prediction near (class colour + blue), black background, dark grey = not evaluated. -> (rgb, (tp, fp, fn))"""
     P, G, valid = np.asarray(P, bool), np.asarray(G, bool), np.asarray(valid, bool)
     c = colors or ERR["lane_divider"]
     DG, DP = dilate(G, tol_cells), dilate(P, tol_cells)
@@ -376,9 +365,8 @@ def _caption(counts, what) -> str:
 
 def centreline_panels(grid, g, o, valid, step: int = 4, length: float = 2.0) -> List[Panel]:
     """The 1 m centre-line head of a frame (no panel for a model without it, or a GT without the layer): (1) its presence against the GT centre-line cells with
-    the
-    tolerance of the numbers (+-1 m: the cyan class colour right, tinted green false, tinted blue missed, dark grey not evaluated), (2) its direction: arrows of
-    `length` m on every `step`-th GT cell,
+    the tolerance of the numbers (+-1 m: the cyan class colour right, tinted green false, tinted blue missed, dark grey not evaluated), (2) its direction:
+    arrows of `length` m on every `step`-th GT cell,
     GT cyan (the colour of the camera panel's centre-lines), predicted amber, on the predicted presence (grey). o: one dt of the Prediction (`prob`, `dir`)."""
     if not o.get("dir") or "centreline" not in o["prob"] or "centreline" not in g or "centreline_dir" not in g:
         return []
@@ -415,9 +403,8 @@ class BevView(View):
 
     def pred_boxes(self, sample: Sample, o, dt=0.0, past: bool = False):
         """the boxes of a prediction panel with the errors in colour (error_box_shapes), the ground truth of the frame behind them and, for dt 0, the
-        ground-truth boxes of the
-        frame half a second earlier faded (the history of the scene) -> (shapes, counts)"""
-        from evaluation.bev_fusion_area import fusion_area, gt_with_shares
+        ground-truth boxes of the frame half a second earlier faded (the history of the scene) -> (shapes, counts)"""
+        from bev_fusion.evaluation.bev_fusion_area import fusion_area, gt_with_shares
         g = sample.reference[dt]
         try:
             gts, shares = gt_with_shares(g, self.t.groups)
@@ -479,12 +466,10 @@ class OutputsView(BevView):
 
     def layer_panels(self, grid, o0, g0, gt_prob, gt_dist, m, vel, gvel):
         """the semantic output as two layers, each ground truth beside the system result: (a) MOVING objects (vehicles, pedestrians, two-wheelers with a
-        velocity above
-        0.5 m/s) as pixels, red, right = red, false = red + green, missed = red + blue; (b) the STATIONARY world (areas, lines, the objects that stand); then
-        the loss of
+        velocity above 0.5 m/s) as pixels, red, right = red, false = red + green, missed = red + blue; (b) the STATIONARY world (areas, lines, the objects that
+        stand); then the loss of
         the drivable-area / vehicle layers and the velocity error as a heat over the GT. Cells of unknown velocity (flow_weight 0: GT velocity 0 means "not
-        known") are left out
-        of the moving / stationary split and of the velocity error. A failure here costs the page these panels, nothing else."""
+        known") are left out of the moving / stationary split and of the velocity error. A failure here costs the page these panels, nothing else."""
         try:
             return self._layer_panels(grid, o0, g0, gt_prob, gt_dist, m, vel, gvel)
         except Exception:                                                     # noqa: BLE001

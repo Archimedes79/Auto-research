@@ -23,10 +23,7 @@ import math
 import torch
 import torch.nn as nn
 
-try:
-    from net.model.lift_pd import Grid
-except ImportError:  # imported as a package module
-    from .lift_pd import Grid
+from bev_fusion.net.model.lift_pd import Grid
 
 V_MAX = 30.0                 # unambiguous Doppler interval half-width in m/s (sensor property; nuScenes: 30 above the observed range)
 HARMONICS = (1, 2, 4)        # all integers: the code stays periodic with the interval

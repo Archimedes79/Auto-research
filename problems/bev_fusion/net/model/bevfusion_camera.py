@@ -18,8 +18,8 @@ Tests: tests/test_bevfusion_camera.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from net.prep.geometry import DEPTHS  # noqa: F401
-from net.prep.images import bevfusion_ida  # noqa: F401
+from bev_fusion.net.prep.geometry import DEPTHS  # noqa: F401
+from bev_fusion.net.prep.images import bevfusion_ida  # noqa: F401
 
 CKPT = "models/pretrained/bevfusion/camera-only-seg.pth"
 

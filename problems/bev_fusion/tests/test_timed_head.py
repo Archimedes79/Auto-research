@@ -1,18 +1,18 @@
 """Tests of net/model/timed_head.py (its former self-test).
 
-    python tests/test_timed_head.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_timed_head      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 import torch.nn as nn
 
-from net.model.lift_pd import Grid
-from net.model.timed_head import TimeMover, TimedHead
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.timed_head import TimeMover, TimedHead
 
 
 def _selftest():
-    from net.loss.motion_loss import motion_loss
+    from bev_fusion.net.loss.motion_loss import motion_loss
     torch.manual_seed(0)
     grid, C = Grid(), 16
     X, Y = grid.nx, grid.ny
@@ -94,8 +94,8 @@ def _selftest():
     assert float(motion_loss(v_gt.clone(), v_gt, mask)) < 1e-6
     assert float(motion_loss(torch.zeros_like(v_gt), v_gt, mask)) > 0.5
     # 5 several heads share ONE mover; gradients reach the film, the refine block and the motion head
-    from net.model.bev_trunk import SemanticHead
-    from net.model.object_head import ObjectHead
+    from bev_fusion.net.model.bev_trunk import SemanticHead
+    from bev_fusion.net.model.object_head import ObjectHead
     sem, obj = TimedHead(SemanticHead(C, 5), C, mover), TimedHead(ObjectHead(C), C, mover)
     assert sem.mover is obj.mover and sem.mover.motion.f.net[0].weight is obj.mover.motion.f.net[0].weight
     S2 = torch.randn(2, C, X, Y)

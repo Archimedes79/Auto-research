@@ -1,6 +1,6 @@
 """Tests of net/prep/feature_cache.py (its former self-test).
 
-    python tests/test_feature_cache.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_feature_cache      (from the problem folder, with its module path)
 """
 import os
 import time
@@ -9,15 +9,16 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 
-from net.prep.feature_cache import CachedFrontRadarDataset, FEAT_HW, FeatureStore, N_CTX, N_PROB, build_radar_cache, check_feature_hw, collate_cached, shard_complete, write_shard
-from net.prep.nuscenes_dataset import FrontRadarDataset
+from bev_fusion.net import netpath
+from bev_fusion.net.prep.feature_cache import CachedFrontRadarDataset, FEAT_HW, FeatureStore, N_CTX, N_PROB, build_radar_cache, check_feature_hw, collate_cached, shard_complete, write_shard
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset
 
 
 def _selftest_radar():
     """the radar cache returns exactly what FrontRadarDataset computes (dtypes, shapes, values); a second read comes from
     the file; the parallel fill covers every sample."""
     import tempfile
-    root_nusc = os.path.expanduser("~/data/nuscenes")
+    root_nusc = netpath.nuscenes_root(mini=True)
     ds = FrontRadarDataset(root_nusc, "v1.0-mini", n_cam=3, cam_stride=2, with_gt=False)
     with tempfile.TemporaryDirectory() as tmp:
         cds = CachedFrontRadarDataset(root_nusc, "v1.0-mini", store=None, radar_cache=tmp, n_cam=3, cam_stride=2,
@@ -39,22 +40,20 @@ def _selftest_radar():
         assert not [f for f in os.listdir(tmp) if ".tmp" in f], "no partial files left"
         # a whole item through the cached dataset: cached features attached, radar equal to the plain dataset's; a batch
         # collates (this path broke once when the class lost its __getitem__)
-        fdir, item_checked = "data/cache/cam_feats_mini", False
-        if os.path.isdir(fdir):
-            store = FeatureStore(fdir)
-            cds.store, cds.stores = store, [store]                      # the item reads the per-source list made at construction
-            ok = [i for i, t in enumerate(cds.samples) if all(store.has(f["token"]) for f in cds._cam_frames(t)[0])]
-            if ok:
-                it = cds[ok[0]]
-                ref = ds[ds.samples.index(cds.samples[ok[0]])]
-                assert all("prob" in f and "ctx" in f for f in it["frames"])
-                assert all(torch.equal(it["radar"][k], ref["radar"][k]) for k in ref["radar"])
-                b = collate_cached([it, it])
-                assert b["prob"].shape[:2] == (2, 3) and len(b["radar"]["b"]) == 2 * len(ref["radar"]["x"])
-                item_checked = True
+        fdir = os.path.join(netpath.SITE, "data/cache/cam_feats_mini")
+        assert os.path.isdir(fdir), f"the mini feature cache {fdir} is missing (README: what the tests need beside the code)"
+        store = FeatureStore(fdir)
+        cds.store, cds.stores = store, [store]                          # the item reads the per-source list made at construction
+        ok = [i for i, t in enumerate(cds.samples) if all(store.has(f["token"]) for f in cds._cam_frames(t)[0])]
+        assert ok, f"{fdir} holds the frames of none of the first {len(cds.samples)} mini samples"
+        it = cds[ok[0]]
+        ref = ds[ds.samples.index(cds.samples[ok[0]])]
+        assert all("prob" in f and "ctx" in f for f in it["frames"])
+        assert all(torch.equal(it["radar"][k], ref["radar"][k]) for k in ref["radar"])
+        b = collate_cached([it, it])
+        assert b["prob"].shape[:2] == (2, 3) and len(b["radar"]["b"]) == 2 * len(ref["radar"]["x"])
     print(f"radar cache selftest ok: cached radar equals the computed one exactly (every column, dtype), read back in "
-          f"{1000 * t_read:.1f} ms, parallel fill of 9 samples, no partial files; whole cached item + collate "
-          f"{'checked' if item_checked else 'NOT checked (no mini feature cache)'}")
+          f"{1000 * t_read:.1f} ms, parallel fill of 9 samples, no partial files; a whole cached item of the mini feature cache and its collate")
 
 
 def _selftest_shards():

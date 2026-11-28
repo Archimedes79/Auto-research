@@ -1,6 +1,6 @@
 """Tests of evaluation/bev_modules.py (its former self-test).
 
-    python tests/test_bev_modules.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_modules      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 import os
@@ -9,7 +9,7 @@ import tempfile
 import numpy as np
 import torch
 
-from evaluation.bev_modules import Recorder, average_response, chain_modules, changed_nothing, draw_panels, energy, frame_panels, mean_over_frames, rel_change, response_row, stat, tensors_of, velocity_rows, zero_cam, zero_doppler, zero_radar
+from bev_fusion.evaluation.bev_modules import Recorder, average_response, chain_modules, changed_nothing, draw_panels, energy, frame_panels, mean_over_frames, rel_change, response_row, stat, tensors_of, velocity_rows, zero_cam, zero_doppler, zero_radar
 
 
 def selftest():

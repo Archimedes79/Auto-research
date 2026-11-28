@@ -16,8 +16,7 @@ Cells: maps on the camera cells (`fov`), objects and velocity on the camera cell
 Flat names: `curve/dt+0.00/<layer>/{ap, roc_auc, f1_max, thr_f1, prevalence, ece, brier, n_pos, n}`, `curve/dt+0.00/velocity/{obj, moving}/{epe, rmse, r2, bias,
 n}`.
 Switched on by the metric `curves` of an Evaluation (`Evaluation.run(net, frames, metrics=("maps", "boxes", "curves"))`; off by default); the metrics are part
-of the
-evaluation id, so an evaluation made without them is never silently reused.
+of the evaluation id, so an evaluation made without them is never silently reused.
 Tests: tests/test_bev_curves.py"""
 from __future__ import annotations
 
@@ -28,8 +27,8 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from Evaluation import Metric, Prediction, Sample
-from evaluation.bev_views import masks
-from evaluation.metrics import dt_key
+from bev_fusion.evaluation.bev_views import masks
+from bev_fusion.evaluation.metrics import dt_key
 
 BINS = 400
 LOGIT = 12.0                                             # the bins span logit(p) in [-LOGIT, LOGIT]; p outside lands in the end bins
@@ -124,7 +123,7 @@ class BevCurveMetric(Metric):
                 out[f"{dk}|{name}"] = histogram(np.asarray(o["prob"][name], np.float32)[valid], np.asarray(g[key], np.float32)[valid] > 0.5)
             if o.get("vhat") is not None and "velocity" in g:
                 # THE object-cell rule (obj_fov x object layer x known velocity); imported here because bev_velocity imports this module
-                from evaluation.bev_velocity import object_cells
+                from bev_fusion.evaluation.bev_velocity import object_cells
                 out[f"{dk}|velocity"] = velocity_sums(o["vhat"], g["velocity"], object_cells(g, self.groups))
         return out
 

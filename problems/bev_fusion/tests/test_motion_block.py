@@ -1,11 +1,11 @@
 """Tests of net/model/motion_block.py (its former self-test).
 
-    python tests/test_motion_block.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_motion_block      (from the problem folder, with its module path)
 """
 import torch
 
-from net.model.lift_pd import Grid
-from net.model.motion_block import MotionBlock, NR, backward_warp, block_inputs, pool_radar, radar_raster
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.motion_block import MotionBlock, NR, backward_warp, block_inputs, pool_radar, radar_raster
 
 
 def _selftest():
@@ -89,7 +89,7 @@ def _selftest():
         except ValueError:
             pass
     # turning and two hops: a point of the oldest frame lands where chain_positions puts it (the ego turns 0.4 rad/s, 10 m/s)
-    from net.model.splat import chain_positions
+    from bev_fusion.net.model.splat import chain_positions
     fr2 = torch.zeros(1, 3, 2, X, Y)
     fr2[0, 2, 0, 70, 60] = 1.0                                           # x 35.25 m, y 4.25 m
     hop = tuple(torch.tensor([t]) for t in (0.165, 10.0, 0.4))

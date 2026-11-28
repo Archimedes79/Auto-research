@@ -1,6 +1,6 @@
 """Tests of net/prep/cache_bevfusion_features.py (its former self-test).
 
-    python tests/test_cache_bevfusion_features.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_cache_bevfusion_features      (from the problem folder, with its module path)
 """
 import json
 import os
@@ -8,17 +8,17 @@ import tempfile
 
 import torch
 
-from net import netpath
-from net.model.bevfusion_camera import BEVFusionImageSide
-from net.prep.cache_bevfusion_features import FEAT_HW, _stream_records, build, filemap, source_tokens
-from net.prep.feature_cache import N_CTX, N_PROB
-from net.prep.images import load_image
+from bev_fusion.net import netpath
+from bev_fusion.net.model.bevfusion_camera import BEVFusionImageSide
+from bev_fusion.net.prep.cache_bevfusion_features import FEAT_HW, _stream_records, build, filemap, source_tokens
+from bev_fusion.net.prep.feature_cache import N_CTX, N_PROB
+from bev_fusion.net.prep.images import load_image
 
 
 def _selftest():
     os.chdir(netpath.SITE)                                       # the data folder: the mini feature cache and the BEVFusion weights are below it
     torch.manual_seed(0)
-    root = os.path.expanduser("~/data/nuscenes")
+    root = netpath.nuscenes_root(mini=True)
     src = "data/cache/cam_feats_mini"
     with tempfile.TemporaryDirectory() as tmp:
         store = build(src, tmp, root, "v1.0-mini", max_scenes=1, max_frames=4, verbose=False)

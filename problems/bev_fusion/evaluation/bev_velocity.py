@@ -25,9 +25,9 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from Evaluation import Metric, Prediction, Sample
-from evaluation import bev_curves as C
-from evaluation.bev_views import masks
-from evaluation.metrics import dt_key, gt_boxes_from_meta, in_front
+from bev_fusion.evaluation import bev_curves as C
+from bev_fusion.evaluation.bev_views import masks
+from bev_fusion.evaluation.metrics import dt_key, gt_boxes_from_meta, in_front
 
 ROWS = ("all", "moving")
 

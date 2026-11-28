@@ -1,20 +1,20 @@
 """Tests of net/model/lane_branch.py (its former self-test).
 
-    python tests/test_lane_branch.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_lane_branch      (from the problem folder, with its module path)
 """
 import os
 
 import torch
 
-from net import netpath
+from bev_fusion.net import netpath
 import torch.nn.functional as F
 
-from net.model.lane_branch import DUALBEV_CKPT, LaneBranch, Res4Features
-from net.model.lift_pd import LiftPD
+from bev_fusion.net.model.lane_branch import DUALBEV_CKPT, LaneBranch, Res4Features
+from bev_fusion.net.model.lift_pd import LiftPD
 
 
 def _selftest():
-    from net.model.lift_pd import Grid, _front_camera
+    from bev_fusion.net.model.lift_pd import Grid, _front_camera
     torch.manual_seed(0)
     grid = Grid(z_levels=(-0.5, 0.0, 0.5, 1.0))
     depths = torch.arange(1.0, 60.0, 0.5)
@@ -64,11 +64,9 @@ def _selftest():
     assert not any(p.requires_grad for p in br4.features.parameters()) and not br4.features.bn1.training
     assert br4.image_map(img[:1]).shape == (1, 32, H // 4, W // 4)
     print("res4 features frozen, BatchNorm in eval mode under train(): ok")
-    if os.path.exists(DUALBEV_CKPT):
-        Res4Features(DUALBEV_CKPT)
-        print("res4 weights load from the DualBEV checkpoint (conv1, bn1, layer1): ok")
-    else:
-        print(f"res4 weights NOT checked ({DUALBEV_CKPT} not found from {os.getcwd()})")
+    assert os.path.exists(DUALBEV_CKPT), f"the pre-trained weights {DUALBEV_CKPT} are not in {os.getcwd()} (README: what the tests need beside the code)"
+    Res4Features(DUALBEV_CKPT)
+    print("res4 weights load from the DualBEV checkpoint (conv1, bn1, layer1): ok")
 
 
 if __name__ == "__main__":

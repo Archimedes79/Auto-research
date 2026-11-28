@@ -1,13 +1,13 @@
 """Tests of net/model/radar_encoder.py (its former self-test).
 
-    python tests/test_radar_encoder.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_radar_encoder      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 
-from net.model import radar_bev as rb
-from net.model.radar_encoder import DR_SCALE, Grid, RadarEncoder, decode_slots, n_channels, rasterize_delta_slots
+from bev_fusion.net.model import radar_bev as rb
+from bev_fusion.net.model.radar_encoder import DR_SCALE, Grid, RadarEncoder, decode_slots, n_channels, rasterize_delta_slots
 
 
 def _synthetic(n, B, grid, g, cells=None):
@@ -33,7 +33,7 @@ def _as_rows(d):
 
 
 def _selftest():
-    from net.loss.radar_loss import aux_weight, slot_aux_loss
+    from bev_fusion.net.loss.radar_loss import aux_weight, slot_aux_loss
     grid = Grid()
     g = torch.Generator().manual_seed(3)
     # 1 exact round trip of all eight fields: distinct cells, two frames, sensors at different poses

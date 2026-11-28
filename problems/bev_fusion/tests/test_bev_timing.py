@@ -1,6 +1,6 @@
 """Tests of evaluation/bev_timing.py (its former self-test).
 
-    python tests/test_bev_timing.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_timing      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 import json
@@ -10,9 +10,9 @@ import time
 
 import torch
 
-from evaluation import bev_adapter as A
-from evaluation import bev_timing
-from evaluation.bev_timing import OWN_GPU_SCRIPTS, busy_processes, gpu_scripts, gpu_state, holds_gpu, is_idle, run_timing, settled_state, time_modules, train_split
+from bev_fusion.evaluation import bev_adapter as A
+from bev_fusion.evaluation import bev_timing
+from bev_fusion.evaluation.bev_timing import OWN_GPU_SCRIPTS, busy_processes, gpu_scripts, gpu_state, holds_gpu, is_idle, run_timing, settled_state, time_modules, train_split
 
 
 def selftest():
@@ -89,9 +89,8 @@ def selftest():
         assert not is_idle({**ok, **bad}, "cuda"), bad
     assert is_idle({**ok, "mem_used_mb": 11800.0}, "cuda", check_memory=False), "after our own model is loaded the memory says nothing"
     # nvidia-smi under WSL2 lists the process that holds a CUDA context with its own pid (seen 2026-11-03: the second check, taken after the model load, refused
-    # an idle GPU
-    # because it counted this very process): the listing of gpu_state drops the own pid and ONLY that one (the parent is no GPU user either, but guessing is not
-    # our business)
+    # an idle GPU because it counted this very process): the listing of gpu_state drops the own pid and ONLY that one (the parent is no GPU user either, but
+    # guessing is not our business)
     real_run = subprocess.run
 
     def fake_run(cmd, **kw):
@@ -106,9 +105,8 @@ def selftest():
         subprocess.run = real_run
     assert listed == ["4242, [N/A]", f"{os.getppid()}, [N/A]"], ("only the own pid is not another GPU user", listed)
     # the second look is taken after our own work has left the GPU: nvidia-smi's utilisation covers the last second, and the tail of the model load read 12 - 33
-    # % (seen 2026-11-03,
-    # nothing else running, 0 % half a second later), which refused an idle GPU; a CPU run waits for nothing, and so does a "cuda" request that fell back to the
-    # CPU (no CUDA GPU:
+    # % (seen 2026-11-03, nothing else running, 0 % half a second later), which refused an idle GPU; a CPU run waits for nothing, and so does a "cuda" request
+    # that fell back to the CPU (no CUDA GPU:
     # torch.cuda.synchronize would raise where the old code reached the warning path of run_timing)
     calls = []
     saved = (vars(bev_timing)["gpu_state"], torch.cuda.synchronize, torch.cuda.is_available, time.sleep)
@@ -150,11 +148,12 @@ def selftest():
     import tempfile
     with tempfile.TemporaryDirectory() as tmp:
         for name, steps in (("a", {"train": {"run": ["{python}", "training/train.py", "{config}"], "gpus": 1}, "prepare": {"run": ["{python}", "gt/generate.py", "{config}"]}}),
-                            ("b", {"stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1}, "evaluate": {"run": "evaluate", "gpus": 1}})):
+                            ("b", {"stage1": {"run": ["{python}", "training/train/lane_train.py", "stage1", "{config}"], "gpus": 1}, "evaluate": {"run": "evaluate", "gpus": 1}}),
+                            ("c", {"fit": {"run": ["{python}", "-P", "-m", "c.training.fit_net", "{config}"], "gpus": 1}, "import": {"run": ["{python}", "-P", "-m", "c.tools.copy", "{config}"]}})):
             os.makedirs(os.path.join(tmp, name))
             json.dump({"steps": steps}, open(os.path.join(tmp, name, "problem.json"), "w"))
         scripts = gpu_scripts(tmp)
-        assert scripts == {**OWN_GPU_SCRIPTS, "train.py": "cuda", "lane_train.py": "cuda"}, scripts
+        assert scripts == {**OWN_GPU_SCRIPTS, "train.py": "cuda", "lane_train.py": "cuda", "fit_net.py": "cuda"}, scripts       # by file and as a module (-m)
         open(os.path.join(tmp, "b", "problem.json"), "w").write("{broken")
         try:
             gpu_scripts(tmp)
@@ -172,7 +171,8 @@ def selftest():
                 "  205 python training/train/lane_train.py stage1 /runs/lane_center/E400.a_s0/config.json\n  206 python gt/generate.py make --config cfg\n  207 python -c import train.py\n")
     assert [x.split()[0] for x in busy_processes(research, set(), scripts)] == ["201", "204", "205"], busy_processes(research, set(), scripts)
     for line, want in (("python3.12 -u /runs/_code/abc/problems/bev_fusion/training/train.py cfg.json", True), ("python -W ignore training/train.py cfg.json", True),
-                       ("python -X dev -u train.py cfg", True), ("env CUDA_VISIBLE_DEVICES=0 python train.py cfg", True), ("python -m evaluation.bev_timing runs/x", True),
+                       ("python -X dev -u train.py cfg", True), ("env CUDA_VISIBLE_DEVICES=0 python train.py cfg", True), ("python -m evaluation.bev_timing runs/x", True), ("python -P -m bev_fusion.training.train /runs/cfg.json", True),
+                       ("python -P -m c.training.fit_net cfg", True), ("python -P -m c.tools.copy cfg", False), ("python -P -m bev_fusion.tests.test_chain", False),
                        ("python -m evaluation.bev_timing runs/x --device=cpu", False), ("python evaluation/bev_timing.py runs/x", True), ("python evaluation/bev_modules.py runs/x", False),
                        ("python evaluation/bev_modules.py runs/x --device cuda", True), ("python net/prep/cache_bevfusion_features.py", True),
                        ("python -m research worker toy E4.m_s0", True), ("python -m research.evaluate lane_center E400.a_s0", True), ("python -m research status", False),

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, replace
 import numpy as np
 import torch
 
-from GtGenerator.layers import DIST_MAX, cell_centres, occlusion
+from GtGenerator import DIST_MAX, cell_centres, occlusion
 
 CLASSES = {"car": (4.5, 1.8, 1.5, 10.0), "truck": (8.0, 2.5, 3.0, 20.0), "pedestrian": (0.6, 0.6, 1.8, -5.0)}  # L W H RCS
 

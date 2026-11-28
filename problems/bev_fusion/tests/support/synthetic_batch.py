@@ -1,20 +1,20 @@
 """A synthetic cached batch for the tiny model (CachedBEVFusionModel on a small grid): front-camera features of the kind the config names, five radars as on
 the car, ego motion.
-    from tests.support.synthetic_batch import batch_for
+    from bev_fusion.tests.support.synthetic_batch import batch_for
     batch = batch_for(model.cfg)                   # B 2, 3 frames, seed 0"""
 import math
 
 import torch
 
-from net.model.lift_pd import Grid
-from tests.support import synthetic_world as sw
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.tests.support import synthetic_world as sw
 
-from net.model.bevfusion_camera import DEPTHS, bevfusion_ida
-from net.model.camera_encoder import nuscenes_front_ida
-from net.prep.feature_cache import FEAT_HW, N_CTX, N_PROB
-from net.model.interface import RADAR_FIELDS
-from net.model.lift_pd import _front_camera
-from net.prep.nuscenes_dataset import DST_HW
+from bev_fusion.net.model.bevfusion_camera import DEPTHS, bevfusion_ida
+from bev_fusion.net.model.camera_encoder import nuscenes_front_ida
+from bev_fusion.net.prep.feature_cache import FEAT_HW, N_CTX, N_PROB
+from bev_fusion.net.model.interface import RADAR_FIELDS
+from bev_fusion.net.model.lift_pd import _front_camera
+from bev_fusion.net.prep.nuscenes_dataset import DST_HW
 
 
 def batch_for(cfg, B=2, Fn=3, seed=0):

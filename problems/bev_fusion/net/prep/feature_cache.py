@@ -16,7 +16,7 @@ Use:
     loader = DataLoader(ds, batch_size=..., collate_fn=collate_cached)
     model = CachedBEVFusionModel(cfg)                                           # camera_bevs reads batch["prob"], ["ctx"]
 Equivalence: the cached model's camera BEVs equal the standard model's within float16 precision (self-test).
-Build:  python net/prep/build_feature_cache.py build <dataroot> <version> <root> [--split train|val] [--device cuda] [--limit N]
+Build:  python -P -m bev_fusion.net.prep.build_feature_cache build <dataroot> <version> <root> [--split train|val] [--device cuda] [--limit N]
 Tests: tests/test_feature_cache.py
 """
 import glob
@@ -27,7 +27,7 @@ import numpy as np
 import torch
 import torch.utils.checkpoint
 
-from net.prep.nuscenes_dataset import DST_HW, FrontRadarDataset, collate
+from bev_fusion.net.prep.nuscenes_dataset import DST_HW, FrontRadarDataset, collate
 
 N_PROB, N_CTX, FEAT_HW = 118, 80, (16, 44)
 CHECKPOINT = "models/pretrained/dualbev-r50-cbgs.pth"
@@ -150,7 +150,7 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         super().__init__(*args, **kw)
         if lane_images_older and self.n_cam < 2:
             raise ValueError("lane_images_older: the window has no older frame (n_cam 1)")
-        from net.prep.cameras import CAMERAS
+        from bev_fusion.net.prep.cameras import CAMERAS
         self.store, self.radar_cache, self.lane_images, self.store2 = store, radar_cache, lane_images, store2
         self.lane_images_older = bool(lane_images_older)
         if camera_features not in CAMERAS:
@@ -164,7 +164,7 @@ class CachedFrontRadarDataset(FrontRadarDataset):
             if st is not None:
                 check_feature_hw(st, src.features, src.cache)
             if src.features == "bevfusion":                  # the cache was made with BEVFusion's test pipeline (scale 0.48, crop 32 / 176)
-                from net.prep.images import bevfusion_ida
+                from bev_fusion.net.prep.images import bevfusion_ida
                 setattr(self, "ida" + src.suffix, bevfusion_ida())      # ida (alone) or ida2 (second source); the DualBEV family keeps self.ida
         self._rsig = radar_signature() if radar_cache else None
 
@@ -204,7 +204,7 @@ class CachedFrontRadarDataset(FrontRadarDataset):
         for src in self.sources[1:]:
             item["ida" + src.suffix] = getattr(self, "ida" + src.suffix)
         if self.lane_images:
-            from net.prep.image_cache import load_image, older_root
+            from bev_fusion.net.prep.image_cache import load_image, older_root
             item["lane_img"] = load_image(self.lane_images, item["frames"][0]["token"])
             if self.lane_images_older:                    # t26 student_frames 'all': the older frames of the window (sweeps), the same crop
                 item["lane_img_old"] = torch.stack([load_image(older_root(self.lane_images), f["token"]) for f in item["frames"][1:]])

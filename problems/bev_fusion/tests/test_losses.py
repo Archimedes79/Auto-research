@@ -1,6 +1,6 @@
 """Tests of net/loss/losses.py (its former self-test).
 
-    python tests/test_losses.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_losses      (from the problem folder, with its module path)
 """
 import math
 
@@ -8,11 +8,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from net.loss.losses import BEVLoss, LossConfig, TASK_GROUPS, TaskWeights, build_layer_targets, dist_huber, dt_weight, object_head_terms, soft_bce, tolerant_dice_loss
-from net.model.layers import DIST_MAX
-from net.model.layers import layer_spec, radar_aux_spec
-from net.model.lift_pd import Grid
-from net.prep.targets import NUSC_GROUPS, head_box
+from bev_fusion.net.loss.losses import BEVLoss, LossConfig, TASK_GROUPS, TaskWeights, build_layer_targets, dist_huber, dt_weight, object_head_terms, soft_bce, tolerant_dice_loss
+from bev_fusion.net.model.layers import DIST_MAX
+from bev_fusion.net.model.layers import layer_spec, radar_aux_spec
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.prep.targets import NUSC_GROUPS, head_box
 
 
 def _selftest_fusion_area():
@@ -21,8 +21,8 @@ def _selftest_fusion_area():
     weights stay; an object whose centre lies outside is ignored; through the whole BEVLoss at dt 0 and dt 0.5 (splat mass) the gradient
     of every fused output is exactly 0 outside the fusion area, the aux heads' gradients are identical to those with the option off."""
     from dataclasses import replace
-    from tests.support import synthetic_world as sw
-    from net.model.object_head import ObjectHead
+    from bev_fusion.tests.support import synthetic_world as sw
+    from bev_fusion.net.model.object_head import ObjectHead
     torch.set_num_threads(2)
     grid, cfg = Grid(), LossConfig()
     X, Y = grid.nx, grid.ny
@@ -104,10 +104,10 @@ def _selftest_fusion_area():
 def _selftest():
     import time
     from dataclasses import replace
-    from tests.support import synthetic_world as sw
-    from net.model.bev_trunk import SemanticHead
-    from net.model.object_head import ObjectHead
-    from net.model.timed_head import TimedHead, TimeMover
+    from bev_fusion.tests.support import synthetic_world as sw
+    from bev_fusion.net.model.bev_trunk import SemanticHead
+    from bev_fusion.net.model.object_head import ObjectHead
+    from bev_fusion.net.model.timed_head import TimedHead, TimeMover
     torch.manual_seed(0)
     torch.set_num_threads(1)                          # small tensors on a shared CPU: threads only add contention
     t0 = time.time()
@@ -156,7 +156,7 @@ def _selftest():
     sel = Tk["w_map"][..., :20, :] > 0
     assert torch.allclose(Tu["w_map"][..., :20, :][sel], cfg.w_unknown * Tk["w_map"][..., :20, :][sel])
 
-    _selftest_fusion_area()                           # D38 (b): `python net/loss/losses.py --fusion-area` runs it alone
+    _selftest_fusion_area()                           # D38 (b): `python -P -m bev_fusion.net.loss.losses --fusion-area` runs it alone
 
     # predictions as leaf tensors: weight-0 cells get exactly zero gradient; doubling the map leaves every term
     cam_n, rad_n = len(layer_spec(False, True)), len(radar_aux_spec(True))

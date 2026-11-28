@@ -1,12 +1,12 @@
 """Tests of net/model/lift_pd.py (its former self-test).
 
-    python tests/test_lift_pd.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_lift_pd      (from the problem folder, with its module path)
 """
 import numpy as np
 import torch
 
-from net.model.lift_pd import LiftPD, _front_camera, frustum_table, height_to_channels, lift_pd
-from net.prep.geometry import Grid, build_table
+from bev_fusion.net.model.lift_pd import LiftPD, _front_camera, frustum_table, height_to_channels, lift_pd
+from bev_fusion.net.prep.geometry import Grid, build_table
 
 
 def _selftest():

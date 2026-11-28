@@ -19,7 +19,7 @@ import math
 import torch
 import torch.nn.functional as F
 
-from net.model.splat import chain_positions, grid_points, splat
+from bev_fusion.net.model.splat import chain_positions, grid_points, splat
 
 EPS = 1e-6
 

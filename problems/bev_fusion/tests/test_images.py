@@ -1,10 +1,10 @@
 """Tests of net/prep/images.py (its former self-test).
 
-    python tests/test_images.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_images      (from the problem folder, with its module path)
 """
 import torch
 
-from net.prep.images import BEVFUSION_MEAN, BEVFUSION_STD, IMG_MEAN, IMG_STD, bevfusion_ida, load_image, nuscenes_front_ida
+from bev_fusion.net.prep.images import BEVFUSION_MEAN, BEVFUSION_STD, IMG_MEAN, IMG_STD, bevfusion_ida, load_image, nuscenes_front_ida
 
 
 def _selftest():

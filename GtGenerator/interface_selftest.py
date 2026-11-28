@@ -34,20 +34,6 @@ SCANNED = ("problems", "autoresearch", "datasets")            # the folders of t
 # there: the list can only shrink, and it is empty when S2 is done. For S2: no module is handed on as a value either (the scan refuses `return GtGenerator` and cannot see
 # `self.lg.held(...)`): lane_gt_data.py and lane_tok_data.py call GtGenerator.lane_tokens() / GtGenerator.load_lane(token) directly, and `self.lg` goes.
 PENDING = {
-    "problems/bev_fusion/evaluation/bev_adapter.py": ("from GtGenerator.versions import version_of_key",),                        # from GtGenerator import version_of_key
-    "problems/bev_fusion/training/train.py": ("from GtGenerator.versions import version_of_key",),                                # the same
-    "problems/bev_fusion/net/model/layers.py": ("from GtGenerator.layers import AREAS, DIST_MAX, LINES, OBJECTS",),               # from GtGenerator import AREAS, DIST_MAX, LINES, OBJECTS
-    "problems/bev_fusion/net/prep/nuscenes_dataset.py": ("from GtGenerator.nuscenes_adapter import pose_matrix",                  # from GtGenerator import pose_matrix
-                                                         "from GtGenerator.nuscenes_gt import NuScenesGT"),                       # GtGenerator.GtGenerator(dataroot, version, nusc=nusc); cache names: .store_signature()
-    "problems/bev_fusion/net/prep/precompute.py": ("from GtGenerator import coverage",),                                          # from GtGenerator import radar_cells
-    "problems/bev_fusion/tests/test_nuscenes_dataset.py": ("from GtGenerator.nuscenes_adapter import pose_matrix",),              # from GtGenerator import pose_matrix
-    "problems/bev_fusion/tests/support/synthetic_world.py": ("from GtGenerator.layers import DIST_MAX, cell_centres, occlusion",),   # from GtGenerator import DIST_MAX, cell_centres, occlusion
-    "problems/bev_fusion/tests/test_splits.py": (                                                                                 # versions = set(GtGenerator.version_names()); the message names no file
-        'with open(os.path.join("..", "..", "GtGenerator", "versions.csv"), newline="", encoding="utf-8") as f:',
-        '''check(all(d["gt"] in versions for d in (small, large, xl)), f"every split names a GtGenerator version ({large['gt']}) of GtGenerator/versions.csv")'''),
-    "problems/bev_fusion/tests/test_precompute.py": (                                                                             # two messages name the module: "GtGenerator.radar_cells"
-        'assert torch.equal(out["vis_radar"][0, 0], torch.from_numpy(_radar_cells()(gx, gy, rig.numpy())).float()), "radar fan != GtGenerator.coverage"',
-        'print("precompute selftest passed: camera map = lift_pd.camera_visibility, radar fan = GtGenerator.coverage.radar_cells of the calibrated poses, fusion area = camera x radar, "'),
     "problems/lane_center/evaluation/qgraph_eval.py": ("from GtGenerator import lane_gt",),                                       # twice: load_lane(token); lane_tokens() (the file is protected and in the evaluator hash)
     "problems/lane_center/net/prep/lane_gt_data.py": ("from GtGenerator import lane_gt",),                                        # lane_signature(), lane_tokens(), load_lane(token), called directly
     "problems/lane_center/net/prep/foundation/gcar_features.py": ("from GtGenerator.light_nusc import light_nuscenes",),          # from GtGenerator import light_nuscenes

@@ -1,14 +1,14 @@
 """Tests of net/model/extract.py (its former self-test).
 
-    python tests/test_extract.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_extract      (from the problem folder, with its module path)
 """
 import math
 
 import torch
 import torch.nn.functional as F
 
-from net.model.object_head import DIR_OFFSET
-from net.model.extract import boxes_from_maps, dense_boxes, select_boxes, soft_line_map
+from bev_fusion.net.model.object_head import DIR_OFFSET
+from bev_fusion.net.model.extract import boxes_from_maps, dense_boxes, select_boxes, soft_line_map
 
 
 def _decode_reference(out, grid, groups, k=50, threshold=0.2):
@@ -48,7 +48,7 @@ def _decode_reference(out, grid, groups, k=50, threshold=0.2):
 
 def _selftest():
     import numpy as np
-    from evaluation.metrics import line_cells
+    from bev_fusion.evaluation.metrics import line_cells
 
     class Grid:
         x_min, y_min, res = -10.0, -12.0, 0.5

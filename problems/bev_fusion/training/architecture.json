@@ -193,7 +193,7 @@
     "net/prep/nuscenes_dataset.py::collate",
     "net/prep/feature_cache.py::collate_cached"
    ],
-   "note": "BEVInputs = the batch dict with its contract in interface.INPUTS (names, shapes, units, frames) and check_inputs(); the forward arguments dts, state, step, ego in interface.CALL; the per-sample flip flag travels with it (the mirror is a BEV operation after the camera slot)"
+   "note": "BEVInputs = the batch dict with its contract in interface.INPUTS (names, shapes, units, frames) and check_inputs(); the forward arguments dts, state, step, ego (model.forward); the per-sample flip flag travels with it (the mirror is a BEV operation after the camera slot)"
   },
   {
    "id": "cam_enc",
@@ -292,10 +292,9 @@
    "col": 7,
    "row": 1,
    "code": [
-    "net/model/object_head.py::ObjectHead",
-    "net/model/object_head.py::BoxRefiner"
+    "net/model/object_head.py::ObjectHead"
    ],
-   "note": "contract: (S moved to dt) -> heatmap, offset, size, yaw, velocity, moving maps; the refiner (option, off in the base chain) decodes top-k and matches the GT inside the training path: a rule step when it is on"
+   "note": "contract: (S moved to dt) -> heatmap, offset, size, yaw, velocity, moving maps"
   },
   {
    "id": "planner",
@@ -339,7 +338,7 @@
     "net/model/extract.py::boxes_from_maps",
     "net/model/extract.py::select_boxes"
    ],
-   "note": "ONE extractor: boxes_from_maps reads only the K peak cells of the head maps (vectorised, float64, the same _params as the dense output) and is what object_head.decode, model.boxes(), the evaluation adapter and the prototype call; select_boxes does the same on a dense output (planner side); extract.py's self-test checks both box by box against the plain per-box loop (6 mutants caught); 1.7 ms instead of 6.5 ms (decode) and 1.5 ms instead of 9.0 ms (model.boxes) per frame at 100 candidates, CPU"
+   "note": "ONE extractor: boxes_from_maps reads only the K peak cells of the head maps (vectorised, float64, the same _params as the dense output) and is what object_head.decode, the evaluation adapter and the prototype call; select_boxes does the same on a dense output (planner side); extract.py's self-test checks both box by box against the plain per-box loop (6 mutants caught); 1.7 ms instead of 6.5 ms (decode) and 1.5 ms instead of 9.0 ms (model.boxes) per frame at 100 candidates, CPU"
   },
   {
    "id": "consumers",
@@ -414,7 +413,7 @@
     "net/loss/train_terms.py",
     "net/loss/student_loss.py"
    ],
-   "note": "one module: the Kendall weights and the cross-head terms (motion and time consistency, refine) stay together; heads declare their output keys; the terms per layer come from the layer table (area: BCE + overlap, polyline: dilated Dice + distance + direction, dense box); loss.hygiene_2026_11_02 switches the corrected terms of the 2026-11-02 findings"
+   "note": "one module: the Kendall weights and the cross-head terms (motion and time consistency) stay together; heads declare their output keys; the terms per layer come from the layer table (area: BCE + overlap, polyline: dilated Dice + distance + direction, dense box); loss.hygiene_2026_11_02 switches the corrected terms of the 2026-11-02 findings"
   },
   {
    "id": "lane",
@@ -451,7 +450,7 @@
     "net/prep/precompute.py::radar_hits",
     "net/prep/geometry.py::camera_visibility"
    ],
-   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans of the calibrated poses (D36; GtGenerator.coverage.radar_cells, cached per rig), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask), radar_static = the same weighted by the measured Doppler (the write mask with rad_static_gate); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
+   "note": "the precompute step (precompute.py): vis_cam from calibration + grid (cached per calibration, the same function live), vis_radar = the radar fans of the calibrated poses (D36; GtGenerator.coverage.radar_cells, cached per rig), vis_fusion = camera x radar (D37: fusion results are scored there), radar_hits = cells with detections now (the radar memory's write mask); read by the network, the training (D36 loss masks) and the evaluation (scoring masks)"
   },
   {
    "id": "mblock",
@@ -501,7 +500,7 @@
     "net/prep/splits.py",
     "splits/"
    ],
-   "note": "scene names only (small 60 / 10, large 428 / 82, xl 700 / 82), each with the GtGenerator version its caches were checked against; the base config carries the lists of large inline (the run's config.json holds the exact lists); net/prep/splits.py resolves a \"split\" name into the lists (build_image_cache.py), names the split of a run (manifest.json, split.json) and is the evaluation's set table; gt_scenes.py turns the lists into the GT a run needs"
+   "note": "scene names only (small 60 / 10, large 428 / 82, xl 700 / 82), each with the GtGenerator version its caches were checked against; the base config names large (\"split\"); net/prep/splits.py resolves the name into the lists for both config readers (net/chain.py read_raw), a stored config with inline lists is read as it is, names the split of a run (manifest.json, split.json) and is the evaluation's set table; gt_scenes.py turns the lists into the GT a run needs"
   }
  ],
  "edges": [

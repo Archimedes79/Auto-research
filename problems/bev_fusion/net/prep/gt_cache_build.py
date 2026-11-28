@@ -7,7 +7,7 @@ signature of the generator (`FrontRadarDataset.gt_signature()`: GtGenerator sour
 again. Resumable (existing files are
 skipped by the writer). The workers are forks of one process that has loaded the devkit once (memory is shared).
 
-Usage:  python net/prep/gt_cache_build.py <dataroot> <version> <cache_dir> --split train|val|mini_train|mini_val
+Usage:  python -P -m bev_fusion.net.prep.gt_cache_build <dataroot> <version> <cache_dir> --split train|val|mini_train|mini_val
             [--scenes scene-0003 ...] [--workers 4] [--limit N]
 Tests: tests/test_gt_cache_build.py
 """
@@ -17,7 +17,7 @@ import time
 
 import torch
 
-from net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
+from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, available_scenes
 
 
 class _GTOnly(torch.utils.data.Dataset):

@@ -16,11 +16,11 @@ vis_cam    the cells the current camera frame observes (lift_pd.camera_visibilit
            live in a car. The write mask of the camera memory (the network mirrors it with the camera BEV for flipped samples); D36: the
            loss and scoring mask of the camera outputs.
 vis_radar  the cells the radar rig can see (D36, the owner: "obs_radar stays the fan"): the +-60 deg / 70 m fans of the five radars, from their
-           calibrated poses (batch["radar_poses"]) through GtGenerator.coverage.radar_cells - the one definition the ground truth uses -, made
+           calibrated poses (batch["radar_poses"]) through the radar_cells of GtGenerator - the one definition the ground truth uses -, made
            once per rig. The fans cover 99.6 % of this grid, so the map restricts little
            today; what matters is that it comes from the geometry and not from a constant.
 vis_fusion the fusion area (D37: fusion results are reported on cells observed by camera and radar) = vis_cam x vis_radar; the evaluation
-           removes the cells hidden behind a GT box (GtGenerator.coverage.hidden_by_boxes) on top.
+           removes the cells hidden behind a GT box on top.
 radar_hits the cells with at least one radar detection of this frame's compensated sweeps, widened by `dilate` cells (radar points are
            mirrored by the augmentation already): where the radar measured now, the write mask of the radar memory.
            `pre.radar_mask(name, radar, B)` makes the map for ONE radar set: the batch's, or, with ModelConfig.radar_per_frame (t25), each
@@ -32,15 +32,15 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from net.prep.geometry import camera_visibility
+from bev_fusion.net.prep.geometry import camera_visibility
 
 _FANS = {}                                                    # (grid, the five radar poses) -> the fan (nx, ny), made once per process
 
 
 def _radar_cells():
-    """GtGenerator.coverage.radar_cells (the fan the ground truth uses), imported when first needed"""
-    from GtGenerator import coverage
-    return coverage.radar_cells
+    """the radar fan as the ground truth defines it (radar_cells of GtGenerator), imported when first needed"""
+    from GtGenerator import radar_cells
+    return radar_cells
 
 
 MAPS = ("vis_cam", "vis_radar", "vis_fusion", "radar_hits")
@@ -71,10 +71,10 @@ class Precompute:
     @classmethod
     def from_config(cls, mcfg):
         """the same step from a ModelConfig alone (no network built): the grid, heights and depth range of its camera slot"""
-        from net.prep.geometry import depth_centres
-        from net.prep.geometry import Grid
+        from bev_fusion.net.prep.geometry import depth_centres
+        from bev_fusion.net.prep.geometry import Grid
         if mcfg.camera_features == "bevfusion":
-            from net.prep.geometry import DEPTHS
+            from bev_fusion.net.prep.geometry import DEPTHS
             dc = DEPTHS
         else:
             dc = depth_centres()
@@ -87,7 +87,7 @@ class Precompute:
         return torch.stack(vis)[:, None].to(device=K.device, dtype=torch.float32)
 
     def radar_fan(self, batch):
-        """(B, 1, X, Y): the cells inside the fan of one of the five radars, from batch["radar_poses"] (GtGenerator.coverage.radar_cells on the
+        """(B, 1, X, Y): the cells inside the fan of one of the five radars, from batch["radar_poses"] (the radar_cells of GtGenerator on the
         cell centres: the definition of the ground truth); one computation per distinct rig"""
         if "radar_poses" not in batch:
             raise KeyError("vis_radar needs batch['radar_poses'] (B, 5, 4, 4), the radar calibration (nuscenes_dataset.collate makes it)")

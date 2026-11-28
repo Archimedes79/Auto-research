@@ -1,7 +1,7 @@
 """Module probe: what does every module of the chain output, does it respond to its input, is it related to the GT? One run, a few val frames,
 CPU or GPU (no checkpoint is changed, the network runs through the same `chain.forward_loss` as the labelled evaluation, cold memory per frame).
 
-    python evaluation/bev_modules.py RUN [--frames 3] [--device cpu] [--split val] [--threads 2] [--out DIR]     (also: `Evaluation.probe(RUN)`)
+    python -P -m bev_fusion.evaluation.bev_modules RUN [--frames 3] [--device cpu] [--split val] [--threads 2] [--out DIR]     (also: `Evaluation.probe(RUN)`)
 
 Writes OUT (default RUN/eval/modules/):
     modules.json        per module output (every float tensor inside it, named by its path): shape, finite, mean, std, absmax, share of zeros, share of dead
@@ -15,12 +15,10 @@ Writes OUT (default RUN/eval/modules/):
                         (a field with an offset along the ego velocity on static cells has not learnt to subtract the ego motion)
     frame_<k>.png       one panel per stage, the GT beside the heads (x forward = up)
 The probed modules are the model's direct children (`chain_modules`: lift AND lift2 of a dual camera, lane, ...), the trunk through its `.features()`;
-`bev_timing.py`
-times the same. What to know when reading the numbers:
+`bev_timing.py` times the same. What to know when reading the numbers:
   * a module called once per dt (the heads) is recorded at its FIRST call (dt -0.5 for `sem_head:` / `obj_head:`); `OUT dt0:` holds the dt-0 outputs
   * `aux_cam` / `aux_rad` only run while training: no output here (for a look, the `radar_aux` tap runs the head on the radar branch: `run --taps radar_aux`,
-  `draw-frame ... --view taps`)
-  * the response row of a stage uses its first two tensors (motion_block: the two coarsest levels; `OUT:v_hat` is the finest)
+  `draw-frame ... --view taps`) * the response row of a stage uses its first two tensors (motion_block: the two coarsest levels; `OUT:v_hat` is the finest)
   * `zero_doppler` sets the radial velocity of every detection to 0, which in the ego-compensated frame reads "every detection stands still", not "no Doppler";
     the camera perturbation also zeroes `lane_img` / `img`; a perturbation that changes nothing at all prints a WARNING (the t3 cam_off class of bug)
   * "static" cells of the velocity check are all defined cells with GT speed < 0.3 m/s, empty ground included, not only static objects
@@ -36,9 +34,9 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from net import chain
-from net.prep.batches import clip_step, to_device
-from evaluation import bev_adapter as A
+from bev_fusion.net import chain
+from bev_fusion.net.prep.batches import clip_step, to_device
+from bev_fusion.evaluation import bev_adapter as A
 
 MEMORIES = ("cam_temporal", "rad_temporal", "fusion")                       # shown again on the warm frame
 RESPONSE_STAGES = ("cam_temporal", "radar", "rad_temporal", "fusion", "trunk", "motion_block")
@@ -126,8 +124,7 @@ def average_response(lst):
 # ------------------------------------------------------------------------------------------------ the velocity field on static and moving cells
 def velocity_rows(frame, ego_v, fields, gv, undefined):
     """fields {level name: (2, X, Y) tensor}, gv the GT velocity (2, X, Y) in m/s, undefined (X, Y) bool -> one row per level: on the static cells (GT speed <
-    0.3,
-    defined) the mean field (vx, vy), its spread and the mean speed (zero for a field that knows the cells stand still), on the moving cells (>= 1 m/s) the
+    0.3, defined) the mean field (vx, vy), its spread and the mean speed (zero for a field that knows the cells stand still), on the moving cells (>= 1 m/s) the
     end-point error and the mean GT speed"""
     gv = gv.float()
     speed = gv.norm(dim=0)
@@ -148,8 +145,7 @@ def velocity_rows(frame, ego_v, fields, gv, undefined):
 # ------------------------------------------------------------------------------------------------ the response test: remove an input
 def zero_cam(batch):
     """every camera input times 0: the cached probability / context tensors the lift reads, and the images the lane branch and the camera student read
-    (`lane_img`,
-    `lane_img_old` of student_frames 'all', `img`) - a camera
+    (`lane_img`, `lane_img_old` of student_frames 'all', `img`) - a camera
     path that is left in the batch would make the test say 'the camera does not matter' (the t3 cam_off bug)"""
     return {**batch, **{k: batch[k] * 0 for k in ("prob", "ctx", "prob2", "ctx2", "lane_img", "lane_img_old", "img") if k in batch and torch.is_tensor(batch[k])}}
 
@@ -172,8 +168,7 @@ def zero_radar(batch):
 
 def zero_doppler(batch):
     """the radial velocity of every detection 0 (in the ego-compensated frame that reads 'every detection stands still'): positions, ranges and rcs stay; in
-    every
-    radar_seq set too"""
+    every radar_seq set too"""
     return map_radar(batch, lambda r: {**r, "vr": r["vr"] * 0})
 
 

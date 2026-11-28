@@ -1,13 +1,13 @@
 """Tests of evaluation/bev_curves.py (its former self-test).
 
-    python tests/test_bev_curves.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_curves      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 
 import numpy as np
 
 from Evaluation import Prediction, Sample
-from evaluation.bev_curves import BevCurveMetric, classification_numbers, histogram, regression_numbers, velocity_sums
+from bev_fusion.evaluation.bev_curves import BevCurveMetric, classification_numbers, histogram, regression_numbers, velocity_sums
 
 
 def exact_ap_auc(score: np.ndarray, y: np.ndarray):
@@ -51,8 +51,8 @@ def selftest():
     r = regression_numbers(s[0])
     assert abs(r["epe"] - 0.5) < 1e-12 and abs(r["bias"] - 0.5) < 1e-12 and abs(r["rmse"] - 0.5) < 1e-12
     # the cells of the velocity numbers (frame()): a car of unknown velocity (GT 0 m/s, flow_weight 0) is no static ground truth. 8 x 8 world: a moving car (4
-    # cells, 3 m/s),
-    # a parked one (1 cell), a car of unknown velocity (1 cell), the field = GT + (0.3, 0.4) m/s -> obj = 5 cells (not 6), moving = 4, EPE 0.5 on both
+    # cells, 3 m/s), a parked one (1 cell), a car of unknown velocity (1 cell), the field = GT + (0.3, 0.4) m/s -> obj = 5 cells (not 6), moving = 4, EPE 0.5 on
+    # both
     from Evaluation.contracts import FrameRef
     z = np.zeros((8, 8), np.float32)
     veh, gv, fw = z.copy(), np.zeros((2, 8, 8), np.float32), np.ones((8, 8), np.float32)

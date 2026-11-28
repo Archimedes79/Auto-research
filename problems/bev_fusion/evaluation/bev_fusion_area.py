@@ -9,13 +9,11 @@ both sides.
                       corners (as GtGenerator.coverage.footprint_share, the stored `share_fusion` of GT v7); a detection uses its length / width / yaw, a
                       pedestrian detection a disc
     GT classes        care f >= 0.5 | partial 0.1 <= f < 0.5 | don't care f < 0.1      (D38 (b): 0.1 and 0.5; a convention backed by a study of the footprint
-    shares)
-    detections        ignored when more than half of the detection's own footprint lies outside the fusion area (the KITTI rule), or when it sits within 2 m of
+    shares) detections ignored when more than half of the detection's own footprint lies outside the fusion area (the KITTI rule), or when it sits within 2 m of
     a neutral
                       GT box (partial / don't care in the headline, also one outside the scored window) of its class and within 2 m of no scored one: a
-                      detection on a don't-care
-                      object is neither a hit nor a false alarm. The 2 m is the centre distance whatever the box size (the TP threshold of the errors): a
-                      detection 2 - 4 m from a
+                      detection on a don't-care object is neither a hit nor a false alarm. The 2 m is the centre distance whatever the box size (the TP
+                      threshold of the errors): a detection 2 - 4 m from a
                       neutral box is NOT ignored and can be a false alarm at ap@4
 
     BevFusionDetMetric   `detf` (GT = care boxes; partial and don't-care boxes are neutral) and `detfp` (GT = care + partial; don't care neutral): the same
@@ -28,11 +26,9 @@ both sides.
                          (one-to-one, nearest first over ALL boxes incl. the neutral ones and every score: the recall ceiling `recall2m`, not the recall of
                          `detf` at 2 m) and the mean centre error of the found ones (`ate`). Classes: all, care,
                          partial, dont_care (footprint share in the fusion area); camera = f_cam >= 0.5 for the camera cells that are not hidden; with the radar
-                         returns of the
-                         annotation (nuScenes `num_radar_pts`, evaluation/bev_annotation_pts.py): cam_radar (camera and >= 1 return), cam_only (camera, no
-                         return), radar_only
-                         (not camera, >= 1 return), neither. Without that table the four are left out. This is the split "things a camera can see" vs "things
-                         camera and
+                         returns of the annotation (nuScenes `num_radar_pts`, evaluation/bev_annotation_pts.py): cam_radar (camera and >= 1 return), cam_only
+                         (camera, no return), radar_only (not camera, >= 1 return), neither. Without that table the four are left out. This is the split "things
+                         a camera can see" vs "things camera and
                          radar can see" of the complete GT set.
 The old numbers (`det`, `seg_fov`) keep their meaning and label (D37: old numbers keep their label, never mixed with the new ones).
 Tests: tests/test_bev_fusion_area.py"""
@@ -46,8 +42,8 @@ import numpy as np
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 from Evaluation import Metric, Prediction, Sample
-from evaluation.bev_task import BevDetMetric
-from evaluation.metrics import dt_key, gt_boxes_from_meta, in_front
+from bev_fusion.evaluation.bev_task import BevDetMetric
+from bev_fusion.evaluation.metrics import dt_key, gt_boxes_from_meta, in_front
 
 RES, X0, Y0 = 0.5, 0.0, -26.0                     # the front grid: axis 0 = x forward, axis 1 = y (left positive)
 CARE, PARTIAL = 0.5, 0.1                          # D38 (b)
@@ -131,8 +127,7 @@ def _dist(a: dict, b: dict) -> float:
 
 def prepare(dets: Sequence[dict], gts_all: Sequence[dict], shares: Sequence[float], area: np.ndarray, include_partial: bool):
     """(detections kept, GT boxes scored) of one frame under the fusion-area rule. gts_all: every annotated box with its footprint share; the scored ones are
-    the
-    care (and, include_partial, the partial) boxes INSIDE the scored window; every other box, also one outside the window, is neutral for the detections"""
+    the care (and, include_partial, the partial) boxes INSIDE the scored window; every other box, also one outside the window, is neutral for the detections"""
     scored, neutral = [], []
     for b, f in zip(gts_all, shares):
         c = gt_class(f)

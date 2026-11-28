@@ -15,7 +15,7 @@ feature-cache builders of prep run the frozen camera heads, and the student enco
 | `loss/` | the losses and the loss weights (`losses.py`, `object_loss.py`, `motion_loss.py`, `radar_loss.py`, `loss_extras.py`), the terms only a training step has (`train_terms.py`: cross-time consistency, radar side loss, student anchor) and the student's loss against the teachers (`student_loss.py`) |
 | `chain.py` | a run's network: `ChainConfig` (the config fields the data, the network and the loss read), `read_config`, `build`, `load_weights` (a checkpoint's EMA weights), `forward` and `forward_loss`; `REMOVED` = the options that left the code and how a stored config that names them is read |
 
-Modules are imported by their package path from the problem folder (`from net.model.model import ModelConfig`).
+Modules are imported absolutely by their package name (`from bev_fusion.net.model.model import ModelConfig`; the style: `../tests/test_net_layering.py`).
 
 **What a file does is its module docstring.** The chain and the rules it obeys: `../DESIGN.md`. Every module's test is
 `../tests/test_<module>.py` (`python3 -m research tests bev_fusion` runs them all; `../README.md` says what each needs).

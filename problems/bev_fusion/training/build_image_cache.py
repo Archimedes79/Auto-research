@@ -1,5 +1,5 @@
 """Build or check the image cache a config names (net/prep/image_cache.py holds the cache itself):
-    python training/build_image_cache.py build-cache | check-cache | build-cache-older | check-cache-older <config> [--workers 1] [--n 20]"""
+    python -P -m bev_fusion.training.build_image_cache build-cache | check-cache | build-cache-older | check-cache-older <config> [--workers 1] [--n 20]"""
 import argparse
 import json
 import sys
@@ -7,15 +7,14 @@ import sys
 import numpy as np
 import torch
 
-from net.prep import image_cache as IC
-from net.prep import splits
+from bev_fusion.net.prep import image_cache as IC
 
 
 def load_config(path):
-    """the TrainConfig of a config file as the trainer reads it: a "split" is replaced by its scene lists (net/prep/splits.py resolve), so the builders
-    cover the scenes of the run, not the whole official split"""
-    from training import train as T
-    return T.TrainConfig(**{k: v for k, v in splits.resolve(json.load(open(path))).items() if not k.startswith("_")})
+    """the TrainConfig of a config file as the trainer reads it (a "split" is its scene lists: the builders cover the scenes of the run, not the whole
+    official split)"""
+    from bev_fusion.training import train as T
+    return T.read_config(path)
 
 
 def _cli(argv):
@@ -28,7 +27,7 @@ def _cli(argv):
     cfg = load_config(a.config)
     # the builders need the plain datasets: no cache to read (the one they build, the teachers' features), no student to feed
     cfg.lane_images = cfg.feature_cache = cfg.feature_cache2 = ""
-    from training import train as T
+    from bev_fusion.training import train as T
     dss = T.make_datasets(cfg)
     root, older = cfg_root(a.config), a.cmd.endswith("older")
     if a.cmd.startswith("build"):

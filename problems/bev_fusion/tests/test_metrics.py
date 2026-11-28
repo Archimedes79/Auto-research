@@ -1,16 +1,16 @@
 """Tests of evaluation/metrics.py (its former self-test).
 
-    python tests/test_metrics.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_metrics      (from the problem folder, with its module path)
 """
 import math
 
 import numpy as np
 
-from evaluation.metrics import DIST_THRESHOLDS, DetMeter, SegMeter, TOLERANCES, TP_THRESHOLD, bin_label, cell_bins, flatten, format_table, gt_boxes_from_meta, in_front, ms_per_frame, range_bin, report, tp_errors, unflatten
+from bev_fusion.evaluation.metrics import DIST_THRESHOLDS, DetMeter, SegMeter, TOLERANCES, TP_THRESHOLD, bin_label, cell_bins, flatten, format_table, gt_boxes_from_meta, in_front, ms_per_frame, range_bin, report, tp_errors, unflatten
 
 
 def _selftest():
-    from net.model.lift_pd import Grid
+    from bev_fusion.net.model.lift_pd import Grid
     g = Grid()                                            # x 0..60, y -26..26, 0.5 m: 120 x 104 cells
     X, Y = g.nx, g.ny
     eq = lambda a, b, e=1e-9: abs(a - b) <= e                                                 # noqa: E731
@@ -39,8 +39,7 @@ def _selftest():
     assert eq(r["0-20"]["iou@0"], 90 / 110) and eq(r["0-20"]["iou@0.5"], 1.0) and eq(r["0-20"]["iou@1"], 1.0)
     iou_shift = r["0-20"]["iou@0"]
     # tolerance radius, metres -> cells (0.5 m cells: 0.5 m = 1 cell, 1 m = 2 cells; a DISC, so a diagonal step of 1 cell is outside 0.5 m but inside 0.75 m and
-    # 1 m;
-    # a 2-cell step is inside 1 m only). A 10 x 10 block moved by (1, 1) and by (2, 0) cells; the expectation is a brute-force count straight from the
+    # 1 m; a 2-cell step is inside 1 m only). A 10 x 10 block moved by (1, 1) and by (2, 0) cells; the expectation is a brute-force count straight from the
     # definition (a predicted cell is a hit if a GT cell centre lies within t metres of its centre, and the other way round) and numbers worked out by hand
     # (diagonal: 99 of 100 cells hit at 0.5 m, the corner pair misses; 2-cell step: 90 of 100 at 0.5 m)
     def tol_iou(P, G, t):

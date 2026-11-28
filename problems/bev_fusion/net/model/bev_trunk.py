@@ -60,9 +60,8 @@ class FPNLSS(nn.Module):
     """BEVDet FPN_LSS: deepest stage upsampled x4 and concatenated with stage 0, two 3x3 convs, upsample x2, 3x3 conv
     and 1x1 conv to out channels at the full grid."""
 
-    def __init__(self, chans, width=1.0, original_order=False):
+    def __init__(self, chans, width=1.0):
         super().__init__()
-        self.original_order = original_order
         c0, _, c2 = chans
         mid, out = int(round(512 * width)), int(round(256 * width))
         self.up1 = nn.Upsample(scale_factor=4, mode="bilinear", align_corners=True)
@@ -74,9 +73,8 @@ class FPNLSS(nn.Module):
         self.out_channels = out
 
     def forward(self, feats):
-        # original_order: [stage 0, up(stage 2)] as in BEVDet / DualBEV, the order the pre-trained weights expect (found
-        # 2026-10-30, t4_soa_front: the default order below scrambles them); the default stays for the earlier runs
-        x = torch.cat([feats[0], self.up1(feats[2])] if self.original_order else [self.up1(feats[2]), feats[0]], 1)
+        # [up(stage 2), stage 0]: not the order of BEVDet / DualBEV, whose pre-trained neck weights therefore start scrambled; the trained runs have it
+        x = torch.cat([self.up1(feats[2]), feats[0]], 1)
         return self.up2(self.conv(x))
 
 
@@ -109,11 +107,11 @@ class SemanticHead(nn.Module):
 
 
 class BEVTrunk(nn.Module):
-    def __init__(self, cin=80, n_classes=14, width=1.0, head_hidden=None, detail=0, fpn_original_order=False):
+    def __init__(self, cin=80, n_classes=14, width=1.0, head_hidden=None, detail=0):
         """detail > 0: add the stride-1 detail path with that many channels (the pre-trained keys are unaffected)."""
         super().__init__()
         self.img_bev_encoder_backbone = BEVBackbone(cin, width)
-        self.img_bev_encoder_neck = FPNLSS(self.img_bev_encoder_backbone.chans, width, fpn_original_order)
+        self.img_bev_encoder_neck = FPNLSS(self.img_bev_encoder_backbone.chans, width)
         self.bev_detail = DetailPath(cin, detail) if detail else None
         self.head = SemanticHead(self.img_bev_encoder_neck.out_channels + (detail or 0), n_classes, head_hidden)
 

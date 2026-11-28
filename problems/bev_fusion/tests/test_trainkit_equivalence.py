@@ -4,7 +4,7 @@ synthetic clips, and must give the pinned losses, run record and weights bit for
 does; when that is meant, pin the new values (--pin prints them) and say why in the commit. After the golden run it runs the engine's own rules
 (trainkit.selftest).
 
-    python tests/test_trainkit_equivalence.py [--pin]      (from the problem folder, with its module path; CPU, 2 threads, about half a minute)
+    python -P -m bev_fusion.tests.test_trainkit_equivalence [--pin]      (from the problem folder, with its module path; CPU, 2 threads, about half a minute)
 """
 import functools
 import hashlib
@@ -17,9 +17,9 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from training import train as T
-from net.model.model import ModelConfig
-from tests.support import synthetic_batch
+from bev_fusion.training import train as T
+from bev_fusion.net.model.model import ModelConfig
+from bev_fusion.tests.support import synthetic_batch
 from trainkit import control
 
 # steps 1, 2, 4 (3 is skipped); 2, 4

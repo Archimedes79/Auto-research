@@ -2,13 +2,13 @@
 import torch
 import torch.utils.checkpoint
 
-from net.prep.augment import jitter_images
-from net.model.lift_pd import lift_key
+from bev_fusion.net.prep.augment import jitter_images
+from bev_fusion.net.model.lift_pd import lift_key
 
 
 def CachedBEVFusionModel(cfg=None):
     """BEVFusionModel whose camera branch reads batch["prob"], batch["ctx"] (the frozen heads are not instantiated)."""
-    from net.model.model import CAMERAS, BEVFusionModel, ModelConfig
+    from bev_fusion.net.model.model import CAMERAS, BEVFusionModel, ModelConfig
     cfg = cfg or ModelConfig()
 
     class _Cached(BEVFusionModel):
@@ -27,7 +27,7 @@ def CachedBEVFusionModel(cfg=None):
             if self.cfg.student_frames == "all" and Fn > 1:
                 if "lane_img_old" not in batch:
                     raise KeyError("student_frames='all' reads the older frames' images batch['lane_img_old']: set TrainConfig.lane_images and have its sweeps sub-folder "
-                                   "(python training/build_image_cache.py build-cache-older <config>)")
+                                   "(python -P -m bev_fusion.training.build_image_cache build-cache-older <config>)")
                 old = batch["lane_img_old"]
                 if old.shape[1] != Fn - 1:
                     raise ValueError(f"student_frames='all': batch['lane_img_old'] holds {old.shape[1]} older frame(s), the batch has {Fn - 1}")

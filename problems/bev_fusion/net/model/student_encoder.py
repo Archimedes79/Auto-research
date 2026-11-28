@@ -1,6 +1,5 @@
 """Student image encoder (experiment t22, stage A): ONE small ImageNet-initialised encoder that outputs the two interfaces of the cached frozen teachers, so the
-chain
-downstream (lifts, trunk, heads) and its warm start stay valid (card: experiments/t22_student_encoder/experiment.md).
+chain downstream (lifts, trunk, heads) and its warm start stay valid (card: experiments/t22_student_encoder/experiment.md).
 
     image (B, 3, 256, 704) RGB 0..255, uint8 or float (the DualBEV crop that `data/cache/img_front` holds), normalised with mean (123.675, 116.28, 103.53) /
     std (58.395, 57.12, 57.375) (the DualBEV convention of camera_encoder.py)
@@ -18,9 +17,8 @@ The heads output the SAME tensors the caches hold, in the conventions of the two
   H8  = BEVFusion (bevfusion_camera.py, cache data/cache/cam_feats_bevfusion): 32 x 88 cells in FRUSTUM convention (cell j at pixel j (W - 1) / (w - 1)), depth
   bins at the
         LEFT edges 1.0 + 0.5 i (`DEPTHS`), 80 context channels, AND in BEVFusion's own window (`bevfusion_ida`: resize 0.48, crop x0 32 / y0 176), which shows a
-        smaller, 9 % magnified
-        part of the original image than the JPEG. The student reads the JPEG only, so its stride-8 map is computed in the JPEG's window (cell centres 8 k + 3.5)
-        and `h8_warp_grid`
+        smaller, 9 % magnified part of the original image than the JPEG. The student reads the JPEG only, so its stride-8 map is computed in the JPEG's window
+        (cell centres 8 k + 3.5) and `h8_warp_grid`
         resamples it, bilinearly and without parameters, onto the cells of BEVFusion's frustum: a cell then carries the prediction for the image point the
         teacher's cell looks at (a
         position-dependent shift of up to +-4 cells that a convolution cannot learn). `warp_h8=False` leaves H8 in the JPEG's window (stage B may lift it with
@@ -30,12 +28,11 @@ one rig).
 Cells are assumed at the centre convention above; a constant sub-cell offset of the net's own alignment is absorbed by the learned 3 x 3 convs.
 
 forward(img) -> {"prob16" (B, 118, 16, 44), "ctx16" (B, 80, 16, 44), "prob8" (B, 118, 32, 88), "ctx8" (B, 80, 32, 88), "logit16", "logit8"} (probabilities =
-softmax of the logits
-over the 118 bins).
+softmax of the logits over the 118 bins).
 
 In the chain (ModelConfig.camera_student) the same module is `model.student`; this file also holds what the chain needs of it: the BatchNorm switch
-(`keep_bn_eval`) and the
-loader of a trained student (`load_trained`). Its loss against the teachers (the anchor of a student that trains) is net/loss/student_loss.py.
+(`keep_bn_eval`) and the loader of a trained student (`load_trained`). Its loss against the teachers (the anchor of a student that trains) is
+net/loss/student_loss.py.
 """
 import os
 
@@ -45,8 +42,8 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 import torchvision
 
-from net.model.bevfusion_camera import bevfusion_ida, frustum_pixels
-from net.model.camera_encoder import IMG_MEAN, IMG_STD, nuscenes_front_ida
+from bev_fusion.net.model.bevfusion_camera import bevfusion_ida, frustum_pixels
+from bev_fusion.net.model.camera_encoder import IMG_MEAN, IMG_STD, nuscenes_front_ida
 
 N_DEPTH, N_CTX, IMG_HW = 118, 80, (256, 704)
 HW8 = (32, 88)                                         # the cache size of H8 (feature_cache.FEAT_HW_OF); H16 is 16 x 44
@@ -88,9 +85,8 @@ def make_backbone(name, pretrained=True):
 # ------------------------------------------------------------------------------------------------ geometry of H8
 def h8_warp_grid(stride=8, out_hw=HW8, hw=IMG_HW):
     """(grid (1, h, w, 2) for F.grid_sample with align_corners=True, xy (h, w, 2)): output cell (i, j) of BEVFusion's frustum -> its pixel (x, y) in the JPEG's
-    (DualBEV) window
-    -> its position in the native stride-`stride` map (cell centres at stride * k + (stride - 1) / 2), normalised to [-1, 1]. The pixel comes from the two ida
-    matrices
+    (DualBEV) window -> its position in the native stride-`stride` map (cell centres at stride * k + (stride - 1) / 2), normalised to [-1, 1]. The pixel comes
+    from the two ida matrices
     (original image -> window), exactly as the lifts use them: p_dualbev = ida_d @ inv(ida_b) @ p_bevfusion."""
     fh, fw = out_hw
     xs, ys = frustum_pixels(fh, fw, *hw)               # BEVFusion-window pixels of the frustum cells
@@ -127,7 +123,6 @@ class StudentEncoder(nn.Module):
         self.register_buffer("mean", torch.tensor(IMG_MEAN).view(1, 3, 1, 1), persistent=False)
         self.register_buffer("std", torch.tensor(IMG_STD).view(1, 3, 1, 1), persistent=False)
         self.register_buffer("grid8", h8_warp_grid()[0] if warp_h8 else None, persistent=False)
-        self._frozen = False
         self._bn_eval = False
         # True: the backbone is recomputed in the backward instead of keeping its activations (set by model._build_student for a student that trains)
         self.checkpoint_encode = False
@@ -158,9 +153,8 @@ class StudentEncoder(nn.Module):
         # t22 stage B: 9 key frames of a micro-batch (batch 3 x clips of 3, the graph kept over the clip) held the backbone activations of every frame at once:
         # peak 16.3 GB on the 12 GB card
         # (smoke run 2026-11-05, 56 s per step from GPU-memory paging). The encoder is then recomputed in the backward and only its four output maps (2.7 MB per
-        # frame) stay. Every backward
-        # that reaches a frame recomputes it (with seq_bptt a clip of 3 runs the encoder 3 + 1 + 2 + 3 = 9 times, not 6). Only with BatchNorm held in eval mode
-        # (keep_bn_eval): a train-mode
+        # frame) stay. Every backward that reaches a frame recomputes it (with seq_bptt a clip of 3 runs the encoder 3 + 1 + 2 + 3 = 9 times, not 6). Only with
+        # BatchNorm held in eval mode (keep_bn_eval): a train-mode
         # BatchNorm would count its statistics twice; the backbone has no dropout, so the recomputation is the same function.
         if self.checkpoint_encode and self._bn_eval and self.training and torch.is_grad_enabled() and any(p.requires_grad for p in self.backbone.parameters()):
             feats = torch.utils.checkpoint.checkpoint(self.encode, img, use_reentrant=False)
@@ -169,13 +163,6 @@ class StudentEncoder(nn.Module):
         return self.decode(feats)
 
     # ---- training
-    def freeze_backbone(self, flag=True):
-        """flag: the backbone gets no gradient and its BatchNorm stays in eval mode (also under .train()); FPN and heads train."""
-        self._frozen = flag
-        for p in self.backbone.parameters():
-            p.requires_grad_(not flag)
-        return self.train(self.training)
-
     def keep_bn_eval(self, flag=True):
         """flag: every BatchNorm of the encoder stays in eval mode (its running statistics are fixed, its scale and shift still train) whatever .train() of the
         model around it asks:
@@ -185,8 +172,6 @@ class StudentEncoder(nn.Module):
 
     def train(self, mode=True):
         super().train(mode)
-        if self._frozen:
-            self.backbone.eval()
         if self._bn_eval:
             for m in self.modules():
                 if isinstance(m, nn.modules.batchnorm._BatchNorm):
@@ -194,9 +179,8 @@ class StudentEncoder(nn.Module):
         return self
 
     def lr_groups(self, lr, backbone_mult=0.1, prefix=""):
-        """trainkit's `Config.lr_groups` for this encoder (`prefix` = its name inside a bigger model): the backbone at backbone_mult x lr, FPN and heads at lr;
-        {} while frozen."""
-        return {} if self._frozen else {prefix + "backbone": {"lr": lr * backbone_mult}}
+        """trainkit's `Config.lr_groups` for this encoder (`prefix` = its name inside a bigger model): the backbone at backbone_mult x lr, FPN and heads at lr"""
+        return {prefix + "backbone": {"lr": lr * backbone_mult}}
 
 
 def newest_checkpoint(path):

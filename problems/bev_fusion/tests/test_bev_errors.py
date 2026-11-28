@@ -1,11 +1,11 @@
 """Tests of evaluation/bev_errors.py (its former self-test).
 
-    python tests/test_bev_errors.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_errors      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 
 from Evaluation.comparison import boxes as BX
-from evaluation.bev_errors import classify_frame
+from bev_fusion.evaluation.bev_errors import classify_frame
 
 
 def selftest():

@@ -1,19 +1,19 @@
 """Tests of net/model/model.py (its former self-test).
 
-    python tests/test_model.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_model      (from the problem folder, with its module path)
 """
 import torch
 
-from net import netpath
-from net.model.model import BEVFusionModel, ModelConfig
-from net.model.temporal_fusion import TemporalFusion
-from net.prep.targets import sample_targets
+from bev_fusion.net import netpath
+from bev_fusion.net.model.model import BEVFusionModel, ModelConfig
+from bev_fusion.net.model.temporal_fusion import TemporalFusion
+from bev_fusion.net.prep.targets import sample_targets
 
 
 def _selftest():
     import os
-    from net.loss.losses import BEVLoss, sample_targets
-    from net.prep.nuscenes_dataset import FrontRadarDataset, collate
+    from bev_fusion.net.loss.losses import BEVLoss, sample_targets
+    from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, collate
     torch.manual_seed(0)
     os.chdir(netpath.SITE)                                                   # the site folder: the default weights are named relative to it (models/pretrained)
     assert BEVFusionModel(ModelConfig(pretrained="")).fusion.p_drop == 0.2
@@ -24,7 +24,7 @@ def _selftest():
         raise AssertionError("lane_branch with camera_off was accepted")
     except ValueError:
         pass
-    ds = FrontRadarDataset(os.path.expanduser("~/data/nuscenes"), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
+    ds = FrontRadarDataset(netpath.nuscenes_root(mini=True), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
     batch = collate([ds[10], ds[200]])                       # mid-scene keyframes: GT of k-1, k, k+1 exist
     gts = sample_targets(batch["gt"])
     dts = tuple(sorted(gts))
@@ -59,7 +59,7 @@ def _selftest():
         with torch.no_grad():
             vis = model.camera_visibility(batch, o["sem"])                                  # (B, 1, X, Y)
             st = model(batch)["state"]["cam"]
-            from net.model.temporal_fusion import read_memory as _rm
+            from bev_fusion.net.model.temporal_fusion import read_memory as _rm
             _, conf = _rm(st["M"], st["W"], st["pose"], model.cam_temporal.ego_pts, vis.shape[-2], vis.shape[-1],
                           model.cam_temporal.mem_grid)
         assert 0.05 < float(vis.mean()) < 0.95, f"visibility covers part of the grid ({float(vis.mean()):.2f})"
@@ -77,22 +77,6 @@ def _selftest():
         u_ref, u_gap = unk([0.5, 0.5]), unk([0.5, 0.45])
     assert abs(float(u_gap[0] - u_ref[0])) < 1e-6 and abs(float(u_gap[1] / u_ref[1]) - 0.9) < 0.05, (u_ref, u_gap)
     del model, res, res2
-    # S5c in training: refine=True adds the refinement terms to the objects group, the gradient reaches the refiner,
-    # the output survives the trainer's float cast; at run time boxes() returns refined boxes
-    m = BEVFusionModel(ModelConfig(pretrained="", refine=True)).train()
-    r = m(batch, dts=dts)
-    cast = {dt: {k: ({a: b.float() for a, b in v.items()} if isinstance(v, dict) else v.float()) for k, v in p.items()}
-            for dt, p in r["out"].items()}                                       # as train.py does
-    Lr = BEVLoss(grid=m.grid)(cast, gts, step_frac=1.0)
-    assert all(f"refine.reg@{dt:+.1f}" in Lr for dt in dts) and torch.isfinite(Lr["total"]), sorted(Lr)[:8]
-    Lr["total"].backward()
-    assert any(q.grad is not None and q.grad.abs().sum() > 0 for q in m.refiner.mlp.parameters()), "refiner gradient"
-    n_ref = int(r["out"][0.0]["refine"]["valid"].sum())
-    m.eval()
-    with torch.no_grad():
-        rb = m.boxes(m(batch, dts=(0.0,)), 0.0, threshold=0.0)
-    assert len(rb) == 2 and all(len(b) > 0 for b in rb) and "obj_feat" in r["out"][0.0]
-    del m, r, cast, Lr
     # every swappable block (shapes only: no checkpoint, no gradient)
     swaps = [{"lift": "p"}, {"cam_temporal": "none"}, {"rad_temporal": "window_memory"}, {"radar_kind": "delta_slots", "c_rad": 64}, {"radar_kind": "off"},
              {"camera_off": True}, {"cam_buffer": "recurrent"}]
@@ -108,8 +92,7 @@ def _selftest():
           f"{float(L['total'].detach()):.2f} ({groups}); {n_train / 1e6:.1f} M of {n_all / 1e6:.1f} M parameters trainable "
           f"(camera heads frozen, no gradient); gradients reach reduce, camera temporal, radar, fusion, trunk, mover, "
           f"both heads; sequence mode with state; per-sample keyframe gap (ego = scalar path; 0.45 s gap: unknown band "
-          f"{float(u_gap[1] / u_ref[1]):.2f} x the 0.5 s band); S5c refinement trains ({n_ref} valid candidates at dt 0, "
-          f"gradient reaches the refiner, float cast ok) and refines at run time; swapped blocks run: {', '.join(tried)}")
+          f"{float(u_gap[1] / u_ref[1]):.2f} x the 0.5 s band); swapped blocks run: {', '.join(tried)}")
 
 
 if __name__ == "__main__":

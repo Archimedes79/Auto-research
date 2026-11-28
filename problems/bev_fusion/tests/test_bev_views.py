@@ -1,13 +1,13 @@
 """Tests of evaluation/bev_views.py (its former self-test).
 
-    python tests/test_bev_views.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_views      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 import math
 
 import numpy as np
 
-from evaluation.bev_views import BLUE, DET_COLOR, GREEN, GT_OVERLAY, NOCARE_COLOR, OUTSIDE_COLOR, bce_map, box_shapes, error_box_shapes, loss_overlay, moving_layers, past_box_shapes, radar_points, speed_dir_rgb, tinted
+from bev_fusion.evaluation.bev_views import BLUE, DET_COLOR, GREEN, GT_OVERLAY, NOCARE_COLOR, OUTSIDE_COLOR, bce_map, box_shapes, error_box_shapes, loss_overlay, moving_layers, past_box_shapes, radar_points, speed_dir_rgb, tinted
 
 
 # ------------------------------------------------------------------------------------------------ self-test of the pure picture helpers

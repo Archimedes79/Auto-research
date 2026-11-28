@@ -1,13 +1,13 @@
 """Tests of evaluation/bev_fusion_area.py (its former self-test).
 
-    python tests/test_bev_fusion_area.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_fusion_area      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 import math
 
 import numpy as np
 
-from evaluation.bev_fusion_area import camera_area, corner_share, coverage_classes, footprint_share, fusion_area, gt_class, prepare
+from bev_fusion.evaluation.bev_fusion_area import camera_area, corner_share, coverage_classes, footprint_share, fusion_area, gt_class, prepare
 
 
 def selftest():

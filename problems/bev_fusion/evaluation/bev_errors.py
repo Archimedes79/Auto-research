@@ -1,19 +1,16 @@
 """The kind of every detection error of one frame: each false positive and each missed box with the reason it is an error, as the pictures (bev_views) label it.
 
-    from evaluation.bev_errors import classify_frame;  r = classify_frame(dets, gts, groups, thr=2.0, min_score=0.3)     # -> {"tp", "fp", "fn"}
+    from bev_fusion.evaluation.bev_errors import classify_frame;  r = classify_frame(dets, gts, groups, thr=2.0, min_score=0.3)     # -> {"tp", "fp", "fn"}
 Tests: tests/test_bev_errors.py
 
 The matching is the metric's own (`Evaluation.comparison.boxes.match`: best score first, nearest free box of the class within `thr` metres), applied to the
-detections
-with score >= `min-score` (what the pictures draw), so an error here is a box the picture shows in the error colour. (v1 also had a command line that tabled the
-errors of
-a whole evaluation from stores no v2 entry point writes; it is in the tag v1.)
+detections with score >= `min-score` (what the pictures draw), so an error here is a box the picture shows in the error colour. (v1 also had a command line that
+tabled the errors of a whole evaluation from stores no v2 entry point writes; it is in the tag v1.)
 
 Kinds (the reason an error is what it is; the first that applies wins, in the order listed):
   FP  duplicate       a ground-truth box of its class lies within `thr` m but another detection has it
       wrong_class     a ground-truth box of ANOTHER class within `thr` m that no detection of its own class found (the class confusion: that box is a miss of
-      its class)
-      isolated        nothing of the ground truth within `thr` m (a ghost; the nearest box is given)
+      its class) isolated nothing of the ground truth within `thr` m (a ghost; the nearest box is given)
   FN  taken           a detection of its class lies within `thr` m but went to another box (two objects, one detection)
       below_score     a detection of its class within `thr` m exists but its score is under `min-score` (a threshold effect, not a miss of the network)
       wrong_class     a detection of another class sits on it and is itself a false positive (the class confusion)
@@ -33,8 +30,7 @@ def _dist(a, b):
 
 def classify_frame(dets, gts, groups, thr=2.0, min_score=0.3):
     """One frame -> {"tp": [(det, gt)], "fp": [(det, kind, other)], "fn": [(gt, kind, other)]}; `other` is the box that explains the kind (or None). dets / gts:
-    box dicts
-    (group, cx, cy, ...; score for dets). The detections with score < min_score are not matched (they only explain a 'below_score' miss)."""
+    box dicts (group, cx, cy, ...; score for dets). The detections with score < min_score are not matched (they only explain a 'below_score' miss)."""
     shown = [d for d in dets if d.get("score", 1.0) >= min_score]
     low = [d for d in dets if d.get("score", 1.0) < min_score]
     per = {}

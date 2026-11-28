@@ -21,7 +21,7 @@ import math
 import torch
 import torch.nn.functional as F
 
-from net.model.object_head import DIR_OFFSET
+from bev_fusion.net.model.object_head import DIR_OFFSET
 
 
 def _params(obj, ix, iy, grid, soft):
@@ -107,7 +107,7 @@ def select_boxes(dense, groups, k=50, threshold=0.2):
 
 def boxes_from_maps(obj, grid, groups, k=50, threshold=0.2, from_probabilities=False):
     """THE box extractor: head maps -> list (B) of box dicts. Only the K peak cells are gathered from the raw maps (on the device of the
-    maps) and parametrised, in float64, by the same `_params` as the dense output; object_head.decode, BEVFusionModel.boxes, the evaluation
+    maps) and parametrised, in float64, by the same `_params` as the dense output; object_head.decode, the evaluation
     adapter and the prototype all come here. from_probabilities: hm already in [0, 1]."""
     hm = obj["hm"] if from_probabilities else torch.sigmoid(obj["hm"])
     scores, group, cell = _peaks(hm, k)

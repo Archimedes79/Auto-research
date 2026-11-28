@@ -1,11 +1,11 @@
 """Milliseconds per module: where does the time of one frame go? Batch 1, the cached chain, the dts (-0.5, 0, +0.5) of `benchmark()`; and for training the
 forward / backward share of one micro-batch.
 
-    python evaluation/bev_timing.py RUN [--n 30] [--warmup 5] [--device cuda] [--out FILE] [--ckpt-dir DIR] [--force]     (also: `Evaluation.time(RUN)`)
+    python -P -m bev_fusion.evaluation.bev_timing RUN [--n 30] [--warmup 5] [--device cuda] [--out FILE] [--ckpt-dir DIR] [--force]
+                                                                                                                 (also: `Evaluation.time(RUN)`)
 
 How: a forward pre-hook and a forward hook on every direct child module of the model (`bev_modules.chain_modules`: lift AND lift2 of a dual camera, lane, ...;
-the
-trunk through its `.features()`), with a CUDA synchronisation around each call. A module called inside another one (a head that calls a shared mover) is
+the trunk through its `.features()`), with a CUDA synchronisation around each call. A module called inside another one (a head that calls a shared mover) is
 attributed EXCLUSIVELY (its time is taken off the caller), a module called several times per frame (the heads: once per dt) is reported per call AND per frame
 (the sum of its calls). The sum of the modules is printed next to the unsynchronised total and the difference is `unattributed_ms`: host-side work outside every
 module (precompute, rasterising the radar, decoding) plus the synchronisation overhead (every sync stalls the queue: the sum of a small-kernel chain is a
@@ -35,10 +35,10 @@ from collections import defaultdict
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from net import chain
-from net.prep.batches import to_device
-from evaluation import bev_adapter as A
-from evaluation.bev_modules import chain_modules, wrap_method
+from bev_fusion.net import chain
+from bev_fusion.net.prep.batches import to_device
+from bev_fusion.evaluation import bev_adapter as A
+from bev_fusion.evaluation.bev_modules import chain_modules, wrap_method
 
 GPU_BASELINE_MB = 2000                       # desktop apps hold ~1.3 GB with no job
 PROBLEMS = os.path.join(ROOT, "..")          # problems/: the steps of their problem.json say which scripts take a GPU
@@ -48,9 +48,9 @@ RESEARCH_MODULES = ("research.evaluate",)    # the core's evaluation step; `-m r
 
 
 def gpu_scripts(problems_dir=PROBLEMS):
-    """script name -> the device it uses without --device: this problem's GPU tools and every script of a problem step with "gpus" >= 1
-    (problems/*/problem.json, read only;
-    a problem.json that cannot be read is an error, not a script less)"""
+    """script name -> the device it uses without --device: this problem's GPU tools and every script of a problem step with "gpus" >= 1, started by its
+    file or as a module (`-m <package>.<module>`: the module's last name + .py, the form holds_gpu compares); problems/*/problem.json, read only; a
+    problem.json that cannot be read is an error, not a script less"""
     out = dict(OWN_GPU_SCRIPTS)
     for path in sorted(glob.glob(os.path.join(problems_dir, "*", "problem.json"))):
         try:
@@ -60,6 +60,7 @@ def gpu_scripts(problems_dir=PROBLEMS):
                 run = step.get("run")
                 if isinstance(run, list) and step.get("gpus", 0) >= 1:
                     out.update((os.path.basename(t), "cuda") for t in run if isinstance(t, str) and t.endswith(".py"))
+                    out.update((str(module).split(".")[-1] + ".py", "cuda") for flag, module in zip(run, run[1:]) if flag == "-m")
         except (OSError, ValueError, AttributeError, TypeError) as e:
             raise ValueError(f"{path}: the GPU steps cannot be read ({type(e).__name__}: {e})") from None
     return out
@@ -72,8 +73,8 @@ def sync(device):
 
 def time_modules(model, forward, device="cpu", n=30, warmup=5, modules=None):
     """-> {"total_ms": median of the unsynchronised forward, "per_call_ms": {module: median exclusive time per call}, "per_frame_ms": {module: median over
-    frames of the sum
-    of its calls}, "calls": {module: calls per frame}, "unattributed_ms": total - sum of the modules}. forward() runs one frame (no_grad is the caller's)."""
+    frames of the sum of its calls}, "calls": {module: calls per frame}, "unattributed_ms": total - sum of the modules}. forward() runs one frame (no_grad is
+    the caller's)."""
     cur, frames, stack = defaultdict(float), defaultdict(list), []
     per_call, calls = defaultdict(list), defaultdict(int)
 
@@ -158,11 +159,9 @@ def train_split(loss_fn, zero_grad, device="cpu", n=8, warmup=5):
 
 def holds_gpu(args, scripts):
     """does this command line (`ps -eo args`) belong to a process that holds the GPU? A python interpreter running a run's worker (`-m research worker`: it runs
-    a step or
-    waits for its GPU slot, and a step that starts under a timing spoils it), the core's evaluation step (`-m research.evaluate`) or one of `scripts`
-    (gpu_scripts(); the
-    script is the first token ending in .py, or the last part of the module of `-m`; `-W ignore` / `-X dev` values are not mistaken for it) on the device it was
-    given
+    a step or waits for its GPU slot, and a step that starts under a timing spoils it), the core's evaluation step (`-m research.evaluate`) or one of `scripts`
+    (gpu_scripts(); the script is the first token ending in .py, or the last part of the module of `-m`; `-W ignore` / `-X dev` values are not mistaken for it)
+    on the device it was given
     (--device, else the script's default). A bash wrapper, `python -c` and a shell are not users of the GPU."""
     tok = args.split()
     while tok and (os.path.basename(tok[0]) == "env" or "=" in tok[0]):         # `env VAR=1 python ...`

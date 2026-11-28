@@ -3,13 +3,13 @@
 
 Same shard format as `net/prep/feature_cache.py` (so `FeatureStore(root)` reads it, N_PROB = 118, N_CTX = 80): one `<scene>.npy` (n, 198, 32, 88)
 float16 + `<scene>.index.npz` (the sample_data tokens, row order) per scene. The frames are the ones of an existing DualBEV cache (`--src`), so both caches
-cover
-the same frames; `--keyframes-only` keeps only the key frames (20 k frames, about 22 GB) instead of all cached frames (58 k, about 64 GB: 1.1 MB per frame
+cover the same frames; `--keyframes-only` keeps only the key frames (20 k frames, about 22 GB) instead of all cached frames (58 k, about 64 GB: 1.1 MB per frame
 against 0.28 MB at stride 16). Images as BEVFusion's test pipeline reads them (`bevfusion_camera.load_image`: 0.48 scale, bicubic, crop 32 / 176). The
 calibration side of a model that reads this cache: `ida = bevfusion_ida()`, depth bin centres 1.0 + 0.5 i, `LiftPD(frustum_cells=True)`.
 The token -> file name map is read from `sample_data.json` once (a trainval parse peaks at about 3 GB for a minute; do not run it next to a training round
 without checking free memory). Resumable per scene, 2 loader threads.
-Build: python net/prep/cache_bevfusion_features.py build --src data/cache/cam_feats [--out data/cache/cam_feats_bevfusion] [--keyframes-only] [--device cuda]
+Build: python -P -m bev_fusion.net.prep.cache_bevfusion_features build --src data/cache/cam_feats [--out data/cache/cam_feats_bevfusion] [--keyframes-only]
+       [--device cuda]
 Tests: tests/test_cache_bevfusion_features.py
 """
 import argparse
@@ -22,9 +22,10 @@ from concurrent.futures import ThreadPoolExecutor
 import numpy as np
 import torch
 
-from net.model.bevfusion_camera import BEVFusionImageSide
-from net.prep.images import load_image
-from net.prep.feature_cache import FEAT_HW_OF, N_CTX, N_PROB, FeatureStore, shard_complete, write_shard
+from bev_fusion.net import netpath
+from bev_fusion.net.model.bevfusion_camera import BEVFusionImageSide
+from bev_fusion.net.prep.images import load_image
+from bev_fusion.net.prep.feature_cache import FEAT_HW_OF, N_CTX, N_PROB, FeatureStore, shard_complete, write_shard
 
 FEAT_HW = FEAT_HW_OF["bevfusion"]
 
@@ -131,7 +132,7 @@ def main():
     ap.add_argument("cmd")
     ap.add_argument("--src", default="data/cache/cam_feats")
     ap.add_argument("--out", default="data/cache/cam_feats_bevfusion")
-    ap.add_argument("--dataroot", default="~/data/nuscenes_full")
+    ap.add_argument("--dataroot", default=netpath.nuscenes_root())
     ap.add_argument("--version", default="v1.0-trainval")
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--batch", type=int, default=8)

@@ -1,12 +1,12 @@
 """Tests of evaluation/bev_sets.py (its former self-test).
 
-    python tests/test_bev_sets.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_bev_sets      (from the problem folder, with its module path)
 """
 from __future__ import annotations
 import os
 import tempfile
 
-from evaluation.bev_sets import PARTS, _splits, counts, lists, names, parse, part_of, set_hash, table, tag
+from bev_fusion.evaluation.bev_sets import PARTS, _splits, counts, lists, names, parse, part_of, set_hash, table, tag
 
 
 def selftest():
@@ -77,5 +77,31 @@ def selftest():
     print(f"bev_sets selftest ok: {len(have)} sets from {len(files)} split files, the grammar (TEST and {len(bads) - 1} malformed names refused), tags, lists (small 60 / 10 inside large 428 / 82), a toy folder")
 
 
+def source_names_its_scenes():
+    """BEVSource.describe() carries the hash of the scenes it holds: two scene lists under one set name are two descriptions (the evaluation id and the
+    comparison of two evaluations read the description), the order of the scenes does not matter"""
+    from bev_fusion.evaluation.bev_adapter import BEVSource
+    from bev_fusion.net.prep import splits
+
+    class Dataset:
+        def gt_signature(self):
+            return "0.5_4_a107e0b4e8"
+
+        def __len__(self):
+            return 3
+
+    def described(scenes):
+        src = object.__new__(BEVSource)                              # the description alone: no nuScenes, no network
+        src.cfg = type("Cfg", (), {"version": "v1.0-trainval", "feature_cache": "data/cache/cam_feats"})()
+        src.ds, src.control, src.split, src.evaluator, src.set_hash = Dataset(), "", "val", "e", None
+        src._frames = {name: [] for name in scenes}
+        return src.describe()
+    a, b, c = described(["scene-0003", "scene-0012"]), described(["scene-0012", "scene-0003"]), described(["scene-0003", "scene-0013"])
+    assert a["scenes_hash"] == splits.list_hash(["scene-0003", "scene-0012"]) == b["scenes_hash"] != c["scenes_hash"] and a["split"] == c["split"] == "val", (a, c)
+    assert {k: v for k, v in a.items() if k != "scenes_hash"} == {k: v for k, v in c.items() if k != "scenes_hash"}, "only the hash tells the two lists apart"
+    print("bev_adapter: the Source's description names the scenes it holds (scenes_hash)")
+
+
 if __name__ == "__main__":
     selftest()
+    source_names_its_scenes()

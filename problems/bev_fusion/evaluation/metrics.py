@@ -94,8 +94,7 @@ def dilate(m, radius_cells):
 
 def angle_error(pred_dir, gt_dir):
     """(X, Y) absolute signed angle (rad, 0 .. pi) between two direction fields (2, X, Y) of (cos, sin); the prediction need not be a unit vector. A reversed
-    line
-    is pi (not 0: centre-lines are directed); a zero prediction vector has no direction: pi."""
+    line is pi (not 0: centre-lines are directed); a zero prediction vector has no direction: pi."""
     p, g = _np(pred_dir).astype(np.float64), _np(gt_dir).astype(np.float64)
     return np.where(np.hypot(p[0], p[1]) > 1e-6, np.abs(np.arctan2(g[0] * p[1] - g[1] * p[0], g[0] * p[0] + g[1] * p[1])), np.pi)
 
@@ -175,10 +174,8 @@ class SegMeter:
 
     def add_directions(self, pred_dir, gt_dir, gt_mask, mask=None, mass=None, dt=0.0):
         """pred_dir, gt_dir: dict layer -> (2, X, Y) direction (cos, sin; the prediction raw, not normalised); gt_mask: dict layer -> (X, Y) the layer's GT
-        cells.
-        Counted under '<layer>:dir': the mean absolute SIGNED angle between the two vectors (rad, 0 .. pi: a reversed line is pi, not 0) over the GT cells of
-        the layer
-        (the prediction is read at every one of them, whether or not it says 'line' there). A zero prediction vector has no direction: pi."""
+        cells. Counted under '<layer>:dir': the mean absolute SIGNED angle between the two vectors (rad, 0 .. pi: a reversed line is pi, not 0) over the GT
+        cells of the layer (the prediction is read at every one of them, whether or not it says 'line' there). A zero prediction vector has no direction: pi."""
         for name in pred_dir:
             G = (_np(gt_mask[name]) > 0.5) & (np.hypot(*_np(gt_dir[name])) > 0.5)
             self._count(name + ":dir", G, G, self._subsets(G.shape, mask, mass), dt, (angle_error(pred_dir[name], gt_dir[name]), G))

@@ -86,7 +86,7 @@ def flip_batch(batch, flip):
         batch["radar_seq"] = [flip_radar(r, flip) for r in batch["radar_seq"]]
     if "gt" in batch:
         batch["gt"] = [{key: flip_gt(g) for key, g in s.items()} if flip[i] else s for i, s in enumerate(batch["gt"])]
-    for key in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits", "radar_static"):    # precomputed maps (precompute.MAPS) already in the batch
+    for key in ("vis_cam", "vis_radar", "vis_fusion", "radar_hits"):    # precomputed maps (precompute.MAPS) already in the batch
         if key in batch:
             m = batch[key]
             batch[key] = torch.where(flip.to(m.device).view(-1, 1, 1, 1), m.flip(-1), m)
@@ -119,8 +119,8 @@ def jitter_images(img, j, salt=0):
     """uint8 images (B, 3, H, W) or (B, K, 3, H, W) -> float32 0 .. 255 of the same shape, on the device of `img`: brightness, contrast (about the mean luma of
     the frame), saturation, gamma and gaussian
     noise, in this order, with the factors of sample b from j["u"][:, b] for EVERY frame of the sample (one consistent scene) and the noise drawn per pixel from
-    a generator seeded with
-    (j["noise_seed"], salt): the current frame and the older ones take different salts. Deterministic, no state shared with torch's global generator."""
+    a generator seeded with (j["noise_seed"], salt): the current frame and the older ones take different salts. Deterministic, no state shared with torch's
+    global generator."""
     s, u = j["strength"], j["u"].to(img.device)
     lead = (img.shape[0],) + (1,) * (img.dim() - 1)
     f = lambda a: (1 + JITTER_RANGE * s * u[a]).view(lead)                        # noqa: E731

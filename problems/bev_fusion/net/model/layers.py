@@ -15,7 +15,7 @@ distance fields). `channels(rows)` lists them as (channel name, channel kind, ta
 runner) reads as `spec`. Channel kinds are the consumers' vocabulary: area, line (a polyline with a distance field: scored as a line), centreline
 (a polyline without one: the first centre-line design, mask + direction), dist, dir, object. The target key of a 1 m row is the 0.5 m key + "@1m".
 The radar aux head's stationary-structure proxy (kind "stationary") is a hook without GT, not a map layer: losses.layer_spec appends it.
-Run the self-test: python tests/test_layers.py   (from the bev_fusion folder; CPU, seconds)
+Run the self-test: python -P -m bev_fusion.tests.test_layers   (from the bev_fusion folder; CPU, seconds)
 """
 import math
 from dataclasses import dataclass
@@ -25,7 +25,7 @@ import torch
 import torch.nn.functional as F
 
 
-from GtGenerator.layers import AREAS, DIST_MAX, LINES, OBJECTS
+from GtGenerator import AREAS, DIST_MAX, LINES, OBJECTS
 
 KINDS = ("area", "polyline", "dense_box")
 LEVELS = {"0.5m": 1, "1m": 2}                         # level -> stride in cells of the 0.5 m GT grid

@@ -1,6 +1,5 @@
 """What an image goes through before the first learned weight: the normalisation constants, the pixel transforms of the two camera pipelines, the calibration
-vector
-of the DualBEV depth net and the image loader of the BEVFusion pipeline."""
+vector of the DualBEV depth net and the image loader of the BEVFusion pipeline."""
 import numpy as np
 import torch
 

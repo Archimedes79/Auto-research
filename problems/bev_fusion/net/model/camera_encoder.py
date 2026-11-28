@@ -19,9 +19,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torchvision
 
-from net.model.lift_pd import Grid, LiftPD
-from net.prep.geometry import DEPTH_BINS, depth_centres  # noqa: F401
-from net.prep.images import IMG_MEAN, IMG_STD, nuscenes_front_ida  # noqa: F401
+from bev_fusion.net.model.lift_pd import Grid, LiftPD
+from bev_fusion.net.prep.geometry import DEPTH_BINS, depth_centres  # noqa: F401
+from bev_fusion.net.prep.images import IMG_MEAN, IMG_STD, nuscenes_front_ida  # noqa: F401
 
 
 # ------------------------------------------------------------------------------------------------ image neck

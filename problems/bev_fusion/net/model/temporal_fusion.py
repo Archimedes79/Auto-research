@@ -32,8 +32,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from net.model.lift_pd import Grid
-from net.model.splat import VelocityHead, grid_points, splat, splat_window
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.splat import VelocityHead, grid_points, splat, splat_window
 
 
 def _col(t, like):

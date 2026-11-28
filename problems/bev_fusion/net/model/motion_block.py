@@ -24,7 +24,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from net.model.splat import splat_window
+from bev_fusion.net.model.splat import splat_window
 
 NR = 6                                                # radar raster channels
 

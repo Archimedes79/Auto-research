@@ -11,7 +11,7 @@
      finite, and a gradient reaches every new parameter and the trunk; a model / loss disagreement on the flag is refused. check_config refuses an odd grid
      for the 1 m row, and the slot kinds that left the code (lift 's', temporal 'ego_gru', radar 'pillars', lane 'rgb'; in the tag v1) with a message, not an
      ImportError.
-Run (from the problem folder, with its module path): python tests/test_layers.py
+Run (from the problem folder, with its module path): python -P -m bev_fusion.tests.test_layers
 """
 import hashlib
 import math
@@ -23,13 +23,13 @@ import numpy as np
 import torch
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-from net.model import layers as LY
-from net.loss import losses as L
-from tests.support import synthetic_world as sw
-from net.model.cached_model import CachedBEVFusionModel
-from net.model.lift_pd import Grid
-from net.model.model import ModelConfig, check_config
-from tests.support.synthetic_batch import batch_for
+from bev_fusion.net.model import layers as LY
+from bev_fusion.net.loss import losses as L
+from bev_fusion.tests.support import synthetic_world as sw
+from bev_fusion.net.model.cached_model import CachedBEVFusionModel
+from bev_fusion.net.model.lift_pd import Grid
+from bev_fusion.net.model.model import ModelConfig, check_config
+from bev_fusion.tests.support.synthetic_batch import batch_for
 
 torch.set_num_threads(2)
 fails = []
@@ -115,8 +115,7 @@ def old_map_terms(logits, T, spec, weights, cfg):
 
 
 class OldBEVLoss(L.BEVLoss):
-    """BEVLoss as it was before the table (commit 479100d): the old specs, the old terms_at (without the S5c refine branch, which the table does not
-    touch) and the old forward, all on old_map_terms; the Kendall weights, the dt weights and the total come out of the same copy."""
+    """BEVLoss as it was before the table (commit 479100d): the old specs, the old terms_at and the old forward, all on old_map_terms; the Kendall weights, the dt weights and the total come out of the same copy."""
 
     def __init__(self, cfg, grid):
         super().__init__(cfg, grid)
@@ -148,9 +147,6 @@ class OldBEVLoss(L.BEVLoss):
             for i, t in enumerate(lv):
                 terms[f"motion_l{i}"] = t
             add("motion", (terms["motion"] + sum(lv)) / (1 + len(lv)))
-            if cfg.consistency and tt is not None:
-                terms["motion_consistency"] = L.consistency_term(p["obj"]["vel"], p["v_hat"], tt)
-                add("motion", cfg.w_consistency * terms["motion_consistency"])
         if "cam_aux" in p:
             wc = T["w_cam"]
             t, g = old_map_terms(p["cam_aux"], T, self.cam_spec, {"area": wc, "line": wc, "object": wc * T["w_keep"]}, cfg)

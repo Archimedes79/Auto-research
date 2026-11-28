@@ -14,10 +14,10 @@ One sample = keyframe k (it needs a previous and a next keyframe, for the GT at 
   frame = item["radar"]), each made at THAT frame's camera time and moved into that frame's ego frame; with radar_window 0.09 the
   newest sweep of each radar (about 54 detections in the grid per keyframe against 300 for 0.5 s): the radar input of a network that
   gets one frame and one sweep per step
-- GT: `GtGenerator.NuScenesGT.training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
+- GT: the generator object `GtGenerator.GtGenerator`, `training_sample` (cur / prev / next with their ego steps), optionally cached as compressed
   float16 npz in a cache folder of this project (derived data, not in git; written atomically, a broken file is rebuilt)
 - meta: tokens, timestamps, the ego speed and yaw rate of the last camera frame
-Raw data is read through the WSL views (~/data/nuscenes_full, ~/data/nuscenes for mini; the repository's data/NuScenes/README.md).
+Raw data is read through the views of the data root (net/netpath.nuscenes_root; datasets/nuscenes/README.md).
 Splits: official nuScenes train / val scene names restricted to the scenes on disk (`available_scenes`).
 Tests: tests/test_nuscenes_dataset.py
 """
@@ -27,11 +27,11 @@ import numpy as np
 import torch
 from PIL import Image
 
-from GtGenerator.nuscenes_adapter import pose_matrix
-from GtGenerator.nuscenes_gt import NuScenesGT
+import GtGenerator
+from GtGenerator import pose_matrix
 
-from net.prep.images import IMG_MEAN, IMG_STD, camera_vector, nuscenes_front_ida
-from net.prep.geometry import Grid
+from bev_fusion.net.prep.images import IMG_MEAN, IMG_STD, camera_vector, nuscenes_front_ida
+from bev_fusion.net.prep.geometry import Grid
 
 RADARS = ("RADAR_FRONT", "RADAR_FRONT_LEFT", "RADAR_FRONT_RIGHT", "RADAR_BACK_LEFT", "RADAR_BACK_RIGHT")
 DST_HW = (256, 704)
@@ -87,7 +87,7 @@ def available_scenes(nusc, split):
 class FrontRadarDataset(torch.utils.data.Dataset):
     def __init__(self, dataroot, version, scenes=None, grid=None, n_cam=3, cam_stride=2, radar_window=0.5,
                  radar_doppler_shift=True, with_gt=True, gt_ss=4, cache_dir=None, nusc=None, radar_per_frame=False):
-        self.gt = NuScenesGT(dataroot, version, nusc)
+        self.gt = GtGenerator.GtGenerator(dataroot, version, nusc=nusc)
         self.nusc, self.root = self.gt.nusc, dataroot
         self.grid = grid or Grid()
         self.n_cam, self.cam_stride, self.radar_window, self.radar_per_frame = n_cam, cam_stride, radar_window, radar_per_frame
@@ -185,17 +185,18 @@ class FrontRadarDataset(torch.utils.data.Dataset):
 
     # ---- GT (optionally cached)
     def gt_signature(self):
-        """identity of the GT this dataset reads: '<res>_<ss>_<generator signature>' (GtGenerator source + flags), the suffix of its GT
-        cache files; recorded by train.py (runs/<name>/gt.json) and by the evaluation (metrics.json, the suite's manifest).
+        """identity of the GT this dataset reads: '<res>_<ss>_<the generator's store key>', the suffix of its GT cache files; recorded by train.py
+        (runs/<name>/gt.json) and by the evaluation (metrics.json, the suite's manifest). The store key names the GT, not the code (store_signature: an edit
+        of the generator that changes no GT keeps it, so the cache files and the records stay valid).
         A grid with other extents than the default front grid (x 0..60 m, y -26..26 m) is another GT of the same resolution: its
         extents follow the resolution ('0.5_x0_40_y-20_20_4_<signature>'). The default keeps the names of every existing cache file."""
         g, d = self.grid, Grid()
         ext = "" if (g.x_min, g.x_max, g.y_min, g.y_max) == (d.x_min, d.x_max, d.y_min, d.y_max) \
             else "_x%g_%g_y%g_%g" % (g.x_min, g.x_max, g.y_min, g.y_max)
-        return f"{g.res}{ext}_{self.gt_ss}_{self.gt.signature()}"
+        return f"{g.res}{ext}_{self.gt_ss}_{self.gt.store_signature()}"
 
     def _gt(self, token):
-        # the generator signature is part of the key: GT cached by an older generator is never reused
+        # the generator's store key is part of the name: GT cached for another GT version is never reused
         path = os.path.join(self.cache_dir, f"{token}_{self.gt_signature()}.npz") if self.cache_dir else None
         if path and os.path.exists(path):
             try:

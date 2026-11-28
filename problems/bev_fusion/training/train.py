@@ -1,22 +1,17 @@
 """Trainer of the camera + radar BEV chain on nuScenes: the BEV side of the engine `autoresearch/trainkit` (EMA, schedule, optimiser groups and step, AMP,
-checkpoints
-and resume, the stop protocol, the log files are the engine's).
+checkpoints and resume, the stop protocol, the log files are the engine's).
 
-    python training/train.py <config.json>      fields of TrainConfig; unknown keys are an error. Works in the problem's data folder (net/netpath.SITE): the
-                                                config names its caches and weights relative to it
+    python -P -m bev_fusion.training.train <config.json>      fields of TrainConfig; unknown keys are an error. Works in the problem's data folder
+                                                              (net/netpath.SITE): the config names its caches and weights relative to it
 
 What is here: the config of a run (the network's fields of net/chain.py ChainConfig plus the trainer's), the data loaders, one training step = a clip of
-consecutive
-keyframes through `chain.forward_loss` with the model state carried from keyframe to keyframe (`run_clip`), the validation under the EMA weights, the freeze
-plan,
-the probes, the record of the ground truth a run used. The model, the loss, the train-only loss terms and the forward of a batch are net/ (chain.py); the
-evaluation imports them from there, never this file.
+consecutive keyframes through `chain.forward_loss` with the model state carried from keyframe to keyframe (`run_clip`), the validation under the EMA weights,
+the freeze plan, the probes, the record of the ground truth a run used. The model, the loss, the train-only loss terms and the forward of a batch are net/
+(chain.py); the evaluation imports them from there, never this file.
 Sequence training (`seq_len` > 1): clips of consecutive keyframes of one scene (`batches.ClipDataset`), the world memory of the temporal fusion carried from
-keyframe
-to keyframe with the ego step between them (`batches.clip_step`), detached at every keyframe or, with `seq_bptt`, kept in the graph through the clip; the first
-keyframe of
-a clip starts cold, the later ones warm, so both cases are trained. With `seq_len` = 1 every keyframe is independent. Validation of clips reports the last
-keyframe warm
+keyframe to keyframe with the ego step between them (`batches.clip_step`), detached at every keyframe or, with `seq_bptt`, kept in the graph through the clip;
+the first keyframe of a clip starts cold, the later ones warm, so both cases are trained. With `seq_len` = 1 every keyframe is independent. Validation of clips
+reports the last keyframe warm
 and cold (`total_last_warm` / `total_last_cold`, the same frames) on a fixed subset of `eval_batches * batch_size` samples spread over all val scenes.
 BatchNorm statistics come from the micro-batch (`batch_size`, not the effective batch `batch_size * accum`).
 """
@@ -29,13 +24,13 @@ from dataclasses import dataclass
 
 import torch
 
-from net import netpath
-from net.chain import ChainConfig, build, drop_removed, external, forward_loss
-from net.prep.augment import draw_jitter, flip_batch, jitter_seed
-from net.prep.batches import ClipDataset, clip_step, collate_clips, make_datasets, val_subset
-from net.prep.feature_cache import collate_cached
-from net.prep.nuscenes_dataset import collate
-from training import freeze as freeze_mod
+from bev_fusion.net import netpath
+from bev_fusion.net.chain import REMOVED, ChainConfig, build, external, forward_loss, read_raw
+from bev_fusion.net.prep.augment import draw_jitter, flip_batch, jitter_seed
+from bev_fusion.net.prep.batches import ClipDataset, clip_step, collate_clips, make_datasets, val_subset
+from bev_fusion.net.prep.feature_cache import collate_cached
+from bev_fusion.net.prep.nuscenes_dataset import collate
+from bev_fusion.training import freeze as freeze_mod
 from trainkit.config import Config
 from trainkit.data import EpochLoader
 from trainkit.loop import Hooks, fit
@@ -43,20 +38,20 @@ from trainkit.optim import clip_groups, lr_group_params
 from trainkit.probe import ModuleProbe, StepProfiler, StepTimer, batch_tokens, dump_incident
 from trainkit.util import detach_tree, prepare_run_dir, resolve_device, seed_all
 
-# a resume may change these on top of the engine's (paths, workers, the cadence of logging and saving, the switches that only look); every other difference is
-# refused
+# a resume may change these on top of the engine's (paths, workers, the cadence of logging and saving, the switches that only look); every other difference
+# is refused. The top-level options that left the code are among them: a checkpoint written before names them, today's config cannot (a removed option of
+# `model` / `loss` stays in its dict, chain.drop_removed, so the dicts of such a run still compare equal)
 RESUME_FREE = Config.RESUME_FREE + ("data_root", "feature_cache", "gt_cache", "feature_cache2", "radar_cache", "lane_images", "workers", "eval_batches", "grad_diag_every",
-                                    "probe", "pin_memory", "prefetch_factor", "profile_steps")
-# switches a checkpoint from before them lacks: turning one on in the middle of a run changes the numbers (a freeze plan, the speed flags, the split clip, the
-# lr groups)
+                                    "probe", "pin_memory", "prefetch_factor", "profile_steps") + tuple(REMOVED[""])
+# switches a checkpoint from before them lacks: turning one on in the middle of a run changes the numbers (a freeze plan, the speed flags, the split clip,
+# the lr groups)
 RESUME_SWITCHES = ("train_only", "freeze", "cudnn_benchmark", "tf32", "grad_clip_split", "lr_groups", "student_anchor", "img_jitter")
 
 
 @dataclass
 class TrainConfig(ChainConfig, Config):
     """the fields of the engine (trainkit.config.Config: name, out_root, steps, lr, warmup, accum, amp, ema, clipping, lr_groups, logging / saving cadence,
-    seed, init_from,
-    device), the network's (chain.ChainConfig: data, caches, model, loss, the train-only loss terms) and the trainer's own, below"""
+    seed, init_from, device), the network's (chain.ChainConfig: data, caches, model, loss, the train-only loss terms) and the trainer's own, below"""
     RESUME_FREE = RESUME_FREE                    # not fields: the rules of a resume (trainkit.checkpoint.check_resume); BF_RESUME_ANY=1 overrides the refusal
     RESUME_SWITCHES = RESUME_SWITCHES
     RESUME_ENV = "BF_RESUME_ANY"
@@ -94,11 +89,9 @@ class TrainConfig(ChainConfig, Config):
 
 
 def read_config(path):
-    """TrainConfig of a config file; keys starting with "_" are comments for the reader (e.g. "_about"), an option that left the code is dropped at its off
-    value
-    and refused at any other (chain.drop_removed), every other unknown key is an error"""
-    with open(path, encoding="utf-8") as fh:
-        return TrainConfig(**{k: v for k, v in drop_removed(json.load(fh)).items() if not k.startswith("_")})
+    """TrainConfig of a config file (chain.read_raw: a "split" becomes its scene lists, an option that left the code is dropped at its off value and refused
+    at any other); keys starting with "_" are comments for the reader (e.g. "_about"), every other unknown key is an error"""
+    return TrainConfig(**{k: v for k, v in read_raw(path).items() if not k.startswith("_")})
 
 
 def jitter_findings(cfg, mcfg):
@@ -139,12 +132,10 @@ def _f(v):
 
 def _pack(out, selected):
     """snapshot of the logged scalar terms of ONE keyframe: (order, packed). The tensors are stacked NOW into one device tensor (a term that is a view of a
-    parameter, which a
-    later keyframe changes in place, must be read as it is at this point; the stack is a copy), numbers are kept. Nothing is read back here: the old code called
-    float() per
+    parameter, which a later keyframe changes in place, must be read as it is at this point; the stack is a copy), numbers are kept. Nothing is read back here:
+    the old code called float() per
     term, and every call waited for the GPU, which was still busy with the backward of this keyframe, so the host could not queue the next keyframe meanwhile.
-    The terms are
-    widened to float64 (exact for float16 / bfloat16 / float32 / float64, as float(v) was)"""
+    The terms are widened to float64 (exact for float16 / bfloat16 / float32 / float64, as float(v) was)"""
     order, tens = [], []
     for k, v in out.items():
         if selected(k):
@@ -158,8 +149,7 @@ def _pack(out, selected):
 
 def _unpack(kf, L):
     """-> (acc, totals) of the packed keyframes with ONE device-to-host transfer. Bit-identical to the per-term floats: the same float32 values widened to
-    Python floats, summed in
-    the same order (keyframe by keyframe, term by term)"""
+    Python floats, summed in the same order (keyframe by keyframe, term by term)"""
     packs = [p for _, p in kf if p is not None]
     flat = torch.cat(packs).cpu().tolist() if packs else []
     acc, totals, pos = {}, [], 0
@@ -185,11 +175,9 @@ def run_clip(model, loss, clip, step_frac, device, cfg, diag=False, train_terms=
     keyframe, or with cfg.seq_bptt kept in the graph through the clip. backward: backpropagate the mean loss of the clip
     divided by cfg.accum, right after each keyframe (with seq_bptt the earlier graphs are retained for the state path of
     the later keyframes, so the gradient is that of the clip's mean loss). scaler: the GradScaler of amp "fp16": the loss is scaled before the backward (the
-    gradients stay
-    scaled until optimizer_step unscales them); the logged terms are the unscaled ones. augment: the mirror (cfg.flip_aug) and, from step_frac =
-    cfg.img_jitter_from on, the
-    photometric jitter of the student's image (cfg.img_jitter: batch["img_jitter"], one draw per clip of this micro-batch, drawn from (cfg.seed, step, micro) =
-    the optimiser
+    gradients stay scaled until optimizer_step unscales them); the logged terms are the unscaled ones. augment: the mirror (cfg.flip_aug) and, from step_frac =
+    cfg.img_jitter_from on, the photometric jitter of the student's image (cfg.img_jitter: batch["img_jitter"], one draw per clip of this micro-batch, drawn
+    from (cfg.seed, step, micro) = the optimiser
     step and the micro-batch inside it).
     -> (dict of the scalar terms averaged over the keyframes, finite flag, diag of the last keyframe or None, list of the
     per-keyframe totals)."""
@@ -227,8 +215,8 @@ def evaluate(model, loss, ema, loader, n_batches, device, cfg, eval_fn=None):
     terms; eval_fn(model, loader) -> dict is an optional metrics hook. With clips (seq_len > 1) the state is carried through
     the clip, and the LAST keyframe is also run cold (no memory): total_last_warm / total_last_cold are the same frames with
     and without the carried memory (paired). A batch with a non-finite loss is left out of the mean and counted: the result carries `n` (batches in the mean)
-    and `n_skipped`
-    (logged as val.n, val.n_skipped); when none is finite the loss totals are NaN (never 0 or missing: a diverged model must not read as a good one)."""
+    and `n_skipped` (logged as val.n, val.n_skipped); when none is finite the loss totals are NaN (never 0 or missing: a diverged model must not read as a good
+    one)."""
     tot, n, skipped = {}, 0, 0
     with ema.applied(model):
         with torch.no_grad():
@@ -268,7 +256,7 @@ def record_gt(out_dir, datasets):
     path = os.path.join(out_dir, "gt.json")
     # D29: the human key of the GT version (v5, ...) next to the signature; none for an unreleased source
     try:
-        from GtGenerator.versions import version_of_key
+        from GtGenerator import version_of_key
         ver = [version_of_key(s) for s in sigs]
         ver = None if None in ver else (ver[0] if len(ver) == 1 else ver)
     except ImportError:
@@ -306,8 +294,7 @@ def check_grids(model, *datasets):
 
 def apply_speed_flags(cfg):
     """the opt-in speed switches of the config; all off by default and then nothing is touched. They are process-wide and set once at the start of train() (an
-    eval_fn in the
-    same process runs with them). -> {name: value} of what was set"""
+    eval_fn in the same process runs with them). -> {name: value} of what was set"""
     done = {}
     if cfg.cudnn_benchmark:
         torch.backends.cudnn.benchmark = True
@@ -322,8 +309,7 @@ class ProbeHooks(Hooks):
     """trainkit/probe.py on the engine's hooks: the gradient norm and update ratio per module on the logged steps (ModuleProbe), the wait for the data and the
     length of a step (StepTimer),
     torch.profiler over a window of steps (StepProfiler) and incident dumps for a skipped step (dump_incident); each one only if the config asks for it
-    (TrainConfig.probe,
-    profile_steps). With both off every method does nothing, the loop's numbers are the same"""
+    (TrainConfig.probe, profile_steps). With both off every method does nothing, the loop's numbers are the same"""
 
     def __init__(self, model, out_dir, cfg, device):
         self.out_dir = out_dir

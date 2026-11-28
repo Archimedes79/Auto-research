@@ -1,14 +1,14 @@
 """Tests of net/prep/augment.py (its former self-test).
 
-    python tests/test_augment.py      (from the problem folder, with its module path)
+    python -P -m bev_fusion.tests.test_augment      (from the problem folder, with its module path)
 """
 import math
 
 import numpy as np
 import torch
 
-from net import netpath
-from net.prep.augment import flip_batch, flip_cam
+from bev_fusion.net import netpath
+from bev_fusion.net.prep.augment import flip_batch, flip_cam
 
 
 def _principal_axis(xs, ys):
@@ -20,16 +20,16 @@ def _principal_axis(xs, ys):
 def _selftest():
     import copy
     import os
-    from net import netpath
+    from bev_fusion.net import netpath
     os.chdir(netpath.SITE)                                       # the data folder: the default weights are named relative to it
-    from net.loss.losses import BEVLoss, sample_targets
-    from net.model.model import BEVFusionModel, ModelConfig
-    from net.prep.nuscenes_dataset import FrontRadarDataset, collate
-    from net.model.radar_bev import rasterize
-    from net.model.temporal_fusion import advance_pose
-    from net.prep.batches import gap_ego_motion
+    from bev_fusion.net.loss.losses import BEVLoss, sample_targets
+    from bev_fusion.net.model.model import BEVFusionModel, ModelConfig
+    from bev_fusion.net.prep.nuscenes_dataset import FrontRadarDataset, collate
+    from bev_fusion.net.model.radar_bev import rasterize
+    from bev_fusion.net.model.temporal_fusion import advance_pose
+    from bev_fusion.net.prep.batches import gap_ego_motion
     torch.manual_seed(0)
-    ds = FrontRadarDataset(os.path.expanduser("~/data/nuscenes"), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
+    ds = FrontRadarDataset(netpath.nuscenes_root(mini=True), "v1.0-mini", n_cam=3, cam_stride=2, with_gt=True)
     batch = collate([ds[10], ds[200]])
     orig = copy.deepcopy(batch)
 

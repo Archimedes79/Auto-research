@@ -1,31 +1,24 @@
 """The split lists (`splits/*.json`) and `net/prep/splits.py` (resolve, manifest, split.json). Known answers, no data, no GPU.
 
-  1. the files: `large` = exactly the lists of the stored config base.json (428 / 82 scenes), `xl` 700 / 82 with large inside it, `small` a
-     subset of `large` (60 / 10); train and val never share a scene; every file names a GtGenerator version of GtGenerator/versions.csv; train scenes are
+  1. the files: `large` = exactly the lists the stored config of E27.t21_s0 carries inline (428 / 82 scenes; base.json names the split), `xl` 700 / 82 with large inside it, `small` a
+     subset of `large` (60 / 10); train and val never share a scene; every file names a released version of GtGenerator; train scenes are
      official nuScenes train scenes, val scenes official val scenes
-  2. resolve: `"split": "large"` gives the lists of the inline base.json (same order), the key `split` is gone (the trainer refuses it) and `_split` names it;
-  the
-     trainer's `read_config` accepts the result; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false,
-     [] and a number
-     are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
-  3. manifest and split.json of a run folder (built here with known content; the real run t20_base_s0 in the site's run root when it is there: split large 428 /
-  82)
-Removed in v2 (D154): the comparison of xl with t17_data.json (that config is gone); the Training hook (`autoresearch/Training` compose, project.json
-`training.resolve`,
-`package.split_record`: gone, the research core starts base.json with its inline lists); the commit and GT of the real run (t16_full_s0 is gone, the kept runs
-hold
-no gt.json and no code snapshot).
-Run from the problem folder: ~/miniconda3/envs/gcar/bin/python tests/test_splits.py
+  2. resolve: `"split": "large"` (base.json) gives the lists of the stored inline config (same order), the key `split` is gone and `_split` names it; the
+     trainer's `read_config` resolves a split itself and takes a resolved config; an inline config comes back unchanged; only `split: null` drops the key (keeping inline lists); `''`, 0, false,
+     [] and a number are refused; split + inline lists (either list alone too), an unknown name and a path in the name are refused
+  3. manifest and split.json of a run folder (built here with known content; the real run t20_base_s0 in the site's run root when it is there: split large
+     428 / 82)
+Run from the problem folder: ~/miniconda3/envs/gcar/bin/python -P -m bev_fusion.tests.test_splits
 """
-import csv
 import json
 import os
 import subprocess
 import sys
 import tempfile
 
-from net import netpath
-from net.prep import splits as S
+import GtGenerator
+from bev_fusion.net import netpath
+from bev_fusion.net.prep import splits as S
 
 fails = []
 
@@ -50,60 +43,63 @@ def config(name):
 
 
 base = config("base")
+with open(os.path.join("experiments", "E027_t21_measured", "runs", "E27.t21_s0", "config.json"), encoding="utf-8") as f_:
+    stored = json.load(f_)                                       # a config that carries its lists inline
 large, small, xl = S.load("large"), S.load("small"), S.load("xl")
 
 # 1 the files
-check(large["train"] == base["train_scenes"] and large["val"] == base["val_scenes"] and (len(large["train"]), len(large["val"])) == (428, 82), "large = the lists of base.json (428 / 82, same order)")
+check(base.get("split") == "large" and all(base.get(k) == [] for k in S.LISTS), "base.json names its split (large); its lists are empty (a card may set them, with split null)")
+check(large["train"] == stored["train_scenes"] and large["val"] == stored["val_scenes"] and (len(large["train"]), len(large["val"])) == (428, 82), "large = the lists the stored config of E27.t21_s0 carries (428 / 82, same order)")
 check((len(xl["train"]), len(xl["val"])) == (700, 82), "xl: 700 / 82 scenes")
 check(set(large["train"]) < set(xl["train"]) and xl["val"] == large["val"], "xl = large + 272 train scenes, the same val scenes")
 check(set(small["train"]) <= set(large["train"]) and set(small["val"]) <= set(large["val"]) and (len(small["train"]), len(small["val"])) == (60, 10), "small: 60 / 10 scenes, a subset of large")
 check(all(not set(d["train"]) & set(d["val"]) for d in (small, large, xl)), "no scene is in train and val of one split")
-with open(os.path.join("..", "..", "GtGenerator", "versions.csv"), newline="", encoding="utf-8") as f:
-    versions = {r["version"] for r in csv.DictReader(f)}
-check(all(d["gt"] in versions for d in (small, large, xl)), f"every split names a GtGenerator version ({large['gt']}) of GtGenerator/versions.csv")
+versions = set(GtGenerator.version_names())
+check(all(d["gt"] in versions for d in (small, large, xl)), f"every split names a released version of GtGenerator ({large['gt']})")
 from nuscenes.utils.splits import create_splits_scenes
 official = create_splits_scenes()
 check(all(set(d["train"]) <= set(official["train"]) and set(d["val"]) <= set(official["val"]) for d in (small, large, xl)), "train scenes are official train scenes, val scenes official val scenes (the devkit's lists)")
 
 # 2 resolve
-inline = {k: v for k, v in base.items() if k not in ("train_scenes", "val_scenes")}
-res = S.resolve(dict(inline, split="large"))
-check(res["train_scenes"] == base["train_scenes"] and res["val_scenes"] == base["val_scenes"], "split large resolves to the lists of the inline base.json")
-check("split" not in res and res["_split"] == "large" and {k: v for k, v in res.items() if k not in ("train_scenes", "val_scenes", "_split")} == inline, "the key split is replaced, nothing else changes")
-check(S.resolve(base) is base and S.resolve(dict(base, name="x")) == dict(base, name="x"), "an inline config comes back unchanged")
-check(S.resolve(dict(base, split=None)) == base, "split null drops the key and keeps the inline lists")
+inline = {k: v for k, v in base.items() if k != "split"}
+res = S.resolve(base)
+check(res["train_scenes"] == stored["train_scenes"] and res["val_scenes"] == stored["val_scenes"], "base.json (split large) resolves to the lists of the stored inline config")
+check("split" not in res and res["_split"] == "large" and {k: v for k, v in res.items() if k not in S.LISTS + ("_split",)} == {k: v for k, v in inline.items() if k not in S.LISTS},
+      "the key split is replaced, nothing else changes")
+check(S.resolve(stored) is stored and S.resolve(dict(stored, name="x")) == dict(stored, name="x"), "an inline config comes back unchanged")
+check(S.resolve(dict(stored, split=None)) == stored, "split null drops the key and keeps the inline lists")
+check(raises(lambda: S.resolve(dict(inline, split=None)), "whole official split") and raises(lambda: S.resolve(dict(inline, split=None, train_scenes=[], val_scenes=[])), "whole official split"),
+      "split null without a list is refused: it would train on the whole official split")
+card = S.resolve(dict(inline, split=None, train_scenes=small["train"], val_scenes=small["val"]))
+check(card["train_scenes"] == small["train"] and card["val_scenes"] == small["val"] and "split" not in card, "a card's explicit lists with split null are taken as they are")
 check(all(raises(lambda v=v: S.resolve(dict(inline, split=v)), "split") for v in ("", 0, False, [], 1, {})),
       "only null drops the key: '', 0, false, [] and {} are refused with a message (1 too: a number is no name)")
 check(raises(lambda: S.resolve(dict(inline, split="large", val_scenes=["scene-0003"])), "keep one") and raises(lambda: S.resolve(dict(inline, split="large", train_scenes=["scene-0001"])), "keep one"),
       "split + only an inline val_scenes (or only train_scenes) is refused too")
 check(S.resolve(dict(inline, split="large", train_scenes=[], val_scenes=[]))["train_scenes"] == large["train"], "empty inline lists are no lists: the split fills them (the documented way to move a stored config to a split)")
-check(raises(lambda: S.resolve(dict(base, split="large")), "keep one") and raises(lambda: S.resolve(dict(inline, split="larg")), "no split 'larg'")
+check(raises(lambda: S.resolve(dict(stored, split="large")), "keep one") and raises(lambda: S.resolve(dict(inline, split="larg")), "no split 'larg'")
       and raises(lambda: S.resolve(dict(inline, split="../splits/large")), "letters, digits"), "split + inline lists, an unknown name and a path in the name are refused")
 with tempfile.TemporaryDirectory() as tmp:                       # a split file that is wrong is refused when it is read
     for label, d in (("a scene in train and val", {"train": ["a", "b"], "val": ["b"]}), ("a scene twice", {"train": ["a", "a"], "val": ["b"]}), ("an empty list", {"train": ["a"], "val": []})):
         json.dump(d, open(os.path.join(tmp, "bad.json"), "w"))
         check(raises(lambda: S.load("bad", tmp), "bad.json"), f"split file with {label}: refused")
 try:
-    from training.train import read_config  # noqa: E402 - needs torch (the gcar environment)
+    from bev_fusion.training.train import read_config  # noqa: E402 - needs torch (the gcar environment)
     with tempfile.TemporaryDirectory() as tmp:
         p = os.path.join(tmp, "c.json")
-        json.dump(S.resolve(dict(inline, split="small")), open(p, "w"))
-        c = read_config(p)
-        check(list(c.train_scenes) == small["train"] and list(c.val_scenes) == small["val"], "the trainer's read_config takes the resolved config and holds the lists")
-        json.dump(dict(inline, split="small"), open(p, "w"))
-        try:
-            read_config(p)
-            check(False, "the trainer refuses an unresolved split key")
-        except TypeError:
-            check(True, "the trainer refuses an unresolved split key (loud, not 700 scenes silently)")
+        for label, cfg_ in (("a config that names a split: resolved by the reader", dict(inline, split="small")), ("a resolved config (the comment key _split)", S.resolve(dict(inline, split="small")))):
+            json.dump(cfg_, open(p, "w"))
+            c = read_config(p)
+            check(list(c.train_scenes) == small["train"] and list(c.val_scenes) == small["val"], f"the trainer's read_config holds the lists of {label}")
 except ImportError as e:
     check(False, f"train.py not importable here ({e}): run the test in the gcar environment")
 with tempfile.TemporaryDirectory() as tmp:
-    p = subprocess.run([sys.executable, "net/prep/splits.py", "resolve"], input=json.dumps(dict(inline, split="xl")), capture_output=True, text=True)
+    cli = [sys.executable, "-P", "-m", S.__name__]                # the module's command line, started as research starts a module (the roots it was given)
+    p = subprocess.run(cli + ["resolve"], input=json.dumps(dict(inline, split="xl")), capture_output=True, text=True)
     check(p.returncode == 0 and json.loads(p.stdout) == S.resolve(dict(inline, split="xl")), "the command line (stdin -> stdout) gives the same as resolve()")
-    p = subprocess.run([sys.executable, "net/prep/splits.py", "names", "small"], capture_output=True, text=True)
+    p = subprocess.run(cli + ["names", "small"], capture_output=True, text=True)
     check(p.returncode == 0 and p.stdout.split("\n")[:-1] == small["train"] + small["val"], "names: the scenes of a split, train then val, one per line (the format of GtGenerator --scenes-file)")
-    p = subprocess.run([sys.executable, "net/prep/splits.py", "resolve"], input=json.dumps(dict(inline, split="nope")), capture_output=True, text=True)
+    p = subprocess.run(cli + ["resolve"], input=json.dumps(dict(inline, split="nope")), capture_output=True, text=True)
     check(p.returncode == 1 and "no split 'nope'" in p.stderr and "large" in p.stderr, "an unknown split on the command line: exit 1, the message names the splits that exist")
 
 # 3 manifest and split.json
@@ -134,6 +130,11 @@ with tempfile.TemporaryDirectory() as tmp:
           and d["gt"] == {"signature": "0.5_4_6a7aa7864a", "version": "v8"} and d["evaluation_frames"] == ["f1", "f2"] and d["official_split"] == {"train": "train", "val": "val"},
           "split.json holds the lists of the run, the split name, the GT and the evaluation frames it was given")
     check(json.load(open(S.write_split_json(run, os.path.join(tmp, "results", "other"))))["evaluation_frames"] is None, "frames unknown = null")
+    json.dump(dict(inline, split="small"), open(os.path.join(run, "config.json"), "w"))       # a run whose config names its split (an import-only run)
+    dn = json.load(open(S.write_split_json(run, os.path.join(tmp, "results", "named"))))
+    check((dn["split"], dn["train"], dn["val"]) == ("small", small["train"], small["val"]) and S.manifest(run)["split"]["name"] == "small",
+          "split.json and the manifest of a run whose config names the split hold its lists, not 'official'")
+    json.dump(cfg, open(os.path.join(run, "config.json"), "w"))
     check(raises(lambda: S.manifest(os.path.join(tmp, "none")), "no readable config.json"), "a folder without config.json is refused")
     check(d["note"] is None, "a run with a config has no note")
     # an older run: a folder, no config.json (9 such folders in runs/ on 2026-11-03)
