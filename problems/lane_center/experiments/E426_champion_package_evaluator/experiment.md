@@ -42,4 +42,17 @@ with `cost.quiet` = 0 is not compared. A later experiment with a time limit meas
 None.
 
 ## Conclusion
-After `research judge`: the numbers with split and denominator, the comparison with E422.champ, what follows.
+**Measured** (`research judge`, 2026-11-28, `verdict.json`: DONE). The hypothesis holds on both seeds: the 18 graph numbers and the 22
+per-scene scores equal E422.champ exactly, on the same checkpoints and ground truth, now scored by evaluator 7201d2ebe42a; 2.323143 M
+parameters and 88.9091796875 MB peak memory are equal too.
+
+VAL, 873 frames in 22 scenes, seeds 0 / 1: topo F1 0.6682 / 0.6813; junction F1 0.2538 / 0.2481 (precision 0.1579 / 0.1539, recall
+0.6467 / 0.6392); F1@0.5 0.6448 / 0.6494; F1@1.0 0.8459 / 0.8476; lanes found 0.7232 / 0.7214; heading error 11.65 / 11.56 deg; duplicates
+0.0628 / 0.0646; vertices per 100 m 23.81 / 24.12.
+
+Time per frame (predict step, batch 1, `cost.quiet` = 1): median 18.97 / 18.64 ms, 90th percentile 41.68 / 30.29 ms (E422.champ medians
+19.07 / 20.87 ms).
+
+Follows: this is the champion's current measurement. A later comparison with a time limit measures its control again. The registration in
+`champions/` and the anchor run named in `HANDOVER.md` still point to E396, whose numbers today's evaluator cannot be checked against (the
+owner's decision).
