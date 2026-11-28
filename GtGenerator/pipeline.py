@@ -17,7 +17,7 @@ def _group_task(args):
     from .suite import GtGenerator
     code_sig, label, dataroot, version, res, ss, options, grp, todo, sig_dir, verbose = args
     t0 = time.time()
-    gen = GtGenerator(dataroot, version, GridSpec(res=res), ss, light=True, scenes=grp, **options)
+    gen = GtGenerator(dataroot, version, grid=GridSpec(res=res), ss=ss, light=True, scenes=grp, **options)
     _same_generator(gen, code_sig)
     done = 0
     for i, t in enumerate(todo):
@@ -59,12 +59,12 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     or supersampling is never continued. The signature changes with every edit of the generator, so GT of an older generator is
     never mixed in. Needs no GPU; trainval takes 5 - 8 hours in one process."""
     import gc
-    from . import sets
-    from .suite import DATA, code_signature, current_signature, json_tables, scene_tokens
+    from . import sets, where
+    from .suite import code_signature, current_signature, json_tables, scene_tokens
     check_arguments(stride=stride, res=res, ss=ss, workers=workers, set_name=set_name, scenes=scenes)
     dataroot = os.path.expanduser(dataroot)
     version = version or detect_version(dataroot)
-    out = os.path.expanduser(out) if out else DATA
+    out = os.path.expanduser(out) if out else where.root()
     known = [s["name"] for s in json_tables(dataroot, version)[0]]
     names = sets.scenes(set_name) if set_name else known if scenes is None else list(dict.fromkeys(scenes))      # no duplicates
     unknown = [n for n in names if n not in known]
@@ -108,7 +108,7 @@ def generate(dataroot, out=None, version=None, scenes=None, stride=1, res=0.5, s
     if verbose:
         print(f"{done} keyframes written, {n_total - done} already there: {sig_dir}  (GT version {gt_version}, commit {idx.get('commit')}"
               f"{', dirty' if idx.get('dirty') else ''}{', RELEASE' if idx.get('release') else ''}, sets complete: {idx.get('sets_complete', [])})\n"
-              f"read one with GtGenerator.load(<sample token>{'' if out == DATA else ', data=' + repr(out)})")
+              f"read one with GtGenerator.load(<sample token>{'' if out == where.root() else ', data=' + repr(out)})")
     lane_result = lane_rigs = masks_error = None
     if lane and stride == 1:
         from .gt_api import make_lane_gt                                    # both systems' lane GT + the masks derived from the BEV Fusion one: the same code as generate_bev_gt / generate_lane_gt

@@ -8,15 +8,17 @@
     key.lane(token)     # ... the lane graph of the system (frame ego for bev_fusion, lane for lane_center)
     key.mask(token, "intersection", border_m=0.5)    # ... and an area mask in the BEV grid, (120, 104) uint8
     GtGenerator.gt_key("bev_fusion", "v1.0-trainval", "full")    # the key of what is stored now, nothing is generated
+    GtGenerator.load_lane(token), GtGenerator.lane_tokens(), GtGenerator.lane_signature()    # the lane store without a key: a graph, the stored tokens, the store key (rig="lane_center" | "bev_fusion")
 
 The same as methods of the class: `GtGenerator.GtGenerator.generate_bev_gt(...)`, `GtGenerator.generate_lane_gt(...)`, `GtGenerator.gt_key(...)` (suite.py). Command line: `python -m GtGenerator generate-bev ROOT --set full`,
 `generate-lane ROOT --rig lane_center|bev_fusion|all`, `generate ROOT` (everything), `key SYSTEM --set full` (cli.py: each command is one of these calls).
 
 THE KEY says which GT it is: the DATA (the identity of the raw nuScenes files, `data_identity` of datasets/nuscenes/manifest.json: the hash of its tables and files; read from the store when the store
 recorded it (the front index and the mask cache do), else from the manifest as it is now) and the CODE (per part the signature = hash of the generator files and options, the git commit of GtGenerator/ that made
-the store and whether it was clean, the GT version, the suite release of releases.csv). `key.id` is a hash of the data and of the signatures of ALL parts of the system (also those a partial key does not
-list) and of the rasteriser: two keys with the same id are the same GT, whatever set was asked for and whichever function made them. Not to be confused with the nuScenes SAMPLE TOKEN of a keyframe,
-which the methods take. `key.complete` is True when every part is stored for what was asked for: the sets `full` / `small` by the sets the index.json of the store says it holds, a list of scenes by
+the store and whether it was clean, the GT version, the suite release of releases.csv). `key.id` is a hash of the data and of the STORES of ALL parts of the system (also those a partial key does not
+list; a store is named by the signature of the code that first made its GT, so new code under `same_gt_as` keeps the id) and of the rasteriser version: two keys with the same id are the same GT, whatever
+set was asked for and whichever function or code made them. Not to be confused with the nuScenes SAMPLE TOKEN of a keyframe, which the methods take. `key.command` is the shell line that makes what an
+incomplete key lacks. `key.complete` is True when every part is stored for what was asked for: the sets `full` / `small` by the sets the index.json of the store says it holds, a list of scenes by
 those scenes, and, when the nuScenes folder is given, by every keyframe of the json tables; a store written with a stride is never complete. It never guesses: no index, no data identity = incomplete.
 
 Parts: bev_fusion = front (<root>/<signature>/), lane (<root>/lane/<signature of the rig>/), masks (<root>/lane/<that signature>/masks/); lane_center = lane only. A version whose code makes the GT of an
@@ -27,6 +29,8 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Optional, Tuple
+
+from . import where
 
 SYSTEMS = ("bev_fusion", "lane_center")                          # the rigs of lane_gt.RIGS (a test pins that they are the same)
 BORDERS = (0.0, 0.5)
@@ -55,11 +59,23 @@ class GtKey:
     release: Optional[str]          # the suite release of this source (releases.csv): v12
     parts: Tuple[Part, ...]
     out: str                        # <data root>/groundtruth (the folder that holds the stores)
-    id: str                         # 12 hex characters over the data and the signatures of ALL parts of the system: the same GT has the same id, whatever was asked for
+    id: str                         # 12 hex characters over the data and the STORES of ALL parts of the system: the same GT has the same id, whatever was asked for and whichever code made it
 
     @property
     def complete(self):
         return self.data != "unknown" and all(p.complete for p in self.parts)
+
+    @property
+    def command(self):
+        """the shell line that makes what this key lacks, "" when every part is stored: `generate-bev` (front GT, lane GT, masks), `generate-lane` for a key of the lane part alone.
+        DATAROOT is the nuScenes folder (a key does not hold it); FILE lists the sequences of a key that was asked for by scenes. Also "" for a key that is incomplete only
+        because its data identity is unknown (no store recorded one and datasets/nuscenes/manifest.json cannot be read): no generation repairs that, the manifest does"""
+        if all(p.complete for p in self.parts):
+            return ""
+        what = f"generate-lane DATAROOT --rig {self.system}" if [p.name for p in self.parts] == ["lane"] else "generate-bev DATAROOT"
+        scenes = f" --set {self.set_name}" if self.set_name in ("full", "small") else "" if self.set_name == "all" else " --scenes-file FILE"
+        out = "" if os.path.abspath(self.out) == os.path.abspath(where.root()) else f" --out {self.out}"
+        return f"python -m GtGenerator {what} --version {self.dataset}{scenes}{out}"
 
     def part(self, name):
         for p in self.parts:
@@ -76,7 +92,7 @@ class GtKey:
             own = f" (the GT of store {p.store})" if p.store != p.signature else ""                 # a version whose code makes the GT of an older one: v9 -> v8, l5 lane_center -> l4
             bits.append(f"{p.name} {p.signature}{own} @ {p.commit or '?'}{'+dirty' if p.dirty else ''}")
         bits.append("complete" if self.complete else "INCOMPLETE: " + ", ".join([p.name for p in self.parts if not p.complete] + (["data identity"] if self.data == "unknown" else [])))
-        return " | ".join(bits)
+        return " | ".join(bits + ([f"make it: {self.command}"] if self.command else []))
 
     def as_dict(self):
         return dict(id=self.id, system=self.system, dataset=self.dataset, set=self.set_name, data=self.data, release=self.release, complete=self.complete,
@@ -93,13 +109,37 @@ class GtKey:
 
     def lane(self, token):
         """the lane graph of the system: the rig bev_fusion (frame ego) or lane_center (frame lane)"""
-        from . import lane_gt
-        return lane_gt.load(token, data=os.path.join(self.out, "lane"), rig=self.system)
+        return load_lane(token, self.system, self.out)
 
     def mask(self, token, kind="intersection", border_m=0.0):
         """an area mask in the BEV grid from the packed cache, (120, 104) uint8 (BEV Fusion only)"""
         from . import lane_raster
         return lane_raster.load_mask(token, kind, border_m, store_dir=self.part("lane").path)
+
+
+# ---------------------------------------------------------------------------------------------------------------- the lane store without a key: what a loader and a cache name need
+def lane_signature(rig="lane_center"):
+    """the STORE key (10 hex) of the lane GT of `rig` for this source: the folder name below <store root>/lane/, after `same_gt_as` of lane_versions.csv. What a cache name or a
+    record carries; the code signature (lane_gt.code_signature) names the code, not the GT"""
+    from . import lane_gt
+    return lane_gt.signature(rig=rig)
+
+
+def _lane_root(data):
+    """the folder of the lane stores below the store root `data` (default where.root(), read at the call)"""
+    return os.path.join(os.path.expanduser(data) if data else where.root(), "lane")
+
+
+def load_lane(token, rig="lane_center", data=None):
+    """the stored lane graph of a keyframe for `rig`: a dict (AGENTS.md section 3b; frame lane for lane_center, ego for bev_fusion). FileNotFoundError names the folders that exist"""
+    from . import lane_gt
+    return lane_gt.load(token, data=_lane_root(data), rig=rig)
+
+
+def lane_tokens(rig="lane_center", data=None):
+    """the sample tokens with a stored lane graph of `rig`: a set, by file name (one listing of the folder)"""
+    from . import lane_gt
+    return lane_gt.held(os.path.join(_lane_root(data), lane_gt.signature(rig=rig)))
 
 
 MANIFEST = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datasets", "nuscenes", "manifest.json")
@@ -162,7 +202,7 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
     file on 16 threads: 12 - 16 s per store of 34k files; False = by name only). See the module doc for what complete means"""
     from . import lane_gt, lane_raster, versions
     from .store import front_keys, names, read_index
-    from .suite import DATA, code_signature, current_signature, current_version
+    from .suite import code_signature, current_signature, current_version
     if system not in SYSTEMS:
         raise ValueError(f"unknown system {system!r}; known: {SYSTEMS}")
     all_parts = ("front", "lane", "masks") if system == "bev_fusion" else ("lane",)
@@ -170,7 +210,7 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
     if [p for p in shown if p not in all_parts]:
         raise ValueError(f"the system {system} has the parts {all_parts}, not {tuple(shown)}")
     options = dict(options or {})
-    out = os.path.expanduser(out) if out else DATA
+    out = os.path.expanduser(out) if out else where.root()
     want = _tokens(dataroot, dataset, set_name, scenes)
     lane_store, bf_store = lane_gt.signature(rig=system), lane_gt.signature(rig="bev_fusion")
     raster = f"{lane_gt.code_signature(rig='bev_fusion')}/{lane_raster.RASTER_VERSION}"
@@ -207,7 +247,9 @@ def key_of(system, dataset="v1.0-trainval", set_name="full", out=None, parts=Non
         seen.append(info["data"][:12] if info else "")
     known = {d for d in seen if d}
     data = "mixed" if len(known) > 1 or "mixed" in known else next(iter(known), None) or data_identity()
-    h = hashlib.sha1("|".join([system, data] + [f"{n}:{ident[n][0]}:{ident[n][1]}" for n in all_parts]).encode())
+    # the id names the GT, not the code: the STORE of each part (after same_gt_as) and, for the masks, the version of the rasteriser; a comment edit of a hashed file keeps it
+    names_gt = {"front": ident["front"][1], "lane": lane_store, "masks": f"{bf_store}/{lane_raster.RASTER_VERSION}"}
+    h = hashlib.sha1("|".join([system, data] + [f"{n}:{names_gt[n]}" for n in all_parts]).encode())
     return GtKey(system, dataset, set_name if set_name else (_scenes_label(scenes) if scenes else "all"), data, versions.current_release(), tuple(built), out, h.hexdigest()[:12])
 
 
@@ -271,9 +313,8 @@ def make_lane_gt(dataroot, out, version, scenes=None, workers=1, verbose=True, r
 
 def _roots(dataroot, out, version):
     from .store import detect_version
-    from .suite import DATA
     dataroot_ = os.path.expanduser(dataroot)
-    return dataroot_, (version or detect_version(dataroot_)), (os.path.expanduser(out) if out else DATA)
+    return dataroot_, (version or detect_version(dataroot_)), (os.path.expanduser(out) if out else where.root())
 
 
 def generate_bev_gt(dataroot, set_name=None, scenes=None, out=None, version=None, workers=1, borders=BORDERS, verbose=True, **options):

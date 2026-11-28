@@ -4,26 +4,39 @@ Training-ready ground truth per nuScenes keyframe (sample token, 2 Hz, 39 - 41 p
 a velocity / flow field in m/s (**front GT**), and the **lane GT**. Everything is in seconds, never "per frame". Nothing in it imports a problem's code. Commands, stores, versions and how to extend
 it: [`README.md`](README.md). Current: front GT v13 (signature `a107e0b4e8`), lane GT l6.1 (stores `9ad1d4ce30` rig `lane_center`, `8a04143278` rig `bev_fusion`), release v15.
 
-## 1. Entry points
-| I want | do this |
-|---|---|
-| the whole GT of one system, one call | BEV Fusion: `key = GtGenerator.generate_bev_gt(root, set_name="full")` (front GT + lane GT of the rig `bev_fusion` + intersection masks at borders 0 and 0.5 m); Spurmitte: `GtGenerator.generate_lane_gt(root, rig="lane_center")` (`rig="all"`: both, a dict). Resumable; they return a **GT key** |
-| the key of what is stored (the check before a training) | `GtGenerator.gt_key("bev_fusion", "v1.0-trainval", "full")`, shell `python -m GtGenerator key bev_fusion --set full` (exit 1 when incomplete); `GtGenerator.missing(tokens)` / `have` for the front GT alone |
-| to read through a key | `key.load(token)` (front GT), `key.lane(token)` (lane graph; frame ego for `bev_fusion`, lane for `lane_center`), `key.mask(token, "intersection", border_m=0.5)`: (120, 104) uint8, `[ix, iy]` like the GT maps (`bev_fusion` only) |
-| stored front GT in training or analysis | `GtGenerator.load(token)` (no nuScenes needed; FileNotFoundError names the folders that exist); the tokens of a sequence: `GtGenerator.scene_tokens("scene-0561", "v1.0-trainval")` |
-| to generate a nuScenes folder (all sequences or some) | `GtGenerator.generate(root, set_name=..., scenes=..., stride=..., workers=...)` or `python -m GtGenerator generate ROOT`: front GT, lane GT, masks; resumable, memory-light, no GPU; trainval takes hours. Pass keywords: the method `GtGenerator.GtGenerator.generate` (adds `keys`, `ok`) orders its arguments differently |
-| single keyframes in code (other options, a quick look) | `GtGenerator.GtGenerator(root, "v1.0-mini").keyframe(token)`; prev / cur / next with the ego motion: `.training_sample(token)` (section 4) |
-| a lane graph | `GtGenerator.lane_gt.load(token, rig=...)` (stored), `GtGenerator.lane_gt.LaneGT(root, version, scenes=[name]).graph(token)` (made on demand), `GtGenerator.lane_gt.missing(tokens)` |
-| to look | `python -m GtGenerator view OUT_DIR <token>` (stored) or `scene-0061:8` (mini, made now); `video SCENE OUT.mp4`; `lanegraph OUT.png scene-0061:8`; `report` (all checks, one PDF) |
-| to be sure after editing the generator | `python -m GtGenerator selftest` (it also checks that this file names every layer, meta entry and box field) |
+## 1. The interface
+A problem (`problems/`), the research core (`autoresearch/`) and `datasets/` use `import GtGenerator` and the names of this table (they are `GtGenerator.__all__`; `__init__.py` has the contract line of
+each), or `python -m GtGenerator COMMAND` across a process boundary, and nothing below them: no module or file of this folder, no folder or file name below the store root, no file format, no version table. A name that is missing is added
+to the table, not imported from below. The test of the rule: `GtGenerator.check_imports([folder, ...])` lists every use below the interface as `file:line: text` (`[]` = none; one line in a test of a
+problem), and `python -m GtGenerator selftest --only interface` runs it over the three folders.
+
+| I want | name | what comes back |
+|---|---|---|
+| where the stores are | `GtGenerator.store_root()` | str: `<data root>/groundtruth`, resolved at every call |
+| which GT this source reads (for a cache name, a record) | `GtGenerator.current_signature()` (front), `GtGenerator.lane_signature(rig="lane_center")`; on a generator object `gen.store_signature()` | str, 10 hex: the key of the STORE (after `same_gt_as`), never the code signature: an edit that changes no GT keeps it |
+| the version name of it | `GtGenerator.current_version()`, `GtGenerator.version_of_key("0.5_4_a107e0b4e8")`, `GtGenerator.version_names()` | "v13"; None for a key that is no released version; the list of all front versions, oldest first (what a split may name as its GT) |
+| the check before a training | `GtGenerator.gt_key("bev_fusion", "v1.0-trainval", "full")`; shell `python -m GtGenerator key bev_fusion --set full` (exit 1 when incomplete); `GtGenerator.missing(tokens)` / shell `have` for the front GT alone | `key`, a `GtGenerator.GtKey`: `key.complete`, `key.command` (the shell line that makes the parts that are missing, "" when none is), `key.id` (the same GT has the same id), `print(key)`; the list of tokens that are not stored |
+| to read through a key | `key.load(token)`, `key.lane(token)`, `key.mask(token, "intersection", border_m=0.5)` | the front keyframe; the lane graph (frame ego for `bev_fusion`, lane for `lane_center`); (120, 104) uint8, `[ix, iy]` like the GT maps (`bev_fusion` only) |
+| a stored front keyframe | `GtGenerator.load(token)` | the dict of section 3 (no nuScenes needed; FileNotFoundError names the folders that exist) |
+| a stored lane graph | `GtGenerator.load_lane(token, rig="lane_center")`, `GtGenerator.lane_tokens(rig="lane_center")` | the dict of section 3b; the set of the sample tokens that are stored |
+| the keyframes of a sequence | `GtGenerator.scene_tokens("scene-0561", "v1.0-trainval")` | list of sample tokens in time order (json tables only, no devkit) |
+| GT made in a loader, single keyframes | `GtGenerator.GtGenerator(root, "v1.0-mini")` = `gen` (everything after the version by keyword: `nusc=` an open devkit, `light=True, scenes=[...]` the memory-light one; options `use_flow`, `use_radar`, `flow_config`, `boxes_at`) | `gen.keyframe(token)`: the dict of section 3; `gen.training_sample(token)`: prev / cur / next (section 4); `gen.keyframes(scene)`, `gen.scenes()`; the raw side the GT itself uses: `gen.cam(token)`, `gen.camera_track(token)`, `gen.ego_steps(t0, t1, track)`, `gen.nusc` |
+| the whole GT of a system, or of a nuScenes folder | `GtGenerator.generate_bev_gt(root, set_name="full")` (front GT + lane GT of the rig `bev_fusion` + intersection masks at borders 0 and 0.5 m), `GtGenerator.generate_lane_gt(root, rig="lane_center")` (`rig="all"`: both, a dict), `GtGenerator.generate(root, set_name=..., scenes=..., workers=...)` (everything); shell `generate-bev`, `generate-lane`, `generate` | a GT key (`generate`: a dict); resumable, memory-light, no GPU, trainval takes hours. Pass keywords: the method `GtGenerator.GtGenerator.generate` (adds `keys`, `ok`) orders its arguments differently |
+| raw nuScenes as the GT reads it | `GtGenerator.light_nuscenes(root, version, scenes=[...], cameras=(...))`, `GtGenerator.pose_matrix(record)` | a devkit-like object holding only these sequences and sensors; (4, 4) float64 of an ego_pose / calibrated_sensor record |
+| the definitions a network and its tests share with the GT | `GtGenerator.GridSpec`, `GtGenerator.AREAS`, `GtGenerator.LINES`, `GtGenerator.OBJECTS`, `GtGenerator.DIST_MAX`, `GtGenerator.cell_centres(grid)`, `GtGenerator.occlusion(gx, gy, cam_xy, footprints)`, `GtGenerator.radar_cells(gx, gy, poses)` | the grid (section 3), the layer names, the truncation of the distance layers in m, the cell centres `(gx, gy)`, bool cell masks (hidden behind a footprint; inside a radar fan) |
+| where a loss or a score counts | `GtGenerator.coverage_for(g, kind)`, `GtGenerator.shares_in(g, corners, height or group=...)`, `GtGenerator.mask_for("bev_fusion")` | section 3a: bool cells; the observed shares of a box; the static masks of a rig |
+| a camera picture with the lane graph on it | `GtGenerator.lane_camera_image(gt, sample, graph, channel, T_e2g_front)` | (H, W, 3) uint8 BGR |
+| to look | `python -m GtGenerator view OUT_DIR <token>` (stored) or `scene-0061:8` (mini, made now); `video SCENE OUT.mp4`; `lanegraph OUT.png scene-0061:8`; `report` (all checks, one PDF) | files |
+| to be sure after editing the generator | `python -m GtGenerator selftest` (it also checks that this file names every layer, meta entry and box field, and every public name) | "ok" lines, or the assertion that failed |
 
 ```python
 import GtGenerator
 toks = GtGenerator.scene_tokens("scene-0561", "v1.0-trainval")    # 40 sample tokens in time order (json tables only)
 g = GtGenerator.load(toks[8])                                      # the stored keyframe: layers + "meta"
+lanes = GtGenerator.load_lane(toks[8])                             # the stored lane graph (Spurmitte; rig="bev_fusion": BEV Fusion's frame and window)
 gen = GtGenerator.GtGenerator("~/data/nuscenes", "v1.0-mini")      # keyword options: use_flow, use_radar, flow_config, boxes_at
 g = gen.keyframe(gen.keyframes("scene-0061")[8])                   # the same dict, made now (seconds)
-gen.signature(), GtGenerator.current_signature()                   # this source / the store folder it reads (differ only under `same_gt_as`)
+gen.signature(), gen.store_signature()                             # the code / the store it fills and reads = GtGenerator.current_signature() (they differ only under `same_gt_as`)
 ```
 
 ## 2. Running it (the box is shared)
@@ -71,19 +84,19 @@ radar fan covers / both).
 
 ## 3a. Coverage: what the rig observes (D36 - D38)
 The front rig is one camera and five radars. **Fusion area** = `camera` cells not `occluded`, inside the `radar` fan; outside it everything is **don't care on both sides** (training and evaluation).
-`GtGenerator.coverage` (numpy only, calibration + grid) holds the one definition: `fusion_cells(g)`, `camera_observed(g)`, `coverage_for(g, kind)` (`map` / `objects` / `velocity`: the fusion area;
-`camera_aux`: camera cells not hidden; `radar_aux`: the fan), `camera_cells(gx, gy, K, T_c2e, size, z=...)`, `radar_cells(gx, gy, poses)`, `rig_radar_poses()` (the mean rig, for code without a
-calibration), `hidden_cells`, `footprint_share`, `shares_in`.
+`coverage.py` (numpy only, calibration + grid) holds the one definition. Public: `GtGenerator.coverage_for(g, kind)` (`map` / `objects` / `velocity`: the fusion area; `camera_aux`: camera cells not
+hidden; `radar_aux`: the fan), `GtGenerator.radar_cells(gx, gy, poses)`, `GtGenerator.shares_in`. Inside the folder it is built from `fusion_cells(g)`, `camera_observed(g)`, `camera_cells(gx, gy, K,
+T_c2e, size, z=...)`, `rig_radar_poses()` (the mean rig, for code without a calibration), `hidden_cells`, `footprint_share`.
 - A box hides the ground behind it with its real volume (a low box casts a short shadow). Only observed boxes hide. Boxes stand on the ground plane z = 0 of the ego frame for this purpose; a point inside
   a box's footprint is never hidden by that box.
 - **f = `share_fusion`**: the share of the footprint where the camera sees the object (at the bottom, middle or top of its height, not hidden by another box) AND the radar covers; samples outside the
   grid count as unobserved. Care f >= 0.5, partial 0.1 <= f < 0.5, don't care f < 0.1. A detection gets its f from the same function, `shares_in(g, corners, height or group=...)`; it counts every observed
   box of the frame as an occluder, also the one the detection is: pass a frame whose `meta["boxes"]` leaves a matched box out.
-- Two static coverage masks without boxes (`rig_masks.py`, from the calibration): `GtGenerator.rig_masks.mask_for("bev_fusion")` (front camera + radars on the grid above, (120, 104)) and
-  `mask_for("lane_center")` (six cameras + radars, (200, 200), lane frame x right, y forward) -> `{"camera", "radar", "fusion"}`; another name is an error. `python -m GtGenerator masks out.png`.
+- Two static coverage masks without boxes (`rig_masks.py`, from the calibration): `GtGenerator.mask_for("bev_fusion")` (front camera + radars on the grid above, (120, 104)) and
+  `GtGenerator.mask_for("lane_center")` (six cameras + radars, (200, 200), lane frame x right, y forward) -> `{"camera", "radar", "fusion"}`; another name is an error. `python -m GtGenerator masks out.png`.
 
 ## 3b. The lane GT (`lane_gt.py`; own signature and stores)
-Made from the nuScenes map and the ego pose at the front-camera time; the tiers and the visibility also read the CAM_FRONT ego poses around the keyframe and the annotated boxes. Two **rigs**, one store
+Read with `GtGenerator.load_lane(token, rig=...)`; `GtGenerator.lane_tokens(rig=...)` are the stored tokens, `GtGenerator.lane_signature(rig=...)` is the key of the store. Made from the nuScenes map and the ego pose at the front-camera time; the tiers and the visibility also read the CAM_FRONT ego poses around the keyframe and the annotated boxes. Two **rigs**, one store
 each; geometry, ids, events and tiers are the same, only frame, window and cameras differ:
 | rig | frame | window (`g["half"]`, `g["window"]`) | `vis` / `occ` |
 |---|---|---|---|
@@ -135,5 +148,5 @@ b = g["meta"]["boxes"][int(g["instance"][40, 52])]                              
 s = gen.training_sample(tok)       # needs the generator; None at the first / last keyframe; {"prev", "cur", "next"}, each in its own ego frame
 dt = s["next"]["meta"]["dt"]       # about +0.5 s; s["cur"]["flow"] * dt = first-order displacement of every cell; box["instance"] links the objects
 ```
-The velocity / flow estimator (`GtGenerator.flow.estimate_flow(tracks, ego, t, radar, config)`, dataset independent) takes the ego velocity from the poses, one pose and v = 0 for a stationary track, else a
+The velocity / flow estimator (`estimate_flow(tracks, ego, t, radar, config)` in `flow.py`, dataset independent; inside the folder, not part of the interface) takes the ego velocity from the poses, one pose and v = 0 for a stationary track, else a
 line fit over +-1.2 s, then a robust radar correction of the radial component, and flags what disagrees.

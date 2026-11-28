@@ -674,6 +674,8 @@ def run(root=None, verbose=True):
     generator_msg = generator_selftest(root, verbose=False)
     from .cli_selftest import run as cli_selftest                                      # the command line: one call per command, exit codes, the stores
     cli_msg = cli_selftest(root, verbose=False)
+    from .interface_selftest import run as interface_selftest                          # the interface of the problems: the public names and the rule (check_imports) on a planted file; the scan of
+    interface_msg = interface_selftest(verbose=False, tree=False)                      # problems/ is `selftest --only interface`: this gate must not fail for a half-edited file of another session
     # 5i one release, one command: the standard GT and the lane GT of the same sequences come out of one `generate`, into two stores of one release
     from . import lane_gt as lane_gt_mod
     from .suite import scene_tokens as tokens_of_scene
@@ -737,6 +739,7 @@ def run(root=None, verbose=True):
         print(gt_api_msg)
         print(flow_msg)
         print(cli_msg)
+        print(interface_msg)
         print(generator_msg)
         print(rig_masks_msg)
 
