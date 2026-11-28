@@ -322,15 +322,17 @@
   },
   {
    "id": "timing",
-   "label": "Timing, batch 1,\nquiet GPU, cached\nfeatures: 16.2 ms",
+   "label": "Cost per run: ms,\npeak memory,\nparameters",
    "kind": "eval",
    "col": 3,
    "row": 4,
    "code": [
+    "evaluation/lane_predict.py::measure_cost",
+    "evaluation/lane_cost.py",
     "evaluation/jtoken_eval.py::timing",
     "evaluation/jtiming.py"
    ],
-   "note": "median ms of the whole path, CUDA events, GPU idle (quiet 16.2 - 16.4 ms for the champion); in the first recipe, with the identical architecture, B' alone took 11.4 ms and the head alone 6.7 ms, timed separately",
+   "note": "every run's predict step times the whole path at batch 1 (CUDA events, cached features), reads the peak GPU memory and counts the parameters; times compare only between quiet runs (GPU and host idle)",
    "sub": "jtoken_eval.py +1"
   },
   {

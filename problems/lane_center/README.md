@@ -29,6 +29,19 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
   `e292_a_s*` = B', `e273_p_s*`, `e271_a_s*`), the token cache `e365_cache/`, the label tables `e357_cache/`, `e365_planb/`,
   `refiner_stats_dec32_logit7.npz`.
 
+## What the evaluation reports (`evaluation/adapter.py`)
+| measure | meaning |
+|---|---|
+| `graph.topo_F1` (the score), `graph.junction_F1` | connectivity along the driving direction (30 m from seeds every 5 m); forks and merges matched within 3 m |
+| `graph.F1@0.5`, `graph.F1@1.0`, `graph.lanes_found`, `graph.false_len_frac` | position of the delivered lines; share of true lanes covered; delivered length off every lane |
+| `graph.heading_err_deg` | zig-zag: mean angle between the delivered line and the nearest true lane (delivered length within 1.5 m of one) |
+| `graph.dup_frac`, `graph.vert100_dp` | parallel duplicates; vertices per 100 m |
+| `cost.ms_median`, `cost.ms_p90` | time per frame of B' + head with its layers, batch 1, RTX 3060 (the foundation features are cached and not part of it); comparable only between runs with `cost.quiet` = 1 |
+| `cost.peak_MB`, `cost.params_M` | peak GPU memory of the network (weights + activations of one frame); parameters |
+
+Results of another evaluator or ground truth are not comparable: the judge refuses them and `ledger.csv` marks them (`comparable`). Nothing is
+kept compatible for old results; a number that matters is measured again.
+
 ## Use (from `autoresearch/`, under WSL)
 ```
 python3 -m research new lane_center <slug> "<title>"     # arms are settings of training/configs/base.json (decode, import_weights, every option of the two trainers in stage1 / stage2; from_run through "needs")

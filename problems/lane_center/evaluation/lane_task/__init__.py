@@ -1,7 +1,6 @@
 """The lane-graph measures of the scorer (`../qgraph_eval.py`): geometry (LaneGraph, resample, simplify), raster (Grid, rasterize, thin,
 skeleton_graph), measures (additive counts + formulas). numpy + scipy; no torch. The settings are `../lane_suite.py` (`LaneConfig`).
-These four files are in the evaluator hash. `task.py` and `causes.py` (the old Task of the general evaluation with its error budget) are
-imported by nothing any more.
+These four files are in the evaluator hash.
 """
 import os as _os
 import sys as _sys

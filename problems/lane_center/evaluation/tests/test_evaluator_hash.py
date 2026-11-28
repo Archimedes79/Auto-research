@@ -55,7 +55,7 @@ def imported(path, mods):
                     add(mods[a.name.split(".")[0]], a.name.split(".")[1:2])
         elif isinstance(node, ast.ImportFrom):
             names = [a.name for a in node.names]
-            if node.level and in_package:                                  # from .geometry import X / from . import causes
+            if node.level and in_package:                                  # from .geometry import X / from . import measures
                 add(os.path.join(here, node.module + ".py") if node.module else here, names)
             elif not node.level and node.module and node.module.split(".")[0] in mods:
                 base = mods[node.module.split(".")[0]]
