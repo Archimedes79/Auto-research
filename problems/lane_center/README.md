@@ -7,6 +7,7 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
 | folder | what |
 |---|---|
 | `net/prep/` | data: the token cache (`lane_tokcache.py`) and its loader (`lane_ptok_data.py`), the frames and the graph ground truth (`frames.py`, `lane_gt_data.py`, `lane_tok_data.py`), targets, the ground-truth geometry of the optional position head (`lane_gtgeom_data.py`) |
+| `net/prep/foundation/` | the GaussianCaR features made again from raw nuScenes (`gcar_features.py`) and a check against the stored ones (`check_features.py`); its `README.md` names what must exist outside the repository |
 | `net/model/` | the networks: the token head (`jtoken.py`, the pair geometry `jtok.py`), the lane head B' (`qgraph.py` and its parts), the soft read-out pieces |
 | `net/loss/` | the token loss (`loss_jtoken.py`) and the losses of B' |
 | `training/` | `train/lane_train.py` (the two stages from a run's config), `train/jtoken_train.py` (stage 1), `train/jlive_train.py` (stage 2, with B' live in the loop: `train/lane_live_tok.py`), `trainer.py`, `bflc_paths.py` (where code, data and runs are), `configs/base.json`, the drawing `architecture.*` |
@@ -17,8 +18,11 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
 
 ## Data and runs (not in git; where the machine file says)
 - `<data root>/lane_center/b123/`: the GaussianCaR features (`feats/{train,val}_{dec32,logit7}.npy`, tokens), the graph ground truth the
-  headline numbers are scored against (`graph_gt_{train,val}.pkl`), poses (the scene of a frame). A re-extraction is not bit-identical, so
-  these files are kept.
+  headline numbers are scored against (`graph_gt_{train,val}.pkl`), poses (the scene of a frame). The features are made again by one
+  command (`net/prep/foundation/README.md`: the GaussianCaR clone at a named commit, its weights by hash, raw nuScenes, the environment). A
+  new extraction is not bit-identical, the rasteriser is not deterministic: measured on 44 frames (2026-11-28), dec32 differs from the
+  stored arrays by 0.018 - 0.031 in the mean (mean absolute value 0.8; two new extractions differ by 0.016 - 0.020), correlation per frame
+  0.993 - 0.999 in the median. So these files are kept.
 - `<data root>/groundtruth/lane/9ad1d4ce30/`: the lane ground truth of GtGenerator; `<data root>/nuscenes/`: raw nuScenes (cameras for
   pictures).
 - `<runs root>/lane_center/`: the runs of the experiments, the imported networks of the champion's chain (`e372_s4_s*`, `e373_cb_s*`,

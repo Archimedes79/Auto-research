@@ -15,8 +15,10 @@ python3 -m research machine init --data <dir> --runs <dir> --python gcar=$HOME/m
 Then the tests of `../README.md`. This recipe was written from the export and has not been run on a second machine; the environment of
 this PC was built step by step (the script is `bev_fusion_lane_center/tools/env/setup/setup_gcar_env.sh` in the git tag `v1`).
 
-Not in the export: the Gaussian rasteriser of the GaussianCaR foundation (a local build from its code). Only the extraction of new
-foundation features needs it; the code in this repository reads the cached features.
+Not in the export: the Gaussian rasteriser of the GaussianCaR foundation, a local build inside the clone of its code with the compiler of
+this environment (nvcc 12.9, gcc 13): `../../problems/lane_center/net/prep/foundation/build_rasteriser.sh <clone>`, the clone and its
+weights in the `README.md` there. Only the extraction of new foundation features needs it; the other code in this repository reads the
+cached features.
 
 ## After a change of the environment
 ```
