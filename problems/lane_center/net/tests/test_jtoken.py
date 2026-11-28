@@ -331,13 +331,15 @@ def _gap_brute(p, cand, pnone, chord, cfg):
     t = lambda i, j: cfg["t_long"] if chord[i, j] > 8 else cfg["t_short"]  # noqa: E731
     lo = lambda i, j: cfg["lo_long"] if chord[i, j] > 8 else cfg["lo"]  # noqa: E731
     q = [[sg((P[i, j] - t(i, j)) / cfg["sigma"]) * ends[i][j] for j in range(K)] for i in range(K)]
-    gate = np.array([[(1 - max(q[i])) * (1 - max(q[n][j] for n in range(K))) * sg((P[i, j] - lo(i, j)) / cfg["sigma_lo"]) * ends[i][j] for j in range(K)] for i in range(K)])
+    row = lambda i, j: max(q[i][n] for n in range(K) if n != j)  # noqa: E731
+    col = lambda i, j: max(q[n][j] for n in range(K) if n != i)  # noqa: E731
+    gate = np.array([[(1 - row(i, j)) * (1 - col(i, j)) * sg((P[i, j] - lo(i, j)) / cfg["sigma_lo"]) * ends[i][j] for j in range(K)] for i in range(K)])
     m = P * gate
     lift = np.zeros_like(p)
     for i in range(K):
         for j in range(K):
             rel = (m[i, j] / max(m[i].max(), 1e-12)) ** cfg["gamma"] * (m[i, j] / max(m[:, j].max(), 1e-12)) ** cfg["gamma"]
-            lift[:, i, j] = cand[:, i, j] * gate[i, j] * rel * max(t(i, j) + cfg["delta"] - P[i, j], 0.0)
+            lift[:, i, j] = cand[:, i, j] * gate[i, j] * rel * t(i, j) * max(1 - P[i, j], 0.0)
     out = np.zeros_like(p)
     for c in range(2):
         for i in range(K):
@@ -349,8 +351,9 @@ def _gap_brute(p, cand, pnone, chord, cfg):
 
 def test_close_gaps():
     """E420 the soft gap-closing layer: off (the default) = the head bit for bit and no new state key; a weak link between an open end and an open start is delivered (only the best one), none when its probability is below the lower
-    threshold, when an end already has a delivered link or when a node is not kept; rows stay distributions; against a brute-force form on a random graph; the gradient reaches the input; the head builds it from its args"""
-    cfg = dict(sigma=0.03, sigma_lo=0.01, gamma=16.0, delta=0.05, lo=0.05, lo_long=0.05, t_short=0.3, t_long=0.2, keep=0.6)
+    threshold, when an end already has another delivered link or when a node is not kept; rows stay distributions; the output never falls when the pair's own probability rises (both classes, below, at and above the thresholds);
+    against a brute-force form on a random graph; the head builds it from its args"""
+    cfg = dict(sigma=0.03, sigma_lo=0.01, gamma=16.0, lo=0.05, lo_long=0.05, t_short=0.3, t_long=0.2, keep=0.6)
     K = 4
     pairs = ((0, 1), (1, 2), (1, 3), (2, 3))
 
@@ -371,17 +374,32 @@ def test_close_gaps():
     out = run((0.8, 0.10, 0.07, 0.8))
     assert float(out[1, 2]) >= 0.3, ("the gap 1 -> 2 is closed", float(out[1, 2]))
     assert float(out[1, 3]) < 0.1, ("the weaker candidate of the same source stays", float(out[1, 3]))
-    assert abs(float(out[0, 1]) - 0.8) < 1e-3 and abs(float(out[2, 3]) - 0.8) < 1e-3, "delivered links are not changed"
+    for i, j in ((0, 1), (2, 3)):
+        assert 0.8 <= float(out[i, j]) <= 0.8 + 0.3 * 0.2 + 1e-5, ("a delivered link stays delivered and rises by at most t (1 - p)", i, j, float(out[i, j]))
     assert abs(float(out[1, K]) - (1 - float(out[1, :K].sum()))) < 1e-5 and float(out[1, K]) < 1 - 0.17, "the lifted mass comes from the none slot"
-    assert float(run((0.8, 0.03, 0.02, 0.8))[1, 2]) < 0.1, "below the lower threshold nothing is lifted"
+    assert float(run((0.8, 0.03, 0.02, 0.8))[1, 2]) < 0.1, "below the lower threshold nothing is delivered"
     assert float(run((0.8, 0.10, 0.60, 0.1))[1, 2]) < 0.12, "a source with a delivered successor is not open"
     assert float(run((0.8, 0.10, 0.07, 0.8), torch.tensor([[0.0, 0.99, 0.0, 0.0]]))[1, 2]) < 0.12, "a node that is not kept opens no gap"
-    full = run((0.8, 0.22, 0.22, 0.1))                                       # a row whose mass is nearly used up
-    assert float(full[1, :K].sum()) <= 1.0 + 1e-5 and float(full[1, 2:4].max()) >= 0.3
-    logp, cand = logp_of((0.8, 0.28, 0.07, 0.8))
-    logp.requires_grad_()
-    JK.close_gaps(logp, cand, kept, chord, cfg).exp()[0, 0, 1, 2].backward()
-    assert float(logp.grad[0, 0, 1, 2].abs()) > 0, "the gradient reaches the input log-probabilities"
+    two = run((0.8, 0.22, 0.22, 0.1))                                        # two equal candidates of one source
+    assert float(two[1, :K].sum()) <= 1.0 + 1e-5 and float(two[1, 2:4].min()) >= 0.3
+    for far in (2.0, 12.0):                                                  # the pair 1 -> 2 in the short (t 0.3) and the long class (t 0.2)
+        ch = torch.full((1, K, K), 2.0)
+        ch[0, 1, 2] = far
+        for others in ((0.8, 0.07, 0.8), (0.05, 0.20, 0.1), (0.4, 0.28, 0.29), (0.8, 0.6, 0.1)):
+            last = -1.0
+            for x in (0.001, 0.02, 0.04, 0.05, 0.06, 0.07, 0.10, 0.15, 0.18, 0.2, 0.25, 0.28, 0.29, 0.3, 0.31, 0.4, 0.5, 0.65):
+                leaf = torch.tensor(x, dtype=torch.float64, requires_grad=True)
+                p = torch.zeros(1, 2, K, K, dtype=torch.float64)
+                cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
+                for (i, j), v in zip(pairs, (others[0], None, others[1], others[2])):
+                    c = int(float(ch[0, i, j]) > 8)
+                    p[0, c, i, j] = leaf if v is None else v
+                    cand[0, c, i, j] = True
+                logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1)
+                got = JK.close_gaps(logp, cand, kept, ch, cfg).exp()[0, int(far > 8), 1, 2]
+                got.backward()
+                assert float(leaf.grad) >= -1e-9 and float(got) >= last - 1e-9, ("the output falls when the pair's own probability rises", far, others, x, float(got), float(leaf.grad))
+                last = float(got)
     rng = np.random.RandomState(5)
     K = 7
     cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
@@ -413,7 +431,7 @@ def test_close_gaps():
     assert torch.allclose(o2["logp"], JK.close_gaps(JK.skip_suppress(o0["logp"], o0["cand"], pnone, o0["chord"], both.skip), o0["cand"], pnone, o0["chord"], cfg)), "the skip layer first, then the gaps"
     assert JKT.build_head(dict(close_gaps=cfg)).gap == cfg and JKT.build_head({}).gap is None
     must_fail(JK.JTokenHead, gap=dict(lo=0.05))
-    print("close_gaps: a gap between an open end and an open start is closed (best candidate only; not below the lower threshold, not at a source with a successor, not over a dropped node), rows stay distributions, brute force on a random graph, head off = bit for bit, skip then gaps, build_head: ok")
+    print("close_gaps: a gap between an open end and an open start is closed (best candidate only; not below the lower threshold, not at a source with a successor, not over a dropped node), rows stay distributions, never falls with the pair's own probability, brute force on a random graph, head off = bit for bit, skip then gaps, build_head: ok")
 
 
 def test_pos_loss():

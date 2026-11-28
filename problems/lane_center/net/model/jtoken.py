@@ -50,7 +50,7 @@ import jtok as JT  # noqa: E402
 SHORT, NG = JT.SHORT, JT.NG
 NEG = -1e4                                                                  # the fill of a masked logit
 SKIP_KEYS = ("sigma", "hops", "m", "t_short", "t_long", "keep")             # E399: the settings of the soft skip-link layer (`skip_suppress`)
-GAP_KEYS = ("sigma", "sigma_lo", "gamma", "delta", "lo", "lo_long", "t_short", "t_long", "keep")    # E420: the settings of the soft gap-closing layer (`close_gaps`)
+GAP_KEYS = ("sigma", "sigma_lo", "gamma", "lo", "lo_long", "t_short", "t_long", "keep")    # E420: the settings of the soft gap-closing layer (`close_gaps`)
 TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
 SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
 BANDS = 4
@@ -130,12 +130,20 @@ def skip_suppress(logp, cand, pnone, chord, cfg):
     return torch.cat([lp, none[..., None]], -1)
 
 
+def _max_of_others(q, dim):
+    """for every entry of q the largest of the OTHER entries along dim (q.shape[dim] >= 2; of two equal largest entries each sees the other)"""
+    v, i = q.topk(2, dim=dim)
+    own = torch.zeros_like(q, dtype=torch.bool).scatter(dim, i.narrow(dim, 0, 1), True)
+    return torch.where(own, v.narrow(dim, 1, 1), v.narrow(dim, 0, 1))
+
+
 def close_gaps(logp, cand, pnone, chord, cfg):
-    """E420: the soft gap-closing layer (no parameter, differentiable). Arguments as `skip_suppress`; cfg: sigma, sigma_lo, gamma, delta, lo, lo_long, t_short, t_long, keep. With P the probability of a pair, t its class threshold, k the soft
-    "kept" of a node and q = sigmoid((P - t) / sigma) x k_i x k_j the soft "delivered" strength of a link: a pair is OPEN by (1 - max_j' q(i, j')) x (1 - max_i' q(i', j)) (its source has no delivered successor and its target no
-    delivered predecessor), ELIGIBLE by sigmoid((P - lo) / sigma_lo) x k_i x k_j (lo_long for the long class) and BEST by (m / max over the source's pairs)^gamma x (m / max over the target's pairs)^gamma with m = P x open x eligible
-    (near 1 for the strongest such pair of both its ends, near 0 for any weaker one). P is lifted by open x eligible x best x max(t + delta - P, 0), the lifted mass is taken from the source's none slot of the class and, where that
-    does not suffice, from its other links in proportion; every row stays a probability distribution. A weak link that is the only way to continue an open end is thus delivered"""
+    """E420: the soft gap-closing layer (no parameter, differentiable, never decreasing in a pair's own probability). Arguments as `skip_suppress`; cfg: sigma, sigma_lo, gamma, lo, lo_long, t_short, t_long, keep. With P the probability
+    of a pair, t its class threshold, k the soft "kept" of a node and q = sigmoid((P - t) / sigma) x k_i x k_j the soft "delivered" strength of a link: a pair is OPEN by (1 - max_j' q(i, j')) x (1 - max_i' q(i', j)) over the OTHER pairs
+    j' != j and i' != i (no other delivered link leaves its source or reaches its target), ELIGIBLE by sigmoid((P - lo) / sigma_lo) x k_i x k_j (lo_long for the long class) and BEST by (m / max over the source's pairs)^gamma x
+    (m / max over the target's pairs)^gamma with m = P x open x eligible (1 for the strongest such pair of both its ends, near 0 for a clearly weaker one). With w = open x eligible x best, P is lifted by w x t x (1 - P): at w = 1 to
+    t + (1 - t) P, above the threshold and still ordered by P. A pair's own P enters neither its openness nor anything that falls with it, so the output never falls when P rises. The lifted mass is taken from the source's none slot of
+    the class and, where that does not suffice, from its other links in proportion; every row stays a probability distribution. A weak link that is the only way to continue an open end is thus delivered"""
     K = cand.shape[-1]
     p = logp[..., :K].exp() * cand
     P = p.sum(1)
@@ -146,10 +154,10 @@ def close_gaps(logp, cand, pnone, chord, cfg):
     k = torch.sigmoid((float(cfg["keep"]) - pnone.to(P.dtype)) / s)
     ends = cand.any(1) * k[:, :, None] * k[:, None, :]
     q = torch.sigmoid((P - t) / s) * ends
-    gate = (1.0 - q.amax(2))[:, :, None] * (1.0 - q.amax(1))[:, None, :] * torch.sigmoid((P - lo) / float(cfg["sigma_lo"])) * ends
+    gate = (1.0 - _max_of_others(q, 2)) * (1.0 - _max_of_others(q, 1)) * torch.sigmoid((P - lo) / float(cfg["sigma_lo"])) * ends
     m = P * gate
     rel = lambda dim: (m / m.amax(dim, keepdim=True).clamp_min(1e-12)) ** gamma  # noqa: E731
-    lift = (gate * rel(2) * rel(1) * (t + float(cfg["delta"]) - P).clamp_min(0.0))[:, None] * cand
+    lift = (gate * rel(2) * rel(1) * t * (1.0 - P).clamp_min(0.0))[:, None] * cand
     room = (1.0 - lift.sum(-1, keepdim=True)).clamp_min(0.0)
     p2 = p * (room / p.sum(-1, keepdim=True).clamp_min(1e-30)).clamp(max=1.0) + lift
     lp = torch.where(cand, p2.clamp_min(1e-30).log(), logp[..., :K])
