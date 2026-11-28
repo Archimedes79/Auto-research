@@ -73,9 +73,9 @@ def load_model(run_dir, device="cuda"):
         a, state = sd.get("args") or {}, sd["state"]
     else:
         sd = torch.load(os.path.join(run_dir, "ckpt.pt"), map_location="cpu", weights_only=False)
-        cfg = os.path.join(run_dir, "config.json")                                              # the trainer writes the run's args here: a running soft arm must not load as a plain head
+        cfg = os.path.join(run_dir, "config.json")                                              # the trainer writes the run's args here: a running arm with the Matrix-NMS layer must not load as a plain head
         a, state = (json.load(open(cfg)).get("args") or {}) if os.path.exists(cfg) else {}, sd["model"]
-    m = QG.QGraph(width=int(a.get("width", 48)), soft_nms=a.get("soft_nms"), ends=bool(a.get("ends")))                    # E284: ends = the junction end head of phase 8 (its tensors are in the checkpoint); E277: the soft close-node step is a property of the model (args of the checkpoint)
+    m = QG.from_args(a)                                                                         # the Matrix-NMS layer is a property of the model (args of the checkpoint)
     m.load_state_dict(state)
     return m.to(device).eval()
 

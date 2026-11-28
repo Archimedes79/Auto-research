@@ -6,7 +6,7 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
 
 | folder | what |
 |---|---|
-| `net/prep/` | data: the token cache (`lane_tokcache.py`) and its loader (`lane_ptok_data.py`), the frames and the graph ground truth (`frames.py`, `lane_gt_data.py`, `lane_tok_data.py`), targets, the ground-truth geometry of the optional position head (`lane_gtgeom_data.py`) |
+| `net/prep/` | data: the token cache (`lane_tokcache.py`) and its loader (`lane_ptok_data.py`), the frames and the graph ground truth (`frames.py`, `lane_gt_data.py`, `lane_tok_data.py`), targets |
 | `net/prep/foundation/` | the GaussianCaR features made again from raw nuScenes (`gcar_features.py`) and a check against the stored ones (`check_features.py`); its `README.md` names what must exist outside the repository |
 | `net/model/` | the networks: the token head (`jtoken.py`, the pair geometry `jtok.py`), the lane head B' (`qgraph.py` and its parts), the soft read-out pieces |
 | `net/loss/` | the token loss (`loss_jtoken.py`) and the losses of B' |

@@ -50,8 +50,7 @@ def main(argv):
     os.makedirs(run_dir, exist_ok=True)
     if cfg.get("import_weights"):
         print(f"weights of {import_weights(cfg, run_dir)}", flush=True)
-    a = argparse.Namespace(run=cfg["name"], seed=cfg["seed"], split=os.environ.get("RESEARCH_SPLIT") or "val", live=True, bs=None, every=1, drop=0.0,
-                           drop_seed=0, max=0, cpu=False)
+    a = argparse.Namespace(run=cfg["name"], seed=cfg["seed"], split=os.environ.get("RESEARCH_SPLIT") or "val", live=True, bs=None, every=1, max=0, cpu=False)
     path = JE.dump_path(a, BP.RUNS, 0)
     if os.path.exists(path):
         print(f"stored: {path}")

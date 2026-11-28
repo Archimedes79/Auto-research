@@ -15,7 +15,7 @@ Derived data: none (nothing is cached here); the code, its selftest and the fixt
 
 Frames: TRAIN / VAL as the cache (`lane_tok_data.TokData(split, res=2.0)`); TEST guard: VAL is exactly `data/splits.json['val']` (`check_rows`; the feature files also hold the TEST rows, never read).
 LiveData item: x (39, 200, 200) f16 (normalised as QData / TokData), token, row, table (the E357 GT table of the frame on the 2 m lattice); NO `QData` item (it fits the long-link scales per frame: too slow). `collate` adds `targets`: the dense maps of B''s own node
-loss, `node_targets(table)` = `qtargets.grid_targets` on the table: exists (50, 50), flags (8, 50, 50), offset / dirv (2, 50, 50), sstart, uout, uin (50, 50); the tier / vis / ztier maps of the E276 switches are not made (B' was trained without them: `NODE_CFG`).
+loss, `node_targets(table)` = `qtargets.grid_targets` on the table: exists (50, 50), flags (8, 50, 50), offset / dirv (2, 50, 50), sstart, uout, uin (50, 50); the tier / vis / ztier maps of `grid_targets` are not made (the node loss does not read them).
 LiveSource.forward(x, tables, token, row, token_drop=0.0, seed=0, gate=True) -> dict(no, batch) = `tokens(x)` -> (no, tk) (pyramid + node stage + live tokens: device work, asynchronous on a GPU) followed by `labelled(tk, tables, token, row, token_drop, seed, gate)` -> batch
 (the label step: it reads the tokens back to the host and runs on the CPU). B' runs in float32 also inside the trainer's bf16 autocast (the cache was made in float32). `no` = `QGraph.node_stage` outputs (e = the damped logit, e_raw = the head's own).
 `batch` = the dict of `lane_ptok_data.collate` (tok (B, K, 64), pos, dirv, e, e_raw, s, uout, uin, flags, valid, ytype, y, ylong, yscale, gt_out, token, row, tokens_np, label) + `lab` (the per-frame dicts of `lane_tokcache.label_frame`: counts, pair gate) and
@@ -91,7 +91,6 @@ import qpredict as QP  # noqa: E402
 import qtargets as QT  # noqa: E402
 
 NODE_KEYS = ("exists", "flags", "offset", "dirv", "sstart", "uout", "uin")                              # the maps `qgraph.node_loss` reads (B''s dense target)
-NODE_CFG = dict(node_w_evt=0.0, node_w_inter=0.0, tier_w=None, vis_w=1.0, neg_w=None, node_loss="e273")  # `qgraph.CFG` of B''s training (args of runs/e292_a_s<S>/model.pt = the defaults): the node loss is the plain dense one
 GRAPH_KEYS = tuple(k for k in LP.TOKEN_FIELDS if k != "valid")                                          # the token inputs of the head that carry the graph (valid is a constant)
 NP_KEYS = ("pos", "dirv", "e_p", "flags_p", "s_p")                                                     # the float fields of `tokens_np` (what the read-out writer reads; plus cell and valid)
 STATS = ("n_gt", "n_gt_assigned", "n_links", "n_links_c", "gt_out", "n_nosrc", "n_reach", "n_pairs", "n_conflict", "n_valid", "n_deliv", "n_deliv_near", "n_gt_deliv_cov", "n_e50_in")      # per-frame counts of a label dict, as the cache stores them
@@ -106,9 +105,7 @@ def node_targets(table):
 
 
 def b_loss(no, targets):
-    """B''s own node loss at its E273 / E292 form (`qgraph.node_loss`, the weight is the caller's): no = node-stage outputs, targets = the `targets` of `collate` -> (loss, info). The loss switches of `qgraph.CFG` must be those of B''s training (NODE_CFG)"""
-    bad = {k: LQG.CFG[k] for k, v in NODE_CFG.items() if LQG.CFG[k] != v}
-    assert not bad, f"`qgraph.CFG` is not that of B''s training: {bad} (B' was trained with {NODE_CFG})"
+    """B''s own node loss, the plain dense one of its training (`loss_qgraph.node_loss`, the weight is the caller's): no = node-stage outputs, targets = the `targets` of `collate` -> (loss, info)"""
     return LQG.node_loss(no, targets)
 
 
@@ -523,18 +520,13 @@ def _t_targets():
     assert g["sstart"][20, 27] == 1 and g["sstart"].sum() == 1 and np.allclose(g["dirv"][:, 20, 27], [1.0, 0.0]) and g["dirv"][0].sum() == 3
     assert g["uout"][21, 27] == 1 and g["uin"][30, 27] == 1 and g["uout"].sum() == 1 and g["uin"].sum() == 1, "a long link marks its source (uout) and its destination (uin)"
     assert all(float(np.abs(v).sum()) == 0 for v in node_targets(toy_table(np.zeros((0, 2)), [], [])).values()), "a frame without GT nodes has empty maps"
-    # B's loss: a perfect prediction costs almost nothing, a wrong one costs more; the loss switches must be those of B''s training
+    # B's loss: a perfect prediction costs almost nothing, a wrong one costs more
     tg = {k: torch.from_numpy(v)[None] for k, v in g.items()}
     ex = tg["exists"]
     no = dict(e=ex * 24 - 12, flags=tg["flags"] * 24 - 12, off=tg["offset"], dir_raw=tg["dirv"] + (1 - ex)[:, None] * torch.tensor([0.0, 1.0]).view(1, 2, 1, 1), s=tg["sstart"] * 24 - 12, uout=tg["uout"] * 24 - 12, uin=tg["uin"] * 24 - 12)
     good, info = b_loss(no, tg)
     assert float(good) < 0.01 and sorted(info) == ["dir", "e", "flags", "off", "s", "u"], (float(good), info)
     assert float(b_loss(dict(no, e=-no["e"]), tg)[0]) > 1.0 and float(b_loss(no, {k: v.transpose(-1, -2) for k, v in tg.items()})[0]) > 0.1
-    LQG.CFG["node_w_evt"] = 2.0
-    try:
-        refuses(lambda: b_loss(no, tg), "not that of B''s training")
-    finally:
-        LQG.CFG["node_w_evt"] = NODE_CFG["node_w_evt"]
 
 
 def _t_tokens():

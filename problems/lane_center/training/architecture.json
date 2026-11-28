@@ -352,12 +352,10 @@
    "row": 6,
    "code": [
     "net/prep/lane_gt_data.py",
-    "net/prep/lane_gtgeom_data.py",
     "net/prep/frames.py",
     "net/prep/polylines.py",
     "net/prep/qtargets.py",
-    "net/prep/qraster.py",
-    "net/prep/qzones.py"
+    "net/prep/qraster.py"
    ],
    "note": "the 39 frozen channels of a frame and the targets drawn from the lane GT (nodes on a 2 m grid, links, pixel maps); rows, normalisation and the stored per-part files come through net/prep/frames.py, which the old chain reads too (p16_data, p8_lib)"
   },
@@ -445,16 +443,14 @@
   },
   {
    "id": "ref_j",
-   "label": "E284 junction end head and the junction ends GT\n(measured, not adopted)",
+   "label": "The ends of the junction GT of E284\n(measured, not adopted)",
    "kind": "alt",
    "col": 2,
    "row": 9,
    "code": [
-    "net/model/qendnet.py",
-    "net/loss/loss_qendnet.py",
     "net/prep/qends.py"
    ],
-   "note": "the E284 end head and the ends of the junction GT (qends), measured and not adopted; the gate's turn limit (qendnet.COS_TURN) and the maneuver count of the read-out (qends.cluster) still read them; the rest of the junction thread (E285 - E363) is in the tag v1",
+   "note": "the ends of the junction GT (qends) of E284, measured and not adopted; the maneuver count of the read-out (qends.cluster) still reads them; the E284 end head and the rest of the junction thread (E285 - E363) are in the tag v1",
    "w": 2,
    "hpx": 52
   },

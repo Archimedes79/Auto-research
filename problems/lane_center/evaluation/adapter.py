@@ -100,7 +100,7 @@ class LaneSubject(Subject):
     def __init__(self, net, split):
         import jtoken_eval as JE
         cfg = json.load(open(os.path.join(net, "config.json"), encoding="utf-8"))
-        a = argparse.Namespace(run=os.path.basename(os.path.normpath(net)), seed=cfg["seed"], split=split, live=True, every=1, drop=0.0, drop_seed=0)
+        a = argparse.Namespace(run=os.path.basename(os.path.normpath(net)), seed=cfg["seed"], split=split, live=True, every=1)
         r = JE.read_dump(a, os.path.dirname(os.path.normpath(net)), 0)
         JE.check_record(r["fr"], r["valid"])
         d = cfg["decode"]

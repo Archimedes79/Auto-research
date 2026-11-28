@@ -3,7 +3,7 @@
     head = JTokenHead()                                       # 0.127 M parameters; the buffer `step` counts the training forwards (the switch of the key weights, below)
     out = head(batch)                                         # batch of `net/prep/lane_ptok_data.loader` (section 2a of the card); only the INPUT keys are read, never a key that carries GT
     loss, info = jtoken_loss(out, batch)                      # the exact likelihood below + type CE + scale L1 (reads y, ylong, yscale, ytype)
-    pr = probs(out); links = decode(out, thr=0.3)             # decode of record; decode_argmax(out) = the alternative (one link per source and class)
+    pr = probs(out); links = decode(out, thr=0.3)             # decode of record
     batch = synthetic_batch(B, K, seed)                       # a random batch that follows the batch dict (tests and the trainer's --smoke)
 
 Input keys (B frames, K tokens): tok (B,K,64), pos (B,K,2) m, dirv (B,K,2) unit, e / e_raw (B,K) logits, flags (B,K,8) logits, s / uout / uin (B,K) logits, valid (B,K) bool. All of them are constants (the cached B' is
@@ -16,22 +16,9 @@ the SAME Linear (after a shared LayerNorm) after layer 1 (keys of layers 2 and 3
 Wiring layer (on top of layer 3, attention weights only): class c in {short: chord <= 8 m, long: chord > 8 m}, z^c_ij = q^c_i.k^c_j / sqrt(32) + bias^c(g_ij) + log(w_j + 1e-3) + b^c_j on the allowed gate of `jtok.pair_geometry`
 (padding masked as key and source) + ONE learned none slot per class (key k^c_none and a bias): p^c(.|i) = softmax over {allowed keys} + {none}. Two handle scales per pair from an MLP of (x_i, x_j, g_ij).
 Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
-(E376 `pos_loss="max"`: -log max_{j in G(i)} p^c(j|i)) when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
-+ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. Tests: test_jtoken.py
-E379 (`distill_loss`, ensemble distillation; the trainer adds W x it to the loss above): p_T = the MEAN of the frozen teachers' PROBABILITIES on the same tokens (`teacher_logp`); kd = KL_s + KL_l, the KL(p_T || p) of the
-successor softmax (with the none slot) per class over the sources of the likelihood (`source_rows`), temperature 1; the type readings and the handle scales are not distilled (card v2).
-E392 (`JTokenHead(rounds=R, msg=)`, default 0 = the head above bit for bit: no extra parameter, no extra output key): after layer 1 (R >= 1) and after layer 2 (R = 2) a round reads the wiring from the current features with the SAME weights as the final
-read (`read_wiring`; key weight of layers 2 - 3), p_k = its probability of the link i -> j summed over the two classes, and gives every token the p_k-weighted features of its likely predecessors and successors, x <- x + MLP([mf ; mb]) (`Round`, own
-weights per round, last layer at zero: a rounds head starts as the champion function; p_k not detached); `types1` / w1 are read BEFORE round 1; the early reads are `out["logp_rounds"]`. msg='uniform' (the content null, `message_weights`): the same degree mass spread uniformly over the allowed pairs. `jtoken_loss(wire_w=W)`: + W x the likelihood of every early read.
-msg='none' (deep supervision without exchange): the same early reads and `out["logp_rounds"]`, but nothing is added to x and no `Round` exists: the parameters, the state keys and their order are the champion's (127131), and the early reads run in TRAINING mode only: in eval mode
-the forward is the champion's bit for bit (no early read, no `logp_rounds`), so a head trained with it is at inference the unchanged champion network.
-msg='self' (the capacity null of the exchange): the same `Round` modules (the parameters of the real rounds) but every token's message is its OWN features, x <- x + MLP([W_v x ; W_u x]): no neighbour is read, the early reads only supervise
-(training mode only, so p_k does not enter x), the rounds act in eval mode too. With wire_w 0 it is the block alone, with wire_w > 0 the block after a supervised read.
-E395 (`JTokenHead(pos_head=True)`, default off = the head above bit for bit: no extra parameter, no state key, no output key): a position head `posh` (MLP d -> d -> 1, GELU, last Linear at zero), built LAST, reads the final features
-(the LayerNorm(x) of the wiring read): `out["dpos"] = POS_CAP tanh(posh / POS_CAP)` (B, K) m, the offset of a token along its normal n = rot90(dirv) (`refined_pos`: pos + dpos n; pos and dirv are the head's inputs, cut from the graph).
-`jtoken_loss(curve_w=W, node_w=V)` (default 0 = nothing read, nothing added): + W x the Catmull-Rom curve loss and / or + V x the node loss of `curve_losses`, on the GT geometry keys of the batch (`GEOM_KEYS`, loader geom=True,
-`lane_gtgeom_data`): the lateral distance, smooth L1 (knee 0.5 m), between the curve through the refined positions of the best tokens of the GT nodes and the curve through the GT nodes (uniform Catmull-Rom, `cr_points_t`), per GT link at
-5 values of t, ghost nodes from the GT neighbours (reflection when one is missing, in both curves), links with a GT chord above 8 m or unequal GT chords (ratio above 2) left out and counted; the node loss is the same distance of each node alone. The forward never reads a GT key. Tests: test_jtoken.py
+when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
++ type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. The forward never reads a GT key. Tests: test_jtoken.py
+The switches of the closed experiments E376 (pos_loss max, the argmax decode), E379 (distillation), E392 (message rounds, early reads) and E395 (the position head and its curve loss) are in the tag v1.
 """
 import math
 import os
@@ -55,10 +42,6 @@ BANDS = 4
 NIN = 2 + 4 * BANDS + 2 + 1 + 1 + 8 + 3                                     # pos / HALF, its Fourier features, dirv, e, e_raw, 8 flags, s, uout, uin
 INPUTS = ("tok", "pos", "dirv", "e", "e_raw", "flags", "s", "uout", "uin", "valid")      # the only batch keys the forward reads
 GT_KEYS = ("y", "ylong", "yscale", "ytype")                                 # the keys of the batch that carry GT (the loss reads them, the forward never)
-EXCHANGE = ("real", "uniform")                                              # E392: the weights of a message round (`message_weights`): the early read's own probabilities, or the content null
-SUPERVISE = ("none", "self")                                                # the early reads only supervise (training mode only): p_k does not enter x
-MSG = EXCHANGE + SUPERVISE                                                  # + none: no exchange, no round module (deep supervision); self: the round block on the token's own features (the capacity null)
-POS_CAP = 3.0                                                               # E395: the largest normal offset of the position head (m)
 def _const(t):
     """a cached input: no gradient into B' (the one place that cuts the graph; skipped under `live_inputs`)"""
     return t.detach()
@@ -105,42 +88,11 @@ def link_prob(logp, cand):
     return (logp[..., :cand.shape[-1]].exp() * cand).sum(1)
 
 
-def message_weights(p, cand, msg="real"):
-    """E392: the weights of one message round from p (B, K, K) = the early probability of the link i -> j (`link_prob`) and the gate cand (B, 2, K, K) -> (w_fwd, w_bwd) (B, K, K): token j gets the forward message sum_i w_fwd[i, j] W_v x_i (its likely
-    predecessors), token i the backward message sum_j w_bwd[i, j] W_u x_j (its likely successors). 'real': both are p. 'uniform' (the content null): each token keeps its soft degree (indeg_j = sum_i p[i, j], outdeg_i = sum_j p[i, j]) but spreads it
-    uniformly over its allowed pairs: w_fwd[i, j] = gate[i, j] / sum_i' gate[i', j] x indeg_j, w_bwd[i, j] = gate[i, j] / sum_j' gate[i, j'] x outdeg_i (an empty sum: weight 0); no information about WHICH neighbours the early read found likely"""
-    assert msg in EXCHANGE, msg
-    if msg == "real":
-        return p, p
-    gate = cand.sum(1).float()
-    return gate / gate.sum(1, keepdim=True).clamp_min(1) * p.sum(1, keepdim=True), gate / gate.sum(2, keepdim=True).clamp_min(1) * p.sum(2, keepdim=True)
-
-
-class Round(nn.Module):
-    """E392: one message round, x <- x + MLP([mf ; mb]) (no LayerNorm) with mf_j = sum_i w_fwd[i, j] W_v x_i and mb_i = sum_j w_bwd[i, j] W_u x_j (`message_weights`); the weights are not detached (the final loss reaches the early read through
-    them). The LAST linear layer of the MLP starts at zero (weight and bias): a new round is the identity, so a rounds head starts as the champion function; its first optimiser step moves the last layer only, the gradient reaches the rest after it"""
-
-    def __init__(self, d=D):
-        super().__init__()
-        self.wv, self.wu = nn.Linear(d, d), nn.Linear(d, d)
-        self.mlp = nn.Sequential(nn.Linear(2 * d, d), nn.GELU(), nn.Linear(d, d))
-        nn.init.zeros_(self.mlp[2].weight)
-        nn.init.zeros_(self.mlp[2].bias)
-
-    def forward(self, x, w_fwd, w_bwd):
-        """w_fwd / w_bwd None (E392 msg 'self', the capacity null): every token's message is its own features, the same as the identity weights"""
-        v, u = self.wv(x), self.wu(x)
-        mf, mb = (v, u) if w_fwd is None else (w_fwd.transpose(1, 2).to(v.dtype) @ v, w_bwd.to(u.dtype) @ u)
-        return x + self.mlp(torch.cat([mf, mb], -1))
-
-
 class JTokenHead(nn.Module):
-    """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4); rounds / msg: E392 (module docstring), the round modules are built LAST (a seeded init of the head's other parameters is the same as without them);
-    `n_early` = the early reads after layer 1 .. rounds, `rounds` = the Round modules (none for msg 'none'); pos_head: E395, the position head `posh` is built after everything else (the same rule)"""
+    """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real", pos_head=False):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False):
         super().__init__()
-        assert 0 <= rounds < layers and msg in MSG, (rounds, layers, msg)
         self.dq = dq
         self.proj = nn.Linear(TOK, d)
         self.mlp = nn.Sequential(nn.Linear(NIN, d), nn.GELU(), nn.Linear(d, d))
@@ -152,13 +104,6 @@ class JTokenHead(nn.Module):
         self.wbias, self.dest = pair_mlp(2), nn.Linear(d, 2)                # bias^c(g_ij), the destination evidence b^c_j
         self.none_k, self.none_b = nn.Parameter(torch.randn(2, dq) * 0.1), nn.Parameter(torch.zeros(2))
         self.sc_i, self.sc_j, self.sc_g, self.sc_o = nn.Linear(d, 32), nn.Linear(d, 32, bias=False), nn.Linear(NG, 32, bias=False), nn.Linear(32, 2)      # the first Linear of (x_i, x_j, g_ij) split into three
-        self.n_early, self.msg = rounds, msg                                # E392
-        self.rounds = nn.ModuleList([Round(d) for _ in range(0 if msg == "none" else rounds)])      # empty at rounds = 0 and for msg 'none': no parameter, no state key
-        self.pos_head, self.pos_cap = pos_head, POS_CAP                     # E395: no module, no state key, no output key when off
-        if pos_head:
-            self.posh = nn.Sequential(nn.Linear(d, d), nn.GELU(), nn.Linear(d, 1))
-            nn.init.zeros_(self.posh[2].weight)                             # the head starts at the B' position (dpos = 0)
-            nn.init.zeros_(self.posh[2].bias)
         self.register_buffer("step", torch.zeros((), dtype=torch.long))
         self._step_py = 0                                                   # the Python mirror of `step` (no device sync per forward); kept by forward, set_step and load_state_dict
         self.live_inputs = live_inputs
@@ -177,23 +122,13 @@ class JTokenHead(nn.Module):
         return t, 1.0 - t.softmax(-1)[..., 0]                               # logits, 1 - p_none
 
     def read_wiring(self, x, wb, logw, cand):
-        """the wiring read of the module docstring on the features x (B, K, d): wb (B, 2, K, K) = bias^c(g_ij), logw (B, K) = the log key weight, cand the gate -> (the log-probabilities of `wiring_logp`, LayerNorm(x)); the final read and every
-        early read of a round (E392) are THIS function with the head's own weights, so they are one reading"""
+        """the wiring read of the module docstring on the features x (B, K, d): wb (B, 2, K, K) = bias^c(g_ij), logw (B, K) = the log key weight, cand the gate -> (the log-probabilities of `wiring_logp`, LayerNorm(x))"""
         B, K, _ = x.shape
         xn = self.lnw(x)
         q, k = (m(xn).view(B, K, 2, self.dq) for m in (self.wq, self.wk))
         z = torch.einsum("bicd,bjcd->bcij", q, k).float() / math.sqrt(self.dq) + wb + logw[:, None, None, :] + self.dest(xn).float().permute(0, 2, 1)[:, :, None, :]
         zn = torch.einsum("bicd,cd->bci", q, self.none_k).float() / math.sqrt(self.dq) + self.none_b[None, :, None]
         return wiring_logp(z, zn, cand), xn
-
-    def exchange(self, k, x, wb, logw, cand):
-        """E392 round k: the early read of x (`read_wiring`) and the messages along it (`Round`) -> (the new x, the early log-probabilities); msg 'none': x itself (the read only supervises); msg 'self': the round on the token's own features"""
-        logp, _ = self.read_wiring(x, wb, logw, cand)
-        if self.msg == "none":
-            return x, logp
-        if self.msg == "self":
-            return self.rounds[k](x, None, None), logp
-        return self.rounds[k](x, *message_weights(link_prob(logp, cand), cand, self.msg)), logp
 
     def forward(self, batch):
         b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}
@@ -204,34 +139,20 @@ class JTokenHead(nn.Module):
         learned = self._step_py >= SWITCH
         chord = g[..., 2] * 20.0
         cand = torch.stack([allowed & (chord <= SHORT), allowed & (chord > SHORT)], 1)
-        n_early = self.n_early if self.msg not in SUPERVISE or self.training else 0     # msg 'none' / 'self': the early reads only supervise, so they exist in training mode only (none: inference = the champion's forward)
-        wb = self.wbias(g).float().permute(0, 3, 1, 2) if n_early else None         # bias^c(g_ij), the same for every read (no early read: made at the final read, where the champion made it: the backward order into g stays the champion's)
         feat = torch.cat([pos / JT.HALF, fourier(pos), dirv, b["e"][..., None], b["e_raw"][..., None], b["flags"], b["s"][..., None], b["uout"][..., None], b["uin"][..., None]], -1).float()
         x = self.ln0(self.proj(b["tok"].float()) + self.mlp(feat))
         x = self.layers[0](x, g, lw(w_in), valid)
         types1, w1 = self.read_types(x)
-        early = []                                                          # E392: the early reads
-        for n, layer in enumerate(self.layers[1:], 1):
-            if n <= n_early:                                                # a round after layer n, before the next one
-                x, logp_k = self.exchange(n - 1, x, wb, lw(w1 if learned else w_in), cand)
-                early.append(logp_k)
-            elif self.msg == "self" and n <= self.n_early:                  # msg 'self' in eval mode: the round block runs, the read that only supervised does not
-                x = self.rounds[n - 1](x, None, None)
+        for layer in self.layers[1:]:
             x = layer(x, g, lw(w1 if learned else w_in), valid)
         types3, w3 = self.read_types(x)
-        if wb is None:
-            wb = self.wbias(g).float().permute(0, 3, 1, 2)
+        wb = self.wbias(g).float().permute(0, 3, 1, 2)                              # bias^c(g_ij)
         logp, xn = self.read_wiring(x, wb, lw(w3 if learned else w_in), cand)          # the wiring layer
         scale = 0.05 + 1.2 * self.sc_o(F.gelu(self.sc_i(xn)[:, :, None] + self.sc_j(xn)[:, None] + self.sc_g(g))).float().sigmoid()
         if self.training:
             self.step += 1
             self._step_py += 1
-        out = dict(logp=logp, cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
-        if early:
-            out["logp_rounds"] = early
-        if self.pos_head:                                                   # E395: the normal offset of every token, from the final features only
-            out["dpos"] = self.pos_cap * torch.tanh(self.posh(xn)[..., 0].float() / self.pos_cap)
-        return out
+        return dict(logp=logp, cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ probabilities and decodes
@@ -257,36 +178,14 @@ def decode(out, thr=0.3):
     return _links(pr, (pr["p"] >= thr) & (pr["p"] >= pr["pnone"]))
 
 
-def decode_argmax(out):
-    """the alternative: per source and class the argmax over {none} + the candidates, a link when it is a candidate (one link per source and class), both ends kept"""
-    K = out["cand"].shape[-1]
-    am = out["logp"].argmax(-1)
-    hit = F.one_hot(am.clamp(max=K - 1), K).bool() & (am < K)[..., None]
-    return _links(probs(out), hit.any(1))
-
-
 def count_params(model):
     return sum(p.numel() for p in model.parameters())
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ a synthetic batch
-def _toy_geom(rng, pos, dirv):
-    """the GT geometry keys of `synthetic_batch(geom=True)` (a consistent toy): GT node g (0 .. 29) = lane token g moved sideways by up to 0.5 m (a refinement has something to learn), its best token = token g (GT node 5 has none),
-    the links of the chain 0 .. 19 (lanes 0 and 1, joined by the long link 9 -> 10) and of the chain 20 .. 29 with the GT neighbours as ghosts (-1 at the ends); padded to 32 nodes and 30 links"""
-    B, Ng, Lg = len(pos), 32, 30
-    gt_pos, gt_dir, gt_btok, gl = np.zeros((B, Ng, 2), np.float32), np.zeros((B, Ng, 2), np.float32), -np.ones((B, Ng), np.int64), -np.ones((B, Lg, 4), np.int64)
-    off = rng.uniform(-0.5, 0.5, (B, 30)).astype(np.float32)
-    gt_pos[:, :30] = pos[:, :30] + off[..., None] * np.stack([-dirv[:, :30, 1], dirv[:, :30, 0]], -1)
-    gt_dir[:, :30], gt_btok[:, :30], gt_btok[:, 5] = dirv[:, :30], np.arange(30), -1
-    links = [(g, g + 1, -1 if g in (0, 20) else g - 1, -1 if g + 1 in (19, 29) else g + 2) for g in list(range(19)) + list(range(20, 29))]
-    gl[:, :len(links)] = links
-    return dict(gt_pos=torch.from_numpy(gt_pos), gt_dir=torch.from_numpy(gt_dir), gt_btok=torch.from_numpy(gt_btok), gl=torch.from_numpy(gl))
-
-
-def synthetic_batch(B=8, K=48, seed=0, geom=False):
+def synthetic_batch(B=8, K=48, seed=0):
     """random frames that follow the batch dict of the card (2a): per frame a lane of 10 tokens 2 m apart, a second lane 12 m behind its end (one long link), a third lane elsewhere, 4 duplicate tokens 0.5 m beside
-    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them. geom (E395): + the GT geometry keys `GEOM_KEYS` (`_toy_geom`, drawn after
-    everything else: the other keys are those of geom False)"""
+    a lane token (they are in G(i) of its predecessor, assigned to no GT node), padding to K. Types and flags follow the token role, so a head can fit them"""
     rng = np.random.RandomState(seed)
     f = lambda *s: np.zeros(s, np.float32)  # noqa: E731
     pos, dirv, valid, ytype, y, ylong = f(B, K, 2), f(B, K, 2), np.zeros((B, K), bool), np.zeros((B, K), np.int64), np.zeros((B, K, K), np.uint8), np.zeros((B, K, K), bool)
@@ -315,9 +214,6 @@ def synthetic_batch(B=8, K=48, seed=0, geom=False):
     e = np.where(ytype > 0, 2.5, np.where(valid, -1.0, -6.0)).astype(np.float32)
     flags = (-3.0 + 6.0 * (np.arange(8) == (ytype[..., None] % 8))).astype(np.float32)
     r = lambda *s: rng.randn(*s).astype(np.float32)  # noqa: E731
-    batch = dict(tok=torch.from_numpy(r(B, K, TOK) * valid[..., None]), pos=torch.from_numpy(pos), dirv=torch.from_numpy(dirv), e=torch.from_numpy(e), e_raw=torch.from_numpy(e + 0.3 * r(B, K)),
-                 flags=torch.from_numpy(flags), s=torch.from_numpy(r(B, K)), uout=torch.from_numpy(r(B, K)), uin=torch.from_numpy(r(B, K)), valid=torch.from_numpy(valid), ytype=torch.from_numpy(ytype),
-                 y=torch.from_numpy(y), ylong=torch.from_numpy(ylong), yscale=torch.from_numpy(yscale))
-    if geom:
-        batch.update(_toy_geom(rng, pos, dirv))
-    return batch
+    return dict(tok=torch.from_numpy(r(B, K, TOK) * valid[..., None]), pos=torch.from_numpy(pos), dirv=torch.from_numpy(dirv), e=torch.from_numpy(e), e_raw=torch.from_numpy(e + 0.3 * r(B, K)),
+                flags=torch.from_numpy(flags), s=torch.from_numpy(r(B, K)), uout=torch.from_numpy(r(B, K)), uin=torch.from_numpy(r(B, K)), valid=torch.from_numpy(valid), ytype=torch.from_numpy(ytype),
+                y=torch.from_numpy(y), ylong=torch.from_numpy(ylong), yscale=torch.from_numpy(yscale))

@@ -82,7 +82,6 @@ MUTANTS = [
     ("forward drops the token drop and the gate", FWD, "return dict(no=no, batch=self.labelled(tk, tables, token, row))"),
     ("the node targets are transposed", "return {k: g[k] for k in NODE_KEYS}", "return {k: np.swapaxes(g[k], -1, -2) for k in NODE_KEYS}"),
     ("B's loss runs on tokens without the graph", "return LQG.node_loss(no, targets)", "return LQG.node_loss({k: v.detach() for k, v in no.items()}, targets)", "does not require grad"),
-    ("B's loss accepts any loss switch", "assert not bad, f\"`qgraph.CFG` is not that of B''s training", "assert True, f\"`qgraph.CFG` is not that of B''s training"),
     ("the pyramid is left in train mode", "        super().train(mode)\n        self.model.eval()\n", "        super().train(mode)\n"),
     ("the node head is frozen", "self.model.nodes.parameters():\n                p.requires_grad_(True)", "self.model.nodes.parameters():\n                p.requires_grad_(False)"),
     ("train_pyr leaves the pyramid under no_grad (E393)", "with contextlib.nullcontext() if self.train_pyr else torch.no_grad():", "with torch.no_grad():"),

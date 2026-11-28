@@ -1,6 +1,6 @@
-"""Tests of the predicted-node cache (`net/prep/lane_tokcache.py`), its loader (`net/prep/lane_ptok_data.py`, E395: also its geom option) and the GT geometry file of E395 (`net/prep/lane_gtgeom_data.py`).
+"""Tests of the predicted-node cache (`net/prep/lane_tokcache.py`) and its loader (`net/prep/lane_ptok_data.py`).
 
-    python net/tests/test_lane_tokcache.py            # the selftests of the three modules, then the hand mutants of the label, selection, comparison, loader and GT geometry code: every mutant must make the selftest of its module FAIL
+    python net/tests/test_lane_tokcache.py            # the selftests of the two modules, then the hand mutants of the label, selection, comparison and loader code: every mutant must make the selftest of its module FAIL
     python net/tests/test_lane_tokcache.py selftests  # the selftests only (about 1 minute)
 
 A mutant = one textual change of the source (a wrong assignment, a swapped link direction, the contraction removed, a padding token that becomes a node, ...); the mutated copy runs in a temporary folder with BFLC_ROOT
@@ -15,7 +15,7 @@ import tempfile
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA = os.path.join(ROOT, "net", "prep")
 
-TC, PT, GG = "lane_tokcache.py", "lane_ptok_data.py", "lane_gtgeom_data.py"
+TC, PT = "lane_tokcache.py", "lane_ptok_data.py"
 MUTANTS = [
     (TC, "tokens are taken in reverse order (not by descending existence)", "for t in range(min(K, near.shape[0])):", "for t in reversed(range(min(K, near.shape[0]))):"),
     (TC, "a token takes the FARTHEST near node", "g = int(np.argmin(np.where(cand, d[t], np.inf)))", "g = int(np.argmax(np.where(cand, d[t], -np.inf)))"),
@@ -69,29 +69,11 @@ MUTANTS = [
     (PT, "ylong uses the chord of the wrong pair", "yl[i, j] = (np.linalg.norm(pos[j] - pos[i], axis=-1) > QT.SHORT)", "yl[i, j] = (np.linalg.norm(pos[i] - pos[0], axis=-1) > QT.SHORT)"),
     (PT, "a GT field in the read-out input", "tokens_np=dict(pos=", "tokens_np=dict(gt_id=np.array(f[\"gt_id\"][i]), pos="),
     (PT, "the link direction is swapped in the prediction", "lk = dict(src=new[src[ok]], dst=new[dst[ok]],", "lk = dict(src=new[dst[ok]], dst=new[src[ok]],"),
-    (PT, "geom: the link rows are padded with 0", "GEOM_FILL = dict(gt_pos=0, gt_dir=0, gt_btok=-1, gl=-1)", "GEOM_FILL = dict(gt_pos=0, gt_dir=0, gt_btok=-1, gl=0)"),
-    (PT, "geom: the best tokens are padded with 0", "GEOM_FILL = dict(gt_pos=0, gt_dir=0, gt_btok=-1, gl=-1)", "GEOM_FILL = dict(gt_pos=0, gt_dir=0, gt_btok=0, gl=-1)"),
-    (PT, "geom: the GT nodes are not cut to the frame's count", "gt_pos=self.geom[\"gt_pos\"][i, :n_g]", "gt_pos=self.geom[\"gt_pos\"][i]"),
-    (PT, "geom: the links are not cut to the frame's count", "gl=self.geom[\"gl\"][i, :n_l])", "gl=self.geom[\"gl\"][i])"),
-    (PT, "geom: the indices stay int32", "out[n] = t.long() if n in (\"gt_btok\", \"gl\") else t", "out[n] = t"),
-    (PT, "geom: the loader does not pass it on", "ds = PTokData(split, seed, ident, K, token_drop, cache, dir, geom)", "ds = PTokData(split, seed, ident, K, token_drop, cache, dir)"),
-    (GG, "a tie of the best token goes to the larger token", "gd[k] < best[g]", "gd[k] <= best[g]"),
-    (GG, "an invalid token can be the best token", "if valid[k] and g >= 0", "if g >= 0"),
-    (GG, "the tie of two ghosts goes to the last candidate", "if a < best:", "if a <= best:"),
-    (GG, "the turning angle keeps its sign", "abs(vec[0] * d[1] - vec[1] * d[0])", "(vec[0] * d[1] - vec[1] * d[0])"),
-    (GG, "the pair of the link is its own ghost (predecessor)", " for w in into[u] if w != v]", " for w in into[u]]"),
-    (GG, "the pair of the link is its own ghost (successor)", " for x in outof[v] if x != u]", " for x in outof[v]]"),
-    (GG, "the successor is read from the wrong end", "for x in outof[v] if x != u", "for x in outof[u] if x != u"),
-    (GG, "the padding of the links is 0", "gl=-np.ones((F, Lm, 4), np.int32)", "gl=np.zeros((F, Lm, 4), np.int32)"),
-    (GG, "another cache's file is accepted", "assert str(g[\"cache\"]) == cache", "assert True"),
-    (GG, "another frame order is accepted", "assert g[\"tokens\"].tolist() == list(tokens)", "assert True"),
-    (GG, "a file is overwritten (a racing builder)", "os.link(tmp, path)", "os.replace(tmp, path)"),
-    (GG, "the temp file is left behind", "        if os.path.exists(tmp):\n            os.remove(tmp)\n", "        pass\n"),
 ]
 
 
 def run_selftests():
-    for mod in (TC, PT, GG):
+    for mod in (TC, PT):
         r = subprocess.run([sys.executable, os.path.join(DATA, mod), "selftest"], capture_output=True, text=True, env=dict(os.environ, BFLC_ROOT=ROOT))
         assert r.returncode == 0, f"{mod} selftest failed:\n{r.stdout[-800:]}{r.stderr[-1500:]}"
         print(r.stdout.strip().splitlines()[-1], flush=True)

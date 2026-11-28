@@ -4,17 +4,19 @@ champion's head (`jtoken.py`), the token cache and the live tokens; the lattice 
     with lattice(2.5): ...                                   # `qtargets` on a 2.5 m lattice for the block (N, RES are module constants read at call time; restored after); check_lattice(2.5)
     g, allowed = pair_geometry(pos, dirv, valid)             # (B, N, N, 13) the geometric pair features, (B, N, N) the candidate gate; [b, i, j] = the link i -> j
 
-The allowed gate (a candidate selection by geometry, named in the card): both headings point forward along the chord, turn at most 130 degrees (`qendnet.COS_TURN`), chord MIN_CHORD .. MAX_CHORD m, both nodes valid, i != j.
+The allowed gate (a candidate selection by geometry, named in the card): both headings point forward along the chord, turn at most 130 degrees (`COS_TURN`), chord MIN_CHORD .. MAX_CHORD m, both nodes valid, i != j.
 E357's own pair head on B's frozen pyramid (JTok, JTokModel, its loss and read-out dump) is in the tag v1. Tests: net/tests/test_jtoken.py (pair_geometry)
 """
+import math
+
 import torch
 
 import qtargets as QT
 from qtargets import check_lattice, lattice  # noqa: E402,F401 (the lattice is a property of the targets; read here by name)
-from qendnet import COS_TURN
 
 NG = 13                                                                     # geometric pair features
 MIN_CHORD, MAX_CHORD = 0.3, 100.0                                           # m: the chord range of the allowed gate
+COS_TURN = math.cos(math.radians(130.0))                                    # the largest turn of the allowed gate
 SHORT = QT.SHORT                                                            # 8 m: a link with a longer chord is a long link (`qtargets.node_table`)
 HALF = QT.HALF
 

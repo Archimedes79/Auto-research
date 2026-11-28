@@ -51,7 +51,6 @@ CFG = LS.config()                 # the lane suite's settings: box 48 m, topo se
 BOX = CFG.box[1]
 STEP = 0.5                        # sampling of the delivered curves (m)
 TIE = 0.3                         # GT points this much farther than the nearest one still tie with it: a point shared by pieces (qtargets groups events within 0.3 m too)
-NODE_SPARSE = None                # E276: None = the GT nodes of E273 (a node in every 2 m cell); (eps, max chord) = the sparse node target the model was trained on (qtargets.node_table)
 TIER_HIT, TIER_ZONE = 1.0, 2.5    # E276 tier metrics: a point is right within 1.0 m of the other graph; a delivered point belongs to the zone of its nearest GT point within 2.5 m
 NODE_TOL, EVENT_TOL = 2.0, 3.0    # node / event matching tolerances (m)
 SEC_NEAR, LANE_NEAR, DUST_FAR = 2.0, 1.0, 2.0
@@ -169,7 +168,7 @@ class LaneRef:
     """the lane GT of a frame prepared for lookups: the GT nodes / links (`qtargets.node_table`), the points of all pieces in a KD-tree, the GT lane length inside the metrics' box"""
 
     def __init__(self, g):
-        self.nt = nt = QT.node_table(g, sparse=NODE_SPARSE)
+        self.nt = nt = QT.node_table(g)
         self.pts, self.pid, self.pj = nt["pts"], nt["pid"], nt["pj"]
         self.ptier, self.pvis = nt["ptier"], nt["pvis"]                                  # E276: the l4 labels of the GT points (tier 0 / visible when the graph has none)
         self.labelled = bool((self.ptier > 0).any())
@@ -342,7 +341,7 @@ def tier_counts(raw, ref):
 def tier_numbers(tc, nc=None):
     """the E276 numbers from pooled tier counts `tc` (dict rec, prec) and pooled node counts `nc` (dict tn, zn; may be empty): t<k>_R_1 / t<k>_R_1all (recall of the visible / all GT points of tier k),
     z<k>_P_1 (precision of the delivered points of zone k; z0 = off the lanes), t12_R_1 / t12_P_1 / t12_F1_1 (tiers and zones 1 + 2 pooled; the primary numbers of the E276 card), t<k>_len (visible GT
-    metres of tier k), and the node numbers t<k>_node_R / z<k>_node_P / t12_node_F1 (within 2 m, against the GT nodes of this scorer: dense for the E273 target, sparse for NODE_SPARSE)"""
+    metres of tier k), and the node numbers t<k>_node_R / z<k>_node_P / t12_node_F1 (within 2 m, against the GT nodes of this scorer: a node in every 2 m cell)"""
     out = {}
     rec, prec = np.asarray(tc["rec"], float), np.asarray(tc["prec"], float)
     for k in (1, 2, 3):

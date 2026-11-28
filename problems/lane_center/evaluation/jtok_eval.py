@@ -1,5 +1,5 @@
 """Controls, read-out and scoring of E357 (the GT nodes as tokens, one pair head for every edge; the pair geometry of `net/model/jtok.py`). The delivered graph of every arm = the GT nodes of the lattice + the arm's links.
-The writer, the link tables and the cards are what `jtoken_eval.py` reads of it (`make_card`, `write_json`, `suffix`, `keep_nodes`, RUNS, CARDS); E357's own head and its `dump` / `score` are in the tag v1.
+The writer, the link tables and the cards are what `jtoken_eval.py` reads of it (`make_card`, `write_json`, `SEC_VOID`, RUNS); E357's own head and its `dump` / `score` are in the tag v1.
 
     python jtok_eval.py ctl --lattice 2.5 [--max N] [--drop 0.17 --drop-seed 0]      # CPU: the arms lo, lo_near, lo_all, hi -> runs/eval/e357_<arm>_<readout>/val.json (never overwritten)
     python jtok_eval.py ctl --lattice 2.0 --check [--max N --ref CARD]              # the kill check: arm hi (GT-section read-out) against runs/eval/e346_l2/val.json to 1e-6 -> PASS / FAIL, writes nothing

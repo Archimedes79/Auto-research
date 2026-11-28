@@ -5,7 +5,7 @@ every setting of a trainer is a key of the base config, so an arm of a card can 
 
 1. argv: `options` on a toy block (known answer); the argv of the base config parses to what the two argv lists of before this rule parsed to
    (OLD: the champion's recipe did not move); every key of a block, set to another value, reaches the trainer's option of its name; `from_run`.
-2. keys: the keys of the blocks stage1 / stage2 are exactly the options of the two parsers, without what the run gives and without GOES.
+2. keys: the keys of the blocks stage1 / stage2 are exactly the options of the two parsers, without what the run gives.
 3. recipe: the trainers take the argv of the base config for the recipe of the trained run REF (`check_start`: the same recipe is resumed) and
    refuse it with one setting changed. Skipped with a printed line where the run root does not hold REF.
 An adoption that changes the champion's recipe changes OLD and REF here with it."""
@@ -31,19 +31,9 @@ OLD = {"stage1": ["--name", "E1.a_s1/stage1", "--seed", "1", "--head-seed", "3",
                   "--steps", "3000", "--bs", "8", "--lr", "0.0001", "--workers", "4"]}
 # another value for every key of a block (stage 2 in two sets: the pyramid needs train_nodes and live_inputs at 1); a new key gets a value here
 SET = {"stage1": [dict(ident="e273_p", head_seed_offset=5, none_weight=0.5, steps=7, bs=3, lr=0.5, workers=1)],
-       "stage2": [dict(head_run="h_s{seed}", b_run="runs/b_s{seed}", head_seed=9, b_weight=0.5, train_pyr=1, pyr_lr_mult=0.1, steps=7, bs=3, lr=0.5, workers=1),
+       "stage2": [dict(head_run="h_s{seed}", b_run="runs/b_s{seed}", b_state_from="c_s{seed}", head_seed=9, b_weight=0.5, train_pyr=1, pyr_lr_mult=0.1, steps=7, bs=3,
+                       lr=0.5, workers=1),
                   dict(train_nodes=0, live_inputs=0)]}
-# Options of the trainers that are NO key of the base config: the switches of closed experiments, which the next step of the E2E round (S2)
-# deletes from the trainers. Until then no card sets them and they run at the trainers' defaults. S2 empties this list; an entry that names
-# no option fails the test.
-GOES = {"stage1": ("cache", "K",                                          # E383: one cache folder per B'
-                   "pos_loss",                                            # E376
-                   "distill_from", "distill_weight",                      # E379
-                   "noise_pos", "noise_e",                                # E381
-                   "rounds", "msg", "wire_weight",                        # E392
-                   "pos_head", "curve_w", "node_w"),                      # E395
-        "stage2": ("none_weight", "pos_loss",                             # E372: stage 2 takes the head run's
-                   "b_state_from")}                                       # E393
 RUN_GIVES = ("name", "seed", "smoke")                                      # no setting of a card: the run's name and seed; the 20-step plumbing run
 
 
@@ -69,9 +59,9 @@ def refused(fn, text):
 
 
 def test_argv():
-    assert LT.options({"none_weight": 0.25, "K": 512, "lr": 1e-4, "head_run": None, "b_run": "runs/e292_a_s{seed}"}, 1) == \
-        ["--none-weight", "0.25", "--K", "512", "--lr", "0.0001", "--b-run", "runs/e292_a_s1"]
-    refused(lambda: LT.options({"pos_head": True}, 0), "no value of an option")              # a flag without a value has no key form
+    assert LT.options({"none_weight": 0.25, "bs": 8, "lr": 1e-4, "head_run": None, "b_run": "runs/e292_a_s{seed}"}, 1) == \
+        ["--none-weight", "0.25", "--bs", "8", "--lr", "0.0001", "--b-run", "runs/e292_a_s1"]
+    refused(lambda: LT.options({"smoke": True}, 0), "no value of an option")                 # a flag without a value has no key form
     cfg = cfg_of()
     for stage in PARSE:
         assert parsed(cfg, stage) == vars(PARSE[stage](OLD[stage])), f"{stage}: the base config is no longer the recipe of before"
@@ -113,11 +103,8 @@ def test_from_run():
 def test_keys():
     need = {"stage1": ["--name", "x"], "stage2": ["--name", "x", "--head-run", "h", "--train-nodes", "1"]}
     for stage, parse in PARSE.items():
-        opts = set(vars(parse(need[stage])))
-        stale = set(GOES[stage]) - opts
-        assert not stale, f"{stage}: GOES names {sorted(stale)}, which the trainer no longer has: take them out"
         keys = {"head_seed" if k == "head_seed_offset" else k for k in BASE[stage]}          # stage 1's head seed is seed + the offset
-        want = opts - set(RUN_GIVES) - set(GOES[stage])
+        want = set(vars(parse(need[stage]))) - set(RUN_GIVES)
         assert keys == want, (f"{stage}: options of the trainer without a key of base.json {sorted(want - keys)}, keys without an option "
                               f"{sorted(keys - want)}")
 
@@ -127,7 +114,7 @@ def test_recipe():
     if not os.path.isdir(run):
         print(f"part 3 skipped: {run} is not on this machine (the recipe of the base config is not compared with a trained run)")
         return False
-    recipe = {"stage1": lambda c: parsed(c, "stage1"),       # jtoken_train.train stores these as the run's args (it changes only a smoke run's steps and adds the teachers' hashes)
+    recipe = {"stage1": lambda c: parsed(c, "stage1"),       # jtoken_train.train stores these as the run's args (it changes only a smoke run's steps)
               "stage2": lambda c: JLT.resolve(JLT.parse_args(LT.stage_args(c, "stage2")), BP.RUNS)}
     check = {"stage1": JKT.check_start, "stage2": JLT.check_start}
     cfg = cfg_of(REF, 0)
