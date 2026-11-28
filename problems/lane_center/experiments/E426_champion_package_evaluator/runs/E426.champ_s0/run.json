@@ -1,0 +1,29 @@
+{
+ "run": "E426.champ_s0",
+ "problem": "lane_center",
+ "experiment": "E426",
+ "arm": "champ",
+ "seed": 0,
+ "commit": "d9fa58dd7a2f970dce869c7d6402bdadc780515f",
+ "tag": "lane_center/E426",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 103.0,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 111.1,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 13:40:44",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 13:41:05",
+ "ended": "2026-11-28 13:44:39"
+}

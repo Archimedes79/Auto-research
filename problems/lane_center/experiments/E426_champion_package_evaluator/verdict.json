@@ -1,0 +1,67 @@
+{
+ "experiment": "E426",
+ "problem": "lane_center",
+ "tag": "lane_center/E426",
+ "snapshot": "d9fa58dd7a2f970dce869c7d6402bdadc780515f",
+ "kind": "measure",
+ "score": "graph.topo_F1",
+ "arms": {
+  "champ": {
+   "verdict": "MEASURED",
+   "seeds": {
+    "0": {
+     "run": "E426.champ_s0",
+     "numbers": {
+      "graph.topo_F1": 0.668172321247442,
+      "graph.junction_F1": 0.2538151936944491,
+      "graph.F1@1.0": 0.8459123104273166,
+      "graph.lanes_found": 0.7231994527509039,
+      "graph.dup_frac": 0.06281232654482875,
+      "graph.vert100_dp": 23.811563385519097
+     },
+     "frames": 873,
+     "cost": {
+      "median_ms": 0.006488000508397818,
+      "n": 873
+     },
+     "result": "problems/lane_center/experiments/E426_champion_package_evaluator/runs/E426.champ_s0/result.json"
+    },
+    "1": {
+     "run": "E426.champ_s1",
+     "numbers": {
+      "graph.topo_F1": 0.6812810912549837,
+      "graph.junction_F1": 0.24812373014885764,
+      "graph.F1@1.0": 0.8475731558111603,
+      "graph.lanes_found": 0.7213915762728428,
+      "graph.dup_frac": 0.06458004304757374,
+      "graph.vert100_dp": 24.119013247198897
+     },
+     "frames": 873,
+     "cost": {
+      "median_ms": 0.006278998625930399,
+      "n": 873
+     },
+     "result": "problems/lane_center/experiments/E426_champion_package_evaluator/runs/E426.champ_s1/result.json"
+    }
+   }
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "ccc6dbe86305",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-28 13:48",
+ "verdict": "DONE"
+}
