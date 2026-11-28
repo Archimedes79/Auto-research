@@ -16,8 +16,8 @@ evaluation and the generator share one definition. Ego frame, x forward, y left,
     fusion_cells(g), coverage_for(g, kind)      the fusion area and the area each output type is trained / scored on, from a GT dict
 
 The fusion area (D37) = camera cells not hidden behind a box, inside the radar fan; outside it is "don't care" on both sides (D38). An
-object counts by f = `share_fusion`: care f >= 0.5, partial 0.1 <= f < 0.5, don't care below 0.1 (the thresholds Mirko accepted; the
-states themselves belong to evaluation and training, not to the GT).
+object counts by f = `share_fusion`: care f >= 0.5, partial 0.1 <= f < 0.5, don't care below 0.1 (the accepted thresholds, D36 - D38;
+the states themselves belong to evaluation and training, not to the GT).
 
 Rules of the geometry. Boxes stand on the ground plane z = 0 of the ego frame, the plane of the map layers and of `camera` (a box on a hill
 or a bridge is placed on it for this purpose), and hide with their height: a box of height h hides the ground behind it from its front
@@ -132,8 +132,8 @@ def blocked(points, cam, prisms):
 
 
 def blocked_at_heights(xy, z, cam, prisms):
-    """bool (k, n): `blocked` for the points (xy[i], z[h, i]) - k heights over the same n ground positions: the clip of the segment against a footprint does not depend on the
-    height, so it is made once for all k."""
+    """bool (k, n): `blocked` for the points (xy[i], z[h, i]) - k heights over the same n ground positions: the clip of the segment against a footprint does not
+    depend on the height, so it is made once for all k."""
     xy, z, cam = np.asarray(xy, float), np.asarray(z, float), np.asarray(cam, float)
     out = np.zeros(z.shape, bool)
     for fp, z_lo, z_hi in prisms:

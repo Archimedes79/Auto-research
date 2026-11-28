@@ -2,7 +2,8 @@
 
 Training-ready ground truth per nuScenes keyframe (sample token, 2 Hz, 39 - 41 per sequence; mini = 10 sequences / 404 keyframes, trainval = 850 / 34,149): static map layers, object footprints, masks and
 a velocity / flow field in m/s (**front GT**), and the **lane GT**. Everything is in seconds, never "per frame". Nothing in it imports a problem's code. Commands, stores, versions and how to extend
-it: [`README.md`](README.md). Current: front GT v13 (signature `a107e0b4e8`), lane GT l6.1 (stores `9ad1d4ce30` rig `lane_center`, `8a04143278` rig `bev_fusion`), release v15.
+it: [`README.md`](README.md). Current: front GT v16 (the GT and the store of v13, `a107e0b4e8`), lane GT l6.2 (the GT of l6: stores `9ad1d4ce30` rig `lane_center`, `8a04143278` rig
+`bev_fusion`), release v17.
 
 ## 1. The interface
 A problem (`problems/`), the research core (`autoresearch/`) and `datasets/` use `import GtGenerator` and the names of this table (they are `GtGenerator.__all__`; `__init__.py` has the contract line of
@@ -21,13 +22,13 @@ problem), and `python -m GtGenerator selftest --only interface` runs it over the
 | a stored lane graph | `GtGenerator.load_lane(token, rig="lane_center")`, `GtGenerator.lane_tokens(rig="lane_center")` | the dict of section 3b; the set of the sample tokens that are stored |
 | the keyframes of a sequence | `GtGenerator.scene_tokens("scene-0561", "v1.0-trainval")` | list of sample tokens in time order (json tables only, no devkit) |
 | GT made in a loader, single keyframes | `GtGenerator.GtGenerator(root, "v1.0-mini")` = `gen` (everything after the version by keyword: `nusc=` an open devkit, `light=True, scenes=[...]` the memory-light one; options `use_flow`, `use_radar`, `flow_config`, `boxes_at`) | `gen.keyframe(token)`: the dict of section 3; `gen.training_sample(token)`: prev / cur / next (section 4); `gen.keyframes(scene)`, `gen.scenes()`; the raw side the GT itself uses: `gen.cam(token)`, `gen.camera_track(token)`, `gen.ego_steps(t0, t1, track)`, `gen.nusc` |
-| the whole GT of a system, or of a nuScenes folder | `GtGenerator.generate_bev_gt(root, set_name="full")` (front GT + lane GT of the rig `bev_fusion` + intersection masks at borders 0 and 0.5 m), `GtGenerator.generate_lane_gt(root, rig="lane_center")` (`rig="all"`: both, a dict), `GtGenerator.generate(root, set_name=..., scenes=..., workers=...)` (everything); shell `generate-bev`, `generate-lane`, `generate` | a GT key (`generate`: a dict); resumable, memory-light, no GPU, trainval takes hours. Pass keywords: the method `GtGenerator.GtGenerator.generate` (adds `keys`, `ok`) orders its arguments differently |
+| the whole GT of a system, or of a nuScenes folder | `GtGenerator.generate_bev_gt(root, set_name="full")` (front GT + lane GT of the rig `bev_fusion` + intersection masks at borders 0 and 0.5 m), `GtGenerator.generate_lane_gt(root, rig="lane_center")` (`rig="all"`: both, a dict), `GtGenerator.generate(root, set_name=..., scenes=..., workers=...)` (everything); shell `generate-bev`, `generate-lane`, `generate` | a GT key (`generate`: a dict); resumable, memory-light, no GPU, trainval takes hours |
 | raw nuScenes as the GT reads it | `GtGenerator.light_nuscenes(root, version, scenes=[...], cameras=(...))`, `GtGenerator.pose_matrix(record)` | a devkit-like object holding only these sequences and sensors; (4, 4) float64 of an ego_pose / calibrated_sensor record |
 | the definitions a network and its tests share with the GT | `GtGenerator.GridSpec`, `GtGenerator.AREAS`, `GtGenerator.LINES`, `GtGenerator.OBJECTS`, `GtGenerator.DIST_MAX`, `GtGenerator.cell_centres(grid)`, `GtGenerator.occlusion(gx, gy, cam_xy, footprints)`, `GtGenerator.radar_cells(gx, gy, poses)` | the grid (section 3), the layer names, the truncation of the distance layers in m, the cell centres `(gx, gy)`, bool cell masks (hidden behind a footprint; inside a radar fan) |
 | where a loss or a score counts | `GtGenerator.coverage_for(g, kind)`, `GtGenerator.shares_in(g, corners, height or group=...)`, `GtGenerator.mask_for("bev_fusion")` | section 3a: bool cells; the observed shares of a box; the static masks of a rig |
 | a camera picture with the lane graph on it | `GtGenerator.lane_camera_image(gt, sample, graph, channel, T_e2g_front)` | (H, W, 3) uint8 BGR |
 | to look | `python -m GtGenerator view OUT_DIR <token>` (stored) or `scene-0061:8` (mini, made now); `video SCENE OUT.mp4`; `lanegraph OUT.png scene-0061:8`; `report` (all checks, one PDF) | files |
-| to be sure after editing the generator | `python -m GtGenerator selftest` (it also checks that this file names every layer, meta entry and box field, and every public name) | "ok" lines, or the assertion that failed |
+| to be sure after editing the generator | `python -m GtGenerator selftest --all` (it also checks that this file names every layer, meta entry and box field, and every public name; without `--all` and without nuScenes mini the data-free cases run and the rest is listed as skipped) | an "ok" line per case, or the assertion that failed |
 
 ```python
 import GtGenerator

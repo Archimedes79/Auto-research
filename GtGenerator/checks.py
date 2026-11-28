@@ -1,4 +1,4 @@
-"""Automatic consistency checks of the generated GT over keyframes: python -m autogt check [--stride N] [--holdout]
+"""Automatic consistency checks of the generated GT over keyframes: python -m GtGenerator check [--stride N] [--holdout]
 
 Each check is a physical or bookkeeping fact the GT must obey; the report counts violations. `Checks` is an accumulator: feed it
 the keyframes one by one (the `report` command feeds it while it builds the cache, so every keyframe is generated once).
@@ -179,7 +179,7 @@ def _feed(h, x):
 
 def digests(dataroot, version="v1.0-mini", stride=2, sweeps=("scene-0061", "scene-1077", "scene-0796")):
     """one digest per frame (every array byte and every meta entry) of every `stride`-th keyframe of all sequences and of a few 12 Hz sweep
-    frames: the evidence that two generators make the same GT (`same_gt_as` in versions.csv). Run `python -m autogt digest OUT.json` in both
+    frames: the evidence that two generators make the same GT (`same_gt_as` in versions.csv). Run `python -m GtGenerator digest OUT.json` in both
     source trees and compare the files (`digest --compare A.json B.json`). -> {signature, digests: {token or token@k: sha1}}"""
     dataroot = os.path.expanduser(dataroot)
     gen = GtGenerator(dataroot, version, light=True)

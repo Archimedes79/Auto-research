@@ -63,7 +63,7 @@ on one thread.
 | `report` | `report` | all checks over all sequences, the GT stored, one PDF with samples |
 | `view`, `sheets`, `video`, `lanegraph`, `masks`, `area-mask TOKEN` | the same names, `area_mask` | pictures of keyframes, a drive at 12 Hz (H.264), the lane graph, the coverage masks, one area mask |
 | `clean [--reports] [--stale-caches DIR]` | `clean` | list (dry run) or `--move` reports and the stores of other generator versions; never a released store; `--delete` only for reports |
-| `selftest [--only PART ...]` | `selftest` | all tests (minutes; needs nuScenes mini), or parts |
+| `selftest [--only NAME ...] [--all] [--root MINI]` | `selftest` | all tests (minutes with nuScenes mini), or the parts and cases named (`selftest.CASES`); without mini the data-free cases run and the others are listed as SKIPPED, `--all` fails instead (the gate of a signature step and of a release) |
 
 - Sequences: `--set small|full` (`sets/`: the 10 sequences of mini; all 850 of trainval), `--scenes scene-0061 ...` or `--scenes-file F`, never two of them. A problem's own split of the same name is another
   list: pass it with `--scenes-file`; its key calls it `scenes:<id>`.
@@ -85,10 +85,11 @@ on one thread.
   nuscenes_adapter.py nuscenes_gt.py coverage.py`. Lane (one per rig, with its parameters): `lane_graph.py road_graph.py lane_lines.py lane_tiers.py rig_cameras.py lane_gt.py`. Every other file
   (interface, writer, stores, tools, tests) changes no GT.
 - A **version** names a signature for people: front `vN` (`versions.csv`, git tag `autogt/vN`), lane `lN` per rig (`lane_versions.csv`, tag `autogt/lane-lN`), a **release** = front + lane as one number
-  (`releases.csv`). Current: front v13 (`a107e0b4e8`), lane l6.1 (stores `9ad1d4ce30` for `lane_center`, `8a04143278` for `bev_fusion`), release v15. `versions` prints the tables.
+  (`releases.csv`). Current: front v16 (the GT and store of v13, `a107e0b4e8`), lane l6.2 (the GT of l6: stores `9ad1d4ce30` for `lane_center`,
+  `8a04143278` for `bev_fusion`), release v17. `versions` prints the tables.
 - **Same GT, new code:** when new code makes the GT of an older version byte for byte, its row names it in `same_gt_as` and it reads and fills that store. Proof for the front: `digest A.json` in both
-  source trees, `digest --compare A.json B.json`, then the new signature under `same_as` of that store in `front_digests.json`. Lane: checked on stored frames; the digests in `lane_l6_digest.json` pin the
-  current graphs. The self-test enforces the pins.
+  source trees, `digest --compare A.json B.json`, then the new signature under `same_as` of that store in `front_digests.json`. Lane: the digests in `lane_l6_digest.json` pin the
+  current graphs (a digest holds the store key, so a `same_gt_as` row keeps them); the self-test enforces the pins.
 - A **GT key** (`gt_api.py`) is the data identity (`data_identity` of `datasets/nuscenes/manifest.json` as recorded by the store, not a hash of the `dataroot` given), the signature, store, version and
   commit of each part, and the release. Two keys with the same `id` are the same GT: the id is over the data identity and the stores, not over the code signatures. `complete` is never guessed
   (`key.command` is the shell line that makes what is missing); frames written under two manifests give the identity `mixed`.

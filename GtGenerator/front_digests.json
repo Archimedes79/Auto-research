@@ -434,7 +434,9 @@
    "fe2a163b8948451b95fa48e21e1988ce@3": "dea68a560394c0544fc24706943c4c997157c07b"
   },
   "frames": 211,
-  "proof": "the digests of the v13 generator (signature a107e0b4e8) on 211 frames: every 2nd keyframe of the ten mini sequences and 6 sweep frames, every array byte and every meta entry; 2026-11-10. v13 makes a DIFFERENT GT than v9 on purpose (yaw wrapped, stationary flags, flow_sigma of unknown cells, unit centreline_dir): a field-by-field comparison of 404 mini keyframes found only these differences and nothing else (temp/gtmove/compare_front.py)",
-  "same_as": []
+  "proof": "the digests of the v13 generator (signature a107e0b4e8) on 211 frames: every 2nd keyframe of the ten mini sequences and 6 sweep frames, every array byte and every meta entry; 2026-11-10. v13 makes a DIFFERENT GT than v9 on purpose (yaw wrapped, stationary flags, flow_sigma of unknown cells, unit centreline_dir): a field-by-field comparison of 404 mini keyframes found only these differences and nothing else (temp/gtmove/compare_front.py). v16 (ceff50b283: comments, docstrings and the unused radar_coverage) makes these 211 frames byte for byte (`digest --compare` of v13 and v16: 0 differ; 2026-11-28)",
+  "same_as": [
+   "ceff50b283"
+  ]
  }
 }

@@ -1,8 +1,9 @@
-"""Self-test of the facade (gt_api.py) and the area masks (lane_raster.py): a toy polygon for the raster (orientation, hole, nested areas, border against the exact distance, empty areas, refused windows),
-the packed cache (round trip, resume, a store that grew, a changed rasteriser, an empty frame), real nuScenes mini frames against a raster made straight from the map and against the front GT's drivable
-area, and `generate_bev_gt` / `generate_lane_gt` on one sequence with the key they return (id, completeness, data identity).
+"""Self-test of the facade (gt_api.py) and the area masks (lane_raster.py): a toy polygon for the raster (orientation, hole, nested areas, border against the
+exact distance, empty areas, refused windows), the packed cache (round trip, resume, a store that grew, a changed rasteriser, an empty frame), real nuScenes
+mini frames against a raster made straight from the map and against the front GT's drivable area, and `generate_bev_gt` / `generate_lane_gt` on one sequence
+with the key they return (id, completeness, data identity).
 
-    python -m GtGenerator.gt_api_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
+    python -m GtGenerator selftest --only gt_api       (cases gt_api_toy: no data; gt_api: nuScenes mini)
 """
 import os
 import tempfile
@@ -36,7 +37,8 @@ def _raster_checks():
     assert m[ix(22.25), iy(4.75)] == 1 and m[ix(22.25), iy(5.25)] == 0 and m[ix(22.25), iy(-4.75)] == 1 and m[ix(22.25), iy(-5.25)] == 0, "y is not flipped: iy = 0 is the RIGHT edge (y = -26)"
     assert m[ix(19.75), iy(0.25)] == 0 and m[ix(20.25), iy(0.25)] == 1 and m[ix(29.75), iy(0.25)] == 1 and m[ix(30.25), iy(0.25)] == 0, "both edges in x are exact (no one-cell bias on the low side)"
     assert not LR.area_mask(g, "road").any(), "an empty area is an empty mask"
-    # the border against the exact distance: a cell centre is set when it lies within `border_m` of the area (shapely, with the hole); the rounded corners of the buffer are polygons of 8 segments per quarter: 3 mm
+    # the border against the exact distance: a cell centre is set when it lies within `border_m` of the area (shapely, with the hole); the rounded corners of
+    # the buffer are polygons of 8 segments per quarter: 3 mm
     from shapely.geometry import Point, Polygon
     area = Polygon(g["areas"]["intersection"][0]["exterior"], [g["areas"]["intersection"][0]["holes"][0]])
     for border in (0.5, 1.0, 2.5):
@@ -86,7 +88,8 @@ def _cache_checks():
         graphs = {}
         for i, t in enumerate(toks):
             g = _toy()
-            g["areas"]["intersection"][0]["exterior"] = g["areas"]["intersection"][0]["exterior"] + np.array([float(i), 0.0], np.float32)       # a different square per frame
+            # a different square per frame
+            g["areas"]["intersection"][0]["exterior"] = g["areas"]["intersection"][0]["exterior"] + np.array([float(i), 0.0], np.float32)
             graphs[t] = g
             lane_gt._save(store, t, g)
         empty = "e" * 32
@@ -146,7 +149,8 @@ def _cache_checks():
 
 
 def _command_checks():
-    """`GtKey.command`: nothing for a key whose parts are stored, else the shell line that makes them, which the command line reads back as the same system, sequences and store root"""
+    """`GtKey.command`: nothing for a key whose parts are stored, else the shell line that makes them, which the command line reads back as the same system,
+    sequences and store root"""
     import shlex
     from . import cli, gt_api, where
 
@@ -168,8 +172,8 @@ def _command_checks():
 
 
 def _mini_checks(root, GtGenerator, lane_gt):
-    """the mask of the stored polygons against a raster made straight from the nuScenes map (road_segment polygons with is_intersection: the way the BEV chat first drew it, PIL at 4x supersampling,
-    which has a bias of about 1 % of the cells at the polygon edges; this mask is exact)"""
+    """the mask of the stored polygons against a raster made straight from the nuScenes map (road_segment polygons with is_intersection: the way the BEV chat
+    first drew it, PIL at 4x supersampling, which has a bias of about 1 % of the cells at the polygon edges; this mask is exact)"""
     from PIL import Image, ImageDraw
     gt = GtGenerator(root, "v1.0-mini", light=True, scenes=["scene-0061", "scene-0103"])
     lgt = lane_gt.LaneGT(root, "v1.0-mini", nusc=gt.nusc, rig="bev_fusion")
@@ -199,14 +203,16 @@ def _mini_checks(root, GtGenerator, lane_gt):
                         dr.polygon(px(it.coords), fill=0)
             direct = np.asarray(img, bool)[2::4, 2::4][:grid.nx, :grid.ny]
             mine = LR.area_mask(lgt.graph(tok)).astype(bool)
-            # the exact reference, from the map polygons and not from the stored graph: a cell is set when its centre is inside a road_segment polygon with is_intersection
+            # the exact reference, from the map polygons and not from the stored graph: a cell is set when its centre is inside a road_segment polygon with
+            # is_intersection
             exact = np.zeros_like(mine)
             xs = grid.x_min + (np.arange(grid.nx) + 0.5) * grid.res
             ys = grid.y_min + (np.arange(grid.ny) + 0.5) * grid.res
             X, Y = np.meshgrid(xs, ys, indexing="ij")
             for pg in polys:
                 for part in ([pg] if pg.geom_type == "Polygon" else list(pg.geoms)):
-                    ego = lambda coords: (np.c_[np.asarray(coords, float)[:, :2], np.zeros(len(coords)), np.ones(len(coords))] @ Tinv.T)[:, :2]      # noqa: E731
+                    # noqa: E731
+                    ego = lambda coords: (np.c_[np.asarray(coords, float)[:, :2], np.zeros(len(coords)), np.ones(len(coords))] @ Tinv.T)[:, :2]
                     poly = shapely.geometry.Polygon(ego(part.exterior.coords), [ego(it.coords) for it in part.interiors])
                     exact |= shapely.contains_xy(poly, X.ravel(), Y.ravel()).reshape(X.shape)
             inter += int((direct & mine).sum())
@@ -238,7 +244,8 @@ def _api_checks(root, lane_gt):
         assert again.id == key.id and again.complete and gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, scenes=["scene-0061"]).complete, "the key is read from the stores"
         lane_only = gt_api.generate_lane_gt(root, rig="bev_fusion", scenes=["scene-0061"], out=d, verbose=False)
         assert [p.name for p in lane_only.parts] == ["lane"] and lane_only.id == key.id, "generate_lane_gt(bev_fusion) names the same GT as generate_bev_gt: the id covers all parts"
-        # a thinned store is not complete whatever its index says: a zero-byte keyframe (a full disk, a bad copy) is found by the deep listing, a lost file by the count; deep=False judges by name only
+        # a thinned store is not complete whatever its index says: a zero-byte keyframe (a full disk, a bad copy) is found by the deep listing, a lost file by
+        # the count; deep=False judges by name only
         ask = lambda **k: gt_api.gt_key("bev_fusion", "v1.0-mini", None, d, None, ["scene-0061"], **k)
         fpath = os.path.join(key.part("front").path, toks[2] + ".npz")
         keep = open(fpath, "rb").read()
@@ -257,7 +264,8 @@ def _api_checks(root, lane_gt):
         assert ask().part("lane").complete and not ask().part("masks").complete and not ask().complete, "a lost mask cache: only the masks part is incomplete"
         os.rename(cpath + ".gone", cpath)
         assert ask().complete, "the cache is back"
-        # the two picture-like commands do what they say: the mask command agrees with the packed cache, a bad border or a bad pick is a ValueError, the lane graph picture is written
+        # the two picture-like commands do what they say: the mask command agrees with the packed cache, a bad border or a bad pick is a ValueError, the lane
+        # graph picture is written
         am = GtGenerator.area_mask(toks[2], "intersection", 0.5, png=os.path.join(d, "m.png"), out=d)
         assert am["shape"] == [120, 104] and am["cells"] == int(key.mask(toks[2], "intersection", 0.5).sum()) > 0 and os.path.getsize(os.path.join(d, "m.png")) > 100, am
         for bad_border in (float("nan"), -1.0):
@@ -280,7 +288,8 @@ def _api_checks(root, lane_gt):
             except ValueError:
                 pass
         assert sets_mod.set_id(["scene-0002", "scene-0001"]) == sets_mod.set_id(["scene-0001", "scene-0002", "scene-0001"]) != sets_mod.set_id(["scene-0001"]), "a scene list is named by its content: order and repeats do not matter"
-        # the data identity: the stores that recorded one must agree, else the key says "mixed"; a lane store records it after a run (its writer is a hashed file that does not)
+        # the data identity: the stores that recorded one must agree, else the key says "mixed"; a lane store records it after a run (its writer is a hashed
+        # file that does not)
         lane_idx = os.path.join(key.part("lane").path, "index.json")
         import json
         saved = json.load(open(lane_idx))
@@ -290,7 +299,8 @@ def _api_checks(root, lane_gt):
         json.dump({k: v for k, v in saved.items() if k != "data_identity"}, open(lane_idx, "w"))
         assert ask().data == gt_api.data_identity() and ask().id == key.id, "a lane store without a record: the front store's identity decides"
         json.dump(saved, open(lane_idx, "w"))
-        # what the recorder does with a lane store: none recorded + nothing new written = today's; none recorded + frames written = still none (the old frames have no known identity); another one = mixed
+        # what the recorder does with a lane store: none recorded + nothing new written = today's; none recorded + frames written = still none (the old frames
+        # have no known identity); another one = mixed
         with tempfile.TemporaryDirectory() as t_:
             f_ = os.path.join(t_, "index.json")
             real_ident = gt_api.data_identity
@@ -306,14 +316,15 @@ def _api_checks(root, lane_gt):
                 assert json.load(open(f_)).get("data_identity") == "aaaaaaaaaaaa", "the index lost the record: written again"
             finally:
                 gt_api.data_identity = real_ident
-        # complete is never a guess: a store of one sequence is not the set `full`, a set is judged by what the index says it holds, the json tables (dataroot) say it exactly
+        # complete is never a guess: a store of one sequence is not the set `full`, a set is judged by what the index says it holds, the json tables (dataroot)
+        # say it exactly
         assert not gt_api.key_of("bev_fusion", "v1.0-mini", "full", d).complete and not gt_api.key_of("bev_fusion", "v1.0-mini", "small", d).complete, "one sequence is neither full nor small"
         assert not gt_api.key_of("bev_fusion", "v1.0-mini", None, d).complete, "no set and no scenes: nothing to judge by, incomplete"
         small = gt_api.key_of("bev_fusion", "v1.0-mini", "small", d, dataroot=root)
         assert not small.complete and small.id == key.id and "INCOMPLETE" in str(small), "the id names the code and the data, completeness is a separate fact"
         assert not gt_api.key_of("bev_fusion", "v1.0-mini", "custom", os.path.join(d, "nothing"), scenes=["scene-0061"]).complete, "no store, not complete"
-        # the id names the GT, not the code: code without a version row fills its own store (another id), code that the table says makes the GT of this store (same_gt_as) keeps the id;
-        # the data identity of the day does not change it (the store recorded it); the key says where its data came from
+        # the id names the GT, not the code: code without a version row fills its own store (another id), code that the table says makes the GT of this store
+        # (same_gt_as) keeps the id; the data identity of the day does not change it (the store recorded it); the key says where its data came from
         real_code, real_store, real_data = lane_gt.code_signature, lane_gt.store_of, gt_api.data_identity
         try:
             lane_gt.code_signature = lambda **p: "f" * 10
@@ -407,7 +418,8 @@ def _api_checks(root, lane_gt):
         for pred, how, word, why in cases:
             damaged[damage(pred, how)] = (word, why)
         zero = next(t for t in toks if t not in used)
-        open(os.path.join(bad, zero + ".pkl.gz"), "wb").close()                  # a zero-byte file: a problem of this token (the audit used to end in an EOFError)
+        # a zero-byte file: a problem of this token (the audit used to end in an EOFError)
+        open(os.path.join(bad, zero + ".pkl.gz"), "wb").close()
         used.add(zero)
         worse = store_audit.audit_lane(bad, "bev_fusion", root, "v1.0-mini", ["scene-0061"], verbose=False)
         assert not worse["ok"] and any(t == "store" for t, _ in worse["problems"]), worse["problems"]
@@ -450,23 +462,20 @@ def _api_checks(root, lane_gt):
     return f"key {key.id}: {key}"[:230]
 
 
-def run(root=None, verbose=True):
-    from . import lane_gt
-    from .suite import GtGenerator
-    root = os.path.expanduser(root or "~/data/nuscenes")
+def toy():
+    """the checks that need no data: the toy raster, the packed cache, the commands of a key"""
     _raster_checks()
     _cache_checks()
     _command_checks()
+    return ("toy raster (orientation, exact edges, hole, nested areas, exact border, empty areas, refused windows), packed cache (round trip, resume, growth, "
+            "rasteriser, empty frame)")
+
+
+def mini(root):
+    """the checks on nuScenes mini: real frames against a raster made from the map, generate_bev_gt / generate_lane_gt and their keys, the store audit"""
+    from . import lane_gt
+    from .suite import GtGenerator
     msg_mini = _mini_checks(root, GtGenerator, lane_gt)
     msg_key = _api_checks(root, lane_gt)
-    msg = f"gt_api / lane_raster selftest ok: toy raster (orientation, exact edges, hole, nested areas, exact border, empty areas, refused windows), packed cache (round trip, resume, growth, rasteriser, empty frame); {msg_mini}; generate_bev_gt / generate_lane_gt on scene-0061, {msg_key}; the store audit finds a missing file, a tier that is none, vis and occ at one point and a point outside the window"
-    if verbose:
-        print(msg)
-    return msg
-
-
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=None)
-    run(ap.parse_args().root)
+    return (f"{msg_mini}; generate_bev_gt / generate_lane_gt on scene-0061, {msg_key}; the store audit finds a missing file, a tier that is none, vis and occ "
+            "at one point and a point outside the window")

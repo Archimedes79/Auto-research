@@ -10,9 +10,6 @@ from .grid import GridSpec
 from .api import Interface
 from .nuscenes_gt import NuScenesGT
 
-DATA = where.root()       # <data root>/groundtruth (where.py)
-
-
 _SIGNATURES = {}
 
 
@@ -50,7 +47,8 @@ def missing(tokens, data=None, **options):
     before a training starts, so that nothing has to be generated in a data-loader worker. `data`: the store root (default where.root(), read at the call)"""
     sig_dir = os.path.join(data or where.root(), current_signature(**options))
     tokens = list(tokens)
-    if len(tokens) > 50:                                                  # one listing of the folder instead of a stat per token (2 ms each on the 9p mounts); a zero-byte file is no keyframe
+    # one listing of the folder instead of a stat per token (2 ms each on the 9p mounts); a zero-byte file is no keyframe
+    if len(tokens) > 50:
         from .store import front_keys
         have = front_keys(sig_dir, nonempty=True)
         return [t for t in tokens if t not in have]
@@ -65,7 +63,8 @@ def missing(tokens, data=None, **options):
 
 def load(token, data=None, **options):
     """the stored GT of one keyframe (written by `python -m GtGenerator generate` / `report`) for the current source and options:
-    dict of float32 layers + meta, no nuScenes needed. `data`: the store root (default where.root(), read at the call). Raises FileNotFoundError that names the folders that do exist."""
+    dict of float32 layers + meta, no nuScenes needed. `data`: the store root (default where.root(), read at the call). Raises FileNotFoundError that names the
+    folders that do exist."""
     data = data or where.root()
     sig_dir = os.path.join(data, current_signature(**options))
     try:
@@ -118,8 +117,9 @@ class GtGenerator(NuScenesGT, Interface):
     light=True: a memory-light devkit (CAM_FRONT + radars only, GtGenerator/light_nusc.py); scenes=[names]: only these sequences are
     loaded (v1.0-trainval: ~0.7 GB for 85 sequences instead of 8+ GB for all)
 
-    The same class is the interface of the whole suite: its STATIC methods (GtGenerator/api.py) are what the command line calls, `GtGenerator.generate_bev_gt(root)`, `GtGenerator.generate_lane_gt(root)`,
-    `GtGenerator.gt_key(system)`, `GtGenerator.generate`, `have`, `check_data`, `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
+    The same class is the interface of the whole suite: its STATIC methods (GtGenerator/api.py) are what the command line calls,
+    `GtGenerator.generate_bev_gt(root)`, `GtGenerator.generate_lane_gt(root)`, `GtGenerator.gt_key(system)`, `GtGenerator.generate`, `have`, `check_data`,
+    `audit_lane`, `area_masks`, `sets`, `versions`, `view`, `video`, `check`, `report`, `clean`, `selftest` ...
     """
 
     def __init__(self, dataroot, version, *, grid=None, ss=4, light=False, scenes=None, **options):
@@ -137,8 +137,8 @@ class GtGenerator(NuScenesGT, Interface):
         return super().training_sample(sample_token, grid or self.grid, ss or self.ss)
 
     def store_signature(self):
-        """the folder name of the stored GT this generator makes: its own signature, or that of the older version whose GT it makes byte for byte (`same_gt_as` in
-        versions.csv). A cache name or a record carries this one, so that an edit that changes no GT invalidates no cache"""
+        """the folder name of the stored GT this generator makes: its own signature, or that of the older version whose GT it makes byte for byte (`same_gt_as`
+        in versions.csv). A cache name or a record carries this one, so that an edit that changes no GT invalidates no cache"""
         from .versions import canonical
         return canonical(self.signature())
 
@@ -155,5 +155,3 @@ class GtGenerator(NuScenesGT, Interface):
             tok = self.nusc.get("sample", tok)["next"]
         return out
 
-
-AutoGT = GtGenerator        # another name of the class; only the self-test of rig_masks.py imports it (rig_masks.py is in no signature)

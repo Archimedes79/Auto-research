@@ -1,8 +1,9 @@
-"""Self-test of the command line (cli.py) and the store helpers behind it: every command is ONE method of GtGenerator (api.py), which makes ONE call of a function of the suite (a recorder stands in for the
-function and the test asserts the call and its arguments), wrong arguments give a message and exit 2 and never a traceback, "not there" gives exit 1, every --help works, the key line printed is the key of the stored GT; and the
-consistency of the stores (listing by file name, a rerun that writes nothing keeps the manifest, versions tables).
+"""Self-test of the command line (cli.py) and the store helpers behind it: every command is ONE method of GtGenerator (api.py), which makes ONE call of a
+function of the suite (a recorder stands in for the function and the test asserts the call and its arguments), wrong arguments give a message and exit 2 and
+never a traceback, "not there" gives exit 1, every --help works, the key line printed is the key of the stored GT; and the consistency of the stores (listing by
+file name, a rerun that writes nothing keeps the manifest, versions tables).
 
-    python -m GtGenerator.cli_selftest [--root ~/data/nuscenes]      (also run by `python -m GtGenerator selftest`)
+    python -m GtGenerator selftest --only cli          (cases cli_toy: no data; cli: nuScenes mini)
 """
 import contextlib
 import io
@@ -66,7 +67,8 @@ def _mapping_checks():
     from . import checks, clean, gt_api, lane_raster, report, rig_masks, sets, store_audit, video, view
     from . import lane_gt
     from . import pipeline
-    # the map of the module doc is the map of the code: every command is ONE method of GtGenerator, named in the doc; no method is without a command, and the command line imports nothing but the class
+    # the map of the module doc is the map of the code: every command is ONE method of GtGenerator, named in the doc; no method is without a command, and the
+    # command line imports nothing but the class
     from .api import Interface
     from .suite import GtGenerator
     expected = {"generate": "generate", "generate-bev": "generate_bev_gt", "generate-lane": "generate_lane_gt", "area-masks": "area_masks", "audit-lane": "audit_lane",
@@ -296,7 +298,8 @@ def _store_checks(root):
         pipeline.generate(root, d, scenes=["scene-0103"], stride=40, verbose=False, lane=False)
         assert set(json.load(open(path))["scenes"]) == {"scene-0061", "scene-0103"}, "a rerun that writes something updates it"
         assert json.load(open(path))["complete"] is True, "a store that grew by another run is complete (the provisional index of that run must not stay)"
-        # the data identity: files written under another manifest.json than the first ones make it "mixed" (the first write does not win silently); the same identity keeps it
+        # the data identity: files written under another manifest.json than the first ones make it "mixed" (the first write does not win silently); the same
+        # identity keeps it
         from . import gt_api as ga
         real_ident = ga.data_identity
         try:
@@ -313,7 +316,8 @@ def _store_checks(root):
         from . import gt_api
         from .suite import scene_tokens
         assert not gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, parts=("front",), scenes=["scene-0061"]).complete, "a stride store is not complete"
-        pipeline.generate(root, d, scenes=["scene-0553"], stride=40, use_flow=False, verbose=False, lane=False)           # a sequence that only this options store holds
+        # a sequence that only this options store holds
+        pipeline.generate(root, d, scenes=["scene-0553"], stride=40, use_flow=False, verbose=False, lane=False)
         opt = gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, parts=("front",), scenes=["scene-0553"], options={"use_flow": False})
         plain = gt_api.key_of("bev_fusion", "v1.0-mini", "custom", d, parts=("front",), scenes=["scene-0553"])
         tok = scene_tokens("scene-0553", "v1.0-mini", root)[0]
@@ -324,7 +328,8 @@ def _store_checks(root):
             raise AssertionError("a part that the key does not list must raise")
         except ValueError:
             pass
-    # a run that writes nothing leaves a finished store alone whatever stride it is asked for (it turned stride 1 into "mixed" and dropped the release); a store without a manifest gets one
+    # a run that writes nothing leaves a finished store alone whatever stride it is asked for (it turned stride 1 into "mixed" and dropped the release); a store
+    # without a manifest gets one
     with tempfile.TemporaryDirectory() as d:
         r = pipeline.generate(root, d, scenes=["scene-0061"], stride=20, verbose=False, lane=False)
         path = os.path.join(d, r["signature"], "index.json")
@@ -367,7 +372,8 @@ def _store_checks(root):
     assert _complete({}, {"t1", "t2", "t3"}, {"t1", "t2"}, "full", None) and not _complete({}, {"t1"}, {"t1", "t2"}, "full", None), "against the json tables: every keyframe, whatever the index says"
     # the versions tables: consistent, a cycle or a dangling same_gt_as is an error, not a hang
     versions.check_table()
-    # new rows are derived from git, nobody types them: the next number of the running sequence (front versions and releases together), the date and the text of the last commit, same_gt_as stays by hand
+    # new rows are derived from git, nobody types them: the next number of the running sequence (front versions and releases together), the date and the text of
+    # the last commit, same_gt_as stays by hand
     change = {"date": "2026-11-11", "subject": "a front change"}
     vrows, rrows = versions.table(), versions.releases()
     top = max([int(r["version"][1:]) for r in vrows] + [int(r["release"][1:]) for r in rrows])
@@ -437,8 +443,8 @@ def _store_checks(root):
 
 
 def _architecture_check():
-    """the architecture drawing (architecture.json -> .svg / .md) is in step with the code: every box points at real code, no file is in no box, the generated files are current (the check of
-    autoresearch/reporter/archdraw.py; a missing tool is a failure, not a skip)"""
+    """the architecture drawing (architecture.json -> .svg / .md) is in step with the code: every box points at real code, no file is in no box, the generated
+    files are current (the check of autoresearch/reporter/archdraw.py; a missing tool is a failure, not a skip)"""
     import subprocess
     import sys
     here = os.path.dirname(os.path.abspath(__file__))
@@ -448,20 +454,16 @@ def _architecture_check():
     assert r.returncode == 0, "the architecture drawing is out of step with the code (run `python autoresearch/reporter/archdraw.py render GtGenerator/architecture.json`): " + r.stdout[-800:] + r.stderr[-300:]
 
 
-def run(root=None, verbose=True):
-    root = os.path.expanduser(root or "~/data/nuscenes")
+def toy():
+    """the checks that need no data: the command map, the architecture drawing"""
     _mapping_checks()
+    _architecture_check()
+    return ("every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, key, have, data, report, clean, "
+            "selftest --only, pictures), every --help works; the architecture drawing is in step with the code")
+
+
+def mini(root):
+    """the checks on nuScenes mini: wrong arguments exit 2 with a message, not there exits 1, the stores and the tables"""
     _error_checks(root)
     _store_checks(root)
-    _architecture_check()
-    msg = "cli selftest ok: every command is one method of GtGenerator and one call (generate, generate-bev, generate-lane, audit-lane, area-masks, key, have, data, report, clean, selftest --only, pictures), every --help works, wrong arguments exit 2 with a message, not there exits 1, stores and tables; the architecture drawing is in step with the code"
-    if verbose:
-        print(msg)
-    return msg
-
-
-if __name__ == "__main__":
-    import argparse
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--root", default=None)
-    run(ap.parse_args().root)
+    return "wrong arguments exit 2 with a message, not there exits 1, stores and tables"
