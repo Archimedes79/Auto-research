@@ -1,0 +1,29 @@
+{
+ "run": "E427.champ_s1",
+ "problem": "lane_center",
+ "experiment": "E427",
+ "arm": "champ",
+ "seed": 1,
+ "commit": "1a1dcd1dc5ad978da469c454f25a5d5114278ced",
+ "tag": "lane_center/E427",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 93.1,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 109.2,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 15:42:54",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 15:42:54",
+ "ended": "2026-11-28 15:46:17"
+}
