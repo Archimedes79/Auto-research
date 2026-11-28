@@ -1,17 +1,17 @@
 """Diagnostics of the read-out of the token head on the predicted nodes of the lane head B': the cards of a dump, the decode sweep, the cell rule, the delivered graphs for the pictures, the timing.
 The read-out itself is `net/model/lane_readout.py` (records, decode, writer), the dump (cache or live) and its checks `evaluation/lane_predict.py`; the evaluation of a run (`evaluation/adapter.py`) reads those two and not this file.
 
-    wsl bash tools/env/_py14.sh jtoken_eval.py dump  --run R --seed S [--split val|train] [--every N] [--cpu] [--max N]   # GPU: the head on the cache tokens -> runs/R/token_<split>.pkl
-    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [--split val|train] [--every N] [--max N]                     # CPU -> runs/R/token_card_rec[_train].json (never overwritten)
-    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
-    wsl bash tools/env/_py14.sh jtoken_eval.py score --run R --seed S [a decode variant] --ref-run R2 [--ref-run-cell S,L,K,on|off]   # CPU: + R2's dump of the same read-out at the same decode or that cell, paired R - R2 -> token_card_.._vs_<R2>[_rc<cell>].json
-    wsl bash tools/env/_py14.sh jtoken_eval.py choose-cell --runs R1[,R2] [--ref-cell 0.3,0.2,0.6,off] [--split train --every 3] [--out-dir D]   # CPU: E375's cell rule (E377 / E378) on the per-class table(s) -> prints S,L,K,on|off, runs/R1/token_cell_perclass..json
-    wsl bash tools/env/_py14.sh jtoken_eval.py sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the per-class grid of decode variants on the TRAIN sample -> runs/R/token_sweep_perclass_train.json
-    wsl bash tools/env/_py14.sh jtoken_eval.py graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --link-thr-long T_L --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
-    wsl bash tools/env/_py14.sh jtoken_eval.py dump --live --run R --seed S [--bs 4] [--split val|train] [--every N] [--cpu] [--max N]   # GPU: B' + the head on the LIVE tokens -> runs/R/token_<split>_live.pkl
-    wsl bash tools/env/_py14.sh jtoken_eval.py score|sweep --live ...                                                                    # CPU: a live dump read with its own tokens (its B' checked: `check_b`); every file name carries _live
-    wsl bash tools/env/_py14.sh jtoken_eval.py score --live --run R --seed S [a decode] --ref-run R2 [--ref-cache]                       # CPU: paired BY FRAME with R2's live dump, or (--ref-cache) with R2's CACHE dump (the parity read) -> .._live_vs_<R2>[_cache]..json
-    wsl bash tools/env/_py14.sh jtoken_eval.py timing --run R [--b-run runs/e292_a_s<S>] [--K 384] [--cpu]                               # parameters, GMACs, ms (GPU only when idle: < 2 GB used and no run.py job)
+    python -P -m lane_center.evaluation.jtoken_eval dump  --run R --seed S [--split val|train] [--every N] [--cpu] [--max N]   # GPU: the head on the cache tokens -> runs/R/token_<split>.pkl
+    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S [--split val|train] [--every N] [--max N]                     # CPU -> runs/R/token_card_rec[_train].json (never overwritten)
+    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S --link-thr T [--link-thr-long T_L] --keep-thr K [--no-none-gate] [--ref-cell S,L,K,on|off]   # CPU: another decode of the same dump -> token_card_rec_lt<T>[_ltl<T_L>]_kt<K>[_nng][_train]..json
+    python -P -m lane_center.evaluation.jtoken_eval score --run R --seed S [a decode variant] --ref-run R2 [--ref-run-cell S,L,K,on|off]   # CPU: + R2's dump of the same read-out at the same decode or that cell, paired R - R2 -> token_card_.._vs_<R2>[_rc<cell>].json
+    python -P -m lane_center.evaluation.jtoken_eval choose-cell --runs R1[,R2] [--ref-cell 0.3,0.2,0.6,off] [--split train --every 3] [--out-dir D]   # CPU: E375's cell rule (E377 / E378) on the per-class table(s) -> prints S,L,K,on|off, runs/R1/token_cell_perclass..json
+    python -P -m lane_center.evaluation.jtoken_eval sweep --run R --seed S --split train [--every N] [--max N] [--grid perclass]                                    # CPU: the per-class grid of decode variants on the TRAIN sample -> runs/R/token_sweep_perclass_train.json
+    python -P -m lane_center.evaluation.jtoken_eval graphs --run R --seed S --name <system> --out <file.pkl> [--link-thr T --link-thr-long T_L --keep-thr K --no-none-gate]   # CPU: the delivered VAL graphs in the schema of pass1.pkl + perframe_table.json
+    python -P -m lane_center.evaluation.jtoken_eval dump --live --run R --seed S [--bs 4] [--split val|train] [--every N] [--cpu] [--max N]   # GPU: B' + the head on the LIVE tokens -> runs/R/token_<split>_live.pkl
+    python -P -m lane_center.evaluation.jtoken_eval score|sweep --live ...                                                                    # CPU: a live dump read with its own tokens (its B' checked: `check_b`); every file name carries _live
+    python -P -m lane_center.evaluation.jtoken_eval score --live --run R --seed S [a decode] --ref-run R2 [--ref-cache]                       # CPU: paired BY FRAME with R2's live dump, or (--ref-cache) with R2's CACHE dump (the parity read) -> .._live_vs_<R2>[_cache]..json
+    python -P -m lane_center.evaluation.jtoken_eval timing --run R [--b-run runs/e292_a_s<S>] [--K 384] [--cpu]                               # parameters, GMACs, ms (GPU only when idle: < 2 GB used and no run.py job)
 
 Read-out of record (named before the run, on the output only): a node is kept when p_none < 0.5 (e = 1 - p_none); decode `rec`: a link i -> j of class c when p^c(j|i) >= 0.3, p^c(j|i) >= p^c(none|i) and both ends are kept (a fork keeps both
 branches). The prediction is written by `lane_ptok_data.to_pred` from the cached TOKENS only (pos, dirv, B''s flags and s; every node in
@@ -41,24 +41,22 @@ import time
 import numpy as np
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "../.."):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
-import jtok as JT  # noqa: E402
-import jtoken as JK  # noqa: E402
-from jtiming import gpu_free, gpu_others  # noqa: E402,F401  (the tests of this tool read them here)
-import lane_dump as DU  # noqa: E402
-import lane_live_data as LLD  # noqa: E402
-import lane_net as LN  # noqa: E402
-import lane_predict as PR  # noqa: E402
-import lane_ptok_data as LP  # noqa: E402
-import lane_readout as RO  # noqa: E402
-import qgraph_eval as QE  # noqa: E402
-from pmap import pmap  # noqa: E402
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+import GtGenerator  # the ground truth: its public interface only
+from lane_center.net.model import jtok as JT
+from lane_center.net.model import jtoken as JK
+from lane_center.evaluation.jtiming import gpu_free, gpu_others  # noqa: F401  (the tests of this tool read them here)
+from lane_center.evaluation import lane_dump as DU
+from lane_center.net.prep import lane_live_data as LLD
+from lane_center.net.model import lane_net as LN
+from lane_center.evaluation import lane_predict as PR
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.model import lane_readout as RO
+from lane_center.evaluation import qgraph_eval as QE
+from lane_center.evaluation.pmap import pmap
 
-ST = QE.TM.ST                                                               # the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
+ROOT = BP.ROOT
+ST = QE.TM.ST                                                              # the shared scene bootstrap (autoresearch/Evaluation/stats.py) that `qgraph_eval.paired` draws with
 RUNS = BP.RUNS
 SEC_VOID = ("pieces_per_gt_piece", "id_switches_per_100m")                  # the scorer's section numbers: meaningless when every node carries section 0
 SCRATCH = os.path.join(BP.SCRATCH, "e365")
@@ -435,8 +433,8 @@ SYS_KEYS = ("lines", "man_ok", "man_n", "man_real", "junc_hit", "junc_near")
 def frame_record(f):
     """the GT side of a frame as `temp/qual_report_1115/pass1_q1115.py` wrote it (re-implemented here, that script is scratch): k, token, row, scene, gt = the lane GT pieces with more than one point (pts float32, tier int8,
     vis bool, kinds), n_man / man_pts = the maneuvers of `jmaneuver.maneuvers(lane GT, qends.cluster)`, sys = {}"""
-    import jmaneuver as JM
-    import qends as QENDS
+    from lane_center.evaluation import jmaneuver as JM
+    from lane_center.net.prep import qends as QENDS
     g = f.lane()
     mans = JM.maneuvers(g, QENDS.cluster)
     return dict(k=f.k, token=f.token, row=f.row, scene=f.scene,
@@ -447,7 +445,7 @@ def frame_record(f):
 
 def sys_record(raw, mans, f):
     """one system's delivered graph of a frame as pass1 wrote it: lines (float32 polylines), man_ok / man_n / man_real / junc_hit / junc_near of `jmaneuver.frame_counts(raw, maneuvers, lane GT tree)`"""
-    import jmaneuver as JM
+    from lane_center.evaluation import jmaneuver as JM
     n_ok, n, hit, near, real = JM.frame_counts(raw, mans, f.ref().tree) if mans else (0, 0, 0, 0, [])
     return dict(lines=[np.asarray(p, np.float32) for p in raw["pts"]], man_ok=n_ok, man_n=n, man_real=[bool(x) for x in real], junc_hit=hit, junc_near=near)
 
@@ -498,8 +496,7 @@ def graphs(a, runs=RUNS):
     card = os.path.join(runs, a.run, f"token_card_rec{vsfx}{card_sfx(a)}.json")
     ref = json.load(open(card))["metrics"]["topo_F1"] if os.path.exists(card) and not a.max else None
     if doc is None:
-        sys.path.append(os.path.join(ROOT, "tools", "viz"))
-        import qgraph_view as QV
+        from lane_center.tools.viz import qgraph_view as QV
         try:
             scn = {s["name"]: s for s in json.load(open(os.path.join(os.path.join(BP.NUSC, "v1.0-trainval"), "scene.json")))}
             scenes = {sid: dict(name=nm, description=scn[nm]["description"], n=len(tk), tokens=tk) for sid, (nm, tk) in QV.val_scenes().items()}
@@ -538,7 +535,7 @@ def timing(a, runs=RUNS):
     """parameters, GMACs and ms per frame of the head (batch 1, bf16 autocast on the GPU, CUDA events, `--frames` cached VAL frames, `--repeats` passes after one untimed pass) and, with --b-run, of B' alone (pyramid + node head + top-K gather) and of
     the whole path (B' + head in one timed region; B' inside the bf16 autocast like the head: the protocol of the recorded 16.2 ms, written as `b_dtype`). K = --K or the K of the cache the run was trained on (at most that). The GPU only when `gpu_free`; --cpu times the code path on the CPU. Writes runs/R/token_timing[_cpu]_<UTC>.json (a new
     file every time) with `quiet` (host load < 3 and an idle GPU before and after) and `usable_for_gcost` (true only for a quiet GPU result)"""
-    import jtiming as JTG
+    from lane_center.evaluation import jtiming as JTG
     m, args = LN.load_head(a.run, "cpu", runs)
     ok, why = (False, "--cpu") if a.cpu else gpu_free()
     if not a.cpu and not ok:
@@ -556,7 +553,7 @@ def timing(a, runs=RUNS):
     ac = lambda: torch.autocast(dev, dtype=torch.bfloat16, enabled=dev == "cuda")  # noqa: E731
     net = xs = None
     if a.b_run:
-        import lane_tok_data as TD
+        from lane_center.net.prep import lane_tok_data as TD
         net = LN.LaneNet(LN.load_b(_abs(a.b_run)), m, K).to(dev).eval()
         td = TD.TokData("val", LATTICE, feats=True)
         xs = [td[i]["x"][None].to(dev) for i in range(a.frames)]

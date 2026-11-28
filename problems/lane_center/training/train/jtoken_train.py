@@ -1,6 +1,6 @@
 """Trainer of the token head on the predicted-node cache of the frozen lane head B' (stage 1); a run starts it through the research worker (`training/train/lane_train.py stage1`).
 
-    python training/train/jtoken_train.py --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--none-weight 0.25] [--head-seed 2] [--smoke]
+    python -P -m lane_center.training.train.jtoken_train --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--none-weight 0.25] [--head-seed 2] [--smoke]
 
 The model is `net/model/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `loss_jtoken.jtoken_loss`. Batches come from `net/prep/lane_ptok_data.loader("train", seed, bs, workers, ident=)`
 (imported only when the loop starts): the ONE finished cache of the frozen head `--ident` (`e292_a` = B') and the seed under `runs/e365_cache`. `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache,
@@ -21,18 +21,14 @@ are TEST-ONLY arguments (a run uses 500 / 384).
 import argparse
 import json
 import os
-import sys
 import time
 
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "evaluation"):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import jtoken as JK  # noqa: E402
-import lane_net as LN  # noqa: E402
-import loss_jtoken as LJK  # noqa: E402
-import trainer as T  # noqa: E402
+from lane_center.net.model import jtoken as JK
+from lane_center.net.model import lane_net as LN
+from lane_center.net.loss import loss_jtoken as LJK
+from lane_center.training import trainer as T
 
 RECIPE = ("seed", "ident", "bs", "steps", "lr", "none_weight", "head_seed")
 SMOKE_K = 384                                                               # tokens per synthetic frame of the smoke run: the memory of the real K
@@ -97,7 +93,7 @@ def train(a, runs=T.RUNS, ckpt_every=500, smoke_k=SMOKE_K):
     if a.smoke:
         loader, batch_fn = None, lambda step: JK.synthetic_batch(a.bs, smoke_k, seed=hs * 100003 + step)
     else:
-        import lane_ptok_data as LP  # the lane chat's loader (card 2a); lazily, so that the tests and --smoke need no cache
+        from lane_center.net.prep import lane_ptok_data as LP  # the lane chat's loader (card 2a); lazily, so that the tests and --smoke need no cache
         _, loader = LP.loader("train", a.seed, a.bs, a.workers, ident=a.ident)
         batch_fn = None
     run = T.Run(a.name, root=runs)

@@ -2,22 +2,21 @@
 weights or any data: the recipe files in the repository (the PCA basis and the sample list by their hashes), the projection and the layout turn
 on known answers, the frame rule and the comparison of the check, the writer (a new part, an interrupted part goes on, a finished part is
 refused), the messages when the clone, the weights or the raw data are missing, the command lines. CPU, seconds.
-Run: `research tests lane_center --only test_foundation` (or python net/tests/test_foundation.py from the problem folder)."""
+Run: `research tests lane_center --only test_foundation` (or python -P -m lane_center.net.tests.test_foundation with the module path: README.md)."""
 import contextlib
 import hashlib
 import io
 import json
 import os
-import sys
 import tempfile
 
 import numpy as np
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-sys.path.insert(0, os.path.join(ROOT, "net", "prep", "foundation"))
-import check_features as CF  # noqa: E402
-import gcar_features as GF  # noqa: E402
+from lane_center.net.prep.foundation import check_features as CF
+from lane_center.net.prep.foundation import gcar_features as GF
+
+ROOT = GF.BP.ROOT
 
 
 def missing(call, *words):
@@ -140,6 +139,13 @@ def test_command_lines():
         pass
     else:
         raise AssertionError("gcar_features accepted a call without --out")
+    try:
+        with contextlib.redirect_stderr(io.StringIO()):
+            GF.parse(["--out", "feats_new"])
+    except SystemExit:
+        pass
+    else:
+        raise AssertionError("gcar_features accepted a relative --out")
     c = CF.parse(["--parts", "train", "--clone", "/c"])
     assert (c.n, c.parts, c.clone, c.workers) == (8, ["train"], "/c", 0) and c.out.startswith(GF.BP.SCRATCH)
 

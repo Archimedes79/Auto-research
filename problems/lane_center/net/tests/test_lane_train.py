@@ -1,7 +1,7 @@
 """Spec test of the entry of the two training stages (`training/train/lane_train.py`) and of the base config (`training/configs/base.json`):
 every setting of a trainer is a key of the base config, so an arm of a card can set it (`research check` refuses a key the base config lacks).
 
-    python net/tests/test_lane_train.py          # CPU, seconds after the imports; part 3 reads the run root, nothing is written there
+    python -P -m lane_center.net.tests.test_lane_train          # CPU, seconds after the imports; part 3 reads the run root, nothing is written there
 
 1. argv: `options` on a toy block (known answer); the argv of the base config parses to what the two argv lists of before this rule parsed to
    (OLD: the champion's recipe did not move); every key of a block, set to another value, reaches the trainer's option of its name; `from_run`.
@@ -11,17 +11,14 @@ every setting of a trainer is a key of the base config, so an arm of a card can 
 An adoption that changes the champion's recipe changes OLD and REF here with it."""
 import json
 import os
-import sys
 import tempfile
 
-ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
-sys.path.insert(0, os.path.join(ROOT, "training", "train"))               # a call by hand; lane_train puts the other folders on the path
-import lane_train as LT  # noqa: E402
-import bflc_paths as BP  # noqa: E402
-import jlive_train as JLT  # noqa: E402
-import jtoken_train as JKT  # noqa: E402
+from lane_center.training.train import lane_train as LT
+from lane_center.training import bflc_paths as BP
+from lane_center.training.train import jlive_train as JLT
+from lane_center.training.train import jtoken_train as JKT
 
-BASE = json.load(open(os.path.join(ROOT, "training", "configs", "base.json"), encoding="utf-8"))
+BASE = json.load(open(os.path.join(BP.ROOT, "training", "configs", "base.json"), encoding="utf-8"))
 PARSE = {"stage1": JKT.parse_args, "stage2": JLT.parse_args}
 REF = "E398.retrain_s0"                                                    # the champion's recipe trained from the base config (2026-11-27)
 # the argv of the run E1.a_s1 (seed 1) as lane_train built them before it passed the whole blocks

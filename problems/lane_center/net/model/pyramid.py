@@ -8,13 +8,13 @@
         feat1    (B, w, 100, 100)   the 1 m features, feat05 (B, 32, 200, 200) the 0.5 m features (the nodes sample them at their positions)
 The body is E271's `GridHead` (same module names), so the weights of a trained E271 head load with `load_e271(path)`; the 1 m tap starts from them.
 Axes: rows = x (right), columns = y (forward), 0.5 m cells on the input, origin -50 m.
-Run the self-test: python pyramid.py
+Run the self-test: python -P -m lane_center.net.model.pyramid
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from head import C_IN, block
+from lane_center.net.model.head import C_IN, block
 
 
 class PyramidHead(nn.Module):

@@ -1,10 +1,10 @@
 """Tests of the predicted-node cache (`net/prep/lane_tokcache.py`) and its loader (`net/prep/lane_ptok_data.py`).
 
-    python net/tests/test_lane_tokcache.py            # the selftests of the two modules, then the hand mutants of the label, selection, comparison and loader code: every mutant must make the selftest of its module FAIL
-    python net/tests/test_lane_tokcache.py selftests  # the selftests only (about 1 minute)
+    python -P -m lane_center.net.tests.test_lane_tokcache            # the selftests of the two modules, then the hand mutants of the label, selection, comparison and loader code: every mutant must make the selftest of its module FAIL
+    python -P -m lane_center.net.tests.test_lane_tokcache selftests  # the selftests only (about 1 minute)
 
-A mutant = one textual change of the source (a wrong assignment, a swapped link direction, the contraction removed, a padding token that becomes a node, ...); the mutated copy runs in a temporary folder with BFLC_ROOT
-pointing at this project, four at a time.
+A mutant = one textual change of the source (a wrong assignment, a swapped link direction, the contraction removed, a padding token that becomes a node, ...); the mutated copy stands in for its module
+(`mutant.py`) and runs its selftest, four at a time. An unmutated copy must pass first: else the launcher, not a mutant, would make the child fail.
 """
 import concurrent.futures as cf
 import os
@@ -12,10 +12,11 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DATA = os.path.join(ROOT, "net", "prep")
+from lane_center.training import bflc_paths as BP
 
-TC, PT = "lane_tokcache.py", "lane_ptok_data.py"
+DATA = os.path.join(BP.ROOT, "net", "prep")
+
+TC, PT = "lane_center.net.prep.lane_tokcache", "lane_center.net.prep.lane_ptok_data"
 MUTANTS = [
     (TC, "tokens are taken in reverse order (not by descending existence)", "for t in range(min(K, near.shape[0])):", "for t in reversed(range(min(K, near.shape[0]))):"),
     (TC, "a token takes the FARTHEST near node", "g = int(np.argmin(np.where(cand, d[t], np.inf)))", "g = int(np.argmax(np.where(cand, d[t], -np.inf)))"),
@@ -63,28 +64,32 @@ MUTANTS = [
 
 def run_selftests():
     for mod in (TC, PT):
-        r = subprocess.run([sys.executable, os.path.join(DATA, mod), "selftest"], capture_output=True, text=True, env=dict(os.environ, BFLC_ROOT=ROOT))
+        r = subprocess.run([sys.executable, "-P", "-m", mod, "selftest"], capture_output=True, text=True)
         assert r.returncode == 0, f"{mod} selftest failed:\n{r.stdout[-800:]}{r.stderr[-1500:]}"
         print(r.stdout.strip().splitlines()[-1], flush=True)
 
 
 def one(args):
     k, (mod, name, a, b), tmp = args
-    src = open(os.path.join(DATA, mod), encoding="utf-8").read()
+    file = mod.rsplit(".", 1)[1] + ".py"
+    src = open(os.path.join(DATA, file), encoding="utf-8").read()
     if src.count(a) != 1:
         return name, "NOT APPLIED"
     d = os.path.join(tmp, str(k))
     os.makedirs(d)
-    p = os.path.join(d, mod)
+    p = os.path.join(d, file)
     with open(p, "w", encoding="utf-8") as fh:
         fh.write(src.replace(a, b))
-    r = subprocess.run([sys.executable, p, "selftest"], capture_output=True, text=True, env=dict(os.environ, BFLC_ROOT=ROOT))
+    r = subprocess.run([sys.executable, "-P", "-m", "lane_center.net.tests.mutant", mod, p, "selftest"], capture_output=True, text=True)
     return name, "killed" if r.returncode != 0 else "SURVIVED"
 
 
 def run_mutants(workers=4):
     left = []
     with tempfile.TemporaryDirectory() as tmp, cf.ThreadPoolExecutor(workers) as ex:
+        for mod in (TC, PT):
+            _, res = one((mod.rsplit(".", 1)[1], (mod, "unmutated", "def selftest():", "def selftest():"), tmp))
+            assert res == "SURVIVED", f"an unmutated copy of {mod} fails its selftest: the launcher, not a mutant, makes the child fail"
         for name, res in ex.map(one, [(k, m, tmp) for k, m in enumerate(MUTANTS)]):
             print(f"{res:<12} {name}", flush=True)
             if res != "killed":

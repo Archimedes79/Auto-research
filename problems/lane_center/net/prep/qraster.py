@@ -9,7 +9,7 @@ Only vectors are stored; these rasters are made in the data loader, per frame, o
 
 Frame of every map: row = x, column = y, cell (i, j) has its centre at -n res / 2 + res (i + 0.5) (as `qtargets` and the feature raster of the project).
 Empty lists, polylines of one point and degenerate polygons give zeros (dist = trunc), no error. `dilate` (m) grows the area polygons: a loader parameter, default 0 (the GT is not dilated).
-Run the self-test: python qraster.py     (real frames of the lane GT store: `test_qraster.py`)
+Run the self-test: python -P -m lane_center.net.prep.qraster    (real frames of the lane GT store: `test_qraster.py`)
 """
 import time
 
@@ -18,7 +18,7 @@ import shapely
 from scipy.ndimage import maximum_filter
 from scipy.spatial import cKDTree
 
-import qtargets as QT
+from lane_center.net.prep import qtargets as QT
 
 LINES = ("lane_divider", "road_divider", "boundary")
 EVENTS = ("split", "merge", "stop", "exit", "start", "end")

@@ -1,6 +1,6 @@
 """The champion through `lane_net.LaneNet`, on the GPU, by hand (not in the list of `research tests`: it needs the GPU, the token cache and the stored run):
 
-    python evaluation/tests/test_champion_gpu.py [--run E396.champ_s0] [--n 16]
+    python -P -m lane_center.evaluation.tests.test_champion_gpu [--run E396.champ_s0] [--n 16]      (with the module path: README.md)
 
 1. The network built from the run's files (`lane_predict.live_source` -> `LaneNet.from_checkpoint`) gives on the first --n VAL frames (a multiple of 8), in the predict step's
    batching (B' at 4, the head at 8: `lane_predict.live_dump`), exactly the records that the stored live dump of the run holds: every field of every record bit for bit (the
@@ -17,10 +17,10 @@ import sys
 import numpy as np
 import torch
 
-import bflc_paths as BP
-import lane_dump as DU
-import lane_predict as PR
-import lane_readout as RO
+from lane_center.training import bflc_paths as BP
+from lane_center.evaluation import lane_dump as DU
+from lane_center.evaluation import lane_predict as PR
+from lane_center.net.model import lane_readout as RO
 
 E_TOL = 1e-4
 

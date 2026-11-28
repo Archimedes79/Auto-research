@@ -28,13 +28,13 @@ import os
 import torch
 import torch.nn as nn
 
-import bflc_paths as BP
-import jtok as JT
-import jtoken as JK
-import lane_live_data as LLD
-import lane_readout as RO
-import lane_tokcache as LC
-import qgraph as QG
+from lane_center.training import bflc_paths as BP
+from lane_center.net.model import jtok as JT
+from lane_center.net.model import jtoken as JK
+from lane_center.net.prep import lane_live_data as LLD
+from lane_center.net.model import lane_readout as RO
+from lane_center.net.prep import lane_tokcache as LC
+from lane_center.net.model import qgraph as QG
 
 ARCH_DEFAULTS = dict(none_weight=1.0, head_seed=None, live_inputs=False)   # what a run of before these options means (the head of the first build)
 ARCH = dict(d=64, heads=4, layers=3, ffn=128)                               # the champion's architecture (the head of the first build), a constant since D117

@@ -11,8 +11,8 @@ import math
 
 import torch
 
-import qtargets as QT
-from qtargets import check_lattice, lattice  # noqa: E402,F401 (the lattice is a property of the targets; read here by name)
+from lane_center.net.prep import qtargets as QT
+from lane_center.net.prep.qtargets import check_lattice, lattice  # noqa: E402,F401 (the lattice is a property of the targets; read here by name)
 
 NG = 13                                                                     # geometric pair features
 MIN_CHORD, MAX_CHORD = 0.3, 100.0                                           # m: the chord range of the allowed gate

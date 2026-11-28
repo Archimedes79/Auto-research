@@ -4,9 +4,9 @@ the right, v = y forward, 200 x 200 cells of 0.5 m, evaluated |x|, |y| < 48 m li
 from dataclasses import dataclass
 from typing import Dict, Optional, Tuple
 
-import bflc_paths as BP  # project paths from the location of this checkout
-from lane_task import Grid
-from lane_task import measures as M
+from lane_center.training import bflc_paths as BP  # project paths from the location of this checkout
+from lane_center.evaluation.lane_task import measures as M
+from lane_center.evaluation.lane_task.raster import Grid
 
 
 @dataclass

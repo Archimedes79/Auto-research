@@ -7,7 +7,7 @@
 The token of a cell = the 2 m feature + the pooled 1 m / 0.5 m features + road and intersection probabilities + the pooled centre-lane and event probabilities of the pixel stage (8 channels) + a Fourier code of the cell centre; two layers of neighbourhood attention
 (7 x 7 cells = +-6 m, a relative-position bias; the card says 9 x 9: smaller for memory, `k=9` is a parameter) give it the context (a split is only a split if the lane diverges ahead);
 then the REFINEMENT: the 1 m and 0.5 m feature maps are sampled bilinearly at the pulled position (differentiable), the token is updated and offset, direction and flags are re-read.
-Run the self-test: python qnodes.py
+Run the self-test: python -P -m lane_center.net.model.qnodes
 """
 import math
 

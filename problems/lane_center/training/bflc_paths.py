@@ -1,8 +1,9 @@
 """Where the lane problem's code, data and runs are. The code is this checkout; data and run outputs are where the machine says (a run of the research
 system gets RESEARCH_DATA / RESEARCH_RUNS from its worker; by hand they come from the machine file, ~/.research/machine.json or RESEARCH_MACHINE).
 
-    import bflc_paths as BP            # flat import like every module of this problem (the entry scripts put training/ on the path)
-    BP.ROOT     the problem folder (problems/lane_center)          BP.REPO     the repository (autoresearch/, GtGenerator/, problems/)
+    from lane_center.training import bflc_paths as BP
+    BP.ROOT     the problem folder (problems/lane_center): where the package lane_center lies, the one place that says so
+    BP.REPO     the repository (autoresearch/, GtGenerator/, problems/)
     BP.RUNS     the problem's run root (old run folders keep their names below it: runs/e292_a_s0 -> RUNS/e292_a_s0)
     BP.DATA     the problem's data: B123 (the GaussianCaR features and the old graph GT, the former ~/exp_gcar_b123)
     BP.NUSC     the raw nuScenes folder (the former ~/data/nuscenes_full)        BP.SCRATCH  scratch outputs of diagnostics (below RUNS, never a record)
@@ -13,7 +14,9 @@ import hashlib
 import json
 import os
 
-ROOT = os.path.normpath(os.environ.get("BFLC_ROOT") or os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir))   # BFLC_ROOT: a test points a moved copy at the problem
+import lane_center
+
+ROOT = os.path.dirname(os.path.abspath(lane_center.__file__))          # the package, not this file: a mutated copy of a module elsewhere still finds the problem
 REPO = os.path.dirname(os.path.dirname(ROOT))
 
 

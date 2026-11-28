@@ -10,7 +10,7 @@ sparsify(out) -> sparse map (B, 5, X, Y) = [w, cos, sin, ox, oy]
     no top-k and no threshold on the training path: w is a weight per cell, a vertex is a cell with weight; the delivered list is a read-out (`vertices`) at inference only.
 
 Copied from bev_fusion/net/model/extract.py: `soft_line_map` (distance field -> line probability, used for the loss against the GT line cells). The rest is new and small.
-Run the self-test: python soft_lines.py
+Run the self-test: python -P -m lane_center.net.model.soft_lines
 """
 import math
 

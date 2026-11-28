@@ -14,9 +14,9 @@ import typing
 
 import numpy as np
 
-import jtoken as JK
-import lane_ptok_data as LP
-import lane_tokcache as LC
+from lane_center.net.model import jtoken as JK
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.prep import lane_tokcache as LC
 
 KEEP_P = 0.05                                                               # candidate links below this probability are not written into a dump
 NODE_KEYS = ["cell", "dirv", "e", "flags", "pos", "s", "section"]

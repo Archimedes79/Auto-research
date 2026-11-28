@@ -4,7 +4,7 @@ input   x (B, 39, 200, 200): the cached GaussianCaR channels (dec32 PCA + 7 map 
         (heat, direction) are NOT an input: `x[:, :39]` is sliced here, so the chain does not inherit the old pipeline
 output  (B, 6, 100, 100) at 1 m: p logit, cos, sin (raw heading), ox, oy (offset logits, `soft_lines.sparsify` squashes them to +-0.5 cell), s (keep-gate logit)
 Axes as the feature raster: rows = x (right), columns = y (forward). The deliverable of stage 2 is `soft_lines.sparsify(head(x))`.
-Run the self-test: python head.py
+Run the self-test: python -P -m lane_center.net.model.head
 """
 import torch
 import torch.nn as nn

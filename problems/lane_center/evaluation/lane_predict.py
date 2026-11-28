@@ -1,6 +1,6 @@
 """The prediction step of a lane run, and the dump it writes: the records of the read-out (`lane_readout.batch_dump`) of the run's network on the frames of a split.
 
-    python evaluation/lane_predict.py <the run's config.json>          (the worker starts it; RESEARCH_SPLIT names the split, default val)
+    python -P -m lane_center.evaluation.lane_predict <the run's config.json>       (the worker starts it; RESEARCH_SPLIT names the split, default val)
 
 On a GPU the step also measures compute time and memory of the whole path, one frame per forward (`measure_cost`: every frame's `ms`, the meta `cost`).
 
@@ -25,13 +25,13 @@ import time
 import numpy as np
 import torch
 
-import bflc_paths as BP
-import jtiming as JTG
-import lane_dump as DU
-import lane_live_data as LLD
-import lane_net as LN
-import lane_ptok_data as LP
-import lane_readout as RO
+from lane_center.training import bflc_paths as BP
+from lane_center.evaluation import jtiming as JTG
+from lane_center.evaluation import lane_dump as DU
+from lane_center.net.prep import lane_live_data as LLD
+from lane_center.net.model import lane_net as LN
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.model import lane_readout as RO
 
 LIVE_BS = 4                                                                  # the batch of B' in a live dump: the cache build's (GPU parity with the cache is claimed at bs 4 only)
 HEAD_BS = 8                                                                  # the batch of the head in every dump (cache and live): the cache dump's
@@ -158,7 +158,7 @@ def dump(a, runs=BP.RUNS):
     assert a.live or not DU.joint_run(ck), "a joint run is read only with --live"
     dev = "cpu" if a.cpu else "cuda"
     if dev == "cuda":
-        import gpu_gate
+        from lane_center.evaluation import gpu_gate
         gpu_gate.wait_for_room(who=f"lane_predict dump {a.run}")
     args = ck["args"]
     LN.check_removed(args, f"run {a.run}")

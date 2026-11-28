@@ -14,15 +14,15 @@ gap share of the centre probability at 16 points of the Hermite curve)]); the cu
 links, 0.9 x sigmoid(MLP) for long links (the learned scales; the targets are the fitted scales of `qtargets.fit_long_scales`).
 Output (dict): act (B, K) flat cell indices, valid (B, K), pos (B, K, 2), dirv (B, K, 2), pb / pa / pc (P,) batch element, source and target index in the active list, is_long (P,), logit (P,),
 sa / sb (P,) handle scales, label (P,) float (when gt is given), cell (B, K, 2).
-Run the self-test: python qlinks.py
+Run the self-test: python -P -m lane_center.net.model.qlinks
 """
 import math
 
 import torch
 import torch.nn as nn
 
-from qassign import fourier_pts
-from qnodes import N, cell_centres, sample, unit
+from lane_center.net.model.qassign import fourier_pts
+from lane_center.net.model.qnodes import N, cell_centres, sample, unit
 
 SHORT = 8.0
 CONE = math.cos(math.radians(75.0))

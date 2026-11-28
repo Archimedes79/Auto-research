@@ -2,7 +2,7 @@
 (256 channels) projected to 32 by a fixed PCA (dec32) plus its 7 map logits (logit7) = the 39 channels at 200 x 200 cells of 0.5 m, float16, that
 `<data>/lane_center/b123/feats/{train,val}_{dec32,logit7}.npy` hold. The one command (GPU, about 0.4 s per frame):
 
-    python net/prep/foundation/gcar_features.py --out <new folder> [--parts val train] [--clone DIR] [--weights FILE] [--workers 2]
+    python -P -m lane_center.net.prep.foundation.gcar_features --out <new folder> [--parts val train] [--clone DIR] [--weights FILE] [--workers 2]
 
 Outside the repository (README.md here): the clone of the foundation's code at COMMIT with its rasteriser built (`--clone` or GCAR_REPO), its
 weights WEIGHTS (`--weights` or GCAR_WEIGHTS), raw nuScenes trainval (`bflc_paths.NUSC`), the environment gcar. In the repository, next to this
@@ -24,10 +24,9 @@ import time
 import numpy as np
 import torch
 
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(HERE, "..", "..", ".."))
-sys.path.insert(0, os.path.join(ROOT, "training"))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
 REMOTE = "https://github.com/santimontiel/gaussiancar"
 COMMIT = "c0e748b9e95a6a6062579ddebdcd1c1e79500c2e"
@@ -81,8 +80,8 @@ def need_clone(path):
         raise Missing(f"the clone at {path} is at commit {head[:12] or '(no git commit)'}, the features were made at {COMMIT[:12]}: "
                       f"git -C {path} checkout {COMMIT}")
     for p in (os.path.join(path, RASTERISER), path):
-        if p not in sys.path:
-            sys.path.insert(0, p)
+        if p not in sys.path:  # path work: the foundation's clone is a foreign checkout with no install (README.md here)
+            sys.path.insert(0, p)  # path work: the same
     try:
         import diff_gaussian_rasterization  # noqa: F401
     except ImportError as e:
@@ -234,8 +233,6 @@ def frames(module, cfg, tokens, workers=2, device="cuda"):
     """the stored channels of every sample token, in order: {"dec32": [32, 200, 200], "logit7": [7, 200, 200]} float16, batch 1"""
     from omegaconf import OmegaConf
 
-    if BP.REPO not in sys.path:
-        sys.path.insert(0, BP.REPO)
     import GtGenerator
 
     root = need_raw(BP.NUSC)
@@ -297,12 +294,15 @@ def write_part(out, part, tokens, source, every=100):
 
 def parse(argv=None):
     ap = argparse.ArgumentParser(description="the GaussianCaR features of the lane problem, made again into a new folder")
-    ap.add_argument("--out", required=True, help="the folder of the new arrays; an existing array is never overwritten")
+    ap.add_argument("--out", required=True, help="the folder of the new arrays, an absolute path (30 GB); an existing array is never overwritten")
     ap.add_argument("--parts", nargs="+", default=list(PARTS), choices=PARTS)
     ap.add_argument("--clone", default=os.environ.get("GCAR_REPO"), help="the GaussianCaR clone (default: GCAR_REPO)")
     ap.add_argument("--weights", default=os.environ.get("GCAR_WEIGHTS"), help="nuscenes_map.ckpt (default: GCAR_WEIGHTS)")
     ap.add_argument("--workers", type=int, default=2, help="processes that read pictures and radar")
-    return ap.parse_args(argv)
+    a = ap.parse_args(argv)
+    if not os.path.isabs(a.out):
+        ap.error(f"--out {a.out}: an absolute path (a relative one would land below the working folder, which is not the problem folder)")
+    return a
 
 
 def main():

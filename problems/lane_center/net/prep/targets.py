@@ -6,7 +6,7 @@ GT lane points as `p16_data.gt_tensors`: g05 (B, G, 2) metres every 0.5 m, padde
 cell_targets -> d (B, n, n) distance of the cell centre to the nearest lane point (m), off (B, 2, n, n) nearest point minus cell centre in cells,
                 head (B, 2, n, n) tangent of that nearest point (unit), idx (B, n, n) index of that point.
 heat(d, sigma) -> soft centre-lane target exp(-d^2 / 2 sigma^2).
-Run the self-test: python targets.py
+Run the self-test: python -P -m lane_center.net.prep.targets
 """
 import torch
 

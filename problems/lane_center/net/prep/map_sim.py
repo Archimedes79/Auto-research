@@ -13,7 +13,7 @@ mp (dict): K pieces, T tokens (every 2 m along the pieces):
   pfeat (K, 12) piece features (kind one-hot lane / connector / mixed, lane count, lane index, number of successors / predecessors, length / 100, start_open, end_open, 0, 0),
   adj (5, K, K) bool: succ, pred, left, right, opposite among the kept pieces, dropped (list of ids), shift (2,), yaw (float, rad), n_roads
 `piece_targets(g, mp)` -> for every GT piece of `g` the list of map piece indices with the same `piece` id (empty = dropped from the map: the dustbin).
-Run the self-test: python map_sim.py
+Run the self-test: python -P -m lane_center.net.prep.map_sim
 """
 import hashlib
 
@@ -109,7 +109,7 @@ def road_targets(g, mp):
 
 
 def _selftest():
-    import qtargets as QT
+    from lane_center.net.prep import qtargets as QT
     ys = lambda a, b: np.stack([np.zeros(int((b - a) / 0.5) + 1), np.arange(a, b + 1e-9, 0.5)], 1)
     A = QT._piece("A", ys(-40, 0), succ=["B"])
     B = QT._piece("B", ys(0, 40), pred=["A"])

@@ -7,16 +7,17 @@ normalisation (D152 follow-up: moved here from the reference chain, which reads 
     norm_stats()           (mean, std) of the feature channels
     Frames(split, ks)      "train" | "val_clean" | "test_clean": part, rows, ks, mean, std and gt (the GT graphs of the part, read on first use)
 
-Self-test (real cached files, no features): python net/prep/frames.py
+Self-test (real cached files, no features): python -P -m lane_center.net.prep.frames
 """
 import json
 import os
 import pickle
 
 import numpy as np
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+
+ROOT = BP.ROOT
 D = BP.B123
 OUT = BP.RUNS
 SPLITS = ("train", "val_clean", "test_clean")

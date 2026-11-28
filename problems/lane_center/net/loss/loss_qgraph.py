@@ -2,10 +2,10 @@
 import torch
 import torch.nn.functional as F
 
-from qgraph import PHASE_FROZEN  # noqa: E402,I001
-import losses as GL
-import qnodes as QN
-import loss_sections as LSE  # noqa: E402
+from lane_center.net.model.qgraph import PHASE_FROZEN  # noqa: E402,I001
+from lane_center.net.loss import losses as GL
+from lane_center.net.model import qnodes as QN
+from lane_center.net.loss import loss_sections as LSE  # noqa: E402
 
 
 PHASE_UPTO = {2: "pyr", 3: "nodes", 4: "links", 5: "sections", 6: "assign", 7: "assign", 9: "assign"}

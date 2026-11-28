@@ -10,18 +10,11 @@ Frames of one scene are correlated, so whole scenes are drawn with replacement (
 The draws and the intervals are the ONE implementation of the repository, `autoresearch/Evaluation/stats.py` (scene_draws, paired_draws, interval_draws; D24, 2026-10-31); its draw sequence is the one this module always used, so stored numbers are reproduced exactly. Draws that cannot be scored (non-finite) are dropped and a result then carries `n_valid`.
 Verdict on S: "better" if the interval of the S difference lies above the noise band (0.010), "worse" if below minus the band, otherwise a "tie (...)" that says whether the interval is positive, negative or contains 0.
 """
-import os
-import sys
-
 import numpy as np
 
-import bflc_paths as BP  # project paths from the location of this checkout
-import graph_eval as GE
-import sparse_metrics as SM
-
-if os.path.join(BP.REPO, "autoresearch") not in sys.path:
-    sys.path.append(os.path.join(BP.REPO, "autoresearch"))
-from Evaluation import stats as ST  # noqa: E402  (the shared scene bootstrap)
+from lane_center.evaluation.sparse_lanes import graph_eval as GE
+from lane_center.evaluation.sparse_lanes import sparse_metrics as SM
+from Evaluation import stats as ST  # the shared scene bootstrap
 
 BAND = 0.010
 KEYS = ("S", "Q", "F1@1.0", "F1@0.5", "F1o2o@1.0", "J", "Sp", "vert100", "len_ratio", "false_len_frac", "lanes_found", "split6_F1", "merge6_F1", "R@1.0", "P@1.0")

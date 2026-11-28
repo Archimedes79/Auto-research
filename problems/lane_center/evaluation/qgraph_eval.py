@@ -27,24 +27,23 @@ Numbers (from ADDITIVE counts per frame, pooled by summing, so any set of frames
                   (nodes farther than 2 m from every GT lane, or on a piece the map lacks, belong to the dustbin), purity (mean over GT lanes of the share on the majority map piece: consistency,
                   not correctness), road_acc (the same at road level). A node at a point shared by several GT pieces accepts any of them.
 A ratio with an empty denominator is 0.0 when the other side is not empty (an empty prediction scores 0, not 1), NaN when both are empty. Q of an empty graph is 0.15 / 0.85 (its false-length term).
-Self-test: python qgraph_eval.py (a toy frame); real frames: evaluation/tests/test_qgraph_eval.py (wsl bash tools/env/_py14.sh test_qgraph_eval.py).
+Self-test: python -P -m lane_center.evaluation.qgraph_eval (a toy frame).
 """
 import json
 import pickle
-import sys
 from dataclasses import dataclass, field
 
 import numpy as np
 from scipy.spatial import cKDTree
 
-import bflc_paths as BP  # project paths from the location of this checkout
-import bootstrap as SB
-import lane_suite as LS
-import qtargets as QT
-import sparse_metrics as SM
-import topo_metrics as TM
-from lane_task import LaneGraph
-from lane_task import measures as MS
+from lane_center.training import bflc_paths as BP  # project paths from the location of this checkout
+from lane_center.evaluation.sparse_lanes import bootstrap as SB
+from lane_center.evaluation import lane_suite as LS
+from lane_center.net.prep import qtargets as QT
+from lane_center.evaluation.sparse_lanes import sparse_metrics as SM
+from lane_center.evaluation.sparse_lanes import topo_metrics as TM
+from lane_center.evaluation.lane_task import measures as MS
+from lane_center.evaluation.lane_task.geometry import LaneGraph
 
 CFG = LS.config()                 # the lane suite's settings: box 48 m, topo seeds every 5 m, junctions within 3 m
 BOX = CFG.box[1]
@@ -136,7 +135,6 @@ class Frame:
 
     def lane(self):
         if self._lane is None:
-            sys.path.insert(0, BP.REPO)
             import GtGenerator
             self._lane = GtGenerator.load_lane(self.token)
         return self._lane
@@ -158,7 +156,6 @@ def val_frames():
 
 def stored_share(frames):
     """share of the frames whose lane GT is in the store of this checkout's lane signature (the store is built in the background)"""
-    sys.path.insert(0, BP.REPO)
     import GtGenerator
     held = GtGenerator.lane_tokens()
     return sum(f.token in held for f in frames) / max(len(frames), 1)
@@ -590,7 +587,7 @@ def toy_lane_gt():
 
 
 def _selftest():
-    import qformat
+    from lane_center.net.model import qformat
     g, old = toy_lane_gt()
     pred = qformat.oracle_prediction(g)
     graph, bk = readout(pred)

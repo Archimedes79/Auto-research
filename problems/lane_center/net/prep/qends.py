@@ -3,7 +3,7 @@
     reps, ids = cluster(items)     # items = [(point (2,), unit heading (2,))]: ends within 1.5 m and 40 degrees of a cluster's first member are one end; read by evaluation/jmaneuver.py
     curve(pa, ta, pb, tb)          # the cubic Hermite curve of a pair (tangent length = k x chord); curve_s: the same with handle scales in units of the chord
 
-Nothing here uses the image, the map or the network. Run the self-test: python qends.py
+Nothing here uses the image, the map or the network. Run the self-test: python -P -m lane_center.net.prep.qends
 """
 import numpy as np
 

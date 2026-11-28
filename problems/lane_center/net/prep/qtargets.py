@@ -15,7 +15,7 @@ The rules (card E273, section 3.3), all by LOCATION, no matching:
   links               a node to every node reached next along the points of the pieces (through suppressed points and over the joins of succ); distance above `short` = long link
   section start       the first node (smallest point index) of a piece: s = 1 (the ids change only at splits and merges, so a piece is a section)
 Frame of the maps: row = x, column = y, cell (i, j) has its centre at -50 + 2 (i + 0.5) / -50 + 2 (j + 0.5), as the feature raster of the project.
-Run the self-test: python qtargets.py     (real frames of the lane GT store: `test_qtargets.py`)
+Run the self-test: python -P -m lane_center.net.prep.qtargets    (real frames of the lane GT store: `test_qtargets.py`)
 """
 import contextlib
 import os
@@ -378,7 +378,7 @@ def check_lattice(res):
     n = int(round(2 * HALF / res))
     assert (N, RES) == (n, float(res)), f"qtargets is on N = {N}, RES = {RES}, not on the {res} m lattice"
     mods = [(name, m) for name, m in list(sys.modules.items()) if m is not None]
-    stale = [name for name, m in mods if getattr(getattr(m, "QT", None), "__name__", "").startswith("qtargets") and m.QT is not me]
+    stale = [name for name, m in mods if getattr(getattr(m, "QT", None), "__name__", "").rsplit(".", 1)[-1].startswith("qtargets") and m.QT is not me]
     copies = [name for name, m in mods if os.path.basename(getattr(m, "__file__", "") or "") == "qtargets.py" and m is not me]
     assert not stale and not copies, f"a second copy of qtargets: held by {stale}, modules {copies}"
     xy = np.array([[-49.9, -49.9], [0.3, -0.7], [49.9, 49.9]])

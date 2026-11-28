@@ -20,10 +20,10 @@ import time
 import numpy as np
 import torch
 
-import bflc_paths as BP
-import lane_ptok_data as LP
-import lane_tokcache as LC
-import qtargets as QT
+from lane_center.training import bflc_paths as BP
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.prep import lane_tokcache as LC
+from lane_center.net.prep import qtargets as QT
 
 NODE_KEYS = ("exists", "flags", "offset", "dirv", "sstart", "uout", "uin")                              # the maps `qgraph.node_loss` reads (B''s dense target)
 GRAPH_KEYS = tuple(k for k in LP.TOKEN_FIELDS if k != "valid")                                          # the token inputs of the head that carry the graph (valid is a constant)
@@ -67,7 +67,7 @@ class LiveData(torch.utils.data.Dataset):
     def __init__(self, split="train", seed=0, ident="e292_a", td=None, cache_dir=None):
         injected = td is not None
         if not injected:
-            import lane_tok_data as LT
+            from lane_center.net.prep import lane_tok_data as LT
             td = LT.TokData(split, res=2.0, feats=True)
         self.td, self.split, self.seed = td, split, int(seed)
         self.rows, self.tokens = td.rows, td.tokens

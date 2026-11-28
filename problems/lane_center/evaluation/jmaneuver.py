@@ -1,21 +1,15 @@
 """Maneuver coverage of a delivered lane graph (E310): the number that asks what the planner needs and what the pictures show; `jtoken_eval.py graphs` writes it per frame.
 
     mans = maneuvers(lane_gt, qends.cluster); n_ok, n, hit, near, real = frame_counts(raw, mans, ref_tree)
-    python jmaneuver.py                    # the selftest (the E310 command `score` on the junction pair head's dumps is in the tag v1)
+    python -P -m lane_center.evaluation.jmaneuver      # the selftest (the E310 command `score` on the junction pair head's dumps is in the tag v1)
 
 A GT MANEUVER is one entry -> exit connection of a junction: the connector runs of the lane GT grouped by their entry / exit cluster (`qends.cluster`, as `qends.end_table`), the longest run per (entry, exit). It is REALISED in a delivered graph when at least 90 % of the
 points of its GT run (the GT points, spacing 0.5 m, inside the 100 m box; at least 3 points) have a delivered polyline point within 1.5 m whose direction differs by at most 40 degrees: 'is the lane drawn there, in that direction', no pairing and no tolerance at the ends. The junction PRECISION is the share of the
 delivered points within 8 m of a GT connector run that lie within 1.5 m of a GT lane point. The maneuver denominator (826 frames, 10991 maneuvers on VAL) is smaller than the 11083 GT pairs of the
 junction pair numbers: the box and the 3-point rule drop 0.8 %.
 """
-import os
-import sys
-
 import numpy as np
 from scipy.spatial import cKDTree
-
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.normpath(os.path.join(ROOT, "net/prep")))           # qends (the selftest)
 
 BOX, TOL, ANG, NEED, JUNC = 50.0, 1.5, 40.0, 0.9, 8.0
 COS = np.cos(np.radians(ANG))
@@ -126,7 +120,7 @@ def selftest():
     th = np.linspace(0, np.pi / 2, 60)
     arc = np.stack([-(15 - 15 * np.cos(th)), -15 + 15 * np.sin(th)], 1)
     g = dict(pieces=[dict(pts=arc, segments=[dict(kind="connector", i0=0, i1=len(arc) - 1)])])
-    import qends as QE
+    from lane_center.net.prep import qends as QE
     mans = maneuvers(g, QE.cluster)
     assert len(mans) == 1 and len(mans[0][2]) >= 20, mans
     ref_tree = cKDTree(arc)

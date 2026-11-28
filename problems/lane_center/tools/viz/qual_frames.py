@@ -3,8 +3,8 @@ One picture per frame: the front camera with the GT lane graph projected (GtGene
 panel per system: its delivered graph against the lane GT (GT grey with travel arrows, own lane = a pale band, delivered points green <= 1 m / orange <= 2 m / red
 beyond, GT not covered within 2 m blue). CPU only. The frames are chosen OUTSIDE this tool by a written rule (`--spec`), never by eye.
 
-    python tools/viz/qual_frames.py --frames F.pkl --spec S.json --systems "B=plain lane head B,champ=token champion" --out DIR [--table T.json]
-    python tools/viz/qual_frames.py --selftest
+    python -P -m lane_center.tools.viz.qual_frames --frames F.pkl --spec S.json --systems "B=plain lane head B,champ=token champion" --out DIR [--table T.json]
+    python -P -m lane_center.tools.viz.qual_frames --selftest
 
 --frames: a pickle {"frames": [rec, ...], "scenes": {scene: {"name", "description"}}} with, per VAL frame k, rec = {"scene", "token", "row",
           "gt": [{"pts": (n, 2) metres, "tier": (n,) int (1 = own lane)}], "sys": {key: {"lines": [(m, 2) ...], "man_ok": int, "man_n": int}}}
@@ -16,7 +16,6 @@ import argparse
 import json
 import os
 import pickle
-import sys
 import tempfile
 import textwrap
 
@@ -27,7 +26,6 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 from scipy.spatial import cKDTree  # noqa: E402
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 BOX = 48.0                                                                       # half width of a BEV panel, m
 NEAR, FAR = 1.0, 2.0                                                             # the colour bands of a delivered point (m from the GT)
 
@@ -96,11 +94,7 @@ def camera(ax, token):
     """the front camera of the frame with the GT projected; a text in place of the image when the tile cannot be made (no dataset, no GT store)"""
     ax.axis("off")
     try:
-        for sub in ("tools/viz", "evaluation", "net/prep", "net/model", "net/loss", "training", "training/data", "evaluation/sparse_lanes", "../.."):
-            p = os.path.normpath(os.path.join(ROOT, sub))
-            if p not in sys.path:
-                sys.path.insert(0, p)
-        import qgraph_view as QV
+        from lane_center.tools.viz import qgraph_view as QV
         g = QV.load_gt(token)
         img = QV.camera_tiles(token, g, {c: (800, 450) for c in QV.CAMS}, log=lambda *a: None)["CAM_FRONT"]
         h = img.shape[0]

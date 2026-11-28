@@ -1,6 +1,6 @@
 """Tests of the token head on predicted nodes (`jtoken.py`, `loss_jtoken.py`, `train/jtoken_train.py`); CPU only (the GPU is hidden), 2 threads, SYNTHETIC batches that follow the batch dict of the card (2a): no cache needed.
 
-    python net/tests/test_jtoken.py [name ...]          # all tests, or the named ones (with or without the `test_` prefix)
+    python -P -m lane_center.net.tests.test_jtoken [name ...]         # all tests, or the named ones (with or without the `test_` prefix)
 
 likelihood (the loss by hand on two frames of 5 tokens, the second with 2 padded tokens, other source counts and no long source: a source with three GT successors (one of them with `ylong` against the token
 chord), a source with none, a source whose GT link lies outside the gate, sources without a candidate masked, the per-frame normalisation; mutants: no none slot, a swapped link direction, no gate, a global mean over
@@ -16,6 +16,7 @@ champion (the default path against RECORDED numbers: the forward, the loss and t
 TRAIN cache starts as E373 did); the soft output layers, each against a brute-force or hand case (skip_suppress, close_gaps, fork_gate, refine_positions: off = the head bit for bit, build_head) and layers_train (the loss
 behind the wiring layers and every gradient finite, the none slot never emptied). The tests of the removed switches (E376 pos_loss max, E379 distillation, E381 noise, E392 rounds, E395 position head) are in the tag v1.
 """
+import contextlib
 import json
 import math
 import os
@@ -28,24 +29,21 @@ import numpy as np
 os.environ["CUDA_VISIBLE_DEVICES"] = ""                                      # this test never touches the GPU
 import torch  # noqa: E402
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-for sub_ in ("../model", "../prep", "../loss", "../../training", "../../training/data", "../../training/data/prep", "../../training/train", "../../evaluation"):
-    sys.path.insert(0, os.path.normpath(os.path.join(HERE, sub_)))
-import bflc_paths as BP  # noqa: E402
-import jtok as JT  # noqa: E402
-import jtoken as JK  # noqa: E402
-import loss_jtoken as LJK  # noqa: E402
-from merged_source import merged  # noqa: E402
+from lane_center.training import bflc_paths as BP  # noqa: E402
+from lane_center.net.model import jtok as JT  # noqa: E402
+from lane_center.net.model import jtoken as JK  # noqa: E402
+from lane_center.net.loss import loss_jtoken as LJK  # noqa: E402
+from lane_center.net.tests.merged_source import merged  # noqa: E402
 # the checks below take "the model module" as a parameter (jtoken or a textual mutant of it) and call its losses on it: jtoken gets the names of its
 # losses (D152 moved them to net/loss; the same objects). A patch of a loss goes to LJK, which the trainer reads.
 for _n, _v in vars(LJK).items():
     if _n not in vars(JK):
         setattr(JK, _n, _v)
-import jtoken_train as JKT  # noqa: E402
-import lane_net as LN  # noqa: E402
-import lane_readout as RO  # noqa: E402
-import lane_ptok_data  # noqa: E402  (lane_net reads it; a test that swaps the trainer's loader puts this module back)
-from merged_source import must_fail  # noqa: E402
+from lane_center.training.train import jtoken_train as JKT  # noqa: E402
+from lane_center.net.model import lane_net as LN  # noqa: E402
+from lane_center.net.model import lane_readout as RO  # noqa: E402
+from lane_center.net.prep import lane_ptok_data  # noqa: E402  (lane_net reads it; a test that swaps the trainer's loader puts this module back)
+from lane_center.net.tests.merged_source import must_fail  # noqa: E402
 
 torch.set_num_threads(2)
 SCRATCH = os.path.join(BP.SCRATCH, "e365")
@@ -66,6 +64,18 @@ def patched(module, name, repl, fn, *a, **k):
         return fn(*a, **k)
     finally:
         setattr(module, name, old)
+
+
+@contextlib.contextmanager
+def loader_as(fake):
+    """the cache loader that the trainer imports inside its loop (`from lane_center.net.prep import lane_ptok_data`) replaced by `fake` for the
+    block: its entry of sys.modules and its package's attribute (an import reads the attribute first)"""
+    prep = sys.modules["lane_center.net.prep"]
+    sys.modules[lane_ptok_data.__name__] = prep.lane_ptok_data = fake
+    try:
+        yield
+    finally:
+        sys.modules[lane_ptok_data.__name__] = prep.lane_ptok_data = lane_ptok_data
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ hand frames
@@ -790,31 +800,22 @@ def test_trainer():
         for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--none-weight", "0.5"]):
             must_fail(JKT.train, JKT.parse_args(argv + other), runs=runs, ckpt_every=5, **kw)                # another recipe in the same folder
         assert "t_s0" in argv
-        sys.modules["lane_ptok_data"] = types.SimpleNamespace()                                              # --smoke must not read the loader: a module without one stands in its place
-        try:
+        with loader_as(types.SimpleNamespace()):                                                             # --smoke must not read the loader: a module without one stands in its place
             JKT.train(JKT.parse_args(["t_noload" if x == "t_s0" else x for x in argv]), runs=runs, ckpt_every=5, **kw)
-        finally:
-            sys.modules["lane_ptok_data"] = lane_ptok_data
         # a non-smoke run through a fake loader that returns (None, batches) like `lane_ptok_data.loader`
         seen = {}
 
         def fake_loader(split, seed, bs, workers, **k):
             seen.update(split=split, seed=seed, bs=bs, workers=workers, **k)
             return None, [JK.synthetic_batch(bs, 48, seed=s) for s in range(3)]
-        sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
-        try:
+        with loader_as(types.SimpleNamespace(loader=fake_loader)):
             JKT.train(JKT.parse_args(["--name", "t_real", "--seed", "1", "--steps", "6", "--bs", "2", "--workers", "0", "--ident", "e273_p"]), runs=runs, ckpt_every=3)
-        finally:
-            sys.modules["lane_ptok_data"] = lane_ptok_data
         assert seen == dict(split="train", seed=1, bs=2, workers=0, ident="e273_p"), seen
         m2, a2 = LN.load_head("t_real", "cpu", runs)
         assert a2["steps"] == 6 and a2["ident"] == "e273_p" and m2._step_py == 6 and os.path.exists(os.path.join(runs, "t_real", ".done"))
-        sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
         seen.clear()
-        try:
+        with loader_as(types.SimpleNamespace(loader=fake_loader)):
             JKT.train(JKT.parse_args(["--name", "t_def", "--steps", "2", "--bs", "2", "--workers", "0"]), runs=runs, ckpt_every=3)
-        finally:
-            sys.modules["lane_ptok_data"] = lane_ptok_data
         assert seen == dict(split="train", seed=0, bs=2, workers=0, ident="e292_a"), seen                      # the default: the one cache of the lane head of the seed
     print("trainer: smoke on synthetic batches (20 steps, kill at 12, resume from the checkpoint of step 10, the step buffer = 20), run-directory files, loss parts logged, another recipe (lr / ident / none weight) refused, "
           "no loader import; a non-smoke run through a fake loader (ident passed, (None, batches) unpacked): ok")
@@ -880,7 +881,7 @@ def test_arch_options():
 # ------------------------------------------------------------------------------------------------------------------------------ the head seed, the live inputs (S4)
 def _cache_batch(n=3):
     """the first n VAL frames of the predicted-node cache of B' seed 0, or None when it is not there"""
-    import lane_ptok_data as LP
+    from lane_center.net.prep import lane_ptok_data as LP
     try:
         ds = LP.PTokData("val", 0, "e292_a")
     except (AssertionError, FileNotFoundError) as e:
@@ -899,12 +900,9 @@ def _mutant(*edits, double=False, of=JK):
         src = src.replace(old, new)
     if double:
         src = src.replace(".float()", ".double()")
-    mod, path = types.ModuleType(of.__name__ + "_mutant"), list(sys.path)
+    mod = types.ModuleType(of.__name__ + "_mutant")
     mod.__file__ = of.__file__
-    try:
-        exec(compile(src, of.__file__, "exec"), mod.__dict__)
-    finally:
-        sys.path[:] = path
+    exec(compile(src, of.__file__, "exec"), mod.__dict__)
     return mod
 
 
@@ -1016,13 +1014,10 @@ def test_head_seed():
         def first_batch(out, batch, **k):
             order.setdefault(now[0], batch["token"][0])
             return loss_real(out, batch, **k)
-        sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
-        try:
+        with loader_as(types.SimpleNamespace(loader=fake_loader)):
             for name, extra in (("f0", []), ("f0h0", ["--head-seed", "0"]), ("f0h2", ["--head-seed", "2"])):
                 now[0] = name
                 patched(LJK, "jtoken_loss", first_batch, JKT.train, JKT.parse_args(["--name", name, "--seed", "0", "--steps", "1", "--bs", "2", "--workers", "0"] + extra), runs, 3)
-        finally:
-            sys.modules["lane_ptok_data"] = lane_ptok_data
         assert all(s["seed"] == 0 and s["ident"] == "e292_a" for s in seen.values()) and len(seen) == 3, "--seed chooses the cache of B' seed 0"
         assert order["f0h0"] == order["f0"] != order["f0h2"], f"the batch order follows the head seed, --head-seed 0 = the default: {order}"
         log = open(os.path.join(runs, "s0h2", "train.log"), encoding="utf-8").read()
@@ -1030,7 +1025,7 @@ def test_head_seed():
         # the real loader of the cache (when it is there): the cache directory is B' seed 0's for both runs, the frames of the first batch follow the head seed
         real = "SKIPPED (no cache)"
         if _cache_batch(1) is not None:
-            import lane_ptok_data as LP
+            from lane_center.net.prep import lane_ptok_data as LP
             dirs, first, loss0 = {}, {}, LJK.jtoken_loss
 
             def spy_loader(*x, **k):
@@ -1077,7 +1072,7 @@ def _twin_step():
     """one step of the champion's stage-1 recipe of seed 0 on the real TRAIN cache (CPU): the head's init is E373's rebuilt (seed_all(2), build_head of its args), the first batch is the first of E373's order and the first loss is
     E373's logged one (the GPU in bf16 there: to 2e-3) -> a note; skipped where the run or the cache is not on this machine"""
     import re
-    import lane_ptok_data as LP
+    from lane_center.net.prep import lane_ptok_data as LP
     e373 = os.path.join(JKT.T.RUNS, E373)
     try:
         LP.cache_dir("train", 0, "e292_a")                                        # asserts unless the finished cache is there

@@ -700,11 +700,12 @@
  ],
  "not_drawn": {
   "net/tests/merged_source.py": "helper of the textual mutants: a model module and its losses as one text (D152)",
+  "net/tests/mutant.py": "helper of the textual mutants: a mutated copy stands in for its module (in a child process or in the test's own)",
   "evaluation/gpu_gate.py": "helper: wait until the GPU has room before a GPU evaluation step (D100)",
   "evaluation/pmap.py": "helper: order-keeping parallel map over a fork pool for CPU scoring",
   "evaluation/tests/": "tests of the evaluation modules (problem.json tests)",
   "tools/": "pictures of graphs over BEV and camera (tools/viz); no part of the delivered path",
-  "training/bflc_paths.py": "project paths from the checkout location, imported by every module",
+  "training/bflc_paths.py": "the problem's paths (its root is where the package lane_center lies), imported by every module",
   "net/tests/test_jlive_train.py": "test of the stage-2 trainer (jlive_train.py)",
   "net/tests/test_jtoken.py": "test of the token head (jtoken.py)",
   "net/tests/test_lane_net.py": "test of the lane network as one module (lane_net.py) and of the data of its live token path (lane_live_data.py)",

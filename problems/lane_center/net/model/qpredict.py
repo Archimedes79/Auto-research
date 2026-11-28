@@ -6,19 +6,15 @@
 Nodes = the active nodes (existence above 0.05 are kept: the read-out threshold e >= 0.5 is the scorer's, an OUTPUT step); `section` = the argmax of the section membership M (the active index of the
 first node of the section), links = the candidate pairs with their probability and handle scales, `assign.P` = the probabilities over the map pieces (batch `map_ids`) and the dustbin.
 The model runs under no_grad with gt=False (no ground truth enters the forward path).
-`make_pred_fn(run)` gives a token -> pred callable for the pictures. Run the self-test: python qpredict.py (needs a trained or smoke model: `--run runs/e273_smoke2`)
+`make_pred_fn(run)` gives a token -> pred callable for the pictures. Run the self-test: python -P -m lane_center.net.model.qpredict (needs a trained or smoke model: `--run runs/e273_smoke2`)
 """
 import argparse
 import os
-import sys
 
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("net/prep", "net/model", "net/loss", "training/data", "training"):
-    sys.path.insert(0, os.path.join(ROOT, sub))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import lane_net as LN  # noqa: E402
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+from lane_center.net.model import lane_net as LN
 
 
 def predict_from_out(out, batch, keep_maps=False, min_p=0.02):
@@ -64,7 +60,7 @@ def predict(model, batch, keep_maps=False, min_p=0.02):
 
 
 def _selftest(run):
-    import lane_gt_data as LD
+    from lane_center.net.prep import lane_gt_data as LD
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     m = LN.load_b(run, dev)
     ds, dl = LD.loader("val_clean", bs=2, workers=0, shuffle=False, map_mode="error")
@@ -80,12 +76,12 @@ def _selftest(run):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", default="runs/e273_smoke2")
-    _selftest(os.path.join(ROOT, ap.parse_args().run))
+    _selftest(os.path.join(BP.ROOT, ap.parse_args().run))
 
 
 def make_pred_fn(run, map_mode="error", device="cuda", keep_maps=True):
     """a callable token -> pred dict (with the dense maps for the pictures) for the VAL frames, from a trained run (`runs/<run>/model.pt`): `qgraph_view.py` takes it as its prediction source"""
-    import lane_gt_data as LD
+    from lane_center.net.prep import lane_gt_data as LD
     m = LN.load_b(os.path.join(BP.RUNS, run) if not os.path.isabs(run) else run, device)
     ds = LD.QData("val_clean", map_mode=map_mode, pixels=False)
     by_tok = {ds.tokens[int(ds.bd.rows[k])]: i for i, k in enumerate(ds.ks)}

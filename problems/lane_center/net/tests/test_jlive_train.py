@@ -1,8 +1,8 @@
 """Tests of the S4 joint trainer (`train/jlive_train.py`, E372) on the CPU: a toy `QGraph` as B' (a run folder with its model.pt, as the selftest of test_lane_net.py builds it), a small `JTokenHead` past the key-weight switch as the champion, frames whose GT tables are
 made of the toy's own tokens, K 64; no cache, no GPU.
 
-    python net/tests/test_jlive_train.py            # the selftest, the real-data check (the E365 cache; skipped with the reason when it is missing), then the hand mutants of jlive_train.py ONE AT A TIME (a shared box): each must make the selftest fail
-    python net/tests/test_jlive_train.py selftests  # the selftest and the real-data check only
+    python -P -m lane_center.net.tests.test_jlive_train            # the selftest, the real-data check (the E365 cache; skipped with the reason when it is missing), then the hand mutants of jlive_train.py ONE AT A TIME (a shared box): each must make the selftest fail
+    python -P -m lane_center.net.tests.test_jlive_train selftests  # the selftest and the real-data check only
 
 The rules by hand (the kill rules on records, AdamW's step against torch's, the shares on a known case); one step by hand in each arm (the loss as defined); 2-step runs through `train` in each arm (what moves and what does not, the per-group clip between two spy hooks,
 the logged numbers, the frames, model.pt read back, the export check); every kill; a step skipped by LabelOverflow = the run without it; the resume bit for bit and flagged, the roll-back flagged, every recipe key refused at a resume.
@@ -19,19 +19,17 @@ import tempfile
 os.environ["CUDA_VISIBLE_DEVICES"] = ""                                                      # the CPU only: `train` takes the GPU when it sees one (before the first CUDA call)
 from torch.optim.optimizer import register_optimizer_step_pre_hook  # noqa: E402
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/train", "net/tests"):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import bflc_paths as BP  # noqa: E402
-import lane_live_data as LLD  # noqa: E402
-import lane_net as LN  # noqa: E402
-import lane_tokcache as LC  # noqa: E402
-import loss_qgraph as LQG  # noqa: E402
-import test_lane_net as TLN  # noqa: E402  (its toy GT table, its launcher of a child process)
+from lane_center.training import bflc_paths as BP  # noqa: E402
+from lane_center.net.prep import lane_live_data as LLD  # noqa: E402
+from lane_center.net.model import lane_net as LN  # noqa: E402
+from lane_center.net.prep import lane_tokcache as LC  # noqa: E402
+from lane_center.net.loss import loss_qgraph as LQG  # noqa: E402
+from lane_center.net.tests import mutant as MU  # noqa: E402
+from lane_center.net.tests import test_lane_net as TLN  # noqa: E402  (its toy GT table)
 
 os.makedirs(BP.SCRATCH, exist_ok=True)                                                       # the temporary folders of the test live below the problem's scratch
-TRAIN = os.path.join(ROOT, "training", "train", "jlive_train.py")
-ENV = dict(os.environ, BFLC_ROOT=ROOT, OMP_NUM_THREADS="2", MKL_NUM_THREADS="2", CUDA_VISIBLE_DEVICES="")      # a shared box: 2 threads, one child at a time, no GPU
+TRAIN = os.path.join(BP.ROOT, "training", "train", "jlive_train.py")
+ENV = dict(os.environ, OMP_NUM_THREADS="2", MKL_NUM_THREADS="2", CUDA_VISIBLE_DEVICES="")      # a shared box: 2 threads, one child at a time, no GPU
 SOFT = ["mnms", 1.75, 0.1]
 KT = 64                                                                                      # tokens per frame of the toy (the trainer's K = 512 is checked, then patched)
 
@@ -107,15 +105,6 @@ MUTANTS = [
 ]
 
 
-def load(path, name):
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
 def load_b(run, tmp):
     """B' of the model.pt of a stage-2 run as the network's loader builds it (`lane_net.LaneNet.from_checkpoint`)"""
     return LN.LaneNet.from_checkpoint(os.path.join(tmp, run, "model.pt"))[0].b
@@ -158,10 +147,10 @@ def world(tmp):
     """a toy B' run (tmp/b), a head run tmp/h (seed 0, none weight 0.25, head seed 2, past the switch), batches A (2 frames, GT tables without links) and B (2 frames, a linked GT pair on the toy's own tokens) -> dict"""
     import numpy as np
     import torch
-    import jtok as JT
-    import jtoken as JK
-    import loss_jtoken as LJK  # noqa: E402
-    import qgraph as QG
+    from lane_center.net.model import jtok as JT
+    from lane_center.net.model import jtoken as JK
+    from lane_center.net.loss import loss_jtoken as LJK  # noqa: E402
+    from lane_center.net.model import qgraph as QG
     torch.manual_seed(0)
     m = QG.QGraph(width=16, soft_nms=SOFT)
     with torch.no_grad():
@@ -285,7 +274,7 @@ def rules(T):
 def steps_by_hand(T, w, tmp):
     import numpy as np
     import torch
-    import loss_jtoken as LJK  # noqa: E402
+    from lane_center.net.loss import loss_jtoken as LJK  # noqa: E402
     B = w["B"]
     for tn, live in ((1, 1), (0, 1), (0, 0)):
         joint, lf, hook, run, args = direct(T, w, tmp, tn, live)
@@ -408,7 +397,7 @@ def steps_by_hand(T, w, tmp):
 # ------------------------------------------------------------------------------------------------------------------------------ runs through train
 def runs(T, w, tmp):
     import torch
-    import trainer
+    from lane_center.training import trainer
     seen, real_fit = {}, trainer.fit
     rd = lambda n: [json.loads(x) for x in open(os.path.join(tmp, n, "log.jsonl"))]  # noqa: E731
     text = lambda n: open(os.path.join(tmp, n, "train.log"), encoding="utf-8").read()  # noqa: E731
@@ -476,7 +465,7 @@ def runs(T, w, tmp):
     assert moved("z") == ([], True), moved("z")
     assert "ushare" not in rd("z")[-1] and rd("z")[-1]["b_loss"] > 0 and "jlive arm z" in text("z"), "z: no share; B''s loss logged"
     # B''s stored args (`qgraph.from_args`): the removed loss switches and the end head at their off values (the args of the stored B' runs) load, another value is refused by name with the tag
-    import qgraph as QG
+    from lane_center.net.model import qgraph as QG
     os.makedirs(os.path.join(tmp, "bx"))
     for extra, why in ((dict(QG.REMOVED), None), (dict(ends=True), "{'ends': True}: options of the lane head that no longer exist (the tag v1 keeps them)"), (dict(node_loss="zone"), "{'node_loss': 'zone'}"),
                        (dict(tier_w=[1.0, 0.5, 0.2]), "'tier_w'"), (dict(soft_nms=[1.5, 0.1, 3]), "E277 (radius, tau, passes) no longer exists (the tag v1 keeps it)")):
@@ -571,7 +560,7 @@ def runs(T, w, tmp):
         else:
             refuses(lambda: T.check_start(cfg, os.path.join(tmp, "oldcfg")), why)
     # E425: --output-layers trains the head WITH the soft output layers in its forward: two steps, finite losses, another first loss than without them, and the model keeps the layers' settings (build_head builds them)
-    import jtoken as JK
+    from lane_center.net.model import jtoken as JK
     with Built(T, [w["B"]]):
         T.train(T.parse_args(cli(w, "ol", 1, steps=2, extra=["--output-layers", "soft_output"])), runs=tmp, ckpt_every=500)
     m_ol = torch.load(os.path.join(tmp, "ol", "model.pt"), weights_only=False)
@@ -587,7 +576,7 @@ def pyr_arms(T, w, tmp):
     on) two steps through `train` between spy hooks: two AdamW groups, the pyramid's rate 0.1 x the head's in every step, the three groups clipped each on its own, the pyramid and the node head moved from the START state, the logged numbers, the
     log lines; c (pyramid frozen) and e (b_weight 0) from the same start: c moves only the node head; the pyramid-gradient kill, the frozen pyramid in c, the B-rise kill only with the anchor; p resumed = p straight, bit for bit"""
     import torch
-    import trainer
+    from lane_center.training import trainer
     st, B = w["st"], w["B"]
     rd = lambda n: [json.loads(x) for x in open(os.path.join(tmp, n, "log.jsonl"))]  # noqa: E731
     text = lambda n: open(os.path.join(tmp, n, "train.log"), encoding="utf-8").read()  # noqa: E731
@@ -746,7 +735,7 @@ def selftest(train_path=TRAIN):
     import torch
     torch.set_num_threads(int(os.environ.get("OMP_NUM_THREADS", "2")))
     assert not torch.cuda.is_available(), "the tests run on the CPU (CUDA_VISIBLE_DEVICES is set empty above)"
-    T = load(train_path, "jlive_train_under_test")
+    T = MU.module("jlive_train_under_test", train_path)                                     # a module of its own (the toy patches its K), the file or a mutant of it
     rules(T)
     T.K = KT                                                                                # the toy's tokens per frame (the real K is checked in `rules`)
     with tempfile.TemporaryDirectory(dir=BP.SCRATCH) as tmp:
@@ -763,8 +752,8 @@ def selftest(train_path=TRAIN):
 
 def real_check(train_path=TRAIN):
     """the real data (needs the E365 cache and the lane GT store): `batches` checks that the B' run is the checkpoint of the cache (seed 0's B' accepted, seed 1's refused) and hands out the live loader's batches (x, table, token, row, targets)"""
-    import lane_ptok_data as LP
-    T = load(train_path, "jlive_train_real")
+    from lane_center.net.prep import lane_ptok_data as LP
+    T = MU.module("jlive_train_real", train_path)
     try:
         LP.cache_dir("train", 0, "e292_a")                                        # asserts unless the finished cache is there
     except AssertionError as e:
@@ -789,7 +778,7 @@ def run_mutants():
                 p = os.path.join(tmp, f"m{k}.py")
                 with open(p, "w", encoding="utf-8") as fh:
                     fh.write(src.replace(a, b))
-                r = subprocess.run([sys.executable, "-c", TLN.LAUNCH, os.path.abspath(__file__), "one", p], capture_output=True, text=True, env=ENV)
+                r = subprocess.run([sys.executable, "-P", "-m", "lane_center.net.tests.test_jlive_train", "one", p], capture_output=True, text=True, env=ENV)
                 tail = ((r.stderr or r.stdout).strip().splitlines() or ["no output"])[-1][:150]
                 res = "SURVIVED" if r.returncode == 0 else ("killed" if tail.startswith(("AssertionError", "Kill", "jlive_train_under_test.Kill")) else "CRASHED: " + tail)
             print(f"{res[:170]:<12} {name}", flush=True)

@@ -1,6 +1,6 @@
 """Trainer of E372 (stage S4 of the token champion, D113): the JOINT fine-tune of the champion token head with B' in the loop (`net/model/lane_net.LaneNet`: B''s tokens and the labels made live in every step). A run starts it through the research worker (`training/train/lane_train.py stage2`).
 
-    python training/train/jlive_train.py --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
+    python -P -m lane_center.training.train.jlive_train --name e372_s4_s0 --seed 0 --head-run e373_cb_s0 --train-nodes 1 --steps 3000 --bs 8 --lr 1e-4 --workers 4 [--live-inputs 1] [--b-run runs/e292_a_s0] [--b-weight 1.0] [--head-seed N] [--b-state-from R] [--train-pyr 1 --pyr-lr-mult 0.1]
 
 Arms (card section 0): z = `--train-nodes 0` (B' frozen, the head's loss only), s4 = `--train-nodes 1` (B''s node head trains on the head's loss + b_weight x its own node loss `loss_qgraph.node_loss`; the head keeps the graph of its inputs: `--live-inputs 0`
 with `--train-nodes 1`, E372's control arm b, is refused: the tag v1 has it). `--seed` = B''s seed (the default `--b-run` runs/e292_a_s<S>, the frame order of the E365 cache; the head run must be of the same seed), `--head-seed` = the data order (default: the head run's).
@@ -36,23 +36,19 @@ import collections
 import json
 import math
 import os
-import sys
 
 import numpy as np
 import torch
 from torch.optim.optimizer import register_optimizer_step_pre_hook
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "evaluation"):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import jtoken_train as JKT  # noqa: E402
-import lane_live_data as LLD  # noqa: E402
-import lane_net as LN  # noqa: E402
-import lane_ptok_data as LP  # noqa: E402
-import lane_tokcache as LC  # noqa: E402
-import loss_qgraph as LQG  # noqa: E402
-import trainer as T  # noqa: E402
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+from lane_center.training.train import jtoken_train as JKT
+from lane_center.net.prep import lane_live_data as LLD
+from lane_center.net.model import lane_net as LN
+from lane_center.net.prep import lane_ptok_data as LP
+from lane_center.net.prep import lane_tokcache as LC
+from lane_center.net.loss import loss_qgraph as LQG
+from lane_center.training import trainer as T
 
 RECIPE = ("seed", "head_run", "head_sha256", "b_run", "b_sha256", "train_nodes", "live_inputs", "b_weight", "none_weight", "head_seed", "bs", "steps", "lr",
           "b_state_from", "b_state_sha256", "train_pyr", "pyr_lr_mult", "output_layers")

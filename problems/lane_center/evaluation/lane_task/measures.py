@@ -28,8 +28,8 @@ from typing import Dict, Sequence, Tuple
 
 import numpy as np
 
-from .geometry import LaneGraph
-from .raster import Grid, edt, thin
+from lane_center.evaluation.lane_task.geometry import LaneGraph
+from lane_center.evaluation.lane_task.raster import Grid, edt, thin
 
 Counts = Dict[str, np.ndarray]
 _E = 1e-12

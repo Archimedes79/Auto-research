@@ -10,22 +10,17 @@ piece (int, index into the GT pieces of the frame, -1 none), uout, uin; links `l
 (3, 200, 200), g05 / t05 for the 1 m centre loss, events1 (6, 100, 100), road2 (2, 50, 50); the intersection polygons are grown by `dilate` = 2 m (the owner: slightly enlarged; the GT itself is undilated: stop / exit events lie 1-3 m before the polygon edge)); the map `map_sim.make_map` with its piece targets (`piece_map`: GT piece -> map pieces,
 `piece_road`).
 `collate` stacks the fixed arrays and pads the variable ones (links with -1, g05 with 1e4, the map to the largest K / T of the batch, with masks `kmask`, `tmask`).
-Run the self-test: python lane_gt_data.py
+Run the self-test: python -P -m lane_center.net.prep.lane_gt_data
 """
 import json
-import os
-import sys
 
 import numpy as np
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub in ("training/data", "training/data/prep", "net/prep", "net/model", "net/loss", "../.."):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub)))
-import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
-import map_sim as MS  # noqa: E402
-import frames as FR  # noqa: E402
-import qtargets as QT  # noqa: E402
+import GtGenerator  # the ground truth: its public interface only
+from lane_center.net.prep import map_sim as MS
+from lane_center.net.prep import frames as FR
+from lane_center.net.prep import qtargets as QT
 
 BOX = 48.0
 
@@ -68,7 +63,7 @@ class QData(torch.utils.data.Dataset):
                    piece_map=MS.piece_targets(g, mp), piece_road=MS.road_targets(g, mp), mp=mp, n_pieces=len(g["pieces"]))
         out.update({n: torch.from_numpy(v) for n, v in t.items()})
         if self.pixels:
-            import qraster as QR
+            from lane_center.net.prep import qraster as QR
             pix = QR.pixel_targets(g, dilate=self.dilate)
             out.update({n: torch.from_numpy(np.asarray(pix[n])) for n in ("lines_mask", "lines_dist", "g05", "t05", "events1", "road2")})
         return out

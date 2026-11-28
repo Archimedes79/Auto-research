@@ -2,11 +2,11 @@
 and the GPU state before and after, and the rule that calls a timing QUIET. The functions are those of v1's junction timer (E342 / E351, in the tag v1 with
 its marker, kernel and CUDA-graph commands, which need the junction system that did not move).
 
-    import jtiming as JTG
+    from lane_center.evaluation import jtiming as JTG
     out, ms = JTG.timed(lambda: model(batch), cuda)
     quiet, line = JTG.quiet_verdict(JTG.load1(), load_after, JTG.gpu_state(), gpu_after)     # QUIET: both loads below QUIET_LOAD and the GPU idle before and after
 
-Test: `python jtiming.py` (selftest, CPU).
+Test: `python -P -m lane_center.evaluation.jtiming` (selftest, CPU).
 """
 import os
 import subprocess

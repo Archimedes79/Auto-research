@@ -12,7 +12,7 @@ the first part is E272's geometric assigner (sigma 1.5, lam 2, c_bin 4: the star
 `rounds` rounds of soft registration: a weighted Procrustes (rotation + translation of the map tokens, weights = node weight x P(token)) moves the map towards the nodes and the logits are
 recomputed (the shift is clamped to +-5 m, the rotation to +-6 degrees). Road level: P(road) = sum of P(piece) over the pieces of the road.
 Frame: lane frame (x right, y forward) for nodes and map alike; nothing is converted.
-Run the self-test: python qassign.py
+Run the self-test: python -P -m lane_center.net.model.qassign
 """
 import math
 

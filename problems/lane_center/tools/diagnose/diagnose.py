@@ -1,6 +1,6 @@
 """One command that checks every stage of a lane run on its stored live dump and says what goes wrong:
 
-    python tools/diagnose/diagnose.py <run> [--split val] [--out DIR] [--no-gpu]
+    python -P -m lane_center.tools.diagnose.diagnose <run> [--split val] [--out DIR] [--no-gpu]      (with the module path: README.md)
 
 <run> is a run folder of the problem's run root with config.json (the decode) and token_<split>_live.pkl (the step `predict`).
 Written to <runs root>/diagnose/<run>/: diagnose.json, summary.md and pictures.
@@ -17,16 +17,8 @@ import os
 import pickle
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-PROBLEM = os.path.normpath(os.path.join(HERE, "..", ".."))
-REPO = os.path.normpath(os.path.join(PROBLEM, "..", ".."))
-for sub in json.load(open(os.path.join(PROBLEM, "problem.json")))["pythonpath"]:
-    sys.path.insert(0, os.path.join(PROBLEM, sub))
-sys.path.insert(0, os.path.join(REPO, "autoresearch"))
-sys.path.insert(0, REPO)
-
-import GtGenerator  # noqa: E402
-import matplotlib  # noqa: E402
+import GtGenerator
+import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
@@ -144,9 +136,9 @@ def main(argv=None):
     ap.add_argument("--no-gpu", action="store_true", help="skip the pixel and node stages")
     ap.add_argument("--worst", type=int, default=6, help="pictures of the frames with the least true lane length covered")
     a = ap.parse_args(argv)
-    import adapter as AD
-    import bflc_paths as BP
-    import lane_readout as RO
+    from lane_center.evaluation import adapter as AD
+    from lane_center.training import bflc_paths as BP
+    from lane_center.net.model import lane_readout as RO
     run_dir = os.path.join(BP.RUNS, a.run)
     cfg = json.load(open(os.path.join(run_dir, "config.json")))
     dec = cfg["decode"]
@@ -159,8 +151,8 @@ def main(argv=None):
     gpu = not a.no_gpu
     if gpu:
         import torch
-        import lane_net as LN
-        import lane_tok_data as TD
+        from lane_center.net.model import lane_net as LN
+        from lane_center.net.prep import lane_tok_data as TD
         data = TD.TokData(a.split, 2.0, feats=True)
         assert list(data.tokens) == [f.token for f in frames]
         net = LN.LaneNet.from_checkpoint(os.path.join(run_dir, "model.pt"), "cuda")[0]

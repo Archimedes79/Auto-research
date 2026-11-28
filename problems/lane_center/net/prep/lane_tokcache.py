@@ -1,11 +1,11 @@
 """D113 / E365 predicted-node cache: the tokens of a FROZEN lane head B (a `QGraph` run: B' = `runs/e292_a_s<S>` with the Matrix-NMS layer, plain B = `runs/e273_p_s<S>`) on every frame of TRAIN and VAL, with the GT labels
 of every token (spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`). Derived data, not in git; this tool, its selftest and the manifests are.
 
-    python net/prep/lane_tokcache.py build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
-    python net/prep/lane_tokcache.py report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
-    python net/prep/lane_tokcache.py summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
-    python net/prep/lane_tokcache.py same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field
-    python net/prep/lane_tokcache.py selftest
+    python -P -m lane_center.net.prep.lane_tokcache build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
+    python -P -m lane_center.net.prep.lane_tokcache report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
+    python -P -m lane_center.net.prep.lane_tokcache summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
+    python -P -m lane_center.net.prep.lane_tokcache same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field
+    python -P -m lane_center.net.prep.lane_tokcache selftest
     c = TokCache(dir); f = c[i]                                                                                                   # one frame as numpy arrays; `lane_ptok_data.py` is the loader
 
 Frames: the order of `lane_tok_data.TokData(split, res=2.0)` (TRAIN = the rows of `QData('train')` with a stored lane GT, VAL = exactly the 873 rows of data/splits.json['val'], asserted there); the GT table of a frame is the E357 table
@@ -35,11 +35,8 @@ import time
 import numpy as np
 import torch
 
-ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation"):
-    sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
-import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
+from lane_center.training import bflc_paths as BP  # where code, data and runs are
+import GtGenerator  # the ground truth: its public interface only
 
 VERSION = "v1"
 CACHE = os.path.join(BP.RUNS, "e365_cache")
@@ -107,7 +104,7 @@ def types_of(flags):
 def label_frame(tk, table, r=R_NEAR, cos=COS_NEAR, K=None, allowed=None, ks=KST):
     """the labels of one frame. tk: numpy dict of the tokens in rank order (pos, dirv, valid, e_p; T >= K rows), table: the GT table of `lane_tok_data` (pos, dirv, flags, sstart, src, dst, long, conn, scale, cell, piece),
     allowed: (K, K) bool, the gate of `jtok.pair_geometry` on the first K tokens (None: all False) -> dict of the label fields (module docstring); the coverage statistics use the first ks[j] of the T given tokens"""
-    from lane_tok_data import sub_table
+    from lane_center.net.prep.lane_tok_data import sub_table
     T = len(tk["pos"])
     K = T if K is None else K
     M = len(table["pos"])
@@ -268,8 +265,8 @@ def _collate(b):
 def build(a, load_net, pair_geometry):
     """one cache of the command line `build`: load_net(run, dev) = the network of the stored lane head B (`lane_net.LaneNet`: its `tokens(x, K, f2)` is the one copy of
     features -> tokens), pair_geometry = the gate of the token pairs (`jtok.pair_geometry`). Both come from the caller: preprocessing does not import the model."""
-    import lane_tok_data as LT
-    import qtargets as QT
+    from lane_center.net.prep import lane_tok_data as LT
+    from lane_center.net.prep import qtargets as QT
     assert tuple(QT.FLAGS) == FLAGS
     split = {"val": "val", "val_clean": "val", "train": "train"}[a.split]
     run = _abs(a.run)
@@ -571,8 +568,8 @@ if __name__ == "__main__":
     if a.cmd == "selftest":
         selftest()
     elif a.cmd == "build":
-        import jtok as JT  # the command line runs the stored B' (net/model)
-        import lane_net as LN
+        from lane_center.net.model import jtok as JT  # the command line runs the stored B' (net/model)
+        from lane_center.net.model import lane_net as LN
         build(a, lambda run, dev: LN.LaneNet(LN.load_b(run, dev), K=a.K), JT.pair_geometry)
     elif a.cmd == "summary":
         out_ = {}
