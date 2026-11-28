@@ -4,6 +4,7 @@ delivered graph (`lane_readout`). The trainers, the predict step, the token cach
 
     net, ck = LaneNet.from_checkpoint("<run>/model.pt")              # a stage-2 file (state + b_state + b_args + args); a stage-1 file (state + args) with b_run=<its B' run folder>
     net = LaneNet(load_b("<runs>/e292_a_s0"), build_head(args), K=512, train_nodes=True)       # from the parts: a B' run folder (model.pt: state + args), the head of a run's args
+    b = build_b(args)                  # a new B' of a stage-0 run's args (the stage-0 trainer: training/train/qgraph_train.py)
     no, tk = net.tokens(x)             # x (B, 39, 200, 200): the node-stage outputs and the K tokens, the graph kept; THE one copy of features -> tokens
     out, tk = net(x)                   # the head's output on the live tokens
     preds = net.graph(x, decode)       # features -> the delivered graph of every frame (qformat predictions) in one forward, no_grad; decode = `lane_readout.Decode`
@@ -82,6 +83,11 @@ def load_head(run, dev, runs=None):
     m = build_head(ck["args"])
     m.load_state_dict(ck["state"])
     return m.to(dev).eval(), ck["args"]
+
+
+def build_b(args):
+    """a new lane head B' of a stage-0 run's args (width, soft_nms: `qgraph.from_args`): what the stage-0 trainer trains (training/train/qgraph_train.py)"""
+    return QG.from_args(args)
 
 
 def load_b(run_dir, device="cpu"):

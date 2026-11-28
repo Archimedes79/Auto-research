@@ -5,7 +5,8 @@ every setting of a trainer is a key of the base config, so an arm of a card can 
 
 1. argv: `options` on a toy block (known answer); the argv of the base config parses to what the two argv lists of before this rule parsed to
    (OLD: the champion's recipe did not move); every key of a block, set to another value, reaches the trainer's option of its name; `from_run`.
-2. keys: the keys of the blocks stage1 / stage2 are exactly the options of the two parsers, without what the run gives.
+2. keys: the keys of the blocks stage1 / stage2 and of every part of stage0 are exactly the options of their parsers, without what the run gives;
+   the parts of stage0 are the recipes of B' (E271 a, E273 p, E292 a) chained through the run's folders; tokens.enabled points stage 1 at the run's cache.
 3. recipe: the trainers take the argv of the base config for the recipe of the trained run REF (`check_start`: the same recipe is resumed) and
    refuse it with one setting changed. Skipped with a printed line where the run root does not hold REF.
 An adoption that changes the champion's recipe changes OLD and REF here with it."""
@@ -17,6 +18,7 @@ from lane_center.training.train import lane_train as LT
 from lane_center.training import bflc_paths as BP
 from lane_center.training.train import jlive_train as JLT
 from lane_center.training.train import jtoken_train as JKT
+from lane_center.training.train import qgraph_train as QGT
 
 BASE = json.load(open(os.path.join(BP.ROOT, "training", "configs", "base.json"), encoding="utf-8"))
 PARSE = {"stage1": JKT.parse_args, "stage2": JLT.parse_args}
@@ -32,6 +34,7 @@ SET = {"stage1": [dict(ident="e273_p", head_seed_offset=5, none_weight=0.5, step
                        lr=0.5, workers=1),
                   dict(train_nodes=0, live_inputs=0, output_layers="soft_output")]}
 RUN_GIVES = ("name", "seed", "smoke")                                      # no setting of a card: the run's name and seed; the 20-step plumbing run
+STAGE0_GIVES = ("head", "resume_from")                                     # the chain of stage 0: the run's own E271 head and the part before
 
 
 def cfg_of(name="E1.a_s1", seed=1, **top):
@@ -104,6 +107,30 @@ def test_keys():
         want = set(vars(parse(need[stage]))) - set(RUN_GIVES)
         assert keys == want, (f"{stage}: options of the trainer without a key of base.json {sorted(want - keys)}, keys without an option "
                               f"{sorted(keys - want)}")
+    want = set(vars(QGT.parse_args(["--name", "x"]))) - set(RUN_GIVES) - set(STAGE0_GIVES) - {"soft_nms"}       # soft_nms: made from soft_nms_mnms
+    assert set(BASE["stage0"]) == {"enabled"} | set(LT.STAGE0), sorted(BASE["stage0"])
+    for part in LT.STAGE0:
+        assert set(BASE["stage0"][part]) == want, f"stage0.{part}: options of qgraph_train without a key {sorted(want - set(BASE['stage0'][part]))}, keys without one {sorted(set(BASE['stage0'][part]) - want)}"
+
+
+def test_stage0_tokens():
+    """the parts of stage 0 from the base config are the recipes of the champion's B' (E271 a, E273 p, E292 a: v1 ledger), chained through the run's folders;
+    tokens.enabled makes stage 1 read the run's own cache"""
+    cfg = dict(cfg_of(), stage0=dict(BASE["stage0"], enabled=1), tokens=dict(BASE["tokens"], enabled=1))
+    got = {p: vars(QGT.parse_args(LT.stage0_args(cfg, p))) for p in LT.STAGE0}
+    assert {k: got["e271"][k] for k in ("phases", "steps", "bs", "width", "gate_phases")} == dict(phases=[1], steps=[4000], bs=8, width=48, gate_phases=[]), got["e271"]
+    assert got["e273"]["steps"] == [QGT.STEPS[k] for k in range(2, 8)] and got["e273"]["gate_phases"] == [] and got["e273"]["soft_nms"] is None and got["e273"]["resume_from"] is None
+    assert got["e273"]["head"] == got["e292"]["head"] == "runs/E1.a_s1/stage0/e271/model.pt" and got["e292"]["resume_from"] == "runs/E1.a_s1/stage0/e273/model.pt"
+    assert {k: got["e292"][k] for k in ("phases", "steps", "bs", "gate_phases", "gate_node_prec", "gate_node_rec", "soft_nms", "name", "seed")} == dict(
+        phases=[3, 4, 5, 6, 9], steps=[3000, 2500, 1000, 750, 1000], bs=4, gate_phases=[3], gate_node_prec=0.75, gate_node_rec=0.5, soft_nms=["mnms", 1.75, 0.1],
+        name="E1.a_s1/stage0/e292", seed=1)
+    assert parsed(cfg, "stage1")["ident"] == "runs/E1.a_s1/tokens" and LT.tokens_b(cfg) == "runs/E1.a_s1/stage0"
+    assert LT.tokens_b(dict(cfg, stage0=BASE["stage0"])) == "runs/e292_a_s1", "tokens without stage 0: the stored B' of stage 1's ident"
+    for stage in ("stage0", "tokens"):                                                         # the base config: both off, the steps refuse
+        with tempfile.TemporaryDirectory() as tmp:
+            p = os.path.join(tmp, "c.json")
+            json.dump(cfg_of(), open(p, "w", encoding="utf-8"))
+            refused(lambda: LT.main([stage, p]), "enabled is 0")
 
 
 def test_recipe():
@@ -125,5 +152,6 @@ if __name__ == "__main__":
     test_argv()
     test_from_run()
     test_keys()
-    print("test_lane_train ok: the argv of the base config, every key of a block reaches its option, from_run; keys = options; "
+    test_stage0_tokens()
+    print("test_lane_train ok: the argv of the base config, every key of a block reaches its option, from_run; keys = options; stage 0 = the recipes of B', tokens; "
           + ("the recipe of " + REF if test_recipe() else "NO recipe check"))

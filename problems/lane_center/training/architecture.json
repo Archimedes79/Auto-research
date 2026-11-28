@@ -363,18 +363,21 @@
   },
   {
    "id": "st0",
-   "label": "Stage 0: lane head B'\ntrained earlier, then\nfrozen (E273, E292)",
+   "label": "Stage 0: lane head B'\nE271 -> E273 -> E292\n(off: the stored B')",
    "kind": "train",
    "col": 2,
    "row": 6,
    "code": [
+    "training/train/qgraph_train.py",
+    "training/train/qgates.py",
+    "net/prep/grid_data.py",
     "net/loss/loss_qgraph.py::qgraph_loss",
     "net/loss/losses.py",
     "net/model/soft_lines.py",
     "net/prep/targets.py"
    ],
-   "note": "pixel maps -> nodes in gated phases, then phase 9 with the Matrix-NMS layer; the checkpoint runs/e292_a_s<seed> is the B' of the champion",
-   "sub": "loss_qgraph.py +3"
+   "note": "from random weights, phase by phase with a gate each: the E271 grid head (phase 1), pixel maps, nodes, links, sections, assignment, jointly (E273 phases 2 - 7), then phases 3 4 5 6 9 with the Matrix-NMS layer (E292); the step stage0 with stage0.enabled, else the stored checkpoint runs/e292_a_s<seed> (the B' of the champion)",
+   "sub": "qgraph_train.py +6"
   },
   {
    "id": "cache",
@@ -388,7 +391,7 @@
     "net/prep/lane_tok_data.py",
     "net/prep/lane_tok_data.py::sub_table"
    ],
-   "note": "derived data, not in git: the K = 512 tokens of the frozen B' on every TRAIN and VAL frame with the labels of every token (assignment to the GT nodes, contracted link targets); the loader batches it"
+   "note": "derived data, not in git: the K = 512 tokens of the frozen B' on every TRAIN and VAL frame with the labels of every token (assignment to the GT nodes, contracted link targets); the loader batches it. The stored cache of runs/e292_a_s<seed>, or (the step tokens, tokens.enabled) the run's own in <run>/tokens"
   },
   {
    "id": "st1",
@@ -415,7 +418,7 @@
   },
   {
    "id": "trainer",
-   "label": "Shared trainer: checkpoint, resume, status.json,\nprobe; the two stages from a run's config",
+   "label": "Shared trainer: checkpoint, resume, status.json,\nprobe; the stages from a run's config",
    "kind": "train",
    "col": 0,
    "row": 7,
@@ -425,7 +428,7 @@
     "../../autoresearch/trainkit/probe.py",
     "training/train/lane_train.py"
    ],
-   "note": "every stage trains and resumes through trainer.fit (the run-directory contract of the research worker; the stop protocol and the probes are trainkit's); lane_train.py starts the two stages from a run's config",
+   "note": "every stage trains and resumes through trainer.fit (the run-directory contract of the research worker; the stop protocol and the probes are trainkit's); lane_train.py starts the stages (stage 0, tokens, stage 1, stage 2) from a run's config",
    "w": 2,
    "hpx": 50
   },
@@ -715,6 +718,7 @@
   "net/tests/test_lane_tokcache.py": "test of the token cache and its loader",
   "net/tests/test_lane_train.py": "test of the stage entry (lane_train.py) and the base config: every trainer setting is a key a card can set",
   "net/tests/test_net_layering.py": "test of the layers: net/prep < net/model < net/loss < training | evaluation, every import (DESIGN R13)",
-  "net/tests/test_foundation.py": "test of the foundation extraction and its check (net/prep/foundation)"
+  "net/tests/test_foundation.py": "test of the foundation extraction and its check (net/prep/foundation)",
+  "net/tests/test_qgraph_train.py": "test of stage 0 (qgraph_train.py, qgates.py) and of the step tokens"
  }
 }

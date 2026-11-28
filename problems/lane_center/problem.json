@@ -5,6 +5,8 @@
  "config": "training/configs/base.json",
  "first_experiment": 396,
  "steps": {
+  "stage0": {"run": ["{python}", "-P", "-m", "lane_center.training.train.lane_train", "stage0", "{config}"], "gpus": 1, "dir": "stage0", "gpu_mb": 8100, "note": "the lane head B' from random weights (qgraph_train: E271 grid head, E273 phases 2 - 7, E292 phases 3 4 5 6 9 with the Matrix-NMS layer); only with stage0.enabled"},
+  "tokens": {"run": ["{python}", "-P", "-m", "lane_center.training.train.lane_train", "tokens", "{config}"], "gpus": 1, "dir": "tokens", "note": "the token cache of the run's B' on TRAIN and VAL into <run>/tokens (lane_tokcache.build); only with tokens.enabled"},
   "stage1": {"run": ["{python}", "-P", "-m", "lane_center.training.train.lane_train", "stage1", "{config}"], "gpus": 1, "dir": "stage1", "note": "the token head on the frozen lane head B' (jtoken_train, reads the token cache)"},
   "stage2": {"run": ["{python}", "-P", "-m", "lane_center.training.train.lane_train", "stage2", "{config}"], "gpus": 1, "dir": "stage2", "note": "the head and B''s node head trained together through the token loss (jlive_train)"},
   "predict": {"run": ["{python}", "-P", "-m", "lane_center.evaluation.lane_predict", "{config}"], "gpus": 1, "note": "the live dump of the run's network on the split: B' at batch 4 (its GPU parity), the head at batch 8"},
@@ -28,6 +30,6 @@
  "tests": ["lane_center.net.tests.test_net_layering", "lane_center.evaluation.tests.test_evaluator_hash", "lane_center.evaluation.sparse_lanes.selftest", "lane_center.evaluation.jtiming",
            "lane_center.net.tests.merged_source", "lane_center.net.tests.mutant selftest", "lane_center.net.tests.test_qmnms", "lane_center.net.tests.test_sections",
            "lane_center.net.tests.test_qgraph", "lane_center.net.tests.test_jtoken", "lane_center.net.tests.test_lane_tokcache", "lane_center.net.tests.test_lane_net",
-           "lane_center.net.tests.test_jlive_train", "lane_center.net.tests.test_lane_train", "lane_center.net.tests.test_foundation", "lane_center.evaluation.tests.test_jtoken_eval"],
+           "lane_center.net.tests.test_jlive_train", "lane_center.net.tests.test_lane_train", "lane_center.net.tests.test_qgraph_train", "lane_center.net.tests.test_foundation", "lane_center.evaluation.tests.test_jtoken_eval"],
  "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
 }

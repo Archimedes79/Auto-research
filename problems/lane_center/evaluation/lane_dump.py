@@ -81,8 +81,8 @@ def joint_run(ck):
 
 
 def base_b(kw):
-    """runs/<ident>_s<seed>: the B' of the run's cache (relative to the project folder)"""
-    return f"runs/{kw['ident']}_s{kw['seed']}"
+    """the B' of the run's cache (`lane_ptok_data.b_run`: runs/<ident>_s<seed>, or the B' a run's own cache was made from)"""
+    return LP.b_run(kw["ident"], kw["seed"])
 
 
 def check_b(meta, ck, kw, runs=BP.RUNS):

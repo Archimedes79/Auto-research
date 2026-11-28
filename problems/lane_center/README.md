@@ -10,7 +10,7 @@ its metrics: `PROBLEM.md`; the modules and the rules they obey: `DESIGN.md`; the
 | `net/prep/foundation/` | the GaussianCaR features made again from raw nuScenes (`gcar_features.py`) and a check against the stored ones (`check_features.py`); its `README.md` names what must exist outside the repository |
 | `net/model/` | the network as one module (`lane_net.py`: `LaneNet` builds it, loads a checkpoint and runs features -> tokens -> graph; the trainers, the predict step and the evaluation use it), its parts: the lane head B' (`qgraph.py` and its parts), the token head (`jtoken.py`, the pair geometry `jtok.py`), the read-out as a named output step (`lane_readout.py`) |
 | `net/loss/` | the token loss (`loss_jtoken.py`) and the losses of B' |
-| `training/` | `train/lane_train.py` (the two stages from a run's config: its blocks `stage1` / `stage2` are the trainers' options, key by key; test `net/tests/test_lane_train.py`), `train/jtoken_train.py` (stage 1), `train/jlive_train.py` (stage 2, with B' live in the loop), `trainer.py`, `bflc_paths.py` (where code, data and runs are), `configs/base.json`, the drawing `architecture.*` |
+| `training/` | `train/lane_train.py` (the stages from a run's config: its blocks `stage0` (three parts) / `stage1` / `stage2` are the trainers' options, key by key, `tokens` the cache step; test `net/tests/test_lane_train.py`), `train/qgraph_train.py` (stage 0: B' from random weights, its gates `train/qgates.py`; data of its E271 phase `net/prep/grid_data.py`; test `net/tests/test_qgraph_train.py`), `train/jtoken_train.py` (stage 1), `train/jlive_train.py` (stage 2, with B' live in the loop), `trainer.py`, `bflc_paths.py` (where code, data and runs are), `configs/base.json`, the drawing `architecture.*` |
 | `evaluation/` | `lane_predict.py` (the step `predict`: the live dump), `lane_dump.py` (the dump's checked reader, on the scored path), `adapter.py` (the evaluation step: decode and score through `Evaluation`), `jtoken_eval.py` (diagnostics: cards, decode sweep, cell rule, timing), `jtiming.py` (the timing protocol), `qgraph_eval.py` + `sparse_lanes/` + `lane_task/` (the scorer and its metrics) |
 | `tools/viz/` | pictures of graphs over BEV and camera |
 | `data/splits.json` | the splits by row: TRAIN, VAL and TEST (the holdout) |
@@ -46,6 +46,7 @@ kept compatible for old results; a number that matters is measured again.
 ```
 python3 -m research new lane_center <slug> "<title>"     # arms are settings of training/configs/base.json (decode, import_weights, every option of the two trainers in stage1 / stage2; from_run through "needs")
 python3 -m research start lane_center E<n>               # steps predict + evaluate; a training card names "steps": ["stage1", "stage2", "predict", "evaluate"]
+                                                         # (B' from the repository: "stage0", "tokens" first, with stage0.enabled and tokens.enabled 1)
 python3 -m research judge lane_center E<n> --write
 ```
 Tests: `python3 -m research tests lane_center` (the list in `problem.json`), among them `net/tests/test_net_layering.py`: the layers `net/prep` <

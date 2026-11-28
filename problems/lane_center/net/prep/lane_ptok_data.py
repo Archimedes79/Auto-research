@@ -1,6 +1,6 @@
 """E365 loader of the predicted-node cache (`lane_tokcache.py`, spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`): the tokens of the frozen lane head B' (or B) of a frame and the GT labels of the tokens.
 
-    ds, dl = loader("train" | "val", seed=0, bs=8, workers=4, ident="e292_a")       # the finished cache of B' seed 0 at K = CACHE_K under runs/e365_cache
+    ds, dl = loader("train" | "val", seed=0, bs=8, workers=4, ident="e292_a")       # the finished cache of B' seed 0 at K = CACHE_K under runs/e365_cache (ident "runs/<run>/tokens": a run's own)
     batch["tok"] (B, K, 64) f16, ["pos"], ["dirv"] (B, K, 2), ["e"], ["e_raw"], ["s"], ["uout"], ["uin"] (B, K), ["flags"] (B, K, 8) logits, ["valid"] (B, K) bool,
     ["ytype"] (B, K) int64 (0 none .. 6 boundary), ["y"] (B, K, K) uint8 (1 where token j is in G(i)), ["ylong"] (B, K, K) bool = y and the chord |pos_j - pos_i| of the TOKENS above 8 m (not the chord of the GT link), ["yscale"] (B, K, K, 2) NaN outside the long GT links with a fit, ["gt_out"] (B,) the GT links lost,
     ["token"], ["row"], ["tokens_np"] (a list of per-frame dicts, float64 pos / dirv / e_p / flags_p / s_p, int cell, bool valid: what the read-out writer needs; NO GT field), ["label"] (the GT-side fields
@@ -8,12 +8,14 @@
     to_pred(tokens_np[b], keep, e_node, links)                                                                       # the qformat prediction of a frame from tokens + the head's output, no GT field
 Tests: net/tests/test_lane_tokcache.py
 """
+import json
 import os
 
 import numpy as np
 import torch
 
 import GtGenerator  # the ground truth: its public interface only
+from lane_center.training import bflc_paths as BP
 from lane_center.net.prep import lane_tokcache as LC
 from lane_center.net.prep import qtargets as QT
 
@@ -22,10 +24,22 @@ CACHE_K = 512                 # the tokens per frame of the cache that every run
 
 
 def cache_dir(split, seed, ident="e292_a", K=CACHE_K):
-    """the directory of the finished cache of run `ident`_s`seed` at K tokens for the split under `lane_tokcache.CACHE` (it must exist)"""
-    d = os.path.join(LC.CACHE, f"b{ident}_{seed}_K{K}_{GtGenerator.lane_signature()}_{LC.VERSION}", split)
+    """the directory of the finished cache for the split (it must exist): ident = a stored head (`e292_a`: the cache of run `ident`_s`seed` at K tokens under
+    `lane_tokcache.CACHE`) or the token cache folder of a run (a path, `runs/<run>/tokens`: the step `tokens`, <folder>/<split>)"""
+    if "/" in ident:
+        d = os.path.join(BP.resolve(ident), split)
+    else:
+        d = os.path.join(LC.CACHE, f"b{ident}_{seed}_K{K}_{GtGenerator.lane_signature()}_{LC.VERSION}", split)
     assert os.path.exists(os.path.join(d, "manifest.json")), f"no finished cache {d}"
     return d
+
+
+def b_run(ident, seed):
+    """the B' of a cache (`cache_dir`), as a run folder `runs/...`: runs/<ident>_s<seed> of a stored head; the B' a run's own cache was made from (its meta.json `run`)"""
+    if "/" not in ident:
+        return f"runs/{ident}_s{seed}"
+    metas = [os.path.join(BP.resolve(ident), s, "meta.json") for s in ("train", "val")]
+    return json.load(open(next(p for p in metas if os.path.exists(p)), encoding="utf-8"))["run"]
 
 
 def densify(ypair, ylong, yscale, K):

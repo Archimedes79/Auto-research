@@ -3,7 +3,7 @@
     python -P -m lane_center.training.train.jtoken_train --name e365_s1_s0 --seed 0 --ident e292_a --steps 12000 --bs 8 --lr 1e-3 --workers 4 [--none-weight 0.25] [--head-seed 2] [--smoke]
 
 The model is `net/model/jtoken.JTokenHead` (the whole trainable path: B' is cached, nothing of it runs), the loss `loss_jtoken.jtoken_loss`. Batches come from `net/prep/lane_ptok_data.loader("train", seed, bs, workers, ident=)`
-(imported only when the loop starts): the ONE finished cache of the frozen head `--ident` (`e292_a` = B') and the seed under `runs/e365_cache`. `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache,
+(imported only when the loop starts): the ONE finished cache of the frozen head `--ident` (`e292_a` = B') and the seed under `runs/e365_cache`, or a run's own cache (`--ident runs/<run>/tokens`). `--smoke` = 20 steps on synthetic batches (`jtoken.synthetic_batch`, K 384, no cache,
 no loader): the plumbing test and the memory check.
 The loop, the run-directory contract, the checkpoint every 500 steps with resume, the roll-back guard and the `clock` line are those of `trainer.fit`; AdamW lr 1e-3, 5 % warm-up, cosine to 0.
 The architecture is the champion's, a constant (`lane_net.ARCH`: d 64, heads 4, layers 3, ffn 128; built by `lane_net.build_head`, `lane_net.load_head` rebuilds it).

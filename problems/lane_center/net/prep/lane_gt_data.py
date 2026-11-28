@@ -26,9 +26,11 @@ BOX = 48.0
 
 
 class QData(torch.utils.data.Dataset):
-    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0):
+    def __init__(self, split="train", ks=None, map_mode="train", pixels=True, strict=False, dilate=2.0, map_seed=None):
+        """map_seed (map_mode train): None = the simulated map of an item from OS entropy; a number = the item is asked as (key, i) and its map is drawn from
+        RandomState([map_seed, key, i]) (the stage-0 trainer: map_seed from the seed and the phase, key = the step), so a run and its resume see the same maps"""
         self.bd = FR.Frames(split, ks=ks)
-        self.map_mode, self.pixels, self.dilate = map_mode, pixels, dilate
+        self.map_mode, self.pixels, self.dilate, self.map_seed = map_mode, pixels, dilate, map_seed
         part = "train" if split == "train" else "val"
         self.tokens = json.load(open(f"{FR.D}/feats/{part}_tokens.json"))
         held = GtGenerator.lane_tokens()
@@ -48,6 +50,8 @@ class QData(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         self._open()
+        key, i = i if isinstance(i, tuple) else (None, i)
+        assert (key is None) == (self.map_seed is None), "with map_seed an item is asked as (key, i), without it as i"
         k = self.ks[i]
         row = int(self.bd.rows[k])
         token = self.tokens[row]
@@ -58,7 +62,8 @@ class QData(torch.utils.data.Dataset):
         t = QT.grid_targets(nt)
         lk, lk_long = QT.link_array(nt)
         lk_scale = QT.fit_long_scales(nt).astype(np.float32)
-        mp = MS.make_map(g, self.map_mode, rng=np.random.RandomState() if self.map_mode == "train" else None, token=token)
+        rng = (np.random.RandomState() if self.map_seed is None else np.random.RandomState([self.map_seed, key, i])) if self.map_mode == "train" else None
+        mp = MS.make_map(g, self.map_mode, rng=rng, token=token)
         out = dict(x=torch.from_numpy(x), row=row, k=k, token=token, lk=torch.from_numpy(lk), lk_long=torch.from_numpy(lk_long), lk_scale=torch.from_numpy(lk_scale),
                    piece_map=MS.piece_targets(g, mp), piece_road=MS.road_targets(g, mp), mp=mp, n_pieces=len(g["pieces"]))
         out.update({n: torch.from_numpy(v) for n, v in t.items()})

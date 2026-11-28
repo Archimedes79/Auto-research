@@ -2,6 +2,7 @@
 of every token (spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`). Derived data, not in git; this tool, its selftest and the manifests are.
 
     python -P -m lane_center.net.prep.lane_tokcache build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
+                                                                                                                         # (a run's own cache, the step `tokens`: build(a) with a.out = runs/<run>/tokens -> <out>/<split>/)
     python -P -m lane_center.net.prep.lane_tokcache report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
     python -P -m lane_center.net.prep.lane_tokcache summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
     python -P -m lane_center.net.prep.lane_tokcache same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field
@@ -271,7 +272,10 @@ def build(a, load_net, pair_geometry):
     split = {"val": "val", "val_clean": "val", "train": "train"}[a.split]
     run = _abs(a.run)
     sig = GtGenerator.lane_signature()
-    out = os.path.join(CACHE, cache_name(os.path.basename(os.path.normpath(run)), a.K, sig) + (f"_first{a.limit}" if a.limit else ""), split)        # a limited build never shares a directory with the full one
+    if getattr(a, "out", None):                                                                            # the folder of a run's own cache (the step `tokens`): <out>/<split>
+        out = os.path.join(_abs(a.out), split)
+    else:                                                                                                  # a limited build never shares a directory with the full one
+        out = os.path.join(CACHE, cache_name(os.path.basename(os.path.normpath(run)), a.K, sig) + (f"_first{a.limit}" if a.limit else ""), split)
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     ds = LT.TokData(split, res=2.0, feats=True)
     n_all = len(ds) if not a.limit else min(a.limit, len(ds))

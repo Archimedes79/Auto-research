@@ -122,8 +122,12 @@ def _endless(loader):
 
 
 def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1e-4, betas=(0.9, 0.98), eps=1e-6, warmup=0.05, sched="onecycle", amp="bf16", clip=3.0,
-        ckpt_every=500, resume=True, eval_fn=None, eval_every=0, guard=True, guard_ratio=1.2, max_rollbacks=6, log_every=100, seed=0, device="cuda", args=None, params=None, max_bad=20, probe=False, probe_depth=1, config=None):
+        ckpt_every=500, resume=True, eval_fn=None, eval_every=0, guard=True, guard_ratio=1.2, max_rollbacks=6, log_every=100, seed=0, device="cuda", args=None, params=None, max_bad=20, probe=False, probe_depth=1, config=None,
+        control_dir=None):
+    """control_dir: the folder whose CONTROL stops the fit (default the run's own, cleared at the start); a trainer of several fits in one process (stage 0: one per phase) passes the
+    folder of its step, which it clears once itself at its start (`control.clear_stale`), so that a stop request between two fits is not taken for a stale one"""
     assert (batch_fn is None) != (loader is None), "give batch_fn(step) or loader"
+    cdir = control_dir or run.dir
     seed_all(seed)
     model.to(device)
     opt = torch.optim.AdamW(params if params is not None else model.parameters(), lr=lr, weight_decay=wd, betas=betas, eps=eps)
@@ -142,7 +146,8 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
         run.log(f"resumed from {ck} at step {step}")
     it = None if batch_fn else _endless(loader)
     bad = 0                                                              # non-finite steps in a row
-    control.clear_stale(run.dir)                                           # a new process never obeys an old stop request
+    if control_dir is None:
+        control.clear_stale(run.dir)                                       # a new process never obeys an old stop request
     with open(run.path("config.json"), "w", encoding="utf-8") as fh:        # the run's own record of its arguments
         json.dump(dict(config or {}, steps=steps, lr=lr, amp=amp, clip=clip, seed=seed, args=args), fh, indent=1, default=str)
     mprobe, timer = (PR.ModuleProbe(model, every=log_every, depth=probe_depth), PR.StepTimer()) if probe else (None, None)
@@ -169,10 +174,10 @@ def fit(model, loss_fn, run, *, steps, batch_fn=None, loader=None, lr=6e-4, wd=1
     model.train()
     try:
         while step < steps:
-            reason = control.stop_requested(run.dir)                     # `research stop`: the worker writes CONTROL
+            reason = control.stop_requested(cdir)                        # `research stop`: the worker writes CONTROL
             if reason is not None:
                 save_ckpt()
-                control.mark_stopped(run.dir, step, reason)
+                control.mark_stopped(cdir, step, reason)
                 run.status(state="stopped", step=step)
                 run.log(f"step {step}: stop requested ({reason}), checkpoint saved, exit {control.EXIT_STOPPED}")
                 raise SystemExit(control.EXIT_STOPPED)

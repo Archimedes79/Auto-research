@@ -110,7 +110,7 @@ def resolve(a, runs):
     h = LN.load_checkpoint(os.path.join(runs, a.head_run, "model.pt"))["args"]
     assert h.get("seed") == a.seed, f"--seed {a.seed}: the head run {a.head_run} learned on the tokens of B' seed {h.get('seed')}"
     LN.check_removed(h, f"the head run {a.head_run}")
-    b_run = a.b_run or f"runs/{h.get('ident') or 'e292_a'}_s{a.seed}"
+    b_run = a.b_run or LP.b_run(h.get("ident") or "e292_a", a.seed)                             # the B' of the head's cache (a run's own: its stage 0)
     b_sha = BP.file_sha256(os.path.join(_abs(b_run), "model.pt"))
     s_sha = None
     if a.b_state_from:                                                                          # E393: the start B' = the b_state of a jlive run made on the same base B' file (the architecture, the cache check)
