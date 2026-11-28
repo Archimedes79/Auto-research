@@ -59,3 +59,15 @@ R6: stage 2 of the champion's recipe would read the loss after the layers. R7: t
 the loss.
 
 ## Conclusion
+**Verdict** (`research judge`, 2026-11-28, `verdict.json`): `trained` **CUT** against `fixed`: topo F1 0.7135 -> 0.6943, -0.0192
+[-0.0263, -0.0133] (seeds -0.0178 / -0.0206). The prediction (+0.005) is refuted on both seeds; junction F1 0.321 -> 0.314 (seed 1 -0.012).
+VAL 873 frames in 22 scenes; nothing adopted.
+
+- The check holds: `plain` gives the champion's stage-2 weights (head and B') bit for bit on both seeds, so `trained` against `fixed` is like
+  with like. `plain` reads CUT as expected (it is the champion without layers).
+- Trained with the layers: lanes found 0.7098 -> 0.7020, heading error 10.59 -> 10.32 deg. The link likelihood of the training stays worse
+  than without them (mean of the last five logged steps, seeds 0 / 1: nll_s 0.133 / 0.149 against 0.105 / 0.119, nll_l 0.030 / 0.026
+  against 0.024 / 0.021).
+- Times not compared: the runs shared the GPU (`cost.quiet` = 0).
+- Learned: the loss read behind the fixed, steep wiring layers trains a worse wiring. The layers stay output layers; if they are to be
+  trained, their settings have to be learned or the loss read before them.

@@ -1,0 +1,36 @@
+{
+ "run": "E425.plain_s1",
+ "problem": "lane_center",
+ "experiment": "E425",
+ "arm": "plain",
+ "seed": 1,
+ "commit": "9a69f60953dd8bcb318b1558eed78152130cabd9",
+ "tag": "lane_center/E425",
+ "steps": {
+  "stage2": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 1622.0,
+   "log": "stage2.log",
+   "gpu_slot": 1
+  },
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 217.2,
+   "log": "predict.log",
+   "gpu_slot": 1
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 240.2,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 11:46:12",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 11:46:34",
+ "ended": "2026-11-28 12:21:13"
+}

@@ -1,0 +1,39 @@
+{
+ "_about": "the base config of a lane run; an experiment's arms change values of it (nested sections key by key). stage1 / stage2 are the options of the two trainers, key by key (training/train/lane_train.py: null = the trainer's own default, a text may hold {seed}); from_run = a finished run whose stage 1 the run starts from (a card's needs)",
+ "name": "E425.trained_s0",
+ "seed": 0,
+ "out_root": "{runs}",
+ "import_weights": "",
+ "from_run": "",
+ "decode": {
+  "link_thr": 0.3,
+  "link_thr_long": 0.2,
+  "keep_thr": 0.6,
+  "none_gate": false
+ },
+ "stage1": {
+  "ident": "e292_a",
+  "head_seed_offset": 2,
+  "none_weight": 0.25,
+  "steps": 12000,
+  "bs": 8,
+  "lr": 0.001,
+  "workers": 4
+ },
+ "stage2": {
+  "head_run": "e373_cb_s{seed}",
+  "b_run": null,
+  "b_state_from": null,
+  "head_seed": null,
+  "train_nodes": 1,
+  "live_inputs": 1,
+  "b_weight": 1.0,
+  "train_pyr": 0,
+  "pyr_lr_mult": 1.0,
+  "output_layers": "soft_output",
+  "steps": 3000,
+  "bs": 8,
+  "lr": 0.0001,
+  "workers": 4
+ }
+}

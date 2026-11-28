@@ -1,0 +1,100 @@
+{
+ "run": "E425.trained_s0",
+ "split": "val",
+ "frames": 873,
+ "scenes": 22,
+ "score": {
+  "metric": "graph.topo_F1",
+  "value": 0.6883799670408108,
+  "better": "higher"
+ },
+ "numbers": {
+  "graph.P@0.5": 0.6572415069016516,
+  "graph.R@0.5": 0.6326842209329497,
+  "graph.F1@0.5": 0.6447291061585649,
+  "graph.P@1.0": 0.8591316475401132,
+  "graph.R@1.0": 0.8188744841412081,
+  "graph.F1@1.0": 0.8385201596181124,
+  "graph.lanes_found": 0.7034105345450992,
+  "graph.false_len_frac": 0.06100427268557391,
+  "graph.topo_P": 0.7894919510119331,
+  "graph.topo_R": 0.6102268605257398,
+  "graph.topo_F1": 0.6883799670408108,
+  "graph.dup_frac": 0.015817584898141935,
+  "graph.R@1_far": 0.7647773155277695,
+  "graph.junction_P": 0.25755147330785355,
+  "graph.junction_R": 0.4462721640675069,
+  "graph.junction_F1": 0.32661038148843025,
+  "graph.vert100_dp": 18.574378492542003,
+  "graph.heading_err_deg": 10.29722869472043,
+  "cost.ms_median": 66.63263702392578,
+  "cost.ms_p90": 80.21887969970703,
+  "cost.peak_MB": 88.9091796875,
+  "cost.params_M": 2.323143,
+  "cost.quiet": 0.0
+ },
+ "better": {
+  "graph.topo_F1": "high",
+  "graph.junction_F1": "high",
+  "graph.F1@0.5": "high",
+  "graph.F1@1.0": "high",
+  "graph.lanes_found": "high",
+  "graph.heading_err_deg": "low",
+  "graph.dup_frac": "low",
+  "graph.vert100_dp": "low",
+  "cost.ms_median": "low",
+  "cost.peak_MB": "low",
+  "cost.params_M": "low"
+ },
+ "per_scene": {
+  "1": 0.6202861537568564,
+  "11": 0.5119764790189768,
+  "13": 0.65217060325677,
+  "15": 0.7181976716783712,
+  "17": 0.7488450353540758,
+  "19": 0.7152281114267987,
+  "21": 0.8061482885020631,
+  "23": 0.8742288923671853,
+  "25": 0.8375785154502849,
+  "27": 0.6759849809690361,
+  "29": 0.8221601934372003,
+  "3": 0.8062165444649364,
+  "31": 0.5019731531024124,
+  "33": 0.7736075848450282,
+  "35": 0.8007621443634615,
+  "37": 0.6228719027716945,
+  "39": 0.6208201892744479,
+  "41": 0.7546544873937098,
+  "42": 0.5993582068106711,
+  "5": 0.8076228142968965,
+  "7": 0.5941275610697099,
+  "9": 0.695207244749022
+ },
+ "evaluation": {
+  "id": "E425.trained_s0@e89c20e030959",
+  "results": "E425.trained_s0@r5e43a00e4634",
+  "frames": "val",
+  "metrics": [
+   "graph",
+   "cost"
+  ],
+  "gt": "graph_gt_val.pkl",
+  "gt_signature": "5a92e34113f3",
+  "evaluator": "0a7eaf74e9e4",
+  "warnings": []
+ },
+ "identity": {
+  "commit": "9a69f60953dd8bcb318b1558eed78152130cabd9",
+  "config": "b0fac639fe5faf5d",
+  "checkpoint": "model.pt",
+  "checkpoint_hash": "65e8afaf5b0c4f46",
+  "code": "54f8dff79b51f63f",
+  "engine": "763b1fbcfd6dc615"
+ },
+ "cost": {
+  "median_ms": 0.009536001016385853,
+  "n": 873
+ },
+ "seconds": 206.7,
+ "date": "2026-11-28 12:22:32"
+}

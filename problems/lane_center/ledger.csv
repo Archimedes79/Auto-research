@@ -21,7 +21,7 @@ E423,E423.fork_s0,fork,0,ok,graph.topo_F1,0.703434,TIE,"gain -0.0027 lies inside
 E423,E423.fork_s1,fork,1,ok,graph.topo_F1,0.718111,TIE,"gain -0.0027 lies inside the band 0.01 (interval [-0.0046, -0.0006])",3a0bc6ff92ac,2026-11-28 11:42:24,2026-11-28 11:45:41,0a7eaf74e9e4 / 5a92e34113f3,yes
 E423,E423.skipgap_s0,skipgap,0,ok,graph.topo_F1,0.707132,control,,3a0bc6ff92ac,2026-11-28 11:31:52,2026-11-28 11:35:12,0a7eaf74e9e4 / 5a92e34113f3,yes
 E423,E423.skipgap_s1,skipgap,1,ok,graph.topo_F1,0.719795,control,,3a0bc6ff92ac,2026-11-28 11:38:53,2026-11-28 11:42:13,0a7eaf74e9e4 / 5a92e34113f3,yes
-E425,E425.plain_s0,plain,0,running,,,,,9a69f60953dd,2026-11-28 11:46:34,,,
-E425,E425.plain_s1,plain,1,running,,,,,9a69f60953dd,2026-11-28 11:46:34,,,
-E425,E425.trained_s0,trained,0,running,,,,,9a69f60953dd,2026-11-28 11:46:34,,,
-E425,E425.trained_s1,trained,1,running,,,,,9a69f60953dd,2026-11-28 11:46:34,,,
+E425,E425.plain_s0,plain,0,ok,graph.topo_F1,0.668172,CUT,"loss -0.0388 beyond the band 0.01 and its interval [-0.0491, -0.0287] lies below 0",9a69f60953dd,2026-11-28 11:46:34,2026-11-28 12:51:19,0a7eaf74e9e4 / 5a92e34113f3,yes
+E425,E425.plain_s1,plain,1,ok,graph.topo_F1,0.681281,CUT,"loss -0.0388 beyond the band 0.01 and its interval [-0.0491, -0.0287] lies below 0",9a69f60953dd,2026-11-28 11:46:34,2026-11-28 12:21:13,0a7eaf74e9e4 / 5a92e34113f3,yes
+E425,E425.trained_s0,trained,0,ok,graph.topo_F1,0.68838,CUT,"loss -0.0192 beyond the band 0.01 and its interval [-0.0263, -0.0133] lies below 0",9a69f60953dd,2026-11-28 11:46:34,2026-11-28 12:22:33,0a7eaf74e9e4 / 5a92e34113f3,yes
+E425,E425.trained_s1,trained,1,ok,graph.topo_F1,0.700195,CUT,"loss -0.0192 beyond the band 0.01 and its interval [-0.0263, -0.0133] lies below 0",9a69f60953dd,2026-11-28 11:46:34,2026-11-28 12:51:15,0a7eaf74e9e4 / 5a92e34113f3,yes

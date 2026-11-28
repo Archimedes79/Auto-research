@@ -1,0 +1,193 @@
+{
+ "experiment": "E425",
+ "problem": "lane_center",
+ "tag": "lane_center/E425",
+ "snapshot": "9a69f60953dd8bcb318b1558eed78152130cabd9",
+ "control": "fixed",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "boot": 2000,
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "plain": {
+   "verdict": "CUT",
+   "reason": "loss -0.0388 beyond the band 0.01 and its interval [-0.0491, -0.0287] lies below 0",
+   "gain": -0.03878975543237195,
+   "interval": [
+    -0.049091283601107774,
+    -0.02872457886227143
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.7135472605556534,
+     "variant": 0.6747575051232815,
+     "diff": -0.03878975543237195,
+     "lo": -0.049091283601107774,
+     "hi": -0.02872457886227143,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.7061894165224261,
+      "variant": 0.668172321247442,
+      "diff": -0.03801709527498409,
+      "lo": -0.0495902185025197,
+      "hi": -0.026501025351916434
+     },
+     "1": {
+      "control": 0.7208234888705083,
+      "variant": 0.6812810912549837,
+      "diff": -0.03954239761552458,
+      "lo": -0.0484615900616064,
+      "hi": -0.03063931467542202
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.3205890887986071,
+      "variant": 0.2509537409577019,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8443159033666022,
+      "variant": 0.8467391074067518,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7098113945079644,
+      "variant": 0.7222955145118733,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.013132524210996725,
+      "variant": 0.06369088407850881,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 19.317965572167964,
+      "variant": 23.964357736707864,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.005,
+   "prediction_hit": false,
+   "guards_broken": [
+    "graph.junction_F1 worse by 0.0696 > 0.01",
+    "graph.dup_frac worse by 0.0506 > 0.01",
+    "graph.vert100_dp worse by 4.6464 > 1.0"
+   ]
+  },
+  "trained": {
+   "verdict": "CUT",
+   "reason": "loss -0.0192 beyond the band 0.01 and its interval [-0.0263, -0.0133] lies below 0",
+   "gain": -0.019230986543496198,
+   "interval": [
+    -0.026318547422396903,
+    -0.013299098070024874
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.7135472605556534,
+     "variant": 0.6943162740121572,
+     "diff": -0.019230986543496198,
+     "lo": -0.026318547422396903,
+     "hi": -0.013299098070024874,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.7061894165224261,
+      "variant": 0.6883799670408108,
+      "diff": -0.017809449481615225,
+      "lo": -0.024667111270764423,
+      "hi": -0.011824441390645988
+     },
+     "1": {
+      "control": 0.7208234888705083,
+      "variant": 0.7001949222916748,
+      "diff": -0.020628566578833496,
+      "lo": -0.028497380781524313,
+      "hi": -0.01429924524172702
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.3205890887986071,
+      "variant": 0.3140854726898758,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8443159033666022,
+      "variant": 0.8397649141976854,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7098113945079644,
+      "variant": 0.7019691195152936,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.013132524210996725,
+      "variant": 0.01680039463574771,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 19.317965572167964,
+      "variant": 18.942206738088522,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.005,
+   "prediction_hit": false,
+   "guards_broken": []
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "ccc6dbe86305",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-28 12:52",
+ "control_check": {
+  "scores": {
+   "0": 0.7061894165224261,
+   "1": 0.7208234888705083
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}
