@@ -1,0 +1,119 @@
+{
+ "experiment": "E423",
+ "problem": "lane_center",
+ "tag": "lane_center/E423",
+ "snapshot": "3a0bc6ff92ac519a4d9d38dad5cc1548dc5a0299",
+ "control": "skipgap",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "boot": 2000,
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "fork": {
+   "verdict": "TIE",
+   "reason": "gain -0.0027 lies inside the band 0.01 (interval [-0.0046, -0.0006])",
+   "gain": -0.0026725014727656538,
+   "interval": [
+    -0.0045568121155064815,
+    -0.0005653016420619031
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.7134861125115398,
+     "variant": 0.7108136110387742,
+     "diff": -0.0026725014727656538,
+     "lo": -0.0045568121155064815,
+     "hi": -0.0005653016420619031,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.7071315953291365,
+      "variant": 0.703433916722157,
+      "diff": -0.0036976786069794487,
+      "lo": -0.007230743271796072,
+      "hi": -0.00060272364229379
+     },
+     "1": {
+      "control": 0.7197951619509693,
+      "variant": 0.718111391943545,
+      "diff": -0.0016837700074242568,
+      "lo": -0.0038192036791394072,
+      "hi": 0.00036517436248779386
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.29148391812865493,
+      "variant": 0.32072255069099354,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8458349382208903,
+      "variant": 0.8430462352250266,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7259356982312127,
+      "variant": 0.7125232092250562,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.018134553128713683,
+      "variant": 0.01271853584887767,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 22.019550869653276,
+      "variant": 21.114866027668967,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.0,
+   "prediction_hit": true,
+   "guards_broken": [
+    "graph.lanes_found worse by 0.0134 > 0.01"
+   ]
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "ccc6dbe86305",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-28 11:46",
+ "control_check": {
+  "scores": {
+   "0": 0.7071315953291365,
+   "1": 0.7197951619509693
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}

@@ -67,3 +67,15 @@ Taken in: E395 and its source named, the oracle from this table's measure, all s
 named, a bar per seed, the check that only positions differ.
 
 ## Conclusion
+**Verdict** (`research judge`, 2026-11-28, `verdict.json`): `layers` **TIE** against `fork`: topo F1 +0.0027 [-0.0016, +0.0054], no guard
+broken. Checks: the delivered nodes and links of `E423.fork` and `E422.layers` are equal on all 873 VAL frames, both seeds (script), so only
+positions differ; both experiments ran the code of one commit.
+
+**The quality bar is met on both seeds** (heading error down by >= 1.0 degree, F1@0.5 up by >= 0.006):
+| seed | heading error (deg) | F1@0.5 | lanes found | vertices / 100 m | time per frame (ms) |
+|---|---|---|---|---|---|
+| 0 | 11.90 -> 10.59 (-1.31) | 0.6384 -> 0.6486 (+0.010) | 0.7114 -> 0.7095 | 20.96 -> 19.14 | 21.3 -> 28.5 |
+| 1 | 11.92 -> 10.59 (-1.33) | 0.6429 -> 0.6541 (+0.011) | 0.7136 -> 0.7101 | 21.27 -> 19.50 | 22.1 -> 27.7 |
+
+- The zig-zag is smaller, not gone: with every node on its lane the heading error on TRAIN is still 8.1 degrees.
+- The cost as built is too high: about 6 ms per frame (both seeds, quiet GPU).

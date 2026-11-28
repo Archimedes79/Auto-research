@@ -1,0 +1,29 @@
+{
+ "run": "E423.skipgap_s0",
+ "problem": "lane_center",
+ "experiment": "E423",
+ "arm": "skipgap",
+ "seed": 0,
+ "commit": "3a0bc6ff92ac519a4d9d38dad5cc1548dc5a0299",
+ "tag": "lane_center/E423",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 99.0,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 100.1,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 11:31:35",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 11:31:52",
+ "ended": "2026-11-28 11:35:12"
+}

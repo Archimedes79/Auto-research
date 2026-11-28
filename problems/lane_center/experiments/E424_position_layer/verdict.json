@@ -1,0 +1,117 @@
+{
+ "experiment": "E424",
+ "problem": "lane_center",
+ "tag": "lane_center/E424",
+ "snapshot": "77dae884a9f69688bb61eb709b0daac372223faf",
+ "control": "fork",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "boot": 2000,
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "layers": {
+   "verdict": "TIE",
+   "reason": "gain +0.0027 lies inside the band 0.01 (interval [-0.0016, +0.0054])",
+   "gain": 0.0027336495168792663,
+   "interval": [
+    -0.0015927487734883172,
+    0.005418417169385749
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.7108136110387742,
+     "variant": 0.7135472605556534,
+     "diff": 0.0027336495168792663,
+     "lo": -0.0015927487734883172,
+     "hi": 0.005418417169385749,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.703433916722157,
+      "variant": 0.7061894165224261,
+      "diff": 0.0027554998002690123,
+      "lo": -0.0011213675037006876,
+      "hi": 0.005635859114358915
+     },
+     "1": {
+      "control": 0.718111391943545,
+      "variant": 0.7208234888705083,
+      "diff": 0.002712096926963281,
+      "lo": -0.0020677868093820855,
+      "hi": 0.005600418569417158
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.32072255069099354,
+      "variant": 0.3205890887986071,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8430462352250266,
+      "variant": 0.8443159033666022,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7125232092250562,
+      "variant": 0.7098113945079644,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.01271853584887767,
+      "variant": 0.013132524210996725,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 21.114866027668967,
+      "variant": 19.317965572167964,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.004,
+   "prediction_hit": true,
+   "guards_broken": []
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "ccc6dbe86305",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-28 11:47",
+ "control_check": {
+  "scores": {
+   "0": 0.703433916722157,
+   "1": 0.718111391943545
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}

@@ -63,3 +63,16 @@ Taken in: numbers of the tested soft layer only, a bar per seed, the two null fo
 dropped.
 
 ## Conclusion
+**Verdict** (`research judge`, 2026-11-28, `verdict.json`): `fork` **TIE** against `skipgap`: topo F1 0.7135 -> 0.7108, -0.0027
+[-0.0046, -0.0006] (as predicted, inside the band). VAL 873 frames in 22 scenes; nothing adopted.
+
+**The bar of this card fails** (junction F1 gain >= 0.015 and lanes found down by at most 0.010, each seed):
+| seed | junction F1 | precision / recall | lanes found | time per frame (ms) |
+|---|---|---|---|---|
+| 0 | 0.2973 -> 0.3273 (+0.030) | 0.208 / 0.522 -> 0.249 / 0.477 | 0.7266 -> 0.7114 (-0.0152) | 20.5 -> 21.3 |
+| 1 | 0.2856 -> 0.3143 (+0.029) | 0.200 / 0.500 -> 0.237 / 0.467 | 0.7253 -> 0.7136 (-0.0117) | 21.1 -> 22.1 |
+
+- Junction F1 gains as hoped; lanes found fall by more than the guard, on VAL nearly twice as far as on TRAIN (-0.008).
+- One frame shows how (scene 39, seed 0, frame 787): the gate cuts a true turn at a node the type softmax does not call a fork, and the
+  covered true lane length falls from 0.955 to 0.801; seed 1 keeps it.
+- Follows: a milder gate (p_fork threshold 0.005, chosen on TRAIN after this result, E426).

@@ -1,0 +1,29 @@
+{
+ "run": "E423.fork_s1",
+ "problem": "lane_center",
+ "experiment": "E423",
+ "arm": "fork",
+ "seed": 1,
+ "commit": "3a0bc6ff92ac519a4d9d38dad5cc1548dc5a0299",
+ "tag": "lane_center/E423",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 103.0,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 93.1,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 11:42:24",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 11:42:24",
+ "ended": "2026-11-28 11:45:41"
+}

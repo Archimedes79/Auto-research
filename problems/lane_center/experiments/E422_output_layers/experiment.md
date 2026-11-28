@@ -80,3 +80,27 @@ Taken in: the attribution of a KEEP, the heading prediction against the champion
 limits and quiet rule, the top-8 truncation, TRAIN tables from the network's own outputs.
 
 ## Conclusion
+**Verdict** (`research judge`, 2026-11-28, `verdict.json`): `layers` **TIE**: topo F1 0.6748 -> 0.7135, +0.0388 [+0.0287, +0.0491] (seeds
++0.0380 / +0.0395; prediction +0.040), but the guard on lanes found broke (-0.0125 > 0.010). VAL 873 frames in 22 scenes; TEST not touched;
+nothing adopted.
+
+Validity: `champ` repeats E396.champ exactly (topo F1 0.668172 / 0.681281). Both arms of the table are timed on an otherwise idle GPU
+(`cost.quiet` = 1), one run after the other.
+
+| number (mean of seeds 0 / 1) | champion | layers |
+|---|---|---|
+| topo F1 | 0.6748 | 0.7135 |
+| junction F1 (precision / recall) | 0.251 (0.156 / 0.643) | 0.321 (0.243 / 0.472) |
+| heading error (deg) | 11.60 | 10.59 |
+| F1@0.5 / F1@1.0 | 0.647 / 0.8467 | 0.651 / 0.8443 |
+| lanes found | 0.7223 | 0.7098 |
+| duplicates / vertices per 100 m | 0.064 / 23.96 | 0.013 / 19.32 |
+| time per frame, median / p90 (ms) | 20.0 / 41 | 28.1 / 55 |
+| peak memory (MB) / parameters (M) | 89 / 2.323 | 89 / 2.323 |
+
+- Predictions: topo and junction met; the heading error fell by 1.0 degrees (predicted 1.2); lanes found fell twice as far as predicted.
+- Not adoptable as it stands: the lanes-found guard and the time limit of this card (+8.1 ms against 3 ms) both fail.
+- Junctions, seed 0, frames with at least four true lanes (825, scratch count): right 3027 -> 2235, false 15834 -> 6552, missed 1654 -> 2446:
+  the layers remove most false forks and merges and a quarter of the right ones.
+- Follows: the lanes lost belong to the fork gate (E423), the time to the position layer (E424); a second round with a milder gate and a
+  cheaper position step (E426).

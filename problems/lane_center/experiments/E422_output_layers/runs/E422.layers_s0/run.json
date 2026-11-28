@@ -1,0 +1,29 @@
+{
+ "run": "E422.layers_s0",
+ "problem": "lane_center",
+ "experiment": "E422",
+ "arm": "layers",
+ "seed": 0,
+ "commit": "ed491106ebefbe9a71bef060804d60ed722c276d",
+ "tag": "lane_center/E422",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 114.1,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 101.0,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 11:20:28",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 11:20:29",
+ "ended": "2026-11-28 11:24:04"
+}
