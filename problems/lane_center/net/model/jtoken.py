@@ -49,6 +49,7 @@ import jtok as JT  # noqa: E402
 
 SHORT, NG = JT.SHORT, JT.NG
 NEG = -1e4                                                                  # the fill of a masked logit
+SKIP_KEYS = ("sigma", "hops", "m", "t_short", "t_long", "keep")             # E399: the settings of the soft skip-link layer (`skip_suppress`)
 TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
 SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
 BANDS = 4
@@ -105,6 +106,29 @@ def link_prob(logp, cand):
     return (logp[..., :cand.shape[-1]].exp() * cand).sum(1)
 
 
+def skip_suppress(logp, cand, pnone, chord, cfg):
+    """E399: the soft skip-link layer (no parameter, differentiable). logp (B, 2, K, K + 1) of `wiring_logp`, cand (B, 2, K, K), pnone (B, K) the none probability of the node type, chord (B, K, K) in m; cfg: sigma, hops, m, t_short,
+    t_long, keep (the thresholds of the read-out). The soft "delivered" strength of a link is q = sigmoid((p - t) / sigma) x k_i x k_j with k = sigmoid((keep - pnone) / sigma) and t the threshold of the pair's class (chord above 8 m: long);
+    R(i, j) = the largest product of q along a path i -> .. -> j of 2 .. hops links over every node's m strongest links; p'(i -> j) = p x (1 - R) and the removed mass goes to the source's none slot of the class, so every row stays a
+    probability distribution. A link that another path of the same graph already covers (a jump ahead on its own lane) is thus damped"""
+    B, K = cand.shape[0], cand.shape[-1]
+    p = logp[..., :K].exp() * cand
+    t = torch.where(chord > SHORT, float(cfg["t_long"]), float(cfg["t_short"])).to(p.dtype)
+    s = float(cfg["sigma"])
+    k = torch.sigmoid((float(cfg["keep"]) - pnone.to(p.dtype)) / s)
+    q = torch.sigmoid((p.sum(1) - t) / s) * cand.any(1) * k[:, :, None] * k[:, None, :]
+    w, idx = q.topk(min(int(cfg["m"]), K), dim=-1)                          # every node's strongest links
+    m = idx.shape[-1]
+    hop = lambda reach: (w[..., None] * reach.gather(1, idx.reshape(B, K * m, 1).expand(-1, -1, K)).view(B, K, m, K)).amax(2)  # noqa: E731
+    reach = q                                                               # paths of 1 .. h links
+    for _ in range(int(cfg["hops"]) - 2):
+        reach = torch.maximum(q, hop(reach))
+    p2 = p * (1.0 - hop(reach))[:, None]                                    # paths of 2 .. hops links
+    lp = torch.where(cand, p2.clamp_min(1e-30).log(), logp[..., :K])
+    none = (1.0 - p2.sum(-1)).clamp_min(1e-30).log()
+    return torch.cat([lp, none[..., None]], -1)
+
+
 def message_weights(p, cand, msg="real"):
     """E392: the weights of one message round from p (B, K, K) = the early probability of the link i -> j (`link_prob`) and the gate cand (B, 2, K, K) -> (w_fwd, w_bwd) (B, K, K): token j gets the forward message sum_i w_fwd[i, j] W_v x_i (its likely
     predecessors), token i the backward message sum_j w_bwd[i, j] W_u x_j (its likely successors). 'real': both are p. 'uniform' (the content null): each token keeps its soft degree (indeg_j = sum_i p[i, j], outdeg_i = sum_j p[i, j]) but spreads it
@@ -138,10 +162,14 @@ class JTokenHead(nn.Module):
     """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4); rounds / msg: E392 (module docstring), the round modules are built LAST (a seeded init of the head's other parameters is the same as without them);
     `n_early` = the early reads after layer 1 .. rounds, `rounds` = the Round modules (none for msg 'none'); pos_head: E395, the position head `posh` is built after everything else (the same rule)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real", pos_head=False):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, rounds=0, msg="real", pos_head=False, skip=None, min_e=None):
         super().__init__()
         assert 0 <= rounds < layers and msg in MSG, (rounds, layers, msg)
+        assert skip is None or sorted(skip) == sorted(SKIP_KEYS), (skip, SKIP_KEYS)
+        assert min_e is None or 0.0 <= min_e < 1.0, min_e
+        self.min_e = min_e                                                   # E399: only the tokens with existence sigmoid(e) above this take part (None = every valid token)
         self.dq = dq
+        self.skip = None if skip is None else dict(skip)                     # E399: the soft skip-link layer on the final wiring (no parameter); None = off
         self.proj = nn.Linear(TOK, d)
         self.mlp = nn.Sequential(nn.Linear(NIN, d), nn.GELU(), nn.Linear(d, d))
         self.ln0 = nn.LayerNorm(d)
@@ -199,6 +227,10 @@ class JTokenHead(nn.Module):
         b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
+        thin = None
+        if self.min_e is not None:                                          # E399: token thinning: the weak tokens leave attention, candidates and the graph
+            thin = valid & (w_in <= self.min_e)
+            valid = valid & ~thin
         g, allowed = JT.pair_geometry(pos, dirv, valid, e=w_in)
         lw = lambda w: (w + 1e-3).log()  # noqa: E731
         learned = self._step_py >= SWITCH
@@ -219,9 +251,16 @@ class JTokenHead(nn.Module):
                 x = self.rounds[n - 1](x, None, None)
             x = layer(x, g, lw(w1 if learned else w_in), valid)
         types3, w3 = self.read_types(x)
+        if thin is not None:                                                # E399: a thinned token reads as none (the read-out keeps no such node)
+            none = torch.zeros(NTYPE, device=types3.device, dtype=types3.dtype)
+            none[0] = 30.0
+            types3 = torch.where(thin[..., None], none, types3)
+            w3 = torch.where(thin, torch.zeros_like(w3), w3)
         if wb is None:
             wb = self.wbias(g).float().permute(0, 3, 1, 2)
         logp, xn = self.read_wiring(x, wb, lw(w3 if learned else w_in), cand)          # the wiring layer
+        if self.skip is not None:                                           # E399
+            logp = skip_suppress(logp, cand, types3.softmax(-1)[..., 0], chord, self.skip)
         scale = 0.05 + 1.2 * self.sc_o(F.gelu(self.sc_i(xn)[:, :, None] + self.sc_j(xn)[:, None] + self.sc_g(g))).float().sigmoid()
         if self.training:
             self.step += 1

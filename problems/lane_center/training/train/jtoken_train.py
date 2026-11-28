@@ -177,9 +177,9 @@ def to_device(b, dev):
 
 
 def build_head(args):
-    """the head of a run's args (live_inputs, rounds, msg, pos_head: absent = the default; the architecture `arch`): the one place that builds it, for the trainer, `load_model` and the stage-2 trainer"""
+    """the head of a run's args (live_inputs, rounds, msg, pos_head, skip_suppress and min_e (E399): absent = the default; the architecture `arch`): the one place that builds it, for the trainer, `load_model` and the stage-2 trainer"""
     d, heads, layers, ffn = arch(args)
-    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, live_inputs=bool(args.get("live_inputs", ARCH_DEFAULTS["live_inputs"])),
+    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, skip=args.get("skip_suppress"), min_e=args.get("min_e"), live_inputs=bool(args.get("live_inputs", ARCH_DEFAULTS["live_inputs"])),
                          rounds=int(args.get("rounds", ARCH_DEFAULTS["rounds"])), msg=args.get("msg", ARCH_DEFAULTS["msg"]), pos_head=bool(args.get("pos_head", ARCH_DEFAULTS["pos_head"])))
 
 

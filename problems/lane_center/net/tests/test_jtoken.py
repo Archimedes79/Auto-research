@@ -228,6 +228,99 @@ def _check_pos(pos, mod=JK):
     return nll_s, nll_l
 
 
+def _skip_brute(q, hops):
+    """the largest product of q along a walk of 2 .. hops links, by hand (loops over every intermediate node)"""
+    K = q.shape[0]
+    reach, indirect = q.copy(), np.zeros_like(q)
+    for _ in range(hops - 1):
+        nxt = np.array([[max(q[i, n] * reach[n, j] for n in range(K)) for j in range(K)] for i in range(K)])
+        indirect = np.maximum(indirect, nxt)
+        reach = np.maximum(q, nxt)
+    return indirect
+
+
+def test_skip_suppress():
+    """E399 the soft skip-link layer: off (the default) = the head bit for bit and no new parameter or state key; on a chain 0 -> 1 -> 2 with the jump 0 -> 2 only the jump loses its mass, to the none slot; rows stay distributions;
+    against a brute-force walk enumeration on a random graph; the gradient reaches the input log-probabilities; the head builds it from its args"""
+    cfg = dict(sigma=0.03, hops=5, m=8, t_short=0.3, t_long=0.2, keep=0.6)
+    K = 4
+    cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
+    for c, i, j in ((0, 0, 1), (0, 1, 2), (1, 0, 2), (0, 2, 3)):
+        cand[0, c, i, j] = True
+    chord = torch.full((1, K, K), 2.0)
+    chord[0, 0, 2] = 12.0
+    z = torch.full((1, 2, K, K), 2.0)
+    zn = torch.zeros(1, 2, K)
+    logp = JK.wiring_logp(z, zn, cand).requires_grad_()
+    pnone = torch.zeros(1, K)
+    out = JK.skip_suppress(logp, cand, pnone, chord, cfg)
+    p0, p1 = logp.exp()[0], out.exp()[0]
+    assert torch.allclose(p1.sum(-1), torch.ones(2, K), atol=1e-5), "every row stays a distribution"
+    for c, i, j in ((0, 0, 1), (0, 1, 2), (0, 2, 3)):
+        assert abs(float(p1[c, i, j] - p0[c, i, j])) < 1e-3, ("a link of the chain is not damped", c, i, j)
+    assert float(p1[1, 0, 2]) < 0.05 * float(p0[1, 0, 2]), ("the jump 0 -> 2 is damped", float(p0[1, 0, 2]), float(p1[1, 0, 2]))
+    assert abs(float(p1[1, 0, K] - (p0[1, 0, K] + p0[1, 0, 2] - p1[1, 0, 2]))) < 1e-5, "the removed mass goes to the none slot"
+    near = JK.wiring_logp(torch.zeros(1, 2, K, K), torch.full((1, 2, K), 0.6), cand).requires_grad_()       # every link at p 0.35, near the thresholds
+    JK.skip_suppress(near, cand, pnone, chord, cfg).exp()[0, 1, 0, K].backward()
+    assert float(near.grad[0, 0, 1, 2].abs()) > 0, "near the thresholds the gradient reaches the chain's links (far from them the layer is saturated)"
+    gone = JK.skip_suppress(logp.detach(), cand, torch.tensor([[0.0, 0.99, 0.0, 0.0]]), chord, cfg).exp()[0]
+    assert abs(float(gone[1, 0, 2] - p0[1, 0, 2])) < 1e-3, "a path over a node that is not kept covers nothing"
+    rng = np.random.RandomState(3)
+    K = 7
+    cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
+    cand[0, 0] = torch.from_numpy((rng.rand(K, K) < 0.45) & ~np.eye(K, dtype=bool))
+    chord = torch.full((1, K, K), 2.0)
+    logp = JK.wiring_logp(torch.from_numpy(rng.randn(1, 2, K, K).astype(np.float32) * 2), torch.zeros(1, 2, K), cand)
+    pn = torch.from_numpy(rng.rand(1, K).astype(np.float32) * 0.5)
+    got = JK.skip_suppress(logp, cand, pn, chord, dict(cfg, m=K, sigma=0.2, hops=4)).exp()[0, 0, :, :K].numpy()
+    p = (logp.exp()[0, 0, :, :K] * cand[0, 0]).numpy()
+    sg = lambda x: 1 / (1 + np.exp(-x))  # noqa: E731
+    k = sg((0.6 - pn[0].numpy()) / 0.2)
+    q = sg((p - 0.3) / 0.2) * cand[0].any(0).numpy() * k[:, None] * k[None]
+    want = p * (1 - _skip_brute(q.astype(np.float64), 4))
+    assert np.abs(got - want)[cand[0, 0].numpy()].max() < 1e-5, np.abs(got - want).max()
+    torch.manual_seed(7)
+    plain = JK.JTokenHead().eval()
+    torch.manual_seed(7)
+    sk = JK.JTokenHead(skip=cfg).eval()
+    assert list(plain.state_dict()) == list(sk.state_dict()) and all(torch.equal(a, b) for a, b in zip(plain.state_dict().values(), sk.state_dict().values()))
+    b = JK.synthetic_batch(2, 64, seed=5)
+    with torch.no_grad():
+        o0, o1 = plain(b), sk(b)
+    assert torch.equal(o0["types"], o1["types"]) and not torch.equal(o0["logp"], o1["logp"])
+    assert torch.allclose(o1["logp"], JK.skip_suppress(o0["logp"], o0["cand"], o0["types"].softmax(-1)[..., 0], o0["chord"], cfg)), "the head applies the layer to its final wiring"
+    assert JKT.build_head(dict(skip_suppress=cfg)).skip == cfg and JKT.build_head({}).skip is None
+    must_fail(JK.JTokenHead, skip=dict(sigma=0.03))
+    print("skip_suppress: chain with a jump (only the jump damped, mass to none, gradient flows, a dropped node covers nothing), brute-force walks on a random graph, head off = bit for bit, same state keys, build_head: ok")
+
+
+def test_min_e():
+    """E399 token thinning `min_e`: off = the head bit for bit; on = the head run with the weak tokens marked invalid (types and wiring of the others equal to that run's), the thinned tokens have no candidate and read as none; the
+    head builds it from its args, a value outside [0, 1) is refused"""
+    torch.manual_seed(11)
+    plain = JK.JTokenHead().eval()
+    torch.manual_seed(11)
+    thin = JK.JTokenHead(min_e=0.3).eval()
+    assert list(plain.state_dict()) == list(thin.state_dict())
+    b = JK.synthetic_batch(2, 64, seed=9)
+    gone = b["valid"] & (b["e"].sigmoid() <= 0.3)
+    assert bool(gone.any()) and bool((b["valid"] & ~gone).any()), "the synthetic batch has tokens on both sides of the threshold"
+    with torch.no_grad():
+        o = thin(b)
+        ref = plain(dict(b, valid=b["valid"] & ~gone))
+    keep = ~gone
+    assert torch.equal(o["valid"], ref["valid"]) and torch.equal(o["cand"], ref["cand"]) and torch.equal(o["logp"], ref["logp"]) and torch.equal(o["types"][keep], ref["types"][keep])
+    links = o["cand"].any(1)
+    assert not bool(links.any(-1)[gone].any()) and not bool(links.any(1)[gone].any()), "a thinned token is no source and no destination"
+    assert float(o["types"][gone].softmax(-1)[:, 0].min()) > 0.999, "a thinned token reads as none"
+    torch.manual_seed(11)
+    with torch.no_grad():
+        assert torch.equal(JK.JTokenHead(min_e=None).eval()(b)["logp"], plain(b)["logp"]), "min_e None = the head bit for bit"
+    assert JKT.build_head(dict(min_e=0.2)).min_e == 0.2 and JKT.build_head({}).min_e is None
+    must_fail(JK.JTokenHead, min_e=1.5)
+    print("min_e: off = the head bit for bit and the same state keys, on = the head with the weak tokens invalid (same wiring and types of the others), thinned tokens are no source and read as none, build_head: ok")
+
+
 def test_pos_loss():
     """E376 --pos-loss: -log sum (default) and -log max over G(i) by hand on a toy batch with duplicates and a fork in both classes (none weight 0.25: the empty-G sources keep it); one member in every group: max = sum bit
     for bit; under max the gradient raises the winning member only (the other member of a duplicate pair or of a fork is pushed down: the max keeps one branch); textual mutants fail"""
@@ -2390,7 +2483,7 @@ def test_pos_mean():
           f"in the log rows of the smoke runs; mutants ({', '.join(muts)}) fail: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
+TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_min_e, test_pos_loss, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options, test_pos_loss_trainer,
          test_live_inputs, test_head_seed, test_distill, test_distill_trainer, test_noise,
          test_rounds_zero, test_rounds_head, test_rounds_grad, test_message_weights, test_wire_loss, test_rounds_trainer, test_msg_none, test_msg_self,
          test_pos_head, test_curve_loss, test_pos_loss_weights, test_dump_dpos, test_pos_head_trainer, test_pos_mean]
