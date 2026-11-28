@@ -17,3 +17,5 @@ here, the technical rules among them live in `DESIGN.md` (R1 - R7).
 ## Open
 | id | question |
 |---|---|
+| Q-2026-11-28a | For the record, and the owner's word whether it needs a row in `TEST_LOG.md`: on 2026-11-28 about 01:35 a coder's first two runs of the new feature check (`net/prep/foundation/check_features.py`, commit `8b1e4fe2`) re-extracted the foundation features of 8 TEST frames (the part `val` of the stored features holds VAL 873 + TEST 833 rows) and compared them with the stored features. No ground truth was read, no lane network ran, no score was made; nothing was chosen on it. The tool reads TRAIN and VAL rows only since then (a test pins it), and the result file was written again from a run without TEST rows. |
+| Q-2026-11-28b | The graph ground truth the lane score uses (`graph_gt_val.pkl` of the feature set b123) and its poses cannot be made from this repository: their scripts (`make_graph_gt.py`, `make_poses.py`) are in the tag `v1` only, and the records name that ground truth by file name, not by a signature. Bring them back behind the `GtGenerator` interface? |
