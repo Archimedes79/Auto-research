@@ -21,7 +21,7 @@
   {"metric": "graph.vert100_dp", "max_drop": 1.0}
  ],
  "control_floor": {"graph.topo_F1": 0.5},
- "evaluate": {"split": "val", "metrics": ["graph"], "device": "cpu", "anchor_tolerance": 0},
+ "evaluate": {"split": "val", "metrics": ["graph", "cost"], "device": "cpu", "anchor_tolerance": 0},
  "holdout": ["test"],
  "protected": ["problem.json", "TEST_LOG.md", "PROBLEM.md", "data/splits.json", "evaluation/adapter.py", "evaluation/qgraph_eval.py", "evaluation/sparse_lanes/", "evaluation/lane_task/"],
  "data": "data/splits.json",

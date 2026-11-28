@@ -8,6 +8,7 @@ its marker, kernel and CUDA-graph commands, which need the junction system that 
 
 Test: `python jtiming.py` (selftest, CPU).
 """
+import os
 import subprocess
 import time
 
@@ -51,6 +52,39 @@ def quiet_verdict(load_before, load_after, gpu_before, gpu_after, limit=QUIET_LO
     quiet = load_before is not None and load_after is not None and load_before < limit and load_after < limit and gpu_idle(gpu_before) and gpu_idle(gpu_after)
     txt = lambda s: "unreadable" if s is None or "error" in s else f"util max {s['util_max']:.0f} %"  # noqa: E731
     return quiet, f"host load (1 min) before {load_before} after {load_after}, limit {limit}; GPU before {txt(gpu_before)}, after {txt(gpu_after)} (idle: at most 5 %): {'QUIET' if quiet else 'NOT QUIET'}"
+
+
+def ancestors():
+    """the pids of this process and its parents (a timing started by a research worker has the worker among them)"""
+    pids, pid = set(), os.getpid()
+    while pid > 1 and pid not in pids:
+        pids.add(pid)
+        try:
+            pid = int(open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return pids
+
+
+def gpu_others(apps, own):
+    """the compute processes on the GPU that are not ours: apps = the lines `pid, MiB` of `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits` (MiB may be [N/A]),
+    own = the pids of this process and its parents -> [pid]"""
+    pids = [int(ln.split(",")[0]) for ln in apps.splitlines() if ln.split(",")[0].strip().isdigit()]
+    return [p for p in pids if p not in own]
+
+
+def gpu_free(limit_mib=2000):
+    """(ok, why): the rule of a timing by hand: nvidia-smi shows less than `limit_mib` used and no compute process on the GPU but this process and its parents (a step of a research worker that runs a
+    network is such a process, whoever started it). The utilisation before and after the timing is `quiet_verdict`'s (the after-sample waits 2.5 s for our own kernels)"""
+    try:
+        smi = lambda q: subprocess.run(["nvidia-smi", q, "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20).stdout  # noqa: E731
+        used = float(smi("--query-gpu=memory.used").strip().split("\n")[0])
+        others = gpu_others(smi("--query-compute-apps=pid,used_memory"), ancestors())
+    except Exception as e:  # noqa: BLE001
+        return False, f"cannot read the GPU: {e}"
+    if used >= limit_mib or others:
+        return False, f"GPU memory used {used:.0f} MiB (limit {limit_mib}), other compute processes on the GPU {others}"
+    return True, f"GPU memory used {used:.0f} MiB, no other compute process on the GPU"
 
 
 def gpu_state():

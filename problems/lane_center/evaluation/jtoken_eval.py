@@ -48,6 +48,7 @@ import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
 import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
 import jtok as JT  # noqa: E402
 import jtoken as JK  # noqa: E402
+from jtiming import gpu_free, gpu_others  # noqa: E402,F401  (the tests of this tool read them here)
 import lane_dump as DU  # noqa: E402
 import lane_live_data as LLD  # noqa: E402
 import lane_net as LN  # noqa: E402
@@ -531,39 +532,6 @@ def head_macs(m, K=384):
     with torch.no_grad(), FlopCounterMode(display=False) as fc:
         m(JK.synthetic_batch(1, K, seed=0))
     return fc.get_total_flops() / 2e9
-
-
-def _ancestors():
-    """the pids of this process and its parents (a timing started by a research worker has the worker among them)"""
-    pids, pid = set(), os.getpid()
-    while pid > 1 and pid not in pids:
-        pids.add(pid)
-        try:
-            pid = int(open(f"/proc/{pid}/stat").read().rsplit(")", 1)[1].split()[1])
-        except (OSError, ValueError, IndexError):
-            break
-    return pids
-
-
-def gpu_others(apps, own):
-    """the compute processes on the GPU that are not ours: apps = the lines `pid, MiB` of `nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader,nounits` (MiB may be [N/A]),
-    own = the pids of this process and its parents -> [pid]"""
-    pids = [int(ln.split(",")[0]) for ln in apps.splitlines() if ln.split(",")[0].strip().isdigit()]
-    return [p for p in pids if p not in own]
-
-
-def gpu_free(limit_mib=2000):
-    """(ok, why): the timing rule: nvidia-smi shows less than `limit_mib` used and no compute process on the GPU but this process and its parents (a step of a research worker that runs a
-    network is such a process, whoever started it). The utilisation before and after the timing is `jtiming`'s (`quiet_verdict`; its after-sample waits 2.5 s for our own kernels)"""
-    try:
-        smi = lambda q: subprocess.run(["nvidia-smi", q, "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20).stdout  # noqa: E731
-        used = float(smi("--query-gpu=memory.used").strip().split("\n")[0])
-        others = gpu_others(smi("--query-compute-apps=pid,used_memory"), _ancestors())
-    except Exception as e:  # noqa: BLE001
-        return False, f"cannot read the GPU: {e}"
-    if used >= limit_mib or others:
-        return False, f"GPU memory used {used:.0f} MiB (limit {limit_mib}), other compute processes on the GPU {others}"
-    return True, f"GPU memory used {used:.0f} MiB, no other compute process on the GPU"
 
 
 def timing(a, runs=RUNS):

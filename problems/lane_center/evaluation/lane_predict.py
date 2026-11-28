@@ -2,6 +2,8 @@
 
     python evaluation/lane_predict.py <the run's config.json>          (the worker starts it; RESEARCH_SPLIT names the split, default val)
 
+On a GPU the step also measures compute time and memory of the whole path, one frame per forward (`measure_cost`: every frame's `ms`, the meta `cost`).
+
 The step writes the LIVE dump <run>/token_<split>_live.pkl: the network (`lane_net.LaneNet`, frozen, no_grad) on the frames of the token cache in its order, B' in batches of
 LIVE_BS 4 (the cache build's: its GPU parity holds at batch 4 only), the head in batches of HEAD_BS 8; no label is made and no ground truth is read. Each record holds
 the frame's own `tokens_np` (the evaluation writes the nodes from them); meta LIVE_META: live, bs_b, bs_head, device, env, b_source (the sha256 of the B' state that ran, of its
@@ -16,12 +18,15 @@ import json
 import os
 import pickle
 import shutil
+import subprocess
 import sys
+import time
 
 import numpy as np
 import torch
 
 import bflc_paths as BP
+import jtiming as JTG
 import lane_dump as DU
 import lane_live_data as LLD
 import lane_net as LN
@@ -101,7 +106,46 @@ def live_dump(a, ck, kw, ds, idx, dev, runs):
             tn = LLD.host_tokens(tk)
             frames += live_records(run_head(src.head, LLD.head_inputs(tk), dev), dict(token=b["token"], row=b["row"], tokens_np=[LLD.tokens_np(tn, j) for j in range(len(b["token"]))]))
     env = dict(torch=torch.__version__, cuda=torch.version.cuda, cudnn=torch.backends.cudnn.version(), gpu=torch.cuda.get_device_name(0) if dev == "cuda" else None)       # as the token fixture records it
-    return frames, dict(live=True, b_source=b_source, bs_b=bs, bs_head=HEAD_BS, device=dev, env=env, tokens_exact=all(exact), tokens_exact_frames=int(sum(exact)))
+    meta = dict(live=True, b_source=b_source, bs_b=bs, bs_head=HEAD_BS, device=dev, env=env, tokens_exact=all(exact), tokens_exact_frames=int(sum(exact)))
+    if dev == "cuda":
+        ms, meta["cost"] = measure_cost(src, data, idx)
+        for f, t in zip(frames, ms):
+            f["ms"] = t
+    return frames, meta
+
+
+# ------------------------------------------------------------------------------------------------------------------------------ compute time and memory
+WARMUP = 20                                                                  # untimed frames before the measurement (cuDNN picks its kernels on the first ones)
+
+
+def _quiet_sample():
+    """-> (the 1-minute load, the GPU state after our own kernels left nvidia-smi's window, the other compute processes on the GPU)"""
+    time.sleep(2.5)
+    apps = subprocess.run(["nvidia-smi", "--query-compute-apps=pid,used_memory", "--format=csv,noheader,nounits"], capture_output=True, text=True, timeout=20).stdout
+    return JTG.load1(), JTG.gpu_state(), JTG.gpu_others(apps, JTG.ancestors())
+
+
+def measure_cost(net, data, idx):
+    """the whole path (`lane_net.LaneNet.tokens` inside the bf16 autocast, then the head: the protocol of the recorded timing) on the frames `idx` of `data`, one frame per forward -> (ms per frame, dict(peak_MB, params_M,
+    quiet, host)); the features are on the GPU before the clock starts (`lane_cost.py` says what the numbers mean)"""
+    def forward(x):
+        with torch.no_grad(), torch.autocast("cuda", dtype=torch.bfloat16):
+            return net.head(LLD.head_inputs(net.tokens(x, float32=False)[1]))
+
+    xs = lambda i: data[int(i)]["x"][None].cuda()
+    before = _quiet_sample()
+    torch.cuda.empty_cache()
+    for i in idx[:WARMUP]:
+        forward(xs(i))
+    torch.cuda.synchronize()
+    torch.cuda.reset_peak_memory_stats()
+    ms = [float(JTG.timed(lambda x=xs(i): forward(x), True)[1]) for i in idx]
+    peak = torch.cuda.max_memory_allocated() / 2**20
+    after = _quiet_sample()
+    quiet, line = JTG.quiet_verdict(before[0], after[0], before[1], after[1])
+    others = sorted(set(before[2]) | set(after[2]))
+    params = sum(p.numel() for m in (net.b.pyr, net.b.nodes, net.head) for p in m.parameters())
+    return ms, dict(peak_MB=float(peak), params_M=params / 1e6, quiet=bool(quiet and not others), host=line + (f"; other compute processes {others}" if others else ""))
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ write and read

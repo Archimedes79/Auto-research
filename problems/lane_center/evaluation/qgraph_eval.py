@@ -52,6 +52,7 @@ STEP = 0.5                        # sampling of the delivered curves (m)
 TIE = 0.3                         # GT points this much farther than the nearest one still tie with it: a point shared by pieces (qtargets groups events within 0.3 m too)
 TIER_HIT, TIER_ZONE = 1.0, 2.5    # E276 tier metrics: a point is right within 1.0 m of the other graph; a delivered point belongs to the zone of its nearest GT point within 2.5 m
 NODE_TOL, EVENT_TOL = 2.0, 3.0    # node / event matching tolerances (m)
+HEAD_NEAR = 1.5                   # heading_err_deg: delivered length this near a true lane is compared by direction (m)
 SEC_NEAR, LANE_NEAR, DUST_FAR = 2.0, 1.0, 2.0
 RAGGED = ("pos_err", "dir_err")   # counts that are concatenated, not summed
 HEADLINE = ("Q", "F1@1.0", "lanes_found", "topo_F1", "topo_P", "topo_R", "junction_F1", "junction_P", "junction_R", "dup_frac", "R@1_far", "vert100", "vert100_dp", "pieces_per_gt_piece",
@@ -312,6 +313,33 @@ def _densify(p, step=STEP):
     return np.concatenate([p[:1]] + [p[i] + (p[i + 1] - p[i]) * (np.arange(1, n[i] + 1) / n[i])[:, None] for i in range(len(seg))])
 
 
+def _segments(pts, step):
+    """-> (midpoints (n, 2), unit directions (n, 2), lengths (n,)) of the segments of the polylines `pts`, each resampled to at most `step`"""
+    mid, tan, length = [np.zeros((0, 2))], [np.zeros((0, 2))], [np.zeros(0)]
+    for p in pts:
+        q = _densify(np.asarray(p, float)[:, :2], step) if len(p) > 1 else np.zeros((0, 2))
+        d = np.diff(q, axis=0) if len(q) > 1 else np.zeros((0, 2))
+        n = np.linalg.norm(d, axis=1)
+        ok = n > 1e-6
+        mid.append((q[:-1] + q[1:])[ok] / 2 if len(d) else d)
+        tan.append(d[ok] / n[ok, None])
+        length.append(n[ok])
+    return np.concatenate(mid), np.concatenate(tan), np.concatenate(length)
+
+
+def heading_counts(raw, gt):
+    """the zig-zag measure's additive counts (sum of angle x length in degree metres, length in metres): every delivered segment (at most STEP long) whose midpoint lies within HEAD_NEAR of a true lane is compared with the
+    direction of the nearest true segment (travel direction: a segment against it counts up to 180 degrees); delivered length farther from every lane is not counted (F1@t and false length see it)"""
+    p_mid, p_tan, p_len = _segments(raw["pts"], STEP)
+    g_mid, g_tan, _ = _segments(gt["pts"], STEP / 2)
+    if not len(p_mid) or not len(g_mid):
+        return np.zeros(2)
+    d, j = cKDTree(g_mid).query(p_mid)
+    ok = d <= HEAD_NEAR
+    angle = np.degrees(np.arccos(np.clip((p_tan[ok] * g_tan[j[ok]]).sum(1), -1.0, 1.0)))
+    return np.array([float((angle * p_len[ok]).sum()), float(p_len[ok].sum())])
+
+
 def tier_counts(raw, ref):
     """E276, additive counts of one frame by the l4 tier of the GT lane points (None when the lane GT carries no labels): `rec` (3, 4): per tier 1 - 3 [visible GT points within 1.0 m of a
     delivered polyline point, visible GT points, the same for all GT points], `prec` (4, 2): per ZONE 0 - 3 (the tier of the nearest GT point within 2.5 m, 0 = none) [delivered polyline points
@@ -458,7 +486,7 @@ def graph_counts(graph, frame, lean=False):
     the same as with lean=False)"""
     raw = to_raw(graph)
     gt = getattr(frame, "gt", frame)
-    c = dict(rec=SB.frame_records([raw], [gt])[0], topo=TM.frame_record(raw, gt), dp=np.array(SB._vstats(raw, False)),
+    c = dict(rec=SB.frame_records([raw], [gt])[0], topo=TM.frame_record(raw, gt), dp=np.array(SB._vstats(raw, False)), head=heading_counts(raw, gt),
              lane=MS.topo_counts(LaneGraph.of(raw), LaneGraph.of({"pts": gt["pts"], "edges": gt.get("edges")}), box=CFG.box, marbles=not lean, **CFG.topo))
     if lean:
         return c
@@ -485,6 +513,8 @@ def graph_numbers(cs):
     out.update({k: float(v) for k, v in MS.topo_numbers(lane).items() if k.startswith("junction")})
     dp = np.sum([c["dp"] for c in cs], 0)
     out["vert100_dp"] = float(100.0 * dp[0] / max(dp[1], 1e-9))              # the vertices the delivered polylines need at 0.3 m (the project's measure for graphs without node ids)
+    head = np.sum([c["head"] for c in cs], 0)
+    out["heading_err_deg"] = float(head[0] / head[1]) if head[1] > 0 else float("nan")
     sec = [c["sec"] for c in cs if "sec" in c]
     if sec:
         s = np.sum(sec, 0)
@@ -578,6 +608,14 @@ def _selftest():
     sh["nodes"]["e"] = np.zeros_like(sh["nodes"]["e"])
     z, zn = graph_metrics(readout(sh)[0], old), node_metrics(sh, g)
     assert z["F1@1.0"] == 0.0 and z["topo_F1"] == 0.0 and zn["node_F1"] == 0.0 and assign_metrics(sh, g)["lane_acc"] == 0.0
+    # heading error: 0 on the truth itself, large on a saw-tooth of 0.3 m every metre (which F1@0.5 hardly sees), 180 degrees against the driving direction, undefined with nothing near a lane
+    y = np.arange(0.0, 30.5, 1.0)
+    line = lambda x: dict(pts=[np.stack([x, y], 1)], edges=[])
+    truth = line(np.zeros_like(y))
+    angle = lambda raw: (lambda c: c[0] / c[1])(heading_counts(raw, truth))
+    assert angle(truth) < 1e-9 and abs(angle(line(0.3 * (-1.0) ** np.arange(len(y)))) - np.degrees(np.arctan(0.6))) < 0.1, angle(line(0.3 * (-1.0) ** np.arange(len(y))))
+    assert abs(angle(dict(pts=[truth["pts"][0][::-1]], edges=[])) - 180.0) < 1e-6 and not heading_counts(line(np.full_like(y, 3.0)), truth).any()
+    assert m["heading_err_deg"] < 3.0 and np.isnan(z["heading_err_deg"]), (m["heading_err_deg"], z["heading_err_deg"])
     print("qgraph_eval selftest ok: oracle F1@1.0", round(m["F1@1.0"], 4), "topo F1", round(m["topo_F1"], 4), "pieces", len(graph.lines), "edges", len(graph.edges))
 
 

@@ -47,7 +47,8 @@ def main(argv=None):
     assert (r["meta"]["bs_b"], r["meta"]["bs_head"], r["meta"]["device"]) == (PR.LIVE_BS, PR.HEAD_BS, "cuda"), r["meta"]
     idx = r["idx"][:a.n]
     frames, meta = PR.live_dump(ns, r["ck"], r["kw"], r["ds"], idx, "cuda", BP.RUNS)
-    older = sorted({k for old in r["fr"][:a.n] for k in old} - set(frames[0]))                 # fields of removed diagnostics that an older dump still holds
+    assert all(np.isfinite(f.pop("ms")) for f in frames) and meta["cost"]["peak_MB"] > 0 and meta["cost"]["params_M"] > 2, meta.get("cost")     # the measurement of the step: a time per frame (never equal), memory, parameters
+    older = sorted({k for old in r["fr"][:a.n] for k in old} - set(frames[0]) - {"ms"})         # fields of removed diagnostics that an older dump still holds
     assert all(set(f) <= set(old) for f, old in zip(frames, r["fr"])), "a record holds a field the stored dump lacks"
     bad = [j for j, (f, old) in enumerate(zip(frames, r["fr"])) if not all(same(f[k], old[k]) for k in f)]
     fields = sorted({k for j in bad for k in frames[j] if not same(frames[j][k], r["fr"][j][k])})

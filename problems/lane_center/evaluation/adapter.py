@@ -1,11 +1,12 @@
 """The adapter of the lane problem for autoresearch/Evaluation (the evaluation step of a run, the anchor test, the pictures of a report).
 
 The network itself ran in the step `predict` (evaluation/lane_predict.py: the live dump of the lane network, at the batch sizes of its GPU
-parity). The Subject here only reads that dump (lane_dump.read_dump) and decodes it at the run's decode (config "decode": the link thresholds,
-the keep threshold, the none gate; net/model/lane_readout.py `graph`): what the system delivers. The metric is the project's own scorer
-(qgraph_eval.score_frames, lean, inside the 2 m lattice): its record of a frame is kept whole as the frame's counts, and the numbers of any set
-of frames are qgraph_eval.graph_numbers of their records - the same numbers as the cards of the diagnostics (jtoken_eval.py; sums of integer
-counts; the float length sums of vert100 only to the last bits). A scene is the scene number of poses_val.npz; VAL = 873 frames in 22 scenes.
+parity, and the measurement of its compute time and memory). The Subject here only reads that dump (lane_dump.read_dump) and decodes it at the
+run's decode (config "decode": the link thresholds, the keep threshold, the none gate; net/model/lane_readout.py `graph`): what the system
+delivers. Two metrics: `graph` = the quality of the delivered graph by the project's scorer (qgraph_eval.score_frames, lean, inside the 2 m
+lattice): its record of a frame is kept whole as the frame's counts, and the numbers of any set of frames are qgraph_eval.graph_numbers of
+their records (the numbers reported: REPORTED); `cost` = ms per frame, peak GPU memory and parameters of the network as the predict step
+measured them (lane_cost.py). A scene is the scene number of poses_val.npz; VAL = 873 frames in 22 scenes.
 Nothing of training/ and no network is imported here: only the dump's reader, the read-out and the scorer, and every one of those files is in
 the evaluator hash (EVALUATOR_FILES below)."""
 from __future__ import annotations
@@ -27,10 +28,14 @@ for sub_ in ("evaluation", "training", "net/prep", "net/model", "net/loss", "tra
 import bflc_paths as BP  # noqa: E402
 from Evaluation import FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, Task, View  # noqa: E402
 from Evaluation.defaults import file_hash  # noqa: E402
+from lane_cost import LaneCost  # noqa: E402
 
-METRICS = ("graph",)
-HEADLINE = ("topo_F1", "junction_F1", "F1@1.0", "lanes_found", "dup_frac", "vert100_dp", "Q", "topo_P", "topo_R")
-LOWER = ("dup_frac", "vert100_dp")
+METRICS = ("graph", "cost")
+# the quality numbers: connectivity (topo F1, the score) and junctions, position (F1 at 0.5 / 1 m, lanes found, length off every lane), shape (heading error:
+# zig-zag), economy (parallel duplicates, vertices per 100 m); the older composite and section numbers of the scorer (Q, S, J, split / merge, ...) are not reported
+HEADLINE = ("topo_F1", "junction_F1", "F1@0.5", "F1@1.0", "lanes_found", "heading_err_deg", "dup_frac", "vert100_dp")
+REPORTED = HEADLINE + ("topo_P", "topo_R", "junction_P", "junction_R", "P@0.5", "R@0.5", "P@1.0", "R@1.0", "false_len_frac", "R@1_far")
+LOWER = ("heading_err_deg", "dup_frac", "vert100_dp", "false_len_frac")
 LATTICE = 2.0
 _FRAMES = {}
 
@@ -107,13 +112,15 @@ class LaneSubject(Subject):
         r = DU.read_dump(a, os.path.dirname(os.path.normpath(net)), 0)
         RO.check_record(r["fr"], r["valid"])
         d = cfg["decode"]
-        self.decode, self.preds = d, {}
+        self.decode, self.preds, self.cost = d, {}, {}
+        run = {k: v for k, v in (r["meta"].get("cost") or {}).items() if k != "host"}          # the run's memory, parameters and quiet flag
         for t, f, v in zip(r["toks"], r["fr"], r["valid"]):
             self.preds[f["token"]] = RO.graph(t, f, v, RO.Decode(**d))
-        self.meta = {k: r["meta"].get(k) for k in ("bs_b", "bs_head", "device", "env", "tokens_exact")}
+            self.cost[f["token"]] = dict(run, ms=f.get("ms"))
+        self.meta = {k: r["meta"].get(k) for k in ("bs_b", "bs_head", "device", "env", "tokens_exact", "cost")}
 
     def predict(self, sample, taps=()):
-        return Prediction(outputs=self.preds[sample.inputs], info={"device": "dump"})
+        return Prediction(outputs=self.preds[sample.inputs], info={"device": "dump", "cost": self.cost[sample.inputs]})
 
     def taps(self):
         return []
@@ -137,8 +144,8 @@ class LaneGraph(Metric):
         QE = _qe()
         recs = [pickle.loads(np.asarray(c["rec"], np.uint8).tobytes()) for c in counts]
         if not recs:
-            return {k: float("nan") for k in HEADLINE}
-        out = {k: float(v) for k, v in QE.graph_numbers(recs).items() if isinstance(v, (int, float, np.floating, np.integer))}
+            return {k: float("nan") for k in REPORTED}
+        out = {k: float(v) for k, v in QE.graph_numbers(recs).items() if k in REPORTED}
         return {k: out[k] for k in (keys or out) if k in out}
 
     def support(self, counts):
@@ -164,7 +171,7 @@ class LaneTask(Task):
     name = "lane_center"
 
     def metrics(self):
-        return [LaneGraph()]
+        return [LaneGraph(), LaneCost()]
 
     def views(self):
         return {"overview": Overview()}
@@ -193,7 +200,7 @@ def task(net, metrics=METRICS):
 # The scored path, stored dump -> prediction -> numbers: every module of this problem that this file imports, directly or through another one
 # (evaluation/tests/test_evaluator_hash.py walks the imports and names the few modules where no scored number passes: its NOT_SCORED).
 EVALUATOR_FILES = [os.path.join(ROOT, *f.split("/")) for f in (
-    "evaluation/adapter.py", "evaluation/lane_dump.py", "evaluation/qgraph_eval.py", "evaluation/lane_suite.py",
+    "evaluation/adapter.py", "evaluation/lane_cost.py", "evaluation/lane_dump.py", "evaluation/qgraph_eval.py", "evaluation/lane_suite.py",
     "evaluation/sparse_lanes/bootstrap.py", "evaluation/sparse_lanes/graph_eval.py", "evaluation/sparse_lanes/sparse_metrics.py", "evaluation/sparse_lanes/topo_metrics.py",
     "evaluation/lane_task/__init__.py", "evaluation/lane_task/geometry.py", "evaluation/lane_task/raster.py", "evaluation/lane_task/measures.py",
     "net/model/lane_readout.py", "net/model/qformat.py", "net/prep/lane_ptok_data.py", "net/prep/lane_tokcache.py", "net/prep/polylines.py", "net/prep/qtargets.py")]
