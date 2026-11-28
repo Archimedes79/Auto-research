@@ -1,4 +1,4 @@
-"""Mutation check of the comparison core: break ONE thing at a time in a COPY of the suite and see that `selftest comparison` fails.
+"""Mutation check of the comparison core: break ONE thing at a time in a COPY of the suite and see that `python -m Evaluation.selftest comparison` fails.
 A mutant that survives is a missing check. Slow (about 8 s per mutant); run it when the core changes:
 
     python Evaluation/comparison/mutation_check.py          (from autoresearch/, any python with numpy, matplotlib, scipy, shapely)
@@ -51,7 +51,7 @@ MUTANTS = [
     ("metrics.py", "                    if row[k] == row[k]:\n", "                    if True:\n", "BoxMetric: nan of a class without ground truth enters the mean"),
     ("metrics.py", "return {k: float(c[1] + c[2] + c[3]) for k in self.headline}", "return {k: 1.0 for k in self.headline}", "MapMetric: support constant"),
     ("metrics.py", "if tp_threshold not in thresholds:", "if False:", "BoxMetric: a tp_threshold that is no threshold accepted"),
-    # found by the independent review (2026-10-31) and closed in the tests
+    # the metric classes and what a review found unguarded
     ("metrics.py", '("mATE", ["ate"])', '("mATE", ["ase"])', "BoxMetric: mATE made from ase"),
     ("metrics.py", '("mAP_all", ["ap_all@%g" % t for t in self.thr])', '("mAP_all", ["ap@%g" % t for t in self.thr])', "BoxMetric: mAP_all made from ap"),
     ("metrics.py", '"mATE": "low"', '"mATE": "high"', "BoxMetric: mATE is better when high"),
@@ -76,7 +76,7 @@ MUTANTS = [
     ("maps.py", "(g & near_p & v).sum(), (g & ~near_p & v).sum()]", "(g & near_g & v).sum(), (g & ~near_g & v).sum()]", "tolerant_counts: g_hit from the wrong dilation"),
     ("maps.py", 'if a.dtype.kind in "iu" and a.size and (a.min() < 0 or a.max() > 1):', "if False:", "_as_mask: integer map with 255 accepted"),
     ("boxes.py", "v = errors[order, j][tp] ", "v = errors[:, j][flags[:, k] > 0] ", "detection_numbers: error means summed in row order, not rank order"),
-    # velocity, moving against static (2026-10-31)
+    # velocity, moving against static
     ("boxes.py", "out[0 if s > moving else 1] += 1", "out[0 if s >= moving else 1] += 1", "velocity_counts: a ground-truth speed of exactly `moving` is moving"),
     ("boxes.py", "        k = 0 if s > moving else 1\n", "        k = 0 if s >= moving else 1\n", "velocity_counts: a pair at exactly `moving` is moving"),
     ("boxes.py", 'math.hypot(d["vx"], d["vy"]) < slow', 'math.hypot(d["vx"], d["vy"]) <= slow', "velocity_counts: a detection of exactly `slow` is slow"),
@@ -116,7 +116,7 @@ def main() -> int:
         if s.count(old) != 1:
             raise SystemExit(f"mutant {what!r}: the text occurs {s.count(old)} times in {fn}, it must occur once (the core changed: update the mutant)")
         open(path, "w", encoding="utf-8").write(s.replace(old, new))
-        r = subprocess.run([sys.executable, "-m", "Evaluation", "selftest", "comparison"], cwd=root, capture_output=True, text=True, timeout=300)
+        r = subprocess.run([sys.executable, "-m", "Evaluation.selftest", "comparison"], cwd=root, capture_output=True, text=True, timeout=300)
         caught = r.returncode != 0 and "FAIL " in r.stdout                  # a check failed; a crash of the mutant itself (a typo) does not count
         print(("caught   " if caught else "SURVIVED ") + what + ("" if caught or r.returncode == 0 else "  (it crashed instead of failing a check)"), flush=True)
         if not caught:

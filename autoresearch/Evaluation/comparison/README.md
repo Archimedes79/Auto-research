@@ -26,6 +26,6 @@ The files of this folder are part of the BEV evaluator hash: an edit, also of a 
   numbers); a class with ground truth and no true positive counts 1.0. `ase` of rectangles ignores height. `biou` needs shapely.
 
 ## Checks
-`python -m Evaluation selftest comparison` (`../selftest_comparison.py`: hand cases, brute force in plain loops, the devkit when installed,
+`python -m Evaluation.selftest comparison` (`../selftest_comparison.py`: hand cases, brute force in plain loops, the devkit when installed,
 and `_REF`, a frozen copy of the BEV code from before this core). After a change of the core also
 `python Evaluation/comparison/mutation_check.py` (slow; add a mutant with every new rule).

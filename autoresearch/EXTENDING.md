@@ -75,8 +75,11 @@ An entry in `problem.json` `steps`:
 - A problem's own ground truth follows the toy (`gt/generate.py`): a store named by a signature of the code that makes it, its options and
   the data manifest; a stored file that differs is refused; the adapter's `Source.describe()` reports `gt_signature`.
 - A new dataset: its manifest (hashes) in git, its bytes under the data root, a holdout split in `problem.json` `holdout`; a reader of the
-  problem's own calls `Evaluation.defaults.guard(split, <problem folder>)`. A dataset that several problems share gets a folder under
-  `../datasets/`.
+  problem's own calls `Evaluation.defaults.guard(split, <problem folder>)`. The guard is closed in every process that the research core
+  did not hand its TEST gate to: the core's `evaluate` step does it itself; a TEST step of the problem's own (`test_steps`), or a worker
+  process started by spawn, that reads the holdout through `guard` or `Evaluation` calls
+  `Evaluation.defaults.set_holdout_gate(research.gates.test_refusal)` first, else it is refused. A dataset that several problems share
+  gets a folder under `../datasets/`.
 
 ## A literature topic
 The procedure: [`literature/README.md`](literature/README.md). The folder is `../problems/<name>/literature/topics/<slug>/`; nothing to register:

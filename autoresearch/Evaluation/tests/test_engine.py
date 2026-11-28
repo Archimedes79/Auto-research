@@ -54,14 +54,13 @@ def _():
         raises(KeyError, text, src.find, bad)
 
 
-@check("sampling: random scenes and evenly spread frames are seeded and as documented; an unknown scene is refused")
+@check("sampling: random scenes and evenly spread frames are seeded and as documented")
 def _():
     src = World()
     assert Sampler(src, 1).scenes(3) == Sampler(src, 1).scenes(3) and len(set(Sampler(src, 1).scenes(3))) == 3 and len(Sampler(src, 1).scenes(99)) == 4
     flat = [f for s in src.scenes() for f in src.frames(s)]
     assert [f.label for f in Sampler(src, 0).spread(10)] == [flat[i].label for i in sorted({int(i) for i in np.linspace(0, 31, 10).round()})]
     assert len(Sampler(src, 0).spread(1000)) == 32
-    raises(KeyError, "unknown scene", Sampler(src, 0).spread, 5, ["no-such-scene"])
 
 
 # ------------------------------------------------------------------------------------------------ the run store
@@ -85,7 +84,6 @@ def _():
         assert r.frame("s0/3") is r.frame("s0/003") is r.frame("s0:3") and r.frame("s0/003")["key"] == "k3" and len(r.counts("m", ["s0/003", "s1/002"])) == 2
         raises(KeyError, "no such frame", r.frame, "s9/0")
         assert RunStore.create(os.path.join(d, "r"), {"name": "t"}).done() == r.done()
-        raises(FileExistsError, "already holds a run", RunStore.create, os.path.join(d, "r"), {"name": "t"}, resume=False)
         st = RunStore.create(os.path.join(d, "c"), {"name": "c"})
         for i in range(CHUNK + 10):
             st.add(FrameRef("s", i), {"m": {"x": np.ones(2)}}, {}, {}, [], {})
@@ -113,7 +111,7 @@ def _():
         raises(ValueError, "line 4", RunStore.open, os.path.join(d, "c"))
 
 
-@check("run identity: a new description key is tolerated with a warning, another value of a key and another metric contract are another run; `ignore` lifts only the named key")
+@check("run identity: a new description key is tolerated with a warning, another value of a key and another metric contract are another run; compare's `ignore` lifts only the named key")
 def _():
     class Signed(World):                                                # the adapter after a change: one more key in describe()
         sig = "abc"
@@ -136,16 +134,16 @@ def _():
         raises(ValueError, "gt_signature", other.quant.run, name="b", progress=0)
         other.quant.run(name="c", progress=0)
         raises(ValueError, "gt_signature", other.quant.compare, "b", "c", boot=10)
+        raises(ValueError, "gt_signature", other.quant.compare, "b", "c", boot=10, ignore={"source": ("seed",)})
+        assert other.quant.compare("b", "c", boot=10, ignore={"source": ("gt_signature",)})["n_common_frames"] == 32
         old = {"metrics": {"iou": {"headline": ["iou"], "better": {"iou": "high"}}}}
         flipped = {"metrics": {"iou": {"headline": ["iou"], "better": {"iou": "low"}}}}
         more = {"metrics": {**old["metrics"], "ap": {"headline": ["ap"], "better": {"ap": "high"}}}}
         assert len(_identity_differences(old, flipped)) == 1 and _identity_differences(old, {}) == [] == _identity_differences({}, old) == _identity_differences(old, more)
         m1 = {"name": "x", "state": "reset", "source": {"dataset": "s", "evaluator_hash": "aaa"}, "subject": {}, "task": "t", "selection": {}}
         RunStore.create(os.path.join(d, "x"), m1).close()
-        m2, ignore = dict(m1, source={"dataset": "s", "evaluator_hash": "bbb"}), {"source": ("evaluator_hash",)}
-        raises(ValueError, "evaluator_hash", RunStore.create, os.path.join(d, "x"), m2)
-        RunStore.create(os.path.join(d, "x"), m2, ignore=ignore).close()
-        raises(ValueError, "dataset", RunStore.create, os.path.join(d, "x"), dict(m2, source={"dataset": "other", "evaluator_hash": "bbb"}), ignore=ignore)
+        raises(ValueError, "evaluator_hash", RunStore.create, os.path.join(d, "x"), dict(m1, source={"dataset": "s", "evaluator_hash": "bbb"}))
+        assert RunStore.create(os.path.join(d, "x"), dict(m1, subject={"device": "cuda"})).manifest["resumed"] == 1, "the same run on another device resumes"
 
 
 # ------------------------------------------------------------------------------------------------ statistics
@@ -209,16 +207,13 @@ def _():
 
 
 # ------------------------------------------------------------------------------------------------ the frame loop and the counting
-@check("runner: carry keeps the memory along a scene and starts each scene empty, reset does not, the full history of one frame equals the carried run; a failing loader raises")
+@check("runner: carry keeps the memory along a scene and starts each scene empty, reset does not; a failing loader raises")
 def _():
     src, subj = World(), Smooth()
     carry = [p.taps["memory"] for _, p in Runner(src, subj, "carry").iter_scene("toy-1", taps=["memory"])]
     reset = [p.taps for _, p in Runner(src, subj, "reset").iter_scene("toy-1", taps=["memory", "blur"])]
     assert all(np.array_equal(r["memory"], r["blur"]) for r in reset) and np.array_equal(carry[0], reset[0]["memory"]) and not np.allclose(carry[5], reset[5]["memory"])
     assert np.allclose(carry[4], 0.5 * carry[3] + 0.5 * reset[4]["blur"], atol=1e-6), "the average of the toy network"
-    ref = src.frames("toy-1")[6]
-    assert np.array_equal(Runner(src, subj, "carry").run_to(ref, ["memory"], history="full")[1].taps["memory"], carry[6])
-    assert np.array_equal(Runner(src, subj, "carry").run_to(ref, ["memory"], cold=True)[1].taps["memory"], reset[6]["memory"])
 
     class Bad(World):
         def load(self, ref):
@@ -275,8 +270,8 @@ def _():
         assert some.labels() == [f"toy-{s}/{i:03d}" for s in (1, 2) for i in range(5)] and some.manifest["selection"]["max_frames"] == 5
         drawn = suite.quant.run(n_scenes=3, seed=1, name="drawn", progress=0)
         assert drawn.scene_names() == Sampler(suite.source, 1).scenes(3) and len(drawn.frames) == 24
-        frames = Sampler(suite.source, 0).spread(8, min_index=3)
-        assert len(frames) == 8 and all(f.index >= 3 for f in frames)
+        frames = [f for f in Sampler(suite.source, 0).spread(12) if f.index >= 2]              # frames with the two frames of history before them
+        assert len(frames) == 8
         warm = suite.quant.run(frames=frames, state="warmup", name="warm", progress=0)          # any subset of frames is allowed
         src, net, metric = World(), Smooth(), ToyTask().metrics()[0]
         for ref in frames:                                              # by hand: empty, the two frames before (Smooth.warmup), the frame
@@ -286,11 +281,9 @@ def _():
             assert np.array_equal(metric.frame(src.load(ref), want)["c"], warm.counts("seg", [ref.label])[0]["c"]), ref.label
         cold = suite.quant.run(frames=frames, state="reset", name="cold", progress=0)
         assert suite.quant.table(cold) != suite.quant.table(warm), "the warm-up history changes the numbers of a network with a memory"
-        for gone, word in ((suite.quant.trace, "draw_frame"), (suite.quant.pareto, "get_cost")):
-            raises(NotImplementedError, word, gone, "warm")
 
 
-@check("outliers and report: the planted frames come first, a scene's drag is leave-one-out by hand, support keeps empty frames out; rows name the draw-frame command; the page links resolve")
+@check("outliers and report: the planted frames come first, a scene's drag is leave-one-out by hand, support keeps empty frames out; rows name the draw-frame command, the page shows them")
 def _():
     with tempfile.TemporaryDirectory() as d:
         suite = make(d)
@@ -310,12 +303,11 @@ def _():
         assert suite.quant.outliers(st, k=50, min_support=10 ** 9)["frames"] == []
         path = suite.quant.report(st)
         text = open(path, encoding="utf-8").read()
-        assert "toy-3" in text and "headline numbers" in text and "draw-frame" in text and "qual frame" not in text and report.links_in(path) == []
+        assert "toy-3" in text and "headline numbers" in text and osr["frames"][0]["view"] in text and scenes[0]["view"] in text
         rows = open(os.path.join(st.path, "frames.csv")).read().strip().split("\n")
         assert len(rows) == 33 and "seg.iou" in rows[0]
-        page = report.write(os.path.join(d, "sub", "i.html"), "t <&>", [("h", report.table([["k", "v"], ["w", "warn"]], status_col=1)),
-                                                                         ("", report.image(path, os.path.join(d, "sub"), 100))])
-        assert "t &lt;&amp;&gt;" in open(page, encoding="utf-8").read() and 'class="warn"' in open(page, encoding="utf-8").read() and len(report.links_in(page)) == 2
+        page = report.write(os.path.join(d, "sub", "i.html"), "t <&>", [("h", report.table([["k", "v"], ["w", "warn"]], status_col=1))])
+        assert "t &lt;&amp;&gt;" in open(page, encoding="utf-8").read() and 'class="warn"' in open(page, encoding="utf-8").read()
 
 
 @check("a metric that returns {} for a whole chunk (nothing to count there) still gives tables, compare and outliers")
@@ -355,7 +347,7 @@ def _():
         assert suite.quant.compare("a", "a", boot=20)["metrics"]["sparse.cells"]["diff"] == 0 and suite.quant.outliers("a", k=2)["scenes"]
 
 
-@check("compare: a worse network is detected (b - a < 0, the interval below 0), a run against itself gives 0; another source or another frame key is refused unless forced")
+@check("compare: a worse network is detected (b - a < 0, the interval below 0), a run against itself gives 0; another source or another frame key is refused")
 def _():
     with tempfile.TemporaryDirectory() as d:
         suite = make(d)
@@ -368,13 +360,11 @@ def _():
         assert same["diff"] == 0 and same["lo"] == 0 and same["hi"] == 0
         make(d, seed=1).quant.run(name="o", progress=0)
         raises(ValueError, "same source and task", suite.quant.compare, "a", "o", boot=20)
-        assert suite.quant.compare("a", "o", boot=20, force=True)["n_common_frames"] == 32
         make(d).quant.run(scenes=["toy-0", "toy-1"], name="p", progress=0)
         assert suite.quant.compare("p", "a", boot=50)["n_common_frames"] == 16, "the frames both runs have"
         for name, key in (("ka", "tokA"), ("kb", "tokB")):              # the same label over another frame key is another frame
             make(d).quant.run(frames=[FrameRef("toy-0", 0, key)], name=name, progress=0)
         raises(ValueError, "frame key", suite.quant.compare, "ka", "kb", boot=20)
-        assert suite.quant.compare("ka", "kb", boot=20, force=True)["n_common_frames"] == 1
 
 
 # ------------------------------------------------------------------------------------------------ drawing
@@ -430,7 +420,6 @@ def _():
     taps = {"fm": rng.random((4, 6, 6)), "lg": rng.normal(size=(2, 6, 6)), "im": rng.random((6, 6, 3)), "mp": rng.random((6, 6)), "vec": np.arange(40.0), "sc": np.array(3.0)}
     panels = tapmod.tap_panels(taps, specs)
     assert [p.kind for p in panels] == ["raster", "rgb", "raster", "image", "raster", "bars", "text"] and panels[5].note == "n; red flag: all equal; first 16 of 40 values"
-    assert [p.title for p in tapmod.tap_panels(taps, specs, wanted=["mp"])] == ["mp"]
     flags = lambda arr: {f.name.split(": ")[1]: f.status for f in tapmod.plausibility(TapSpec("t"), arr)}       # noqa: E731
     assert flags(np.zeros((2, 4, 4))) == {"alive": "fail"} and flags(np.full((2, 4, 4), 3.0)).get("alive") == "warn" and flags(broken)["finite"] == "fail"
     assert flags(rng.random((2, 4, 4))) == {} and flags(np.full((2, 4, 4), 1e9) + rng.random((2, 4, 4)))["magnitude"] == "warn"

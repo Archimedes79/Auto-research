@@ -1,19 +1,13 @@
-"""A small html writer for the index pages: headings, tables, thumbnails and links with paths relative to the page.
-No styling dependencies; the pages open from the file system."""
+"""A small html writer for the report page of an evaluation: headings and tables. No styling dependencies; the page opens from the file system."""
 from __future__ import annotations
 
 import html
 import os
-from typing import Any, Iterable, List, Sequence
+from typing import Any, Iterable, Sequence
 
 CSS = """body{font-family:Segoe UI,Arial,sans-serif;margin:18px;max-width:1500px}h1{font-size:20px}h2{font-size:16px;margin-top:26px}
 table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #bbb;padding:3px 7px;text-align:right}th{background:#eee}
-td.l,th.l{text-align:left}.warn{background:#fff3cd}.fail{background:#f8d7da}.ok{background:#e8f5e9}code{background:#f3f3f3;padding:1px 3px}
-img{border:1px solid #ccc;margin:2px}.note{color:#555;font-size:12px}"""
-
-
-def rel(path: str, start: str) -> str:
-    return os.path.relpath(path, start).replace(os.sep, "/")
+td.l,th.l{text-align:left}.warn{background:#fff3cd}.fail{background:#f8d7da}.ok{background:#e8f5e9}"""
 
 
 def fmt(v: Any) -> str:
@@ -36,12 +30,6 @@ def table(rows: Sequence[Sequence[Any]], left_cols: Sequence[int] = (0,), status
     return "\n".join(out)
 
 
-def image(path: str, start: str, width: int = 420, caption: str = "") -> str:
-    r = rel(path, start)
-    cap = f"<div class=note>{html.escape(caption)}</div>" if caption else ""
-    return f'<div style="display:inline-block;vertical-align:top"><a href="{r}"><img src="{r}" width="{width}"></a>{cap}</div>'
-
-
 def write(path: str, title: str, sections: Iterable[tuple]) -> str:
     """sections: (heading, html body) pairs -> the page at `path`"""
     parts = [f"<!doctype html><meta charset=utf-8><title>{html.escape(title)}</title><style>{CSS}</style>",
@@ -54,11 +42,3 @@ def write(path: str, title: str, sections: Iterable[tuple]) -> str:
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(parts))
     return path
-
-
-def links_in(path: str) -> List[str]:
-    """all href / src targets of a page (for tests: every one must exist)"""
-    import re
-    with open(path, encoding="utf-8") as f:
-        txt = f.read()
-    return [m for m in re.findall(r'(?:href|src)="([^"#]+)"', txt) if not m.startswith(("http:", "https:"))]

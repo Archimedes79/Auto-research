@@ -5,13 +5,7 @@ A project's adapter implements the boxes of contracts.py (Source, Subject, Task 
 from .contracts import (Counts, Flag, FrameRef, Metric, Page, Panel, Prediction, Sample, Shape, Source, Subject, TapSpec, Task,
                         View, ViewContext)
 from .suite import EvalSuite
+from .api import Evaluation, EvaluationError, Frames
 
 __all__ = ["EvalSuite", "Source", "Subject", "Task", "Metric", "View", "FrameRef", "Sample", "Prediction", "Page", "Panel", "Shape",
            "TapSpec", "Flag", "ViewContext", "Counts", "Evaluation", "Frames", "EvaluationError"]
-
-
-def __getattr__(name):                                  # the class interface is loaded when it is used
-    if name in ("Evaluation", "Frames", "EvaluationError"):
-        from . import api
-        return getattr(api, name)
-    raise AttributeError(f"module 'Evaluation' has no attribute {name!r}")

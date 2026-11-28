@@ -41,7 +41,7 @@ _OPTIONAL = ("metrics",)         # the metric contract (headline keys, direction
 
 def _identity_differences(stored: Dict[str, Any], new: Dict[str, Any], keys=_IDENTITY_KEYS, gained: Optional[List[str]] = None,
                           either: bool = False, ignore: Optional[Dict[str, Any]] = None) -> List[str]:
-    """the manifest entries that make a resume (or a benchmark attached to a run) another run (what differs, stored -> new).
+    """the manifest entries that make a resume another run, or two compared runs two questions (what differs, stored -> new).
     A key of a description (source / subject / task dict) that is NEW in `new` and absent from `stored` is not a difference: the
     stored run predates it (an adapter that later adds e.g. a ground-truth signature must not orphan its older stores); it is
     appended to `gained` ("source: gt_signature") for a warning. either=True (two stored runs compared) tolerates a key that only
@@ -113,22 +113,18 @@ class RunStore:
 
     # ------------------------------------------------------------------------------------------ create / open
     @classmethod
-    def create(cls, path: str, manifest: Dict[str, Any], resume: bool = True, force: bool = False,
-               ignore: Optional[Dict[str, Any]] = None) -> "RunStore":
-        """a new run directory, or (resume) the existing one: frames already stored are kept. A resume must be the SAME run (state,
+    def create(cls, path: str, manifest: Dict[str, Any]) -> "RunStore":
+        """a new run directory, or the existing one resumed: frames already stored are kept. A resume must be the SAME run (state,
         source, subject, task, selection as in the stored manifest, the device aside): otherwise the stored counts would be mixed
-        into the numbers of another checkpoint / seed / frame set. force=True skips that check; ignore ({entry: keys}, e.g.
-        {"source": ("evaluator_hash",)}) skips it for those description keys only. A description key that is new in
+        into the numbers of another checkpoint / seed / frame set, and it is refused. A description key that is new in
         `manifest` and absent from the stored run (an adapter that added e.g. a ground-truth signature) is tolerated with a warning; the
         stored descriptions are then kept and the keys listed under `predates_keys`."""
         if os.path.exists(os.path.join(path, "manifest.json")):
-            if not resume:
-                raise FileExistsError(f"{path} already holds a run (resume it or choose another name)")
             st = cls.open(path, mode="a", repair=False)                   # nothing is touched before it is clear that this is the same run
             gained: List[str] = []
-            diff = [] if force else _identity_differences(st.manifest, manifest, gained=gained, ignore=ignore)
+            diff = _identity_differences(st.manifest, manifest, gained=gained)
             if diff:
-                raise ValueError(f"{path} holds a different run ({'; '.join(diff)}): choose another name, or force=True to resume it anyway")
+                raise ValueError(f"{path} holds a different run ({'; '.join(diff)}): choose another name")
             if os.path.exists(os.path.join(path, "frames.jsonl")):
                 st._frames = _read_frames(os.path.join(path, "frames.jsonl"), repair=True)
             warn_gained(gained, f"resume of {path}")
@@ -137,7 +133,7 @@ class RunStore:
                       "against this selection", file=sys.stderr, flush=True)
             old = {k: st.manifest.get(k) for k in _IDENTITY_KEYS}
             st.manifest.update({k: v for k, v in manifest.items() if k not in ("created",)})
-            if gained and not force:                                       # the stored frames predate the new keys: keep the stored
+            if gained:                                                     # the stored frames predate the new keys: keep the stored
                 for k, v in old.items():                                   # descriptions, so the manifest does not claim them
                     if isinstance(v, dict):
                         st.manifest[k] = v
@@ -206,11 +202,6 @@ class RunStore:
         self.manifest["scenes"] = sorted({fr["scene"] for fr in self._frames})
         self._write_manifest()
 
-    def set_cost(self, key: str, value: Dict[str, Any]) -> None:
-        """store a cost entry (run_ms, bench, ops; see cost.py) in the manifest of this run and write it"""
-        self.manifest.setdefault("cost", {})[key] = value
-        self._write_manifest()
-
     def _write_manifest(self) -> None:
         tmp = os.path.join(self.path, "manifest.tmp.json")
         with open(tmp, "w", encoding="utf-8") as f:
@@ -242,8 +233,8 @@ class RunStore:
                 self._cache.pop(next(iter(self._cache)))
             out: Dict[int, Counts] = {}
             fn = os.path.join(self.path, f"counts_{metric}_{chunk:05d}.npz")
-            if os.path.exists(fn):                                           # missing (a run stored before 2026-10-31 whose metric gave {} for a
-                with np.load(fn) as z:                                       # whole chunk): the frames of the chunk have empty counts
+            if os.path.exists(fn):                                           # no file (a store whose metric gave {} for the whole chunk may
+                with np.load(fn) as z:                                       # have none): the frames of the chunk have empty counts
                     for name in z.files:
                         pos, k = name.split("|", 1)
                         out.setdefault(int(pos), {})[k] = z[name]

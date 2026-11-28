@@ -1,7 +1,7 @@
 """The tests of the evaluation: known answers of the engine, the class interface and the command line (tests/) and of the comparison core (selftest_comparison.py).
 
-    python -m Evaluation.selftest [word ...]          (from autoresearch/; also `python -m Evaluation selftest`; needs numpy and matplotlib, the torch checks are skipped without torch)
-The words filter the checks by name (`selftest comparison`: what comparison/mutation_check.py runs). Exit 0 all pass, 1 a check fails (its traceback is printed), 2 no check has such a name."""
+    python -m Evaluation.selftest [word ...]          (from autoresearch/; needs numpy and matplotlib, the torch checks are skipped without torch)
+The words filter the checks by name (`comparison`: what comparison/mutation_check.py runs). Exit 0 all pass, 1 a check fails (its traceback is printed), 2 no check has such a name."""
 from __future__ import annotations
 
 import sys

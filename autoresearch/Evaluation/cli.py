@@ -3,7 +3,6 @@
     python -m Evaluation run t21_ctl_s0 small.val --gt-key v13 --metrics maps,boxes
     python -m Evaluation show-numbers ID --match drivable --json        (`show_numbers` and `Evaluation.show_numbers` work too)
     python -m Evaluation methods                    the commands with their arguments
-    python -m Evaluation selftest [word ...]        the tests (selftest.py)
 A parameter without a default, and `network`, `id`, `results`, `a`, `b`, `frame`, `frames`, is positional; every other one is an option (`--gt-key v8`, `--workers 0`); a list is
 repeatable or comma separated (`--taps a,b`). `--project DIR` (default AR_PROJECT), `--adapter MODULE` (default: <project>/evaluation/evaluation.json), `--json`: stdout holds exactly
 what the method returns (whatever the engine prints goes to stderr; NaN and Infinity become null). Exit 0 done, 1 the result says ok: False (`check`), 2 an error: a message on stderr
@@ -135,9 +134,6 @@ def main(argv: Optional[Sequence[str]] = None, cls: type = Evaluation) -> int:
     if argv[0] == "methods":
         methods_text(cls)
         return 0
-    if argv[0] == "selftest":
-        from .selftest import main as selftest
-        return selftest(argv[1:])
     name = argv[0].removeprefix(cls.__name__ + ".").replace("-", "_")
     if name not in cls.METHODS:
         print(f"Evaluation: unknown command {argv[0]!r}; `python -m Evaluation methods` lists them", file=sys.stderr)

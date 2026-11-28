@@ -8,34 +8,10 @@ adapter (the tests do).
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional
+from typing import Optional
 
 from .contracts import Source, Subject, Task
 from .quantitative import Quantitative
-
-
-class Counting(Quantitative):
-    """the engine of quantitative.py (a file of the evaluator hash) with what this package offers: a row of the outlier search names the command that draws its frame, the report has no
-    pictures, and its two methods whose parts are gone refuse"""
-
-    def trace(self, *args, **kwargs):
-        raise NotImplementedError("quant.trace is not offered: draw a stored frame with `Evaluation.draw_frame(id, frame, view)`")
-
-    def pareto(self, *args, **kwargs):
-        raise NotImplementedError("quant.pareto is not offered: compare two evaluations with `compare` and read the ms per frame with `get_cost`")
-
-    def outliers(self, run, *args, **kwargs) -> Dict[str, List[dict]]:
-        res, store = super().outliers(run, *args, **kwargs), self.open(run)
-        eval_id = store.manifest.get("evaluation", {}).get("id", "ID")
-        first: Dict[str, str] = {}                                             # a scene row is looked at through its first scored frame
-        for frame in store.frames:
-            first.setdefault(frame["scene"], frame["label"])
-        for row in (row for rows in res.values() for row in rows):
-            row["view"] = f"draw-frame {eval_id} {row.get('label') or first[row['scene']]}"
-        return res
-
-    def report(self, run, k: int = 8) -> str:
-        return super().report(run, render=0, k=k)
 
 
 class EvalSuite:
@@ -45,7 +21,7 @@ class EvalSuite:
         self.source, self.subject, self.task = source, subject, task
         self.out, self.state = os.path.abspath(out), state
         os.makedirs(self.out, exist_ok=True)
-        self.quant = Counting(self)
+        self.quant = Quantitative(self)
 
     def close(self) -> None:
         if self.subject is not None:

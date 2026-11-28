@@ -136,7 +136,7 @@ class Panel:
     ylim: Optional[Tuple[float, float]] = None
     equal: bool = True
     shapes: List[Shape] = field(default_factory=list)
-    note: str = ""                    # one line for the html guide: what to look for
+    note: str = ""                    # one line drawn under the picture: what to look for
 
 
 @dataclass
@@ -157,7 +157,6 @@ class ViewContext:
     taps: List[TapSpec] = field(default_factory=list)                 # the taps the Subject declares
     flags: List[Flag] = field(default_factory=list)
     subject: Dict[str, Any] = field(default_factory=dict)             # Subject.describe()
-    wanted_taps: Optional[Sequence[str]] = None                       # the debug view: which taps to draw (None = all)
 
 
 # ------------------------------------------------------------------------------------------------ the three boxes
@@ -246,9 +245,9 @@ class Subject(ABC):
     def ops(self, sample: Sample) -> Dict[str, Any]:
         """optional: the operations of ONE forward pass on this frame, {"gmacs": float, "method": "measured" | "estimated" | "mixed",
         "note": what is counted and what is not, "parts": {name: gmacs}} (a MAC is a multiply-add = 2 FLOPs). `torch_taps.count_ops`
-        measures what torch can see (convolutions, matrix products, attention); `cost.with_estimate` adds a part nobody counts (a custom
-        CUDA op, numpy code) as an estimate with its formula. Called once per quantitative run, before the first frame; it must not
-        depend on the memory state (the suite calls reset() afterwards). {} = not known."""
+        measures what torch can see (convolutions, matrix products, attention); a part nobody counts (a custom CUDA op, numpy code)
+        is the Subject's own estimate, named in `note`. Called once per run of the suite through the Subject, before the first
+        frame; it must not depend on the memory state (the suite calls reset() afterwards). {} = not known."""
         return {}
 
     def close(self) -> None:
@@ -296,7 +295,6 @@ class Metric(ABC):
 class View(ABC):
     """A way to draw one frame: sample + prediction -> Page."""
     name: str = "overview"
-    description: str = ""
 
     @abstractmethod
     def render(self, sample: Sample, pred: Prediction, ctx: ViewContext) -> Page:
@@ -306,7 +304,6 @@ class View(ABC):
 class Task(ABC):
     """What the outputs of a Subject mean: its Metrics, its Views, its plausibility checks."""
     name: str = "task"
-    default_video_view: str = "overview"
 
     @abstractmethod
     def metrics(self) -> List[Metric]:
@@ -317,20 +314,5 @@ class Task(ABC):
         """name -> View; must contain 'overview' (ground truth next to the prediction with the errors highlighted)"""
 
     def checks(self, sample: Sample, pred: Prediction) -> List[Flag]:
+        """plausibility findings of one frame (kept by a run through the Subject, shown by the debug view)"""
         return []
-
-    def guide(self) -> str:
-        """text for the html index: how to read the pictures"""
-        return ""
-
-    def probe(self, sample: Sample, pred: Prediction) -> Dict[str, float]:
-        """optional, for the probing (`probing.py`): numbers of ONE frame, stored with it. 'tag.<name>': a property of the situation
-        (0 / 1, or a number: curvature, range, night ...); 'cause.<name>': the amount of error assigned to a cause, in one unit that
-        adds up over frames (e.g. metres of lane). Cheap, deterministic, no network access."""
-        return {}
-
-    def causes(self) -> Dict[str, Tuple[str, ...]]:
-        """optional: cause name (without the 'cause.' prefix) -> (what it is, what to improve[, where to work]). The third entry is the
-        place the probing books the cause to (e.g. 'model', 'code', 'evaluation'; 'model/evaluation' shares it equally); without it the
-        cause name is the place."""
-        return {}

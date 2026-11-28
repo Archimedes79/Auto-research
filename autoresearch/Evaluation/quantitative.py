@@ -1,19 +1,17 @@
 """The quantitative suite: numbers over all videos together, and the way back from a number to the frames it comes from.
 
-    run(...)                 every chosen scene through the Subject in time order -> a RunStore (counts of every Metric per frame,
-                             per-frame scores, flags, ms); resumable
+    run(...)                 every chosen scene through the Subject in time order, or the stored predictions of a ResultSet
+                             -> a RunStore (counts of every Metric per frame, per-frame scores, flags, ms); resumable. A run through
+                             the Subject also records the ms per frame of its frames, the machine's load and Subject.ops
     table(run)               the Metrics' reduce() over all frames: the dataset-level numbers
     per_scene(run)           the same per scene
     outliers(run)            where the numbers come from: (1) the scenes that drag a headline number most (exact leave-one-out),
                              (2) per score the frames far outside the others (robust z, only frames with enough support),
                              each listed frame with its own drag on the headline numbers, (3) plausibility flags;
-                             every row carries the frame label and the command that draws it
-    trace(run, label)        draw such a frame (overview + debug) through the qualitative suite
+                             every row carries the frame label and the command that draws it (`draw-frame`)
     compare(a, b)            paired scene bootstrap of the headline numbers between two stored runs (a = control, b = variant: b - a;
                              same frames, same source and task), no network
-    report(run)              html: tables, outliers with pictures of the worst frames
-    timing(run=)             ms per frame of the Subject (only valid on an idle machine; the load is recorded); run() itself records
-                             the ms per frame of its own frames and Subject.ops (cost.py), pareto() sets runs against each other
+    report(run)              html: the tables of the numbers, of the scenes by drag and of the outliers; frames.csv
 """
 from __future__ import annotations
 
@@ -60,15 +58,13 @@ class Quantitative:
 
     def run(self, scenes: Optional[Sequence[str]] = None, n_scenes: Optional[int] = None, seed: int = 0,
             max_frames: Optional[int] = None, frames: Optional[Sequence[FrameRef]] = None, state: Optional[str] = None,
-            name: Optional[str] = None, resume: bool = True, progress: int = 25, on_frame=None,
-            ignore: Optional[Dict[str, Sequence[str]]] = None, results=None, reference=None) -> RunStore:
+            name: Optional[str] = None, progress: int = 25, results=None, reference=None) -> RunStore:
         """Run the chosen scenes (default: all; n_scenes: that many random scenes; max_frames: the first frames of each scene)
-        or the given frames (grouped by scene, in time order) through the Subject and store the counts of every Metric.
-        state 'carry' (default of the suite) | 'reset' (every frame independent) | 'warmup'. on_frame(sample, prediction): optional callback
-        for EVERY frame run (also frames a resumed run already has stored: the Subject runs them anyway). ignore: description keys of a
-        resumed store that may differ ({"source": ("evaluator_hash",)}: the person accepts a store finished with other evaluator code).
+        or the given frames (grouped by scene, in time order) through the Subject and store the counts of every Metric; a store of
+        that name is resumed when it holds the same run (RunStore.create).
+        state 'carry' (default of the suite) | 'reset' (every frame independent) | 'warmup'.
         results: a ResultSet (results.py): score ITS stored predictions instead of running the Subject (the frames are its frames, or `frames` out of them; no network, no state to
-        carry, no plausibility flags or probe: they need the inputs). reference(ref) -> the ground truth of a frame (default: `source.load(ref).reference`, which loads everything).
+        carry, no plausibility flags: they need the inputs). reference(ref) -> the ground truth of a frame (default: `source.load(ref).reference`, which loads everything).
         -> the closed RunStore."""
         src, subj, task = self.s.source, self.s.subject, self.s.task
         state = state or self.s.state
@@ -98,7 +94,7 @@ class Quantitative:
                                   "frames_sha": hashlib.sha1("\n".join(f.label for v in plan.values() for f in v).encode()).hexdigest()[:12],
                                   # the labels are scene / index: another frame list behind the same labels (a re-cut dataset, other tokens) is only seen in the keys
                                   "keys_sha": hashlib.sha1("\n".join(f.key for v in plan.values() for f in v).encode()).hexdigest()[:12]}}
-        store = RunStore.create(os.path.join(self.dir, run_name), manifest, resume=resume, ignore=ignore)
+        store = RunStore.create(os.path.join(self.dir, run_name), manifest)
         done = store.done()
         n_before = len(store.frames)
         cost = store.manifest.setdefault("cost", {})
@@ -120,8 +116,6 @@ class Quantitative:
                     (Sample(ref, None, ref_of(ref), meta={"token": ref.key}), results.load(ref)) for ref in refs if ref.label not in done)
                 for sample, pred in stream:
                     n += 1
-                    if on_frame is not None:
-                        on_frame(sample, pred)
                     if sample.ref.label in done:
                         continue
                     counts, scores, support = {}, {}, {}
@@ -133,9 +127,6 @@ class Quantitative:
                     flags = [dict(name=f.name, status=f.status, value=_plain(f.value), note=f.note)
                              for f in task.checks(sample, pred) if f.status != "ok"] if results is None else []
                     info = {k: v for k, v in pred.info.items() if isinstance(v, (int, float, str, bool))}
-                    pr = task.probe(sample, pred) if results is None else None
-                    if pr:                                                       # descriptors and error causes for the probing
-                        info["probe"] = {k: round(float(v), 4) for k, v in pr.items()}
                     store.add(sample.ref, counts, scores, support, flags, info)
                     if progress and n % progress == 0:
                         dt = time.perf_counter() - t0
@@ -199,10 +190,15 @@ class Quantitative:
         frames: per score (a Metric's per-frame scalar) the k frames furthest outside the others in the bad direction, by
           robust z (median / MAD) among frames with support >= min_support; |z| >= z is marked 'outlier'; each row also gives
           the frame's own drag on the headline numbers of its metric.
-        flags: frames carrying plausibility flags, worst first. Every row has 'label' (or 'scene') and 'view' = the command."""
+        flags: frames carrying plausibility flags, worst first. Every row has 'label' (or 'scene') and 'view' = the command that
+          draws it (`draw-frame <evaluation id> <frame>`; a scene is looked at through its first scored frame)."""
         st = self.open(run)
         metrics = self._metrics()
         res: Dict[str, List[dict]] = {"scenes": [], "frames": [], "flags": []}
+        draw = f"draw-frame {st.manifest.get('evaluation', {}).get('id', 'ID')} "
+        first: Dict[str, str] = {}
+        for fr in st.frames:
+            first.setdefault(fr["scene"], fr["label"])
         # (1) scenes
         for name, m in metrics.items():
             hk = list(m.headline)
@@ -213,7 +209,7 @@ class Quantitative:
             for key in hk:
                 sign = 1.0 if m.direction(key) == "high" else -1.0
                 rows = [{"kind": "scene", "metric": f"{name}.{key}", "scene": sc, "drag": -sign * v[key], "frames": len(by_scene[sc]),
-                         "view": f"qual videos 1 --scenes {sc}"} for sc, v in infl.items()
+                         "view": draw + first[sc]} for sc, v in infl.items()
                         if v[key] == v[key]]
                 rows.sort(key=lambda r: -r["drag"])
                 res["scenes"] += rows[:k]
@@ -237,7 +233,7 @@ class Quantitative:
                 for i in order:
                     row = {"kind": "frame", "metric": sk, "label": frames[i]["label"], "scene": frames[i]["scene"],
                            "value": float(vals[i]), "z": float(zz[i]), "support": float(sup[i]),
-                           "outlier": bool(-sign * zz[i] >= z), "view": f"qual frame {frames[i]['label']} --view overview debug"}
+                           "outlier": bool(-sign * zz[i] >= z), "view": draw + frames[i]["label"]}
                     if hk:
                         rest = m.reduce([c for j, c in enumerate(counts) if j != i], keys=hk)
                         row["drag"] = {key: float(-(1.0 if m.direction(key) == "high" else -1.0) * (full[key] - rest[key]))
@@ -248,41 +244,33 @@ class Quantitative:
         for fr in frames:
             for f in fr["flags"]:
                 res["flags"].append({"kind": "flag", "label": fr["label"], "scene": fr["scene"], "status": f["status"], "name": f["name"],
-                                     "note": f["note"], "view": f"qual frame {fr['label']} --view overview debug"})
+                                     "note": f["note"], "view": draw + fr["label"]})
         res["flags"].sort(key=lambda r: (rank.get(r["status"], 2), r["label"]))
         res["flags"] = res["flags"][: max(k * 3, 30)]
         return res
 
-    def trace(self, run: Union[str, RunStore], label: str, views: Sequence[str] = ("overview", "debug")):
-        """draw one frame of a stored run (same Source / Subject as the suite was built with)"""
-        st = self.open(run)
-        fr = st.frame(label)
-        state = st.manifest.get("state", "carry")
-        history = {"carry": "full", "warmup": None, "reset": "none"}[state]                          # the exact replay of the run
-        return self.s.qual.frame((fr["scene"], fr["index"]), views, out_dir=os.path.join(st.path, "trace"), history=history, state=state)
-
     # -------------------------------------------------------------------------------------- compare
-    def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0, force: bool = False,
+    def compare(self, run_a: Union[str, RunStore], run_b: Union[str, RunStore], boot: int = 1000, seed: int = 0,
                 ignore: Optional[Dict[str, Sequence[str]]] = None) -> Dict[str, Any]:
         """Paired scene bootstrap of the headline numbers on the frames both runs have: run_a = the CONTROL (reference), run_b = the
         VARIANT, diff = b - a = variant - control (the sign of the judge, `research judge`, the same as the lane project's
         SB.paired(variant, control)). -> {'metric.key': {a, b, diff, lo, hi, p_b_better (direction-aware), p_diff_gt0, n_valid, ...}}.
         Both runs must come from the same Source and Task (their manifests' `source` and `task` entries: dataset, split, ground-truth
-        version, caches); otherwise the counts are of different questions and the comparison is refused (force=True compares anyway).
+        version, caches); otherwise the counts are of different questions and the comparison is refused.
         ignore: description keys that are the arms' difference, not the question ({"source": ("feature_cache",)}: a run fed with
         other features answers the same question on the same frames and ground truth).
         The labels are scene / index only: a label both runs have must name the same frame key (dataset id), otherwise the pairs are
-        two different frames and the comparison is refused (force=True compares anyway)."""
+        two different frames and the comparison is refused."""
         a, b = self.open(run_a), self.open(run_b)
-        same_question(a, b, force=force, ignore=ignore)
+        same_question(a, b, ignore)
         common = set(a.labels()) & set(b.labels())
         if not common:
             raise ValueError("the runs have no frame in common")
-        ka, kb = ({fr["label"]: fr.get("key") or None for fr in st.frames} for st in (a, b))      # no key (a store from before it was stored, a FrameRef without one) is None: not a clash
+        ka, kb = ({fr["label"]: fr.get("key") or None for fr in st.frames} for st in (a, b))      # a frame stored without a key is None: not a clash
         clash = sorted(lb for lb in common if ka[lb] is not None and kb[lb] is not None and ka[lb] != kb[lb])
-        if clash and not force:
+        if clash:
             raise ValueError(f"{len(clash)} of the {len(common)} common frame labels name another frame key in the two runs (e.g. {clash[0]}: "
-                             f"{ka[clash[0]]} vs {kb[clash[0]]}): the pairs would be different frames; force=True compares anyway")
+                             f"{ka[clash[0]]} vs {kb[clash[0]]}): the pairs would be different frames")
         out: Dict[str, Any] = {"n_common_frames": len(common), "only_a": len(set(a.labels()) - common),
                                "only_b": len(set(b.labels()) - common), "metrics": {}}
         for name, m in self._metrics().items():
@@ -296,8 +284,8 @@ class Quantitative:
         return out
 
     # -------------------------------------------------------------------------------------- report
-    def report(self, run: Union[str, RunStore], render: int = 6, k: int = 8) -> str:
-        """<run>/report.html: manifest, headline numbers, scenes sorted by drag, outliers, the pictures of the worst frames"""
+    def report(self, run: Union[str, RunStore], k: int = 8) -> str:
+        """<run>/report.html: manifest, headline numbers, scenes sorted by drag, outliers (each row with the command that draws it); frames.csv next to it"""
         st = self.open(run)
         tab = self.table(st)
         osr = self.outliers(st, k=k)
@@ -323,17 +311,6 @@ class Quantitative:
             sections.append(("plausibility flags", html.table([["status", "frame", "flag", "note"]] +
                                                                 [[r["status"], r["label"], r["name"], r["note"]] for r in osr["flags"]],
                                                                 left_cols=(0, 1, 2, 3), status_col=0)))
-        shown, thumbs = set(), []
-        for r in osr["frames"]:
-            if len(shown) >= render:
-                break
-            if r["label"] in shown:
-                continue
-            shown.add(r["label"])
-            q = self.trace(st, r["label"], ("overview",))
-            thumbs.append(html.image(q.images["overview"], st.path, 760, f"{r['label']}: {r['metric']} = {r['value']:.3f} (z {r['z']:.1f})"))
-        if thumbs:
-            sections.append(("the worst frames (pictures)", "".join(thumbs)))
         path = html.write(os.path.join(st.path, "report.html"), f"quantitative report: {man.get('name')}", sections)
         self.export_csv(st)
         return path
@@ -350,67 +327,25 @@ class Quantitative:
                 w.writerow([fr["label"], fr["scene"], fr["index"], fr["key"], len(fr["flags"])] + [fr["scores"].get(k, "") for k in keys])
         return path
 
-    # -------------------------------------------------------------------------------------- timing
-    def pareto(self, runs: Sequence[Union[str, RunStore]], y: Optional[str] = None, costs: Sequence[str] = ("ms", "gmacs"),
-               out: Optional[str] = None, force: bool = False) -> Dict[str, Any]:
-        """quality (`y` = 'metric.key', default the first headline number) against ms and GMACs per frame for several runs, on the
-        frames all of them have; marks the runs no other run beats on both (see cost.py); writes quant/pareto_<y>.png and .json;
-        the runs must share source and task (force=True skips that check)"""
-        from . import cost
-        return cost.pareto(self, runs, y, costs, out, force=force)
 
-    def timing(self, spec: Any = None, n: int = 30, run: Optional[Union[str, RunStore]] = None, force: bool = False) -> Dict[str, Any]:
-        """ms per frame of the Subject on one frame (the first frame of the first scene, or `spec`). Only valid on an idle
-        machine: the load average (and the GPU utilisation, if nvidia-smi exists) are read BEFORE the benchmark and recorded next to
-        the numbers. With `run` the result is also stored in that run's manifest (cost.bench), where `pareto` finds it; the Subject,
-        Source and Task of this suite must be those of the run (force=True skips the check)."""
-        st = self.open(run) if run is not None else None
-        if st is not None and not force:
-            gained: List[str] = []
-            diff = _identity_differences(st.manifest, {"source": self.s.source.describe(), "subject": self.s.subject.describe(),
-                                                       "task": self.s.task.name}, ("source", "subject", "task"), gained=gained)
-            if not diff:
-                warn_gained(gained, f"timing attached to run {st.manifest.get('name')}")
-            if diff:
-                raise ValueError(f"this suite is not the one that made run {st.manifest.get('name')} ({'; '.join(diff)}): a benchmark of "
-                                 "another network must not be attached to it (force=True does it anyway)")
-        ref = self.s.source.find(spec) if spec is not None else self.s.source.frames(self.s.source.scenes()[0])[0]
-        sample, _ = Runner(self.s.source, self.s.subject, self.s.state).run_to(ref)
-        load = machine_load()
-        res = self.s.subject.benchmark(sample, n=n)
-        res["load"] = load
-        res["frame"] = ref.label
-        os.makedirs(self.dir, exist_ok=True)
-        with open(os.path.join(self.dir, "timing.json"), "w") as f:
-            json.dump(res, f, indent=1)
-        if st is not None:
-            st.set_cost("bench", dict(res))
-        return res
-
-
-def same_question(*stores: RunStore, force: bool = False, ignore: Optional[Dict[str, Sequence[str]]] = None) -> None:
-    """refuse runs whose manifests differ in `source` or `task` (dataset, split, ground-truth version, caches: the bev_fusion GT signature
-    trap) unless force=True; the first run is the reference. ignore: {entry: keys} that may differ (the inputs the arms vary)"""
-    if force or len(stores) < 2:
-        return
-    bad = []
-    for st in stores[1:]:
-        gained: List[str] = []
-        diff = _identity_differences(stores[0].manifest, st.manifest, ("source", "task"), gained=gained, either=True, ignore=ignore)
-        warn_gained(gained, f"comparing {st.manifest.get('name', st.path)} with {stores[0].manifest.get('name', stores[0].path)}")
-        if diff:
-            bad.append(f"{st.manifest.get('name', st.path)} vs {stores[0].manifest.get('name', stores[0].path)}: {'; '.join(diff)}")
-    if bad:
-        raise ValueError("the runs do not come from the same source and task, so their numbers answer different questions ("
-                         + " | ".join(bad) + "); evaluate both on the same data, or force=True (--force) to compare anyway")
+def same_question(a: RunStore, b: RunStore, ignore: Optional[Dict[str, Sequence[str]]] = None) -> None:
+    """refuse two runs whose manifests differ in `source` or `task` (dataset, split, ground-truth version, caches): a is the reference.
+    ignore: {entry: keys} that may differ (the inputs the arms vary)"""
+    gained: List[str] = []
+    name_a, name_b = a.manifest.get("name", a.path), b.manifest.get("name", b.path)
+    diff = _identity_differences(a.manifest, b.manifest, ("source", "task"), gained=gained, either=True, ignore=ignore)
+    warn_gained(gained, f"comparing {name_b} with {name_a}")
+    if diff:
+        raise ValueError(f"the runs do not come from the same source and task, so their numbers answer different questions ({name_b} vs {name_a}: "
+                         f"{'; '.join(diff)}); evaluate both on the same data")
 
 
 def _cost_rows(man: Dict[str, Any]) -> List[list]:
     """the cost entries of a manifest as rows of the report's run table"""
     c, rows = man.get("cost") or {}, []
-    for key, label in (("run_ms", "ms per frame, measured in the run"), ("bench", "ms per frame, benchmark")):
-        if c.get(key):
-            rows.append([label, f"median {c[key]['median_ms']:.2f}, p90 {c[key]['p90_ms']:.2f} (n {c[key]['n']}, load {c[key].get('load', {}).get('load1', '?')})"])
+    if c.get("run_ms"):
+        r = c["run_ms"]
+        rows.append(["ms per frame, measured in the run", f"median {r['median_ms']:.2f}, p90 {r['p90_ms']:.2f} (n {r['n']}, load {r.get('load', {}).get('load1', '?')})"])
     if (c.get("ops") or {}).get("gmacs") is not None:
         rows.append(["GMACs per frame", f"{c['ops']['gmacs']:.4g} ({c['ops'].get('method', '?')})"])
     return rows

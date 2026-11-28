@@ -545,21 +545,50 @@ def chain(tmp: str) -> None:
     assert "inside a worker" in hand.stderr
     assert "TEST refused" in research(["test", "toy", "E1.a_s0"], env, ok=(1,)).stderr
     code = os.path.join(tmp, "runs", "toy", "_code", snap[:12])
-    probe = ("import os,sys; from Evaluation import Evaluation\n"
-             "try:\n    Evaluation(project=os.getcwd()).run(sys.argv[1], 'test', metrics=('seg',), device='cpu')\n"
-             "except Exception as e:\n    print('REFUSED', e); sys.exit(0)\nsys.exit(1)\n")
+    read = ("    Evaluation(project=os.getcwd()).run(sys.argv[1], 'test', metrics=('seg',), device='cpu')\n"
+            "except Exception as e:\n    print('REFUSED', e); sys.exit(0)\nsys.exit(1)\n")
+    guarded = "    try:\n        defaults.guard('test', os.getcwd())\n        print('GUARD OPEN', what)\n    except PermissionError:\n        print('GUARD CLOSED', what)\n"
+    own_yes = ("import functools, os, sys; from Evaluation import defaults; from research import gates\n"          # a yes of the script's own, dressed as the gate
+               "def forged(problem, run): return ''\n"
+               "forged.__module__, forged.__name__, forged.__qualname__ = 'research.gates', 'test_refusal', 'test_refusal'\n"
+               "class Yes:\n    __module__ = 'research.gates'\n    def __init__(self): self.__name__ = 'test_refusal'\n    def __call__(self, problem, run): return ''\n"
+               "for what, gate in (('lambda', lambda problem, run: ''), ('forged', forged), ('wraps', functools.wraps(gates.test_refusal)(lambda problem, run: '')), ('object', Yes())):\n"
+               "    try:\n        defaults.set_holdout_gate(gate)\n    except PermissionError as e:\n        print('NOT TAKEN', what, e)\n" + guarded)
+    probes = {"alone": "import os,sys; from Evaluation import Evaluation\ntry:\n" + read,                         # a problem's own script
+              "own yes": own_yes,
+              "handed": "import os,sys; from Evaluation import Evaluation, defaults; from research import gates\ndefaults.set_holdout_gate(gates.test_refusal)\n"
+                        "for what in ('handed',):\n" + guarded + "try:\n" + read}
     penv = dict(env, PYTHONPATH=os.pathsep.join([os.path.join(code, "problems", "toy"), os.path.join(code, "autoresearch")]), RESEARCH_RUNS=os.path.join(tmp, "runs", "toy"))
-    read_test = lambda e: sh([sys.executable, "-c", probe, os.path.join(tmp, "runs", "toy", "E1.a_s0")], os.path.join(code, "problems", "toy"), e).stdout  # noqa: E731
+    read_test = lambda e, how="alone": sh([sys.executable, "-c", probes[how], os.path.join(tmp, "runs", "toy", "E1.a_s0")], os.path.join(code, "problems", "toy"), e).stdout  # noqa: E731
     assert "is a holdout split" in read_test(penv)
     as_test = dict(penv, RESEARCH_REPO=root, RESEARCH_PROBLEM="toy", RESEARCH_RUN="E1.a_s0", RESEARCH_HOLDOUT_RUN="E1.a_s0")      # set by hand
-    assert "is a holdout split" in read_test(as_test), "the variables of a TEST run without a row of the TEST log"
+    for how in ("alone", "handed"):
+        assert "is a holdout split" in read_test(as_test, how), f"the variables of a TEST run without a row of the TEST log ({how})"
+    assert "GUARD CLOSED handed" in read_test(as_test, "handed")
+    step_env = dict(as_test, RESEARCH_RECORD=os.path.join(root, e1, "runs", "E1.a_s0"), RESEARCH_RUN_DIR=os.path.join(tmp, "runs", "toy", "E1.a_s0"))
+    step = lambda: sh([sys.executable, "-m", "research.evaluate", "toy", "E1.a_s0", "--test"], os.path.join(code, "problems", "toy"), step_env, ok=(1,)).stderr  # noqa: E731
+    assert "TEST refused" in step()
     test_log = os.path.join(root, "problems", "toy", "TEST_LOG.md")
     keep_log = open(test_log, encoding="utf-8").read()
     open(test_log, "a", encoding="utf-8").write("| 2026-11-27 | E1.a_s0 | D1 | selftest |\n")
-    opened = read_test(as_test)
-    open(test_log, "w", encoding="utf-8").write(keep_log)
-    assert "REFUSED" in opened and "is a holdout split" not in opened, opened         # the gate opens; the toy has no test shard to read
-    say("refused: an evaluation step by hand, TEST without a log row, a holdout read outside a TEST run or without a row of the TEST log")
+    try:
+        with_row = {how: read_test(as_test, how) for how in probes}
+        no_run = read_test({k: v for k, v in as_test.items() if k != "RESEARCH_HOLDOUT_RUN"}, "handed")
+        in_step = step()
+    finally:
+        open(test_log, "w", encoding="utf-8").write(keep_log)
+    assert "is a holdout split" in with_row["alone"], "the row opens nothing for a process that was not handed the gate of the research core"
+    assert "is a holdout split" in no_run and "GUARD CLOSED" in no_run, "the gate and the row open nothing outside a run of research test"
+    for what in ("lambda", "forged", "wraps", "object"):                                                        # the row is there: only the gate is the script's own
+        assert f"NOT TAKEN {what} the holdout gate is research.gates.test_refusal" in with_row["own yes"] and f"GUARD CLOSED {what}" in with_row["own yes"], (what, with_row["own yes"])
+    assert "GUARD OPEN" not in with_row["own yes"] + with_row["alone"] + no_run
+    # the real gate opens: the guard lets the split through and the read goes on to the toy's own answer (its manifest has no test shard)
+    assert "GUARD OPEN handed" in with_row["handed"] and "REFUSED set 'test': not one of" in with_row["handed"], with_row["handed"]
+    assert "the holdout gate is" not in with_row["handed"] and "is a holdout split" not in with_row["handed"], with_row["handed"]
+    assert "set 'test': not one of" in in_step and not any(t in in_step for t in ("TEST refused", "is a holdout split", "the holdout gate is")), in_step   # the step hands the gate over itself
+    assert not os.path.exists(os.path.join(root, e1, "runs", "E1.a_s0", "test.json"))
+    say("refused: an evaluation step by hand, TEST without a log row, a holdout read outside a TEST run, without the gate of the research core, with a gate of "
+        "its own, or without a row of the TEST log; with all three the evaluation step opens it")
     # the hook: a protected file without and with a grant
     hook = os.path.join(core, "research", "hook.py")
     ev = {"tool_name": "Edit", "tool_input": {"file_path": os.path.join(root, "problems", "toy", "problem.json")}, "cwd": root}

@@ -10,216 +10,33 @@ One path: the Runner (netrunner.py) is the only code that runs a network (D72: i
 "this network on this data"; `score` counts stored predictions against the ground truth into a RunStore (store.py: additive counts per frame); every other method reads what was stored.
 Scoring again with another ground truth or metric needs the Source but not the network. D70: a network with a memory always runs warm: whole scenes in time order from the network's own
 start; the frames you ask for decide which results are kept and scored, a frame already stored is not predicted again.
-Ids: `<network>@r<hash>` (predictions), `<network>@e<hash>` (a scored evaluation of chosen frames, a ground truth and metrics); the same question gives the same id. One network per
-process (a project's code modules are imported once, the adapter may refuse a second code snapshot): run each network in its own process and compare the evaluations by their ids.
+Ids: `<network>@r<hash>` (predictions), `<network>@e<hash>` (a scored evaluation of chosen frames, a ground truth and metrics); the same question gives the same id. Several networks may
+run in one process unless the project's adapter refuses it (an adapter that imports a network's code snapshot once refuses a second one): then run each network in its own process and
+compare the evaluations by their ids.
 `run` here is not `research start`: it writes no record and takes no GPU slot; a number that feeds a verdict comes from the evaluation step of a registered run (research/evaluate.py).
 
-Frames: a text (`Frames.parse`). `val`, `small.val` = every frame of a set; `spread:1000:large.val` = 1000 frames evenly spaced over all its frames (the scenes they lie in run up to
-the last of them); `random:3[:SEED]:val` = 3 random scenes (seed 0 when none is named); `scenes:scene-0061,scene-0103:val` = those scenes; `frames:scene-0061/12,scene-0003/5:val` = those frames
-(their scenes run whole up to them). The set is last and defaults to `val`; it must be one the project defines (`sets`).
-
-The adapter is a module of the project, named in `<project>/evaluation/evaluation.json` as {"adapter": "evaluation.bev_eval"} or passed to Evaluation (a module or its name); EXTENSIONS.md
-lists its functions. A source's `describe()` must give `gt_signature` and `evaluator_hash` (the hash of the files that shape the numbers); without either the Evaluation refuses (a hash
-that cannot be computed is not "unchanged"). Numpy and the standard library only here."""
+Frames are a text (`val`, `spread:1000:large.val`, `scenes:a,b:val`, ...: `Frames` in project.py). The adapter is a module of the project, named in
+`<project>/evaluation/evaluation.json` as {"adapter": "evaluation.bev_eval"} or passed to Evaluation (a module or its name); EXTENSIONS.md lists its functions. A source's `describe()`
+must give `gt_signature` and `evaluator_hash` (the hash of the files that shape the numbers); without either the Evaluation refuses (a hash that cannot be computed is not "unchanged").
+Numpy and the standard library only here."""
 from __future__ import annotations
 
-import importlib
 import json
 import os
-import sys
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from . import defaults, qualitative
+from . import qualitative
 from .contracts import FrameRef, Metric, Source
+from .netrunner import Runner
+from .project import CARRY, EvaluationError, Frames, Helpers, load_adapter, names    # noqa: F401  (EvaluationError, Frames and load_adapter are also imported from here)
 from .results import Locked, ResultSet, digest, writer_lock
-from .sampling import Sampler
 from .store import RunStore
 from .suite import EvalSuite
 
-CARRY = "carry"                                                               # the memory is always carried along a scene (D70)
-MEMORY_START_MAX, MEMORY_GROWTH_MIN, MEMORY_MIN_FRAMES = 0.05, 0.02, 4        # the health of a carried memory (D70): empty at the first frame of a scene, filling over its frames
-MIN_SCENES_FOR_INTERVAL = 30                                                  # the percentile scene bootstrap is anti-conservative below this (the review chat simulated it: 12.1 % false at 10 scenes, 7.4 % at 30)
+MIN_SCENES_FOR_INTERVAL = 30                                                  # the percentile scene bootstrap is anti-conservative below this (simulated: 12.1 % false at 10 scenes, 7.4 % at 30)
 NO_EVALUATOR_HASH = ("the data adapter gives no evaluator hash (the files that shape the numbers could not be hashed: one is missing or renamed): an old evaluation would be reused across edits of the metric "
                      "code; fix the adapter")
-RESULT_DROP = ("class", "gt_signature", "gt_version", "evaluator_hash", "set_hash", "scenes", "frames", "split")      # what a source says about the GT and the set: not what the network was fed
-
-
-class EvaluationError(Exception):
-    """the message says what to fix"""
-
-
-# ------------------------------------------------------------------------------------------------ frames
-class Frames:
-    """which frames of which set, written as the text of the module docstring; `resolve(source)` -> (the scenes to run, the frames to keep and score)"""
-    KINDS = {"all": 0, "spread": 1, "random": 2, "scenes": 1, "frames": 1}
-
-    def __init__(self, kind: str = "all", args: Sequence[Any] = (), of: str = "val"):
-        if kind not in self.KINDS or len(args) != self.KINDS[kind]:
-            raise EvaluationError(f"frames {kind!r} takes {self.KINDS.get(kind)} argument(s), got {len(args)}")
-        self.kind, self.args, self.of = kind, tuple(args), of
-
-    @classmethod
-    def parse(cls, text: "str | Frames") -> "Frames":
-        """a Frames from its text (see the module text); a Frames is returned as it is"""
-        if isinstance(text, Frames):
-            return text
-        parts = str(text).split(":")
-        kind = parts[0]
-        if kind not in cls.KINDS or kind == "all":
-            return cls("all", (), str(text))                                    # a bare set name
-        usage = {"spread": "spread:N[:SET]", "random": "random:N[:SEED][:SET]", "scenes": "scenes:NAME,NAME[:SET]", "frames": "frames:SCENE/INDEX,SCENE/INDEX[:SET]"}[kind]
-        rest = parts[1:]
-        if not rest or len(rest) > 3:
-            raise EvaluationError(f"frames {text!r}: {usage}")
-        try:
-            if kind == "random":
-                n, seed = int(rest[0]), 0
-                if len(rest) > 1 and rest[1].lstrip("-").isdigit():              # random:3:7:val, random:3:7, random:3:val
-                    seed, rest = int(rest[1]), rest[:1] + rest[2:]
-                args, of = (n, seed), (rest[1] if len(rest) > 1 else "val")
-            elif kind == "spread":
-                args, of = (int(rest[0]),), (rest[1] if len(rest) > 1 else "val")
-            else:
-                args, of = (tuple(x for x in rest[0].split(",") if x),), (rest[1] if len(rest) > 1 else "val")
-        except ValueError:
-            raise EvaluationError(f"frames {text!r}: a number is expected: {usage}") from None
-        if len(rest) > 2:
-            raise EvaluationError(f"frames {text!r}: {usage}")
-        return cls(kind, args, of)
-
-    def __str__(self) -> str:
-        if self.kind == "all":
-            return self.of
-        a = [",".join(x) if isinstance(x, tuple) else str(x) for x in self.args]
-        return ":".join([self.kind] + a + [self.of])
-
-    __repr__ = __str__
-
-    def resolve(self, source: Source) -> Tuple[List[str], List[FrameRef]]:
-        """the scenes to run (whole, in time order) and the frames to keep; an unknown scene or frame is an error that lists what exists"""
-        have = list(source.scenes())
-        if self.kind == "all":
-            keep = [r for s in have for r in source.frames(s)]
-        elif self.kind == "spread":
-            keep = Sampler(source, 0).spread(self.args[0])
-        elif self.kind == "random":
-            keep = [r for s in Sampler(source, self.args[1]).scenes(self.args[0]) for r in source.frames(s)]
-        elif self.kind == "scenes":
-            bad = [s for s in self.args[0] if s not in have]
-            if bad or not self.args[0]:
-                raise EvaluationError(f"scenes {bad or 'none named'}: not in {self.of} ({len(have)} scenes, e.g. {', '.join(have[:3])})")
-            keep = [r for s in self.args[0] for r in source.frames(s)]
-        else:
-            keep = []
-            for text in self.args[0]:
-                parsed = FrameRef.parse(text)
-                if parsed is None or parsed[0] not in have or parsed[1] >= len(source.frames(parsed[0])):
-                    raise EvaluationError(f"frame {text!r}: not a frame of {self.of} (scene/index, e.g. {have[0]}/0)")
-                keep.append(source.frames(parsed[0])[parsed[1]])
-        if not keep:
-            raise EvaluationError(f"frames {self}: no frame selected")
-        keep = sorted(set(keep))
-        return sorted({r.scene for r in keep}), keep
-
-
-# ------------------------------------------------------------------------------------------------ the adapter
-def load_adapter(spec: Any, project: Optional[str]):
-    """the adapter module: given (a module or object with the functions), named in `spec` (a module path), or named in <project>/evaluation/evaluation.json. A "runner" key there and
-    an adapter function `inputs` are refused: the Runner and the identity of predictions are the package's own, and a project that counts on its own must hear it"""
-    project = os.path.abspath(project or os.environ.get("AR_PROJECT") or ".")
-    cfg = os.path.join(project, "evaluation", "evaluation.json")
-    try:
-        with open(cfg, encoding="utf-8") as f:
-            config = json.load(f)
-    except (OSError, ValueError):
-        config = {}
-    config = config if isinstance(config, dict) else {}
-    if "runner" in config:
-        raise EvaluationError(f"{cfg}: the key \"runner\" is not supported, every project runs on netrunner.Runner: remove it")
-    if spec is not None and not isinstance(spec, str):
-        mod = spec
-    else:
-        if spec is None:
-            spec = config.get("adapter")
-            if not spec:
-                raise EvaluationError(f"no adapter: pass one, or write {cfg} as {{\"adapter\": \"module.path\"}}")
-        if project not in sys.path:
-            sys.path.insert(0, project)
-        try:
-            mod = importlib.import_module(spec)
-        except ImportError as e:
-            raise EvaluationError(f"adapter {spec!r} cannot be imported: {e}") from None
-    missing = [f for f in defaults.REQUIRED if not hasattr(mod, f)]
-    if missing:
-        raise EvaluationError(f"the adapter lacks {', '.join(missing)}")
-    if hasattr(mod, "inputs"):
-        raise EvaluationError("the adapter defines `inputs`, which is not supported: what the network is fed is what the Source's describe() says; remove it")
-    if hasattr(mod, "free_source") != hasattr(mod, "free_subject"):
-        raise EvaluationError("the adapter defines only one of free_source / free_subject: they go together (a Source without ground truth and the Subject that fits it)")
-    return mod if isinstance(mod, defaults.Adapter) else defaults.Adapter(mod, project)      # name, out, network, ... where the adapter has none
-
-
-def names(x: "str | Sequence[str]") -> Tuple[str, ...]:
-    """a list of names from a name or a list (a bare string is one name, not its letters)"""
-    return (x,) if isinstance(x, str) else tuple(x)
-
-
-# ------------------------------------------------------------------------------------------------ the class
-class Helpers:
-    """what the Runner and the Evaluation both need: the adapter, the names of networks, the identity of predictions, the stored sets. Not commands."""
-
-    def __init__(self, project: Optional[str] = None, adapter: Any = None):
-        self.ad = load_adapter(adapter, project)
-        self._networks: Dict[str, str] = {}                   # the networks this object has seen: name -> path (an id carries only the name)
-
-    def resolve(self, network: str) -> str:
-        try:
-            net = self.ad.resolve(network) if hasattr(self.ad, "resolve") else network
-        except OSError as e:
-            raise EvaluationError(str(e)) from None
-        self._networks[self.ad.name(net)] = net
-        return net
-
-    def net_identity(self, net: str) -> Dict[str, Any]:
-        try:
-            return self.ad.identity(net)
-        except OSError as e:
-            raise EvaluationError(f"{net}: {e}") from None
-
-    def identity(self, net_identity: Dict[str, Any], source: Source) -> Dict[str, Any]:
-        """what the predictions depend on: the network, what it was fed (what a source says about the ground truth and the set is not part of it) and the memory mode"""
-        return {"network": net_identity, "inputs": {k: v for k, v in source.describe().items() if k not in RESULT_DROP}, "state": CARRY}
-
-    def stored(self, net: str, rid: str) -> Optional[ResultSet]:
-        path = os.path.join(self.ad.out(net), "results", rid)
-        return ResultSet.open(path) if os.path.exists(os.path.join(path, "manifest.json")) else None
-
-    @staticmethod
-    def health(rs: Optional[ResultSet], scenes) -> List[str]:
-        """the warnings recorded for these scenes (the memory's health)"""
-        return [msg for sc, msg in rs.manifest.get("health", {}).items() if sc in scenes] if rs is not None else []
-
-    def _release(self, source: Source) -> None:
-        if hasattr(self.ad, "release"):
-            self.ad.release(source)
-
-    def _source(self, net: str, of: str, workers: int, control: str, labelled: bool) -> Source:
-        """the Source of a set: with its ground truth (the adapter's source) for the Evaluation, without (free_source, else source) for the Runner. A set the project does not define is
-        refused before anything is opened, and whatever the adapter raises (SystemExit included) is an EvaluationError"""
-        held = defaults.holdout_sets(getattr(self.ad, "project", ""))
-        if (of in held or of.split(".")[-1] in held) and not defaults.holdout_open():
-            raise EvaluationError(f"set {of!r} is a holdout split of this problem: it opens only in a run of `research test` (a row of the TEST log under a decided decision)")
-        known = self.ad.sets()
-        if of not in known:
-            raise EvaluationError(f"set {of!r}: not one of {sorted(known)}" + (" (the TEST split is not offered)" if "test" in of else ""))
-        try:
-            make = self.ad.source if labelled else getattr(self.ad, "free_source", self.ad.source)
-            return make(net, of, workers=workers, control=control)
-        except SystemExit as e:
-            raise EvaluationError(str(e.code) if e.code is not None else "the data adapter stopped") from None
-        except (ValueError, KeyError, OSError) as e:
-            raise EvaluationError(str(e.args[0] if isinstance(e, KeyError) and e.args else e)) from None
 
 
 def _python_only(method):
@@ -231,7 +48,6 @@ def _python_only(method):
 class Evaluation(Helpers):
     def __init__(self, project: Optional[str] = None, adapter: Any = None):
         super().__init__(project, adapter)
-        from .netrunner import Runner                         # (netrunner imports this module)
         self.runner = Runner(project, self.ad)
         self._tasks: Dict[Tuple[str, Tuple[str, ...]], Any] = {}
 

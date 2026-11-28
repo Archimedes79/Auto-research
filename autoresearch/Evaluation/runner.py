@@ -4,8 +4,8 @@
                            (reset() once at the start), state='reset' makes every frame independent (reset() before each),
                            state='warmup' starts every frame from empty and feeds only the `Subject.warmup` frames before it
                            (what a network trained on short clips saw; frames may be any subset)
-    run_to(ref)            random access: reset, feed `Subject.warmup` history frames (their outputs are discarded), then the
-                           frame itself (taps on). cold=True skips the history.
+    run_to(ref)            one frame of the 'warmup' state: reset, feed the `Subject.warmup` frames before it (their outputs are
+                           discarded), then the frame itself (taps on)
 The Runner owns nothing but the order of calls; metrics, pictures and storage are the callers' business.
 """
 from __future__ import annotations
@@ -84,20 +84,11 @@ class Runner:
         pred.info.setdefault("predict_ms", (time.perf_counter() - t0) * 1000.0)
         return pred
 
-    def run_to(self, ref: FrameRef, taps: Sequence[str] = (), cold: bool = False, history=None) -> Tuple[Sample, Prediction]:
-        """one frame with the history a deployed system would have in the same scene. history: None = Subject.warmup frames
-        before it (fast; exact only if the network forgets older frames), 'full' = every frame from the start of the scene (the
-        exact replay of a carried run: what a trace of a quantitative run needs), an int = that many, 'none' / cold = none.
-        In state 'reset' there is never a history."""
+    def run_to(self, ref: FrameRef, taps: Sequence[str] = ()) -> Tuple[Sample, Prediction]:
+        """one frame from an empty memory with the `Subject.warmup` frames before it in its scene as history (exact only if the
+        network forgets older frames)"""
         scene_frames = self.source.frames(ref.scene)
-        if cold or self.state == "reset" or history in ("none", 0):
-            n_hist = 0
-        elif history == "full":
-            n_hist = ref.index
-        elif history is None:
-            n_hist = min(int(self.subject.warmup), ref.index)
-        else:
-            n_hist = min(int(history), ref.index)
+        n_hist = min(int(self.subject.warmup), ref.index)
         self.subject.reset()
         for r in scene_frames[ref.index - n_hist:ref.index]:
             self.subject.predict(self.source.load(r), ())

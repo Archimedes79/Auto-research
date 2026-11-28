@@ -2,7 +2,8 @@
 the network of the run folder on the evaluation split through `Evaluation` (predictions and counts stay in the run folder), and the record
 result.json - or test.json for a run of `research test` - with the numbers, the numbers per scene, the identities and where the counts are.
 
-Only a worker writes these records: without RESEARCH_RECORD (a call by hand) the step refuses; a diagnostic uses `python -m Evaluation`."""
+Only a worker writes these records: without RESEARCH_RECORD (a call by hand) the step refuses; a diagnostic uses `python -m Evaluation`.
+A run of `research test` hands `Evaluation` the TEST gate here (`gates.test_refusal`); in every other process a holdout split stays closed."""
 from __future__ import annotations
 
 import json
@@ -35,6 +36,8 @@ def main(problem: str, rid: str, test: bool = False) -> int:
         if why or os.environ.get("RESEARCH_HOLDOUT_RUN") != rid:
             raise ResearchError(f"TEST refused: {why or 'not a run of research test'}")
         split = p["holdout"][0]
+        from Evaluation import defaults
+        defaults.set_holdout_gate(gates.test_refusal)           # without it Evaluation keeps every holdout split closed; it asks again at every read
     else:
         split = spec.split_of(card, p)
     frames = split if test else spec.frames_of(card, p)

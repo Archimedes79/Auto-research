@@ -10,7 +10,7 @@ structure, an extreme magnitude. Flags are heuristics: they point, a human judge
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Sequence
 
 import numpy as np
 
@@ -78,15 +78,12 @@ def _limits(spec: TapSpec):
     return ((spec.extent[1], spec.extent[0]) if (spec.flip_x and spec.extent) else None), None
 
 
-def tap_panels(taps: Dict[str, np.ndarray], specs: Sequence[TapSpec], wanted: Optional[Sequence[str]] = None,
-               pca: bool = True) -> List[Panel]:
-    """panels for the tapped arrays, in the order the specs were declared (`wanted`: only these names)."""
+def tap_panels(taps: Dict[str, np.ndarray], specs: Sequence[TapSpec]) -> List[Panel]:
+    """panels for the tapped arrays, in the order the specs were declared (a tap without a spec comes after them)"""
     by = {s.name: s for s in specs}
     order = [s.name for s in specs if s.name in taps] + [n for n in taps if n not in by]
     panels: List[Panel] = []
     for name in order:
-        if wanted is not None and name not in wanted:
-            continue
         spec = by.get(name, TapSpec(name=name, kind="feature_map" if np.asarray(taps[name]).ndim == 3 else "map"))
         a = np.asarray(taps[name])
         stage = f"[{spec.stage}] " if spec.stage else ""
@@ -95,7 +92,7 @@ def tap_panels(taps: Dict[str, np.ndarray], specs: Sequence[TapSpec], wanted: Op
         kw = dict(extent=spec.extent, xlim=xlim, ylim=ylim, note=note)
         if spec.kind == "feature_map" and a.ndim == 3:
             panels.append(Panel("raster", f"{stage}{name}: energy {a.shape[0]}ch", energy(a), colorbar=True, **kw))
-            if pca and a.shape[0] >= 3:
+            if a.shape[0] >= 3:
                 panels.append(Panel("rgb", f"{stage}{name}: first 3 components", pca_rgb(a), **kw))
         elif spec.kind == "logits" and a.ndim == 3:
             panels.append(Panel("raster", f"{stage}{name}: max sigmoid over {a.shape[0]}ch", (1 / (1 + np.exp(-a))).max(0),
