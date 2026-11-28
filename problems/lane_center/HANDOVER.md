@@ -13,11 +13,11 @@ system (keep threshold 0.5 against 0.6), is a TIE (-0.0026, [-0.0039, -0.0017]);
 **Know.** VAL has 22 scenes: the judge warns that a scene bootstrap below about 30 scenes is narrow. The steps `stage1` / `stage2` train
 from the kept B' (E292 a; the stages before it, E271 and E273, cannot be retrained bit for bit: their code is lost since 2026-11-10). The
 step `predict` dumps the delivered tokens (B' at batch 4), the evaluation step decodes and scores them: the `cost` in `result.json` is that
-read-out, not the network's time (16.21 ms per frame, v1). The anchor re-scores the stored dump; it does not run the network again. The evaluator files (`adapter.py` `EVALUATOR_FILES`: `qgraph_eval.py`,
-`jtoken_eval.py`, `sparse_lanes/` scorers, `lane_task/measures.py`) are hashed into every result: a change, even of a comment, makes old
-runs incomparable (the judge refuses a `from` control), so they were left byte for byte; known stale text there (`_py14.sh` usage lines,
-`evaluate.py` / `decide.py` mentions) and the timing's idle check `jtoken_eval.gpu_free` (it greps the gone `run.py`, so it never sees a
-research job) go with the next real change of the evaluator, which then re-measures the champion. A TEST
+read-out, not the network's time (16.21 ms per frame, v1). The anchor re-scores the stored dump; it does not run the network again. The evaluator files (`adapter.py` `EVALUATOR_FILES`: every
+lane module on the scored path stored dump -> prediction -> numbers; `evaluation/tests/test_evaluator_hash.py` keeps the list complete) are
+hashed into every result: a change, even of a comment, makes old runs incomparable (the judge refuses a `from` control). The hash changed
+with the interface round of 2026-11-28 (no number moved: the anchor agrees at tolerance 0), so the champion is measured again under it
+before it serves as a control. A TEST
 evaluation is not built yet: `net/prep/lane_tokcache.py build` takes train and val only and the token loaders refuse `test`, so
 `research test lane_center` ends in the step `predict`; that path (the test rows are in the val features) is built before the owner's TEST
 row. The same holds for BEV Fusion (`evaluation/bev_sets.py`). Owner of the code: the lead chat of a round.

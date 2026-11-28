@@ -6,8 +6,10 @@ system gets RESEARCH_DATA / RESEARCH_RUNS from its worker; by hand they come fro
     BP.RUNS     the problem's run root (old run folders keep their names below it: runs/e292_a_s0 -> RUNS/e292_a_s0)
     BP.DATA     the problem's data: B123 (the GaussianCaR features and the old graph GT, the former ~/exp_gcar_b123)
     BP.NUSC     the raw nuScenes folder (the former ~/data/nuscenes_full)        BP.SCRATCH  scratch outputs of diagnostics (below RUNS, never a record)
+    BP.file_sha256(path)   the sha256 of a file
     BP.resolve(p)   an absolute path as it is; "runs/x" -> RUNS/x (the form stored in old checkpoints and caches); else relative to ROOT
 """
+import hashlib
 import json
 import os
 
@@ -41,6 +43,15 @@ def resolve(p):
     if p == "runs" or p.startswith("runs/"):
         return os.path.join(RUNS, p[5:]) if len(p) > 4 else RUNS
     return os.path.join(ROOT, p)
+
+
+def file_sha256(path):
+    """the sha256 of a file (hex): the identity of a checkpoint in a recipe, of the B' a token cache was made from, of a stored dump"""
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for b in iter(lambda: fh.read(1 << 22), b""):
+            h.update(b)
+    return h.hexdigest()
 
 
 if __name__ == "__main__":

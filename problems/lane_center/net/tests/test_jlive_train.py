@@ -1,4 +1,4 @@
-"""Tests of the S4 joint trainer (`train/jlive_train.py`, E372) on the CPU: a toy `QGraph` as B' (a run folder with its model.pt, as `lane_live_tok`'s selftest builds it), a small `JTokenHead` past the key-weight switch as the champion, frames whose GT tables are
+"""Tests of the S4 joint trainer (`train/jlive_train.py`, E372) on the CPU: a toy `QGraph` as B' (a run folder with its model.pt, as the selftest of test_lane_net.py builds it), a small `JTokenHead` past the key-weight switch as the champion, frames whose GT tables are
 made of the toy's own tokens, K 64; no cache, no GPU.
 
     python net/tests/test_jlive_train.py            # the selftest, the real-data check (the E365 cache; skipped with the reason when it is missing), then the hand mutants of jlive_train.py ONE AT A TIME (a shared box): each must make the selftest fail
@@ -20,9 +20,14 @@ os.environ["CUDA_VISIBLE_DEVICES"] = ""                                         
 from torch.optim.optimizer import register_optimizer_step_pre_hook  # noqa: E402
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/data", "training/data/prep", "training/train", "evaluation"):
+for sub_ in ("training", "net/prep", "net/model", "net/loss", "training/train", "net/tests"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import bflc_paths as BP  # noqa: E402
+import lane_live_data as LLD  # noqa: E402
+import lane_net as LN  # noqa: E402
+import lane_tokcache as LC  # noqa: E402
+import loss_qgraph as LQG  # noqa: E402
+import test_lane_net as TLN  # noqa: E402  (its toy GT table, its launcher of a child process)
 
 os.makedirs(BP.SCRATCH, exist_ok=True)                                                       # the temporary folders of the test live below the problem's scratch
 TRAIN = os.path.join(ROOT, "training", "train", "jlive_train.py")
@@ -33,7 +38,6 @@ KT = 64                                                                         
 MUTANTS = [
     ("the head's live_inputs is not checked", "        if m.head.live_inputs != live:\n", "        if False:\n"),
     ("a zero gradient of the head's loss on the node head is accepted in s4", "            if not n_h > 0:\n", "            if False:\n"),
-    ("B' is not a submodule (not clipped, not checkpointed)", "        self.head, self.src = head, src\n", "        self.head = head\n        object.__setattr__(self, \"src\", src)\n"),
     ("one joint clip over both groups", "nh, nn_, np_ = (torch.nn.utils.clip_grad_norm_([p for p in ps if p.grad is not None], CLIP) for ps in (self.heads, self.nodes, self.pyrs))",
      "nh = nn_ = np_ = torch.nn.utils.clip_grad_norm_([p for p in self.heads + self.nodes + self.pyrs if p.grad is not None], CLIP)"),
     ("the node head is not clipped", "for ps in (self.heads, self.nodes, self.pyrs))", "for ps in (self.heads, [], self.pyrs))"),
@@ -55,7 +59,7 @@ MUTANTS = [
     ("B's loss (weight 0) stays in the backward of e (E393)", "        loss = loss_h + w * loss_b if b_rise else loss_h ", "        loss = loss_h + w * loss_b if tn else loss_h "),
     ("the pyramid check counts B''s loss as the head's (E393)", "gp = torch.autograd.grad(loss_h, pyrs,", "gp = torch.autograd.grad(loss_h + loss_b, pyrs,"),
     ("the active-cell count is the capped valid count (E393)", "        m.rec[\"nact\"].append(float(n_act))\n", "        m.rec[\"nact\"].append(win[-1][4] / win[-1][5])\n"),
-    ("B' trains in z", "LLT.LiveSource(args[\"b_run\"], K, train_nodes=bool(args[\"train_nodes\"]),", "LLT.LiveSource(args[\"b_run\"], K, train_nodes=True,"),
+    ("B' trains in z", "head, K, train_nodes=bool(args[\"train_nodes\"]),", "head, K, train_nodes=True,"),
     ("the head run's none weight is ignored", "if h.get(\"none_weight\") is None else h[\"none_weight\"],", "if h.get(\"none_weight\") is None else 1.0,"),
     ("the data order is B''s seed", "seed=args[\"head_seed\"], args=args,", "seed=a.seed, args=args,"),
     ("no share at the last step", "if tn and (i % SHARE_EVERY == 0 or i == steps):", "if tn and i % SHARE_EVERY == 0:"),
@@ -66,7 +70,7 @@ MUTANTS = [
     ("a resume is not flagged", "        if st[\"last\"] is None and i > 1:\n", "        if False:\n"),
     ("a roll-back is not flagged", "        elif st[\"last\"] is not None and i <= st[\"last\"]:\n", "        elif False:\n"),
     ("the record is not checkpointed", "    def get_extra_state(self):\n        return {k: list(v) for k, v in self.rec.items()}", "    def get_extra_state(self):\n        return dict(b=[], h=[], overflow=[])"),
-    ("model.pt holds the start B'", "b_state=joint.src.model.state_dict(), b_args=b_args", "b_state=start, b_args=b_args"),
+    ("model.pt holds the start B'", "b_state=joint.b.state_dict(), b_args=b_args", "b_state=start, b_args=b_args"),
     ("the export does not check the frozen tensors", "        assert not moved, f\"model.pt: B''s", "        assert True, f\"model.pt: B''s"),
     ("an export failure keeps .done", "            os.replace(run.path(\".done\"), run.path(\".done.FALSE\"))", "            pass"),
     ("AdamW's step without the bias correction of m", "return group[\"lr\"] / (1 - b1 ** t) * m", "return group[\"lr\"] * m"),
@@ -79,18 +83,17 @@ MUTANTS = [
     ("the moving labels of one batch", "collections.deque(maxlen=LOG_EVERY), dict(last=None, checked=False)", "collections.deque(maxlen=1), dict(last=None, checked=False)"),
     ("nn_min counts a token with itself", " & ~torch.eye(v.shape[1], dtype=torch.bool, device=v.device)", ""),
     ("pos_grad_max is never set", "                tk[\"pos\"].register_hook(", "                (lambda f_: None)("),
-    ("a head-run option stored as None is kept", "JKT.ARCH_DEFAULTS[\"none_weight\"] if h.get(\"none_weight\") is None else h[\"none_weight\"]", "h.get(\"none_weight\", JKT.ARCH_DEFAULTS[\"none_weight\"])"),
-    ("a head run of a removed option is trained without it", "    JKT.check_removed(h, f\"the head run {a.head_run}\")\n", ""),
-    ("a stored run of a removed option is resumed", "        JKT.check_removed(c.get(\"args\") or {}, folder)\n", ""),
+    ("a head-run option stored as None is kept", "LN.ARCH_DEFAULTS[\"none_weight\"] if h.get(\"none_weight\") is None else h[\"none_weight\"]", "h.get(\"none_weight\", LN.ARCH_DEFAULTS[\"none_weight\"])"),
+    ("a head run of a removed option is trained without it", "    LN.check_removed(h, f\"the head run {a.head_run}\")\n", ""),
+    ("a stored run of a removed option is resumed", "        LN.check_removed(c.get(\"args\") or {}, folder)\n", ""),
     ("the removed arm b (--train-nodes 1 --live-inputs 0) is accepted", "    assert a.live_inputs or not a.train_nodes,", "    assert True,"),
-    ("B' is built without the guard of its stored args", "    m = QG.from_args(ck[\"b_args\"])\n", "    m = QG.QGraph(width=int(ck[\"b_args\"].get(\"width\", 48)), soft_nms=ck[\"b_args\"].get(\"soft_nms\"))\n"),
-    ("a config of before E393 does not resume", "RECIPE_DEFAULTS.get(k, JKT.ARCH_DEFAULTS.get(k))", "JKT.ARCH_DEFAULTS.get(k)"),
+    ("a config of before E393 does not resume", "RECIPE_DEFAULTS.get(k, LN.ARCH_DEFAULTS.get(k))", "LN.ARCH_DEFAULTS.get(k)"),
     ("the recipe lacks the E393 keys", ",\n          \"b_state_from\", \"b_state_sha256\", \"train_pyr\", \"pyr_lr_mult\")", ")"),
-    ("the start state is not loaded (E393)", "        src.model.load_state_dict(torch.load(p, map_location=\"cpu\", weights_only=False)[\"b_state\"])\n", "        pass\n"),
+    ("the start state is not loaded (E393)", "        joint.b.load_state_dict(LN.load_checkpoint(p)[\"b_state\"])\n", "        pass\n"),
     ("the start run's base B' file is not checked (E393)", "        assert s[\"args\"].get(\"b_sha256\") == b_sha,", "        assert True,"),
-    ("the start file is not re-checked at the build (E393)", "        assert JKT.file_sha256(p) == args[\"b_state_sha256\"],", "        assert True,"),
+    ("the start file is not re-checked at the build (E393)", "        assert BP.file_sha256(p) == args[\"b_state_sha256\"],", "        assert True,"),
     ("the pyramid trains in every arm with a node head (E393)", "train_pyr=bool(args.get(\"train_pyr\")))", "train_pyr=bool(args[\"train_nodes\"]))"),
-    ("the pyramid's lr multiplier is not passed (E393)", "dict(params=joint.src.pyr_params(), lr_mult=a.pyr_lr_mult)", "dict(params=joint.src.pyr_params())"),
+    ("the pyramid's lr multiplier is not passed (E393)", "dict(params=joint.pyr_params(), lr_mult=a.pyr_lr_mult)", "dict(params=joint.pyr_params())"),
     ("the pyramid-gradient check is skipped (E393)", "                if not (math.isfinite(n_p) and n_p > 0):\n", "                if False:\n"),
     ("the export lets the pyramid move in every arm (E393)", " and not (args.get(\"train_pyr\") and k.startswith(\"pyr.\"))]", " and not k.startswith(\"pyr.\")]"),
     ("the coverage kill is off (E393)", "    if len(cov) > WIN and", "    if False and"),
@@ -109,6 +112,11 @@ def load(path, name):
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
     return mod
+
+
+def load_b(run, tmp):
+    """B' of the model.pt of a stage-2 run as the network's loader builds it (`lane_net.LaneNet.from_checkpoint`)"""
+    return LN.LaneNet.from_checkpoint(os.path.join(tmp, run, "model.pt"))[0].b
 
 
 def kills(fn, text):
@@ -151,12 +159,11 @@ def world(tmp):
     import jtok as JT
     import jtoken as JK
     import loss_jtoken as LJK  # noqa: E402
-    import lane_live_tok as LLT
     import qgraph as QG
     torch.manual_seed(0)
     m = QG.QGraph(width=16, soft_nms=SOFT)
     with torch.no_grad():
-        m.nodes.head1.bias[0] = 3.0                                                         # many valid tokens (as the selftest of lane_live_tok)
+        m.nodes.head1.bias[0] = 3.0                                                         # many valid tokens (as the selftest of test_lane_net.py)
     os.makedirs(os.path.join(tmp, "b"))
     torch.save(dict(state=m.state_dict(), args=dict(width=16, soft_nms=SOFT)), os.path.join(tmp, "b", "model.pt"))
     head = JK.JTokenHead()
@@ -166,26 +173,25 @@ def world(tmp):
     g = torch.Generator().manual_seed(1)
     xs = [torch.randn(39, 200, 200, generator=g).half() for _ in range(4)]
     with torch.no_grad():
-        tk = LLT.LiveSource(m, KT, train_nodes=False).eval().tokens(torch.stack(xs))[1]
+        tk = LN.LaneNet(m, K=KT).eval().tokens(torch.stack(xs))[1]
     allowed = JT.pair_geometry(tk["pos"], tk["dirv"], tk["valid"])[1]
     items = []
     for f in range(4):
         if f < 2:
-            t = LLT.toy_table(np.zeros((0, 2)), [], [])
+            t = TLN.toy_table(np.zeros((0, 2)), [], [])
         else:
             i, j = [int(v) for v in allowed[f].nonzero()[0]]
-            t = LLT.toy_table(tk["pos"][f][[i, j]].double().numpy(), [(0, 1)], [False])
+            t = TLN.toy_table(tk["pos"][f][[i, j]].double().numpy(), [(0, 1)], [False])
             t["dirv"] = tk["dirv"][f][[i, j]].double().numpy()
         items.append(dict(x=xs[f], token=f"f{f}", row=f, table=t))
-    import jtoken_train as JKT
     st = {k: v.clone() for k, v in m.state_dict().items()}                                  # E393: a start run "bst" (a jlive model.pt) whose b_state differs from the B' file in the node head AND the pyramid
     with torch.no_grad():
         for k in st:
             if (k.startswith("nodes.") or k.startswith("pyr.")) and st[k].is_floating_point() and st[k].dim() > 1:
                 st[k] += 0.01 * torch.randn(st[k].shape, generator=g)
     os.makedirs(os.path.join(tmp, "bst"))
-    torch.save(dict(state=head.state_dict(), args=dict(seed=0, b_sha256=JKT.file_sha256(os.path.join(tmp, "b", "model.pt"))), b_state=st, b_args=dict(width=16, soft_nms=SOFT)), os.path.join(tmp, "bst", "model.pt"))
-    return dict(b_dir=os.path.join(tmp, "b"), A=LLT.collate(items[:2]), B=LLT.collate(items[2:]), st=st)
+    torch.save(dict(state=head.state_dict(), args=dict(seed=0, b_sha256=BP.file_sha256(os.path.join(tmp, "b", "model.pt"))), b_state=st, b_args=dict(width=16, soft_nms=SOFT)), os.path.join(tmp, "bst", "model.pt"))
+    return dict(b_dir=os.path.join(tmp, "b"), A=LLD.collate(items[:2]), B=LLD.collate(items[2:]), st=st)
 
 
 def cli(w, name, train_nodes, live=1, steps=2, extra=()):
@@ -278,22 +284,21 @@ def steps_by_hand(T, w, tmp):
     import numpy as np
     import torch
     import loss_jtoken as LJK  # noqa: E402
-    import lane_live_tok as LLT
     B = w["B"]
     for tn, live in ((1, 1), (0, 1), (0, 0)):
         joint, lf, hook, run, args = direct(T, w, tmp, tn, live)
         ref = copy.deepcopy(joint)
         loss, info = lf(joint, B)
-        no, tk = ref.src.tokens(B["x"])
-        lbatch = ref.src.labelled(tk, B["table"], B["token"], B["row"], gate=False)
-        lh, _ = LJK.jtoken_loss(ref.head(LLT.head_inputs(tk)), lbatch, none_weight=0.25)
-        lb, _ = LLT.b_loss(no, B["targets"])
+        no, tk = ref.tokens(B["x"])
+        lbatch = ref.labelled(tk, B["table"], B["token"], B["row"], gate=False)
+        lh, _ = LJK.jtoken_loss(ref.head(LLD.head_inputs(tk)), lbatch, none_weight=0.25)
+        lb, _ = LQG.node_loss(no, B["targets"])
         want = lh + lb if tn else lh
         assert abs(float(loss) - float(want)) < 1e-6 and abs(info["head"] - float(lh)) < 1e-6 and abs(info["b_loss"] - float(lb)) < 1e-6, f"arm {T.arm(tn)}: the loss of a step is not the head's loss {'+ B''s' if tn else 'alone'} ({float(loss)} {float(want)})"
         assert loss.requires_grad and (not tn or any("> 0: s4" in x for x in run.lines)), (T.arm(tn), run.lines)
         assert hook.cur["i"] == 1 and hook.cur["info"] is info and hook.cur["logged"] and any("step 1 frames ['f2', 'f3']" in x for x in run.lines)
         if tn and live:                                                                     # the share step: the gradient handed to the hook is B''s (b_weight 1) on the node head, not the head's
-            want_gb = torch.autograd.grad(lb, ref.src.trainable(), retain_graph=True, allow_unused=True)
+            want_gb = torch.autograd.grad(lb, ref.trainable(), retain_graph=True, allow_unused=True)
             assert hook.cur["gb"] is not None and len(hook.cur["gb"]) == len(want_gb), "s4: no g_b at the last step (a share step)"
             assert all((x is None and y is None) or torch.allclose(x, y, rtol=1e-5, atol=1e-7) for x, y in zip(hook.cur["gb"], want_gb)), "the hook's g_b is not the gradient of B''s loss"
         else:
@@ -306,13 +311,13 @@ def steps_by_hand(T, w, tmp):
         assert abs(info["pos_grad_max"] - want_pg) < 1e-5 * max(1.0, want_pg) if tn and live else math.isnan(info["pos_grad_max"]), (T.arm(tn), info["pos_grad_max"], want_pg)
         # the moving labels over the last 100 steps of the process: B, then A (no GT; A alone would give pair_cov = gt_cov = 0)
         lab = lbatch["lab"]
-        lab_a = ref.src.labelled(ref.src.tokens(w["A"]["x"])[1], w["A"]["table"], w["A"]["token"], w["A"]["row"], gate=False)["lab"]
+        lab_a = ref.labelled(ref.tokens(w["A"]["x"])[1], w["A"]["table"], w["A"]["token"], w["A"]["row"], gate=False)["lab"]
         info2 = lf(joint, w["A"])[1]
         assert info2["gt_cov"] == sum(float(x["n_gt_assigned"]) for x in lab + lab_a) / max(sum(float(x["n_gt"]) for x in lab + lab_a), 1.0) > 0 and info2["pair_cov"] == info["pos_pairs"] / max(info["gt_links"], 1.0) > 0, (info2, info)
         assert info2["n_valid"] == float(np.mean([x["n_valid"] for x in lab + lab_a])) and info["overflow"] == 0.0
         assert len(joint.rec["b"]) == 2 and abs(joint.rec["h"][0] - float(lh)) < 1e-6
         cov_b = sum(float(x["n_gt_assigned"]) for x in lab) / sum(float(x["n_gt"]) for x in lab)
-        act = [float((ref.src.tokens(bb["x"])[0]["e"].detach().float().flatten(1).sigmoid() > LLT.LC.P_ACTIVE).sum(1).float().mean()) for bb in (B, w["A"])]
+        act = [float((ref.tokens(bb["x"])[0]["e"].detach().float().flatten(1).sigmoid() > LC.P_ACTIVE).sum(1).float().mean()) for bb in (B, w["A"])]
         assert len(joint.rec["cov"]) == len(joint.rec["nact"]) == 2, joint.rec
         assert joint.rec["cov"][0] == cov_b > 0 and math.isnan(joint.rec["cov"][1]) and joint.rec["nact"] == act, (joint.rec["cov"], joint.rec["nact"], act)   # A has no GT: NaN
         assert act[0] > T.K and act[0] > float(np.mean([x["n_valid"] for x in lab])), "the toy must have more active cells than K (the count is uncapped, the valid tokens are not)"
@@ -339,19 +344,19 @@ def steps_by_hand(T, w, tmp):
     joint.head.live_inputs = True
     kills(lambda: lf(joint, B), "live_inputs")
     # the start check: s4 whose head's loss does not reach B (the tokens cut before the head)
-    old = LLT.head_inputs
-    LLT.head_inputs = lambda tk: {k: v.detach() for k, v in old(tk).items()}
+    old = LLD.head_inputs
+    LLD.head_inputs = lambda tk: {k: v.detach() for k, v in old(tk).items()}
     try:
         joint, lf, *_ = direct(T, w, tmp, 1, 1)
         kills(lambda: lf(joint, B), "refused at the start")
     finally:
-        LLT.head_inputs = old
+        LLD.head_inputs = old
     # the hook: a frozen tensor of B' with a gradient at the first update (z: the node head), a zero head update on a logged step
     joint, lf, hook, run, _ = direct(T, w, tmp, 0, 1)
     opt = torch.optim.AdamW(list(joint.head.parameters()), lr=1e-4)
     for p in joint.head.parameters():
         p.grad = torch.ones_like(p)
-    nd = next(joint.src.model.nodes.parameters())
+    nd = next(joint.b.nodes.parameters())
     nd.grad = torch.ones_like(nd)
     kills(lambda: hook(opt, (), {}), "hold a gradient")
     nd.grad = None
@@ -361,7 +366,7 @@ def steps_by_hand(T, w, tmp):
     hook.cur = dict(i=100, info={}, gb=None, logged=True)
     kills(lambda: hook(opt, (), {}), "not learning")
     # LabelOverflow: the step returns a NaN loss (fit's skip: no optimiser step) and is counted; the kill above 1 % from step 100 on
-    pmax, LLT.LC.PMAX = LLT.LC.PMAX, 0
+    pmax, LC.PMAX = LC.PMAX, 0
     try:
         joint, lf, _, run, _ = direct(T, w, tmp, 1, 1)
         loss, info = lf(joint, B)
@@ -372,16 +377,16 @@ def steps_by_hand(T, w, tmp):
         joint.rec = dict(b=[1.0] * 100, h=[1.0] * 100, overflow=[7], cov=[], nact=[])
         kills(lambda: lf(joint, B), "LabelOverflow")
     finally:
-        LLT.LC.PMAX = pmax
+        LC.PMAX = pmax
     # a loss that is not finite stops the run (fit alone would skip the step): B''s loss NaN, in z too
-    ob = LLT.b_loss
-    LLT.b_loss = lambda no, tg: (torch.tensor(float("nan")), {})
+    ob = LQG.node_loss
+    LQG.node_loss = lambda no, tg: (torch.tensor(float("nan")), {})
     try:
         for tn in (1, 0):
             joint, lf, *_ = direct(T, w, tmp, tn, 1)
             kills(lambda: lf(joint, B), "not finite")
     finally:
-        LLT.b_loss = ob
+        LQG.node_loss = ob
     # the B-rise kill through the step (s4: B's loss of the toy is far above 1.2 x a start mean of 1), not in z
     joint, lf, *_ = direct(T, w, tmp, 1, 1)
     joint.rec = dict(b=[1.0] * 399, h=[1.0] * 399, overflow=[], cov=[], nact=[])
@@ -401,9 +406,7 @@ def steps_by_hand(T, w, tmp):
 # ------------------------------------------------------------------------------------------------------------------------------ runs through train
 def runs(T, w, tmp):
     import torch
-    import jtoken_train as JKT
     import trainer
-    import lane_live_tok as LLT
     seen, real_fit = {}, trainer.fit
     rd = lambda n: [json.loads(x) for x in open(os.path.join(tmp, n, "log.jsonl"))]  # noqa: E731
     text = lambda n: open(os.path.join(tmp, n, "train.log"), encoding="utf-8").read()  # noqa: E731
@@ -421,7 +424,7 @@ def runs(T, w, tmp):
         hb = register_optimizer_step_pre_hook(before)
 
         def fit(model, loss_fn, run, **kw):
-            groups = dict(head=list(model.head.parameters()), nodes=model.src.trainable())
+            groups = dict(head=list(model.head.parameters()), nodes=model.trainable())
             state["n"] = lambda: {g: math.sqrt(sum(float(p.grad.double().square().sum()) for p in ps if p.grad is not None)) for g, ps in groups.items()}
             ha = register_optimizer_step_pre_hook(lambda opt, a, k: seen["after"].append(state["n"]()))
             try:
@@ -452,18 +455,18 @@ def runs(T, w, tmp):
     assert last["nn_min"] > 0 and last["pos_grad_max"] > 0 and math.isfinite(last["pos_grad_max"]), last
     cfg = json.load(open(os.path.join(tmp, "s4", "config.json")))
     assert cfg["design"] == "jlive" and cfg["seed"] == 2 and cfg["clip"] == 0 and cfg["clip_per_group"] == 3.0 and cfg["args"]["none_weight"] == 0.25 and "pos_loss" not in cfg["args"] and cfg["args"]["head_seed"] == 2, cfg
-    assert [id(p) for p in seen["fit_kw"]["params"]] == [id(p) for p in list(j4.head.parameters()) + j4.src.trainable()] and seen["fit_kw"]["sched"] == "cosine" and seen["fit_kw"]["lr"] == 1e-4, "fit optimises the head and the node head, nothing frozen"
+    assert [id(p) for p in seen["fit_kw"]["params"]] == [id(p) for p in list(j4.head.parameters()) + j4.trainable()] and seen["fit_kw"]["sched"] == "cosine" and seen["fit_kw"]["lr"] == 1e-4, "fit optimises the head and the node head, nothing frozen"
     tx = text("s4")
     assert "jlive arm s4" in tx and "live_inputs True" in tx and "head h" in tx and w["b_dir"] in tx and "step 1 frames ['f2', 'f3']" in tx and "step 2 frames ['f2', 'f3']" in tx and "> 0: s4" in tx and "step 2: update share" in tx, tx[-1500:]
     # model.pt: the live head in jtoken_train's format, B' as trained; what moved per arm
     ck = torch.load(os.path.join(tmp, "s4", "model.pt"), weights_only=False)
     assert ck["args"]["live_inputs"] == 1 and ck["args"]["train_nodes"] == 1 and ck["args"]["head_run"] == "h" and ck["args"]["b_run"] == w["b_dir"] and ck["b_args"]["soft_nms"] == SOFT and ck["rec"]["overflow"] == [] and len(ck["rec"]["b"]) == 2
-    hm, _ = JKT.load_model("s4", "cpu", tmp)
+    hm, _ = LN.load_head("s4", "cpu", tmp)
     assert hm.live_inputs and all(torch.equal(hm.state_dict()[k], j4.head.state_dict()[k].cpu()) for k in hm.state_dict())
 
     def moved(run):
-        b = T.load_b(run, "cpu", tmp).state_dict()
-        h = JKT.load_model(run, "cpu", tmp)[0].state_dict()
+        b = load_b(run, tmp).state_dict()
+        h = LN.load_head(run, "cpu", tmp)[0].state_dict()
         return sorted({k.split(".")[0] for k in b if not torch.equal(b[k], start[k])}), any(not torch.equal(h[k], h0[k]) for k in h if k != "step")
     assert moved("s4") == (["nodes"], True), moved("s4")
     with Built(T, [w["B"]]) as bt:
@@ -477,14 +480,14 @@ def runs(T, w, tmp):
                        (dict(tier_w=[1.0, 0.5, 0.2]), "'tier_w'"), (dict(soft_nms=[1.5, 0.1, 3]), "E277 (radius, tau, passes) no longer exists (the tag v1 keeps it)")):
         torch.save(dict(ck, b_args=dict(ck["b_args"], **extra)), os.path.join(tmp, "bx", "model.pt"))
         if why is None:
-            assert all(torch.equal(v, ck["b_state"][k]) for k, v in T.load_b("bx", "cpu", tmp).state_dict().items()), "B' with the removed options at their off values is not the stored B'"
+            assert all(torch.equal(v, ck["b_state"][k]) for k, v in load_b("bx", tmp).state_dict().items()), "B' with the removed options at their off values is not the stored B'"
         else:
-            refuses(lambda: T.load_b("bx", "cpu", tmp), why)
+            refuses(lambda: load_b("bx", tmp), why)
     # the stage of a research run: a name with a folder ("<run>/stage2", `lane_train.py`) is exported and read back too
     with Built(T, [w["B"]]):
         T.train(T.parse_args(cli(w, "nest/stage2", 1, steps=1)), runs=tmp, ckpt_every=500)
     nest = os.path.join(tmp, "nest", "stage2")
-    assert JKT.load_model("nest/stage2", "cpu", tmp)[0].live_inputs and not os.path.exists(os.path.join(nest, ".done.FALSE")), os.listdir(nest)
+    assert LN.load_head("nest/stage2", "cpu", tmp)[0].live_inputs and not os.path.exists(os.path.join(nest, ".done.FALSE")), os.listdir(nest)
     # the export check: a frozen tensor of B' that moved (here: a start that differs) is refused and fit's .done becomes .done.FALSE
     jz = bt.joints[0]
     st = {k: v.clone() for k, v in start.items()}
@@ -494,26 +497,26 @@ def runs(T, w, tmp):
     sz = json.load(open(os.path.join(tmp, "z", "status.json")))
     assert os.path.exists(os.path.join(tmp, "z", ".done.FALSE")) and not os.path.exists(os.path.join(tmp, "z", ".done")) and sz["state"] == "failed" and "must stay as at the start" in sz["error"], sz
     # a kill survives a resume: the reason in KILLED and status.json, the folder is refused at the next start
-    ob = LLT.b_loss
-    LLT.b_loss = lambda no, tg: (torch.tensor(float("nan")), {})
+    ob = LQG.node_loss
+    LQG.node_loss = lambda no, tg: (torch.tensor(float("nan")), {})
     try:
         with Built(T, [w["B"]]):
             kills(lambda: T.train(T.parse_args(cli(w, "kd", 1)), runs=tmp, ckpt_every=500), "not finite")
     finally:
-        LLT.b_loss = ob
+        LQG.node_loss = ob
     assert os.path.exists(os.path.join(tmp, "kd", "KILLED")), "a kill wrote no KILLED file"
     assert "not finite" in open(os.path.join(tmp, "kd", "KILLED")).read() and "not finite" in json.load(open(os.path.join(tmp, "kd", "status.json")))["killed"]
     with Built(T, [w["B"]]):
         refuses(lambda: T.train(T.parse_args(cli(w, "kd", 1)), runs=tmp, ckpt_every=500), "stopped by a kill rule")
     # a step skipped by LabelOverflow is the run without it: [A, B] with B over PMAX = the one-step run on [A] (all but the head's forward counter)
-    pmax, LLT.LC.PMAX = LLT.LC.PMAX, 0
+    pmax, LC.PMAX = LC.PMAX, 0
     try:
         with Built(T, [w["A"], w["B"]]):
             T.train(T.parse_args(cli(w, "ov", 1)), runs=tmp, ckpt_every=500)
         with Built(T, [w["A"]]):
             T.train(T.parse_args(cli(w, "one", 1, steps=1)), runs=tmp, ckpt_every=500)
     finally:
-        LLT.LC.PMAX = pmax
+        LC.PMAX = pmax
     ov, one = (torch.load(os.path.join(tmp, n, "model.pt"), weights_only=False) for n in ("ov", "one"))
     assert ov["rec"]["overflow"] == [2] and math.isnan(ov["rec"]["b"][1]) and json.load(open(os.path.join(tmp, "ov", "status.json")))["updates"] == 1
     assert all(torch.equal(ov["b_state"][k], one["b_state"][k]) for k in one["b_state"]) and all(torch.equal(ov["state"][k], one["state"][k]) for k in one["state"] if k != "step"), "the skipped step changed a weight"
@@ -572,7 +575,6 @@ def pyr_arms(T, w, tmp):
     on) two steps through `train` between spy hooks: two AdamW groups, the pyramid's rate 0.1 x the head's in every step, the three groups clipped each on its own, the pyramid and the node head moved from the START state, the logged numbers, the
     log lines; c (pyramid frozen) and e (b_weight 0) from the same start: c moves only the node head; the pyramid-gradient kill, the frozen pyramid in c, the B-rise kill only with the anchor; p resumed = p straight, bit for bit"""
     import torch
-    import jtoken_train as JKT
     import trainer
     st, B = w["st"], w["B"]
     rd = lambda n: [json.loads(x) for x in open(os.path.join(tmp, n, "log.jsonl"))]  # noqa: E731
@@ -583,11 +585,11 @@ def pyr_arms(T, w, tmp):
     refuses(lambda: T.parse_args(cli(w, "x", 1, extra=["--pyr-lr-mult", "0.1"])), "only with --train-pyr 1")
     # the start state
     a = T.resolve(T.parse_args(cli(w, "x", 1, extra=["--b-state-from", "bst"])), tmp)
-    assert a["b_state_from"] == "bst" and a["b_state_sha256"] == JKT.file_sha256(os.path.join(tmp, "bst", "model.pt")) and a["train_pyr"] == 0 and a["pyr_lr_mult"] == 1.0, a
+    assert a["b_state_from"] == "bst" and a["b_state_sha256"] == BP.file_sha256(os.path.join(tmp, "bst", "model.pt")) and a["train_pyr"] == 0 and a["pyr_lr_mult"] == 1.0, a
     j = T.build(a, tmp)[0]
-    assert all(torch.equal(j.src.model.state_dict()[k], st[k]) for k in st), "the start B' is not the b_state of --b-state-from"
+    assert all(torch.equal(j.b.state_dict()[k], st[k]) for k in st), "the start B' is not the b_state of --b-state-from"
     a0 = T.resolve(T.parse_args(cli(w, "x", 1)), tmp)
-    assert a0["b_state_from"] is None and a0["b_state_sha256"] is None and not all(torch.equal(T.build(a0, tmp)[0].src.model.state_dict()[k], st[k]) for k in st), "without --b-state-from: the B' file's state"
+    assert a0["b_state_from"] is None and a0["b_state_sha256"] is None and not all(torch.equal(T.build(a0, tmp)[0].b.state_dict()[k], st[k]) for k in st), "without --b-state-from: the B' file's state"
     ck = torch.load(os.path.join(tmp, "bst", "model.pt"), weights_only=False)
     for n_, c_ in (("bst_other", dict(ck, args=dict(ck["args"], b_sha256="0" * 64))), ("bst_none", {k: v for k, v in ck.items() if k != "b_state"})):
         os.makedirs(os.path.join(tmp, n_))
@@ -602,7 +604,7 @@ def pyr_arms(T, w, tmp):
         hb = register_optimizer_step_pre_hook(lambda opt, a_, k_: seen["before"].append(state["n"]()) if "n" in state else None)
 
         def fit(model, loss_fn, run, **kw):
-            groups = dict(head=list(model.head.parameters()), nodes=model.src.node_params(), pyr=model.src.pyr_params())
+            groups = dict(head=list(model.head.parameters()), nodes=model.node_params(), pyr=model.pyr_params())
             state["n"] = lambda: {g: math.sqrt(sum(float(p.grad.double().square().sum()) for p in ps if p.grad is not None)) for g, ps in groups.items()}
 
             def after(opt, a_, k_):
@@ -628,7 +630,7 @@ def pyr_arms(T, w, tmp):
     assert any(bf["pyr"] > T.CLIP or bf["nodes"] > T.CLIP for bf in seen["before"]), f"the test needs an active clip on a B' group: {seen['before']}"
     assert all(len(l_) == 2 and l_[0] > 0 and abs(l_[1] - 0.1 * l_[0]) < 1e-15 for l_ in seen["lr"]), f"the pyramid's rate is not 0.1 x the head's: {seen['lr']}"
     g0, g1 = seen["fit_kw"]["params"]
-    assert [id(p) for p in g0["params"]] == [id(p) for p in list(jp.head.parameters()) + jp.src.node_params()] and [id(p) for p in g1["params"]] == [id(p) for p in jp.src.pyr_params()] and g1["lr_mult"] == 0.1 and "lr_mult" not in g0
+    assert [id(p) for p in g0["params"]] == [id(p) for p in list(jp.head.parameters()) + jp.node_params()] and [id(p) for p in g1["params"]] == [id(p) for p in jp.pyr_params()] and g1["lr_mult"] == 0.1 and "lr_mult" not in g0
     last = rd("p")[-1]
     for k in ("gn_head", "gn_nodes", "gn_pyr", "pshare", "clip_pyr", "upd_nodes", "upd_pyr", "upd_head", "cov_mean", "nact_mean", "b_loss"):
         assert k in last and math.isfinite(last[k]), (k, last)
@@ -640,9 +642,9 @@ def pyr_arms(T, w, tmp):
     T.check_start(cfg, os.path.join(tmp, "p"))
 
     def moved(run):                                                                         # against the START state (st), not the B' file
-        b = T.load_b(run, "cpu", tmp).state_dict()
+        b = load_b(run, tmp).state_dict()
         return sorted({k.split(".")[0] for k in b if not torch.equal(b[k], st[k])})
-    assert moved("p") == ["nodes", "pyr"] and all(torch.equal(T.load_b("p", "cpu", tmp).state_dict()[k], jp.src.model.state_dict()[k]) for k in st), moved("p")
+    assert moved("p") == ["nodes", "pyr"] and all(torch.equal(load_b("p", tmp).state_dict()[k], jp.b.state_dict()[k]) for k in st), moved("p")
     with Built(T, [B]):
         T.train(T.parse_args(cli(w, "c", 1, extra=["--b-state-from", "bst"])), runs=tmp, ckpt_every=500)
         T.train(T.parse_args(cli(w, "e", 1, extra=P + ["--b-weight", "0"])), runs=tmp, ckpt_every=500)
@@ -657,17 +659,16 @@ def pyr_arms(T, w, tmp):
         hook = T.StepHook(run, joint)
         joint.train()
         return joint, T.make_loss(run, joint, args, hook), hook, run
-    import lane_live_tok as LLT
-    ob = LLT.b_loss
+    ob = LQG.node_loss
     joint, lf, _, _ = built(P)
-    fw = joint.src.model.pyr.forward
-    joint.src.model.pyr.forward = lambda x: {k: v.detach() for k, v in fw(x).items()}
-    pp0 = next(joint.src.model.pyr.parameters())
-    LLT.b_loss = lambda no, tg: (lambda r: (r[0] + 1e-3 * pp0.sum(), r[1]))(ob(no, tg))   # only B''s loss reaches the pyramid: the check reads the head's loss alone
+    fw = joint.b.pyr.forward
+    joint.b.pyr.forward = lambda x: {k: v.detach() for k, v in fw(x).items()}
+    pp0 = next(joint.b.pyr.parameters())
+    LQG.node_loss = lambda no, tg: (lambda r: (r[0] + 1e-3 * pp0.sum(), r[1]))(ob(no, tg))   # only B''s loss reaches the pyramid: the check reads the head's loss alone
     try:
         kills(lambda: lf(joint, B), "gives B''s pyramid no gradient")
     finally:
-        LLT.b_loss = ob
+        LQG.node_loss = ob
     # e (b_weight 0): B''s loss stays out of the backward: a B' loss with a finite value and an infinite gradient leaves the step's gradients finite
     joint, lf, _, _ = built(P + ["--b-weight", "0"])
 
@@ -675,18 +676,18 @@ def pyr_arms(T, w, tmp):
         loss, info = ob(no, tg)
         x = no["e"].float().flatten()[0]
         return loss + (x - x.detach()).abs().sqrt(), info
-    LLT.b_loss = bad
+    LQG.node_loss = bad
     try:
         loss, info = lf(joint, B)
     finally:
-        LLT.b_loss = ob
+        LQG.node_loss = ob
     loss.backward()
-    assert loss.item() == info["head"] and all(bool(torch.isfinite(p.grad).all()) for p in joint.src.trainable() if p.grad is not None), "e: B''s loss reached the backward"
+    assert loss.item() == info["head"] and all(bool(torch.isfinite(p.grad).all()) for p in joint.trainable() if p.grad is not None), "e: B''s loss reached the backward"
     joint, lf, hook, _ = built(["--b-state-from", "bst"])
     opt = torch.optim.AdamW(list(joint.head.parameters()), lr=1e-4)
     for p in joint.head.parameters():
         p.grad = torch.ones_like(p)
-    pp = next(joint.src.model.pyr.parameters())
+    pp = next(joint.b.pyr.parameters())
     pp.grad = torch.ones_like(pp)
     kills(lambda: hook(opt, (), {}), "hold a gradient")
     for extra, killed in ((P, True), (P + ["--b-weight", "0"], False)):
@@ -741,6 +742,10 @@ def selftest(train_path=TRAIN):
         steps_by_hand(T, w, tmp)
         runs(T, w, tmp)
         pyr_arms(T, w, tmp)
+        import torch
+        os.makedirs(os.path.join(tmp, "old"))                                                 # a checkpoint of before the network was one module is refused by name
+        torch.save(dict(model={"src.model.pyr.w": torch.zeros(1)}), os.path.join(tmp, "old", "ckpt.pt"))
+        refuses(lambda: T.check_start({}, os.path.join(tmp, "old")), "before the network became one module")
     print("jlive_train selftest ok", flush=True)
 
 
@@ -749,9 +754,9 @@ def real_check(train_path=TRAIN):
     import lane_ptok_data as LP
     T = load(train_path, "jlive_train_real")
     try:
-        LP.cache_dir("train", 0, "e292_a")                                        # asserts unless exactly one finished cache is there
+        LP.cache_dir("train", 0, "e292_a")                                        # asserts unless the finished cache is there
     except AssertionError as e:
-        if not str(e).startswith("0 finished caches"):
+        if not str(e).startswith("no finished cache"):
             raise                                                                 # several caches match: a real problem, not a skip
         print(f"real check SKIPPED: no E365 TRAIN cache of B' seed 0 ({e})")
         return
@@ -762,7 +767,6 @@ def real_check(train_path=TRAIN):
 
 
 def run_mutants():
-    import test_lane_live as TLL                                                            # its launcher: numpy / torch imported with the project paths behind site-packages (the 319 paths cost 50 s)
     left = []
     with tempfile.TemporaryDirectory(dir=BP.SCRATCH) as tmp:
         src = open(TRAIN, encoding="utf-8").read()
@@ -773,7 +777,7 @@ def run_mutants():
                 p = os.path.join(tmp, f"m{k}.py")
                 with open(p, "w", encoding="utf-8") as fh:
                     fh.write(src.replace(a, b))
-                r = subprocess.run([sys.executable, "-c", TLL.LAUNCH, os.path.abspath(__file__), "one", p], capture_output=True, text=True, env=ENV)
+                r = subprocess.run([sys.executable, "-c", TLN.LAUNCH, os.path.abspath(__file__), "one", p], capture_output=True, text=True, env=ENV)
                 tail = ((r.stderr or r.stdout).strip().splitlines() or ["no output"])[-1][:150]
                 res = "SURVIVED" if r.returncode == 0 else ("killed" if tail.startswith(("AssertionError", "Kill", "jlive_train_under_test.Kill")) else "CRASHED: " + tail)
             print(f"{res[:170]:<12} {name}", flush=True)

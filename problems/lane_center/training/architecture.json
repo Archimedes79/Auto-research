@@ -140,7 +140,7 @@
    "row": 0,
    "code": [
     "net/prep/lane_tokcache.py::select_tokens",
-    "training/train/lane_live_tok.py::live_tokens"
+    "net/model/lane_net.py::live_tokens"
    ],
    "note": "the K = 512 cells with the largest existence logit (a stable argsort) become tokens; cells with sigmoid(e) <= 0.05 are padding",
    "why": "a hard index choice on the existence of B' (the named compute budget of R5): no gradient goes through the choice, the picked tokens carry the gradient to the node head in stage 2",
@@ -155,10 +155,11 @@
    "col": 6,
    "row": 0,
    "code": [
-    "training/train/lane_live_tok.py::LiveSource"
+    "net/model/lane_net.py::LaneNet",
+    "net/prep/lane_live_data.py"
    ],
    "note": "the delivered path and stage 2: B' runs inside the step, the K tokens are made from its live output with the graph kept (token rounded to float16 as the cache stores it, gradient passed straight through)",
-   "sub": "lane_live_tok.py"
+   "sub": "lane_net.py +1"
   },
   {
    "id": "gate",
@@ -234,7 +235,7 @@
    "col": 3,
    "row": 2,
    "code": [
-    "evaluation/jtoken_eval.py::decode_variant",
+    "net/model/lane_readout.py::decode_variant",
     "evaluation/jtoken_eval.py::D115",
     "net/model/jtoken.py::decode"
    ],
@@ -242,7 +243,7 @@
    "why": "hand-tuned on TRAIN and named (R7, D115): the decode of the champion is link short 0.3, link long 0.2, node keep p_none < 0.6, none gate off",
    "replace_with": "learn the thresholds with a loss that sees the graph metric (delivered lanes, junction precision)",
    "catch": "E388: a soft-F1 surrogate loses (-0.025 / -0.028 topo F1, -0.11 junction F1 on VAL; it loses on TRAIN too), so the thresholds stay named",
-   "sub": "jtoken_eval.py +2"
+   "sub": "lane_readout.py +2"
   },
   {
    "id": "thr_keep",
@@ -251,15 +252,15 @@
    "col": 3,
    "row": 3,
    "code": [
-    "evaluation/jtoken_eval.py::node_e",
-    "evaluation/jtoken_eval.py::frame_prediction",
+    "net/model/lane_readout.py::node_e",
+    "net/model/lane_readout.py::frame_prediction",
     "net/prep/lane_ptok_data.py::to_pred"
    ],
    "note": "a token becomes a node of the graph when the none probability of its own type softmax is below 0.6; the fourth named threshold",
    "why": "the same hand-tuned and named read-out (R7, D115); the existence written for a kept node is 1 - p_none shifted by keep_thr - 0.5",
    "replace_with": "a kept-node loss on the graph metric",
    "catch": "as above: the surrogate of E388 lost, and the cell is chosen on TRAIN before the single VAL score (E375)",
-   "sub": "jtoken_eval.py +2"
+   "sub": "lane_readout.py +2"
   },
   {
    "id": "graph",
@@ -306,11 +307,10 @@
    "row": 4,
    "code": [
     "evaluation/jtoken_eval.py::score",
-    "evaluation/jtoken_eval.py::dump",
+    "evaluation/lane_dump.py::read_dump",
     "evaluation/jtoken_eval.py::sweep",
     "evaluation/jtoken_eval.py::choose_cell",
     "evaluation/qgraph_eval.py",
-    "evaluation/qgraph_readout.py",
     "evaluation/sparse_lanes/",
     "evaluation/lane_suite.py",
     "evaluation/lane_task/",
@@ -318,7 +318,7 @@
     "evaluation/adapter.py"
    ],
    "note": "dump (the head's output per frame) -> a decode of the dump -> the qformat prediction -> the scorer; one definition of every metric, never a private one",
-   "sub": "jtoken_eval.py +10"
+   "sub": "jtoken_eval.py +9"
   },
   {
    "id": "timing",
@@ -407,7 +407,7 @@
    "row": 6,
    "code": [
     "training/train/jlive_train.py",
-    "training/train/lane_live_tok.py::b_loss"
+    "net/loss/loss_qgraph.py::node_loss"
    ],
    "note": "B' runs in the step (live tokens), its node head trains on the token loss plus its own node loss; the champion recipe of D120 (E372), no past block, no map block"
   },
@@ -471,17 +471,6 @@
    "w": 2,
    "hpx": 52,
    "sub": "qlinks.py +3"
-  },
-  {
-   "id": "ref_t0",
-   "label": "E357 T0: GT nodes as\ntokens, rule controls\n(pair head: tag v1)",
-   "kind": "alt",
-   "col": 4,
-   "row": 9,
-   "code": [
-    "evaluation/jtok_eval.py"
-   ],
-   "note": "the step that led to the token design (D105): the rule controls and the card writer on lattice tokens; the pair head of the stage and its trainer are in the tag v1"
   }
  ],
  "edges": [
@@ -677,8 +666,7 @@
    "label": "reference systems and stages that were measured and not adopted (kept, not developed)",
    "nodes": [
     "ref_j",
-    "ref_b",
-    "ref_t0"
+    "ref_b"
    ]
   }
  ],
@@ -717,10 +705,13 @@
   "training/bflc_paths.py": "project paths from the checkout location, imported by every module",
   "net/tests/test_jlive_train.py": "test of the stage-2 trainer (jlive_train.py)",
   "net/tests/test_jtoken.py": "test of the token head (jtoken.py)",
-  "net/tests/test_lane_live.py": "test of the live token producer (lane_live_tok.py)",
+  "net/tests/test_lane_net.py": "test of the lane network as one module (lane_net.py) and of the data of its live token path (lane_live_data.py)",
+  "net/tests/test_qgraph.py": "test of the lane head B' with its loss, phase by phase (qgraph.py, loss_qgraph.py)",
+  "net/tests/test_qmnms.py": "test of the Matrix-NMS layer against its hard numpy reference (qmnms.py)",
+  "net/tests/test_sections.py": "test of the section stage of B' with its loss (sections.py, loss_sections.py)",
   "net/tests/test_lane_tokcache.py": "test of the token cache and its loader",
   "net/tests/test_lane_train.py": "test of the stage entry (lane_train.py) and the base config: every trainer setting is a key a card can set",
-  "net/tests/test_net_layering.py": "test of the layer order of net/ (DESIGN R13)",
+  "net/tests/test_net_layering.py": "test of the layers: net/prep < net/model < net/loss < training | evaluation, every import (DESIGN R13)",
   "net/tests/test_foundation.py": "test of the foundation extraction and its check (net/prep/foundation)"
  }
 }

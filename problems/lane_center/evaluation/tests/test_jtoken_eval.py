@@ -35,12 +35,17 @@ for sub_ in ("../..", "../../training", "../../net/prep", "../../net/model", "..
 import jtok as JT  # noqa: E402
 import jtoken as JK  # noqa: E402
 import jtoken_eval as E  # noqa: E402
+import lane_dump as DU  # noqa: E402
+import lane_net as LN  # noqa: E402
+import lane_predict as PR  # noqa: E402
 import lane_ptok_data as LP  # noqa: E402
+import lane_readout as RO  # noqa: E402
+import lane_tokcache as LC  # noqa: E402
 sys.path.insert(0, os.path.normpath(os.path.join(HERE, "../../net/tests")))
 from merged_source import must_fail  # noqa: E402
 
 torch.set_num_threads(2)
-CACHE_OK = any(os.path.exists(os.path.join(E.LC.CACHE, d, "val", "manifest.json")) for d in (os.listdir(E.LC.CACHE) if os.path.isdir(E.LC.CACHE) else []))
+CACHE_OK = any(os.path.exists(os.path.join(LC.CACHE, d, "val", "manifest.json")) for d in (os.listdir(LC.CACHE) if os.path.isdir(LC.CACHE) else []))
 SMOKE = os.path.join(E.RUNS, "e373_cb_s0", "model.pt")          # a head checkpoint (the champion's stage-1 head on B' seed 0) only for plumbing: its args, and its state where the weights do not matter
 
 
@@ -100,8 +105,8 @@ def batch_of(tok, n=1):
 
 
 def pred_of(out, tok, decode="rec"):
-    (f,) = E.batch_dump(out, batch_of(tok))
-    return E.frame_prediction(tok, f, decode), f
+    (f,) = RO.batch_dump(out, batch_of(tok))
+    return RO.frame_prediction(tok, f, decode), f
 
 
 def floor_model():
@@ -156,11 +161,11 @@ def test_decode_variant():
     K = 6
     succ = {0: {1: 0.5, 2: 0.4}, 1: {2: 0.2}, 2: {3: 0.35}, 3: {4: 0.1}}                                  # none = the rest: src 0 two branches, src 1 weak (0.2), src 2 below its none (0.35 < 0.65), src 3 very weak
     out, tok = stub_out(K, succ, [0.1, 0.1, 0.55, 0.1, 0.1, 0.1])                                          # token 2 has p_none 0.55: not a node at 0.5
-    (f,) = E.batch_dump(out, batch_of(tok))
+    (f,) = RO.batch_dump(out, batch_of(tok))
     valid = np.ones(K, bool)
-    rec = E.decode_variant(f, valid)                                                                       # the defaults are the decode of record, exactly
+    rec = RO.decode_variant(f, valid)                                                                       # the defaults are the decode of record, exactly
     assert all(np.array_equal(rec["rec"][k], f["rec"][k]) for k in f["rec"]) and np.array_equal(rec["keep"], f["keep"]), (rec["rec"], f["rec"])
-    got = lambda **k: _links_set(E.decode_variant(f, valid, **k)["rec"])  # noqa: E731
+    got = lambda **k: _links_set(RO.decode_variant(f, valid, **k)["rec"])  # noqa: E731
     assert got() == {(0, 1)} and got(link_thr=0.2) == {(0, 1)}, "token 2 is no node at p_none 0.55: no link to or from it"
     assert got(keep_thr=0.6) == {(0, 1), (0, 2)} and got(link_thr=0.2, keep_thr=0.6) == {(0, 1), (0, 2)}, "a higher keep threshold adds the node"
     assert got(keep_thr=0.6, none_gate=False) == {(0, 1), (0, 2), (2, 3)}, "the none gate off adds 2 -> 3 (0.35 below p(none) 0.65)"
@@ -170,22 +175,22 @@ def test_decode_variant():
             chain = [got(link_thr=t, keep_thr=kt, none_gate=gate) for t in (0.3, 0.19, 0.09, 0.05)]
             assert all(x <= y for x, y in zip(chain, chain[1:])), "a lower link threshold only adds links"
         assert got(link_thr=0.2, keep_thr=kt) <= got(link_thr=0.2, keep_thr=kt, none_gate=False), "no none gate only adds links"
-    must_fail(E.decode_variant, f, valid, 0.04)                                                            # below the candidates the dump holds
-    v = E.decode_variant(f, np.array([True, True, True, True, True, False]), keep_thr=0.6)                 # the valid mask: an invalid token is never a node, whatever its p_none
+    must_fail(RO.decode_variant, f, valid, 0.04)                                                            # below the candidates the dump holds
+    v = RO.decode_variant(f, np.array([True, True, True, True, True, False]), keep_thr=0.6)                 # the valid mask: an invalid token is never a node, whatever its p_none
     assert not v["keep"][5] and v["keep"][2]
-    pred = E.frame_prediction(tok, E.decode_variant(f, valid, keep_thr=0.6), "rec", 0.6)                   # a node kept at 0.6 still passes the scorer's e >= 0.5, e = 1 - p_none + 0.1
+    pred = RO.frame_prediction(tok, RO.decode_variant(f, valid, keep_thr=0.6), "rec", 0.6)                   # a node kept at 0.6 still passes the scorer's e >= 0.5, e = 1 - p_none + 0.1
     import qgraph_eval as QE
     assert QE.kept(pred, 0.5, 0.5)[0].all() and abs(pred["nodes"]["e"][2] - 0.55) < 1e-6 and abs(pred["nodes"]["e"][0] - 1.0) < 1e-6 and len(pred["nodes"]["pos"]) == 6, pred["nodes"]["e"]
     old = dict(f, cand={k: v for k, v in f["cand"].items() if k not in ("a", "b")})                         # a dump of before the variants (no scales in the candidates): refused, re-dump
-    must_fail(E.decode_variant, old, valid)
-    E.check_record([f], [valid])
-    must_fail(E.check_record, [dict(f, rec=dict(f["rec"], a=f["rec"]["a"] + 0.01))], [valid])                # a record whose scales are not the candidates' is caught before a variant is scored
+    must_fail(RO.decode_variant, old, valid)
+    RO.check_record([f], [valid])
+    must_fail(RO.check_record, [dict(f, rec=dict(f["rec"], a=f["rec"]["a"] + 0.01))], [valid])                # a record whose scales are not the candidates' is caught before a variant is scored
     # a hand frame exactly on the thresholds: p = float32(0.3) at link 0.3, p == p(none), p_none == float32(0.6) at keep 0.6; each mutant of a comparison delivers another graph
     f32 = np.float32
     th = dict(token="t", pnone=np.array([0.1, 0.1, 0.6, 0.1, 0.1], f32), none_cls=np.array([[0.2, 0.4, 0.1, 0.1, 0.1], [1.0] * 5], f32),
               cand=dict(src=np.array([0, 1, 3, 3], np.int16), dst=np.array([1, 3, 2, 4], np.int16), p=np.array([0.3, 0.4, 0.5, 0.5], f32), long=np.zeros(4, bool), a=np.full(4, THIRD, f32), b=np.full(4, THIRD, f32)))
     v5 = np.ones(5, bool)
-    got_th = E.decode_variant(th, v5, link_thr=0.3, keep_thr=0.6)
+    got_th = RO.decode_variant(th, v5, link_thr=0.3, keep_thr=0.6)
     want = {(0, 1), (1, 3), (3, 4)}
     assert _links_set(got_th["rec"]) == want and got_th["keep"].tolist() == [True, True, False, True, True], (got_th["rec"], got_th["keep"])
 
@@ -204,10 +209,10 @@ def test_decode_variant():
     m.set_step(JK.SWITCH)
     sb = JK.synthetic_batch(3, 48, seed=2)
     toks = [dict(pos=sb["pos"][b].double().numpy(), cell=np.arange(48)) for b in range(3)]
-    frames = E.batch_dump(E.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
+    frames = RO.batch_dump(PR.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
     n_rec = 0
     for fr_, val in zip(frames, sb["valid"].numpy()):
-        d = E.decode_variant(fr_, val)
+        d = RO.decode_variant(fr_, val)
         assert all(np.array_equal(d["rec"][k], fr_["rec"][k]) for k in fr_["rec"]) and np.array_equal(d["keep"], fr_["keep"])
         n_rec += len(fr_["rec"]["src"])
     assert n_rec > 0
@@ -244,14 +249,14 @@ def test_decode_perclass():
               cand=dict(src=np.array([x[0] for x in c], np.int16), dst=np.array([x[1] for x in c], np.int16), p=np.array([x[2] for x in c], f32), long=np.array([0, 0, 0, 1, 1, 1], bool),
                         a=np.full(6, THIRD, f32), b=np.full(6, THIRD, f32), gt_long=np.array([0, 1, 0, 1, 1, 0], bool)))       # gt_long: a GT-chord class lying around (1 -> 2 long by GT, 2 -> 5 short by GT)
     v6 = np.ones(6, bool)
-    one = E.decode_variant(th, v6, 0.3)
-    pairs = ((E.decode_variant(th, v6, 0.3, link_thr_long=0.3), one), (E.decode_variant(th, v6), one), (E.decode_variant(th, v6, 0.1), E.decode_variant(th, v6, 0.1, link_thr_long=0.1)))
+    one = RO.decode_variant(th, v6, 0.3)
+    pairs = ((RO.decode_variant(th, v6, 0.3, link_thr_long=0.3), one), (RO.decode_variant(th, v6), one), (RO.decode_variant(th, v6, 0.1), RO.decode_variant(th, v6, 0.1, link_thr_long=0.1)))
     for i, (same, ref) in enumerate(pairs):                                                                  # None = link_thr = one threshold on all fields, at the record's 0.3 and at 0.1 (not the record's)
-        assert np.array_equal(same["keep"], ref["keep"]) and all(np.array_equal(same["rec"][k], ref["rec"][k]) for k in E.LINK_FIELDS), i
-    got = lambda fn=E.decode_variant, **k: _by_class(fn(th, v6, **k))  # noqa: E731
+        assert np.array_equal(same["keep"], ref["keep"]) and all(np.array_equal(same["rec"][k], ref["rec"][k]) for k in RO.LINK_FIELDS), i
+    got = lambda fn=RO.decode_variant, **k: _by_class(fn(th, v6, **k))  # noqa: E731
     assert got(link_thr=0.3) == ({(0, 1)}, {(0, 4)}), got(link_thr=0.3)
     assert got(link_thr=0.1, link_thr_long=0.3) == ({(0, 1), (1, 2), (2, 3)}, {(0, 4)}), "a short threshold of 0.1 adds the short links only"
-    must_fail(E.decode_variant, th, v6, 0.3, link_thr_long=0.04)
+    must_fail(RO.decode_variant, th, v6, 0.3, link_thr_long=0.04)
     cases = (dict(link_thr=0.3, link_thr_long=0.05), dict(link_thr=0.1))                                     # a long threshold of 0.05 adds the long links only; one threshold 0.1 (None) on both classes
     answers = [({(0, 1)}, {(0, 4), (1, 5), (2, 5)}), ({(0, 1), (1, 2), (2, 3)}, {(0, 4), (1, 5)})]
     assert [got(**k) for k in cases] == answers, [got(**k) for k in cases]
@@ -259,20 +264,20 @@ def test_decode_perclass():
                "the class by the GT chord": ('[c["long"].astype(int)]                 #', '[c["gt_long"].astype(int)]                 #'),
                "None = the record's threshold": ("thr_long = link_thr if", "thr_long = LINK_THR if")}
     for old, new in mutants.values():
-        assert [got(_mutant(E.decode_variant, old, new), **k) for k in cases] != answers, new
+        assert [got(_mutant(RO.decode_variant, old, new), **k) for k in cases] != answers, new
     # a real head (random weights), none gate off: per frame, the long threshold moves only long links, the short threshold only short ones; the dump's class is the token chord
     torch.manual_seed(0)
     m = JK.JTokenHead().eval()
     m.set_step(JK.SWITCH)
     sb = JK.synthetic_batch(3, 48, seed=2)
     toks = [dict(pos=sb["pos"][b].double().numpy(), cell=np.arange(48)) for b in range(3)]
-    frames = E.batch_dump(E.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
+    frames = RO.batch_dump(PR.run_head(m, sb, "cpu"), dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
     added = moved = 0
     for fr_, val, t in zip(frames, sb["valid"].numpy(), toks):
         cd = fr_["cand"]
         chord = np.linalg.norm(t["pos"][cd["dst"].astype(int)] - t["pos"][cd["src"].astype(int)], axis=1)
         assert np.array_equal(cd["long"][np.abs(chord - JT.SHORT) > 1e-3], (chord > JT.SHORT)[np.abs(chord - JT.SHORT) > 1e-3]), "the dump's class is the token chord > 8 m"
-        dec = lambda lt, ltl: _by_class(E.decode_variant(fr_, val, lt, 0.5, False, ltl))  # noqa: E731
+        dec = lambda lt, ltl: _by_class(RO.decode_variant(fr_, val, lt, 0.5, False, ltl))  # noqa: E731
         (s3, l3), (s3w, l3w), (s1, l1) = dec(0.3, None), dec(0.3, 0.05), dec(0.1, 0.3)
         assert s3w == s3 and l3w >= l3 and l1 == l3 and s1 >= s3, "a class threshold moves the links of its class only"
         added, moved = added + len(l3w - l3), moved + len(s1 - s3)
@@ -286,12 +291,12 @@ def test_dump_roundtrip():
     m = JK.JTokenHead().eval()
     m.set_step(JK.SWITCH)
     sb = JK.synthetic_batch(3, 48, seed=1)
-    out = E.run_head(m, sb, "cpu")
+    out = PR.run_head(m, sb, "cpu")
     toks = []
     for b in range(3):
         toks.append(dict(pos=sb["pos"][b].double().numpy(), dirv=sb["dirv"][b].double().numpy(), e_p=sb["e"][b].sigmoid().double().numpy(), flags_p=sb["flags"][b].sigmoid().double().numpy(),
                          s_p=sb["s"][b].sigmoid().double().numpy(), cell=np.arange(48), valid=sb["valid"][b].numpy()))
-    frames = E.batch_dump(out, dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
+    frames = RO.batch_dump(out, dict(token=["a", "b", "c"], row=torch.arange(3), tokens_np=toks))
     rec, pr = JK.decode(out), JK.probs(out)
     for b, f in enumerate(frames):
         assert sorted(f) == ["cand", "cell", "keep", "none_cls", "pnone", "ptype", "rec", "row", "token"], sorted(f)           # no field of a GT table
@@ -299,7 +304,7 @@ def test_dump_roundtrip():
         want = sorted(zip(*(x.tolist() for x in torch.nonzero(rec["link"][b], as_tuple=True))))
         assert sorted(zip(f["rec"]["src"].tolist(), f["rec"]["dst"].tolist())) == want
         assert all(f["rec"]["p"] >= 0.3 - 1e-6) and (len(f["rec"]["src"]) == 0 or np.isin(f["rec"]["src"].astype(int) * 1000 + f["rec"]["dst"], f["cand"]["src"].astype(int) * 1000 + f["cand"]["dst"]).all()), "the candidate list holds every link"
-        assert (f["cand"]["p"] >= E.KEEP_P - 1e-6).all() and f["none_cls"].shape == (2, 48) and (f["none_cls"] >= 0).all() and (f["none_cls"] <= 1.0001).all()
+        assert (f["cand"]["p"] >= RO.KEEP_P - 1e-6).all() and f["none_cls"].shape == (2, 48) and (f["none_cls"] >= 0).all() and (f["none_cls"] <= 1.0001).all()
         lg = f["rec"]["long"]
         assert np.allclose(f["rec"]["a"][~lg], 1 / 3) and ((f["rec"]["a"][lg] >= 0.05) & (f["rec"]["a"][lg] <= 1.25)).all(), "scales: 1/3 for the short links, the head's for the long ones"
     print(f"dump_roundtrip: the dump holds the keep mask, the decode of record, {sum(len(f['rec']['src']) for f in frames)} record links, the candidate list and the none probabilities of 3 frames of a real head: ok")
@@ -310,7 +315,7 @@ def test_writer_no_gt():
     K = 4
     out, tok = stub_out(K, {0: {1: 0.8}, 1: {2: 0.8}}, [0.1] * K)
     pred, f = pred_of(out, tok)
-    assert list(inspect.signature(E.frame_prediction).parameters) == ["tokens", "f", "decode", "keep_thr"], "the writer's inputs are the tokens and the dump frame"
+    assert list(inspect.signature(RO.frame_prediction).parameters) == ["tokens", "f", "decode", "keep_thr"], "the writer's inputs are the tokens and the dump frame"
     gt_leaks = {"section": lambda nd: nd.update(section=np.arange(len(nd["pos"]))), "flags": lambda nd: nd.update(flags=np.ones_like(nd["flags"])), "pos": lambda nd: nd.update(pos=nd["pos"] + 0.7),
                 "extra field": lambda nd: nd.update(piece=np.zeros(len(nd["pos"]), int)), "s": lambda nd: nd.update(s=np.ones_like(nd["s"]))}
     real = LP.to_pred
@@ -320,7 +325,7 @@ def test_writer_no_gt():
             leak(p["nodes"])
             return p
         with patched((LP, "to_pred", mutant)):
-            must_fail(E.frame_prediction, tok, f, "rec")
+            must_fail(RO.frame_prediction, tok, f, "rec")
     gt_links = dict(src=np.array([1]), dst=np.array([0]), p=np.ones(1), long=np.zeros(1, bool), a=np.full(1, 1 / 3), b=np.full(1, 1 / 3), curves=None)
     for name, leak in (("links replaced by GT links", lambda p_: p_.update(links=gt_links)), ("e set to 1", lambda p_: p_["nodes"].update(e=np.ones_like(p_["nodes"]["e"]))),
                        ("cell changed", lambda p_: p_["nodes"].update(cell=p_["nodes"]["cell"] + 1))):
@@ -329,22 +334,22 @@ def test_writer_no_gt():
             leak(p_)
             return p_
         with patched((LP, "to_pred", mutant2)):
-            must_fail(E.frame_prediction, tok, f, "rec")
+            must_fail(RO.frame_prediction, tok, f, "rec")
     def with_assign(frame, keep, e_node, links, flags=None):
         p = real(frame, keep, e_node, links, flags)
         p["assign"] = dict(P=np.zeros((1, 1)))
         return p
     with patched((LP, "to_pred", with_assign)):
-        must_fail(E.frame_prediction, tok, f, "rec")
+        must_fail(RO.frame_prediction, tok, f, "rec")
     tok2 = dict(tok, piece=np.arange(K), gt_id=np.arange(K), gt_flags=np.ones((K, 8)))                  # GT fields lying around in the token dict change nothing
-    p2 = E.frame_prediction(tok2, f, "rec")
+    p2 = RO.frame_prediction(tok2, f, "rec")
     assert all(np.array_equal(pred["nodes"][k], p2["nodes"][k]) for k in pred["nodes"]) and np.array_equal(pred["links"]["src"], p2["links"]["src"])
     print("writer_no_gt: a GT section / flag / position / s / extra field / assignment in the writer is caught by check_writer (6 mutants), links replaced by GT links / e set to 1 / a changed cell by frame_prediction (3 more); GT fields in the token dict change nothing: ok")
 
 
 def test_numbers():
-    assert E.sample(873, "val").tolist() == list(range(873))
-    s = E.sample(8414, "train")
+    assert DU.sample(873, "val").tolist() == list(range(873))
+    s = DU.sample(8414, "train")
     assert len(s) == 873 and s[0] == 0 and s[-1] == 8413 and (np.diff(s) > 0).all()
     # paired junction F1 (E375): counts pooled per draw, the scene draws of qgraph_eval.paired; two scenes of one frame each: a = [pred, GT, matched] [1, 1, 1] + [0, 3, 0] (pooled F1 0.4, the frame mean would be 0.5), b = [1, 1, 0] + [0, 3, 0]
     import qgraph_eval as QE
@@ -365,22 +370,24 @@ def test_numbers():
     assert E.parse_cell("0.2,0.05,0.6,off") == (0.2, 0.05, 0.6, False) and E.parse_args(["score", "--run", "h", "--seed", "0"]).ref_cell is None
     must_fail(E.parse_args, ["score", "--run", "h", "--seed", "0", "--link-thr", "0.2", "--ref-cell", "0.2,0.2,0.6,maybe"])
     must_fail(E.score, E.parse_args(["score", "--run", "h", "--seed", "0", "--ref-cell", "0.2,0.2,0.6,off"]))                   # a reference cell needs a variant (refused before anything is read)
-    # gpu_free: this process and its parents never count as another run.py job
+    # gpu_free: quiet = little memory used and no compute process on the GPU but this one and its parents
+    assert E.gpu_others("12, 300\n34, [N/A]\n\n[N/A], 5\n", {12}) == [34] and E.gpu_others("", set()) == []
     fake = lambda out: types.SimpleNamespace(stdout=out)  # noqa: E731
-    mine = "\n".join(str(x) for x in (os.getpid(), os.getppid()))
-    with patched((E.subprocess, "run", lambda cmd, **k: fake("500\n") if cmd[0] == "nvidia-smi" else fake(mine + "\n"))):
+    mine = "".join(f"{x}, [N/A]\n" for x in (os.getpid(), os.getppid()))
+    smi = lambda used, apps: (lambda cmd, **k: fake(apps if "compute-apps" in cmd[1] else used))  # noqa: E731
+    with patched((E.subprocess, "run", smi("500\n", mine))):
         assert E.gpu_free()[0], E.gpu_free()
-    with patched((E.subprocess, "run", lambda cmd, **k: fake("500\n") if cmd[0] == "nvidia-smi" else fake(mine + "\n999999\n"))):
+    with patched((E.subprocess, "run", smi("500\n", mine + "999999, 800\n"))):
         ok, why = E.gpu_free()
         assert not ok and "999999" in why and str(os.getpid()) not in why, why
-    with patched((E.subprocess, "run", lambda cmd, **k: fake("2500\n") if cmd[0] == "nvidia-smi" else fake(""))):
+    with patched((E.subprocess, "run", smi("2500\n", ""))):
         assert not E.gpu_free()[0]
     # stamped result files, the dump identity
     with tempfile.TemporaryDirectory() as d:
         a1, a2 = E._write_stamped(d, "x", dict(v=np.float32(1.5))), E._write_stamped(d, "x", dict(v=2))
         assert a1 != a2 and json.load(open(a1)) == dict(v=1.5) and len(os.listdir(d)) == 2, "a result file is never skipped or overwritten"
         open(os.path.join(d, "f.bin"), "wb").write(b"abc")
-        fid = E._file_id(os.path.join(d, "f.bin"))
+        fid = DU.file_id(os.path.join(d, "f.bin"))
         assert fid["sha256"] == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" and fid["mtime"].endswith("UTC"), fid
     print("numbers: the samples, the paired junction F1 on a hand case "
           "(pooled counts 0.4, interval 0 .. 1; a = b gives 0; the draws (scenes, B, seed) of qgraph_eval.paired), --ref-cell parsed and refused without a variant, gpu_free without this process and its parents, stamped result files, "
@@ -399,7 +406,7 @@ def test_timing():
     with tempfile.TemporaryDirectory() as runs:
         os.makedirs(os.path.join(runs, "h"))
         torch.save(torch.load(SMOKE, map_location="cpu", weights_only=False), os.path.join(runs, "h", "model.pt"))
-        K = E.open_cache("val", 0).K
+        K = DU.open_cache("val", 0).K
         t_args = ["timing", "--run", "h", "--cpu", "--frames", "2", "--repeats", "1"]
         E.timing(E.parse_args(t_args + ["--b-run", "runs/e292_a_s0"]), runs)
         E.timing(E.parse_args(t_args), runs)
@@ -424,7 +431,7 @@ def _plant_pnone(path, toks):
         v = np.flatnonzero(t["valid"])[:12]
         f["pnone"][v] = np.where(np.arange(len(v)) % 2, np.float32(0.65), np.float32(0.55))
         f["keep"] = t["valid"] & (f["pnone"] < np.float32(0.5))
-        f["rec"] = E.decode_variant(f, t["valid"])["rec"]
+        f["rec"] = RO.decode_variant(f, t["valid"])["rec"]
         planted += len(v)
     pickle.dump(d, open(path, "wb"))
     return d, planted
@@ -443,8 +450,8 @@ def test_sweep():
         ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
         ck["state"] = floor_model().state_dict()
         torch.save(ck, os.path.join(runs, "h", "model.pt"))
-        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
-        toks = [E.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
+        PR.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        toks = [DU.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
         d, planted = _plant_pnone(os.path.join(runs, "h", "token_val_n3.pkl"), toks)
         sw = ["sweep", "--run", "h", "--seed", "0"]
         gone = (["ensemble", "--runs", "h,g", "--seed", "0"], ["anatomy", "--run", "h", "--seed", "0"], ["live-diff", "--run", "h", "--seed", "0", "--against", "g"], ["check-layer1", "--seed", "0"],
@@ -472,7 +479,7 @@ def test_sweep():
         assert pj["rows"] == prow, "sweep --jobs 3 gives the rows of the serial sweep, to the last digit"
         import qgraph_eval as QE
         r0 = pcell[(0.1, 0.05, 0.6)]                                                                        # one row against a direct scoring of its decode
-        d0 = E.score_preds([E.frame_prediction(t, E.decode_variant(f, t["valid"], 0.1, 0.6, False, 0.05), "rec", 0.6) for f, t in zip(d["frames"], toks)], QE.val_frames()[:3], log=lambda *a, **k: None)
+        d0 = E.score_preds([RO.frame_prediction(t, RO.decode_variant(f, t["valid"], 0.1, 0.6, False, 0.05), "rec", 0.6) for f, t in zip(d["frames"], toks)], QE.val_frames()[:3], log=lambda *a, **k: None)
         jn = np.sum([c["lane"]["junc"] for c in d0["rec"]["graph"]], 0)                                    # predicted, GT, matched junction points of the 3 frames (three different counts: a mix-up shows)
         assert len(set(jn.tolist())) == 3 and abs(r0["junction_points_per_frame"] * r0["frames"] - jn[0]) < 1e-9 and all(r0[k] == d0["graph"][k] for k in E.JUNCTION_KEYS), (jn, r0)
         assert all(r[f"node_link_long_{k}"] is not None for r in prow for k in "PR") and (r0["node_link_long_P"], r0["node_link_long_R"]) == (d0["nodes"]["link_long_P"], d0["nodes"]["link_long_R"]), r0
@@ -500,13 +507,13 @@ def test_sweep():
 
 def test_every():
     """--every N: the sample, the file names, the meta of the dump, and score / sweep reading the subset back (frames 0, 3, 6 of VAL with --max 3; the TRAIN sample every third = 291 frames)"""
-    s = E.sample(8414, "train")
-    assert len(E.sample(8414, "train", 3)) == 291 and E.sample(8414, "train", 3).tolist() == s[::3].tolist() and E.sample(873, "val", 3).tolist()[:3] == [0, 3, 6] and E.sample(873, "val", 1).tolist() == list(range(873))
+    s = DU.sample(8414, "train")
+    assert len(DU.sample(8414, "train", 3)) == 291 and DU.sample(8414, "train", 3).tolist() == s[::3].tolist() and DU.sample(873, "val", 3).tolist()[:3] == [0, 3, 6] and DU.sample(873, "val", 1).tolist() == list(range(873))
     if not CACHE_OK or not os.path.exists(SMOKE):
         print("every: the sample ok, the dump / score / sweep part SKIPPED (no cache or smoke model)")
         return
     import qgraph_eval as QE
-    ds = E.open_cache("val", 0)
+    ds = DU.open_cache("val", 0)
     with tempfile.TemporaryDirectory() as tmp:
         runs, scratch = os.path.join(tmp, "runs"), os.path.join(tmp, "scratch")
         out = os.path.join(scratch, "out")
@@ -515,16 +522,16 @@ def test_every():
         ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
         ck["state"] = floor_model().state_dict()                                                       # an untrained head that keeps nodes and links
         torch.save(ck, os.path.join(runs, "h", "model.pt"))
-        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)
+        PR.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)
         path = os.path.join(runs, "h", "token_val_every3_n3.pkl")
         toks = [ds[i]["tokens_np"] for i in (0, 3, 6)]
         d, _ = _plant_pnone(path, toks)                                                                 # the keep threshold of a reference cell matters
         assert d["meta"]["every"] == 3 and d["meta"]["idx"] == [0, 3, 6] and d["meta"]["tokens"] == [ds.tokens[i] for i in (0, 3, 6)] and [f["token"] for f in d["frames"]] == d["meta"]["tokens"], d["meta"]
-        must_fail(E.dump, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)       # never overwritten
+        must_fail(PR.dump, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--every", "3", "--max", "3"]), runs)       # never overwritten
         c = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--every", "3", "--max", "3"]), runs, out)
         assert sorted(os.listdir(out)) == ["h_token_card_rec_every3_n3.json"], os.listdir(out)
         fr = QE.val_frames()
-        want = E.score_preds([E.frame_prediction(t, f, "rec") for t, f in zip(toks, d["frames"])], [fr[i] for i in (0, 3, 6)], log=lambda *a, **k: None)["graph"]
+        want = E.score_preds([RO.frame_prediction(t, f, "rec") for t, f in zip(toks, d["frames"])], [fr[i] for i in (0, 3, 6)], log=lambda *a, **k: None)["graph"]
         assert c["frames"] == 3 and all(abs(c["metrics"][k] - want[k]) < 1e-12 for k in E.KEYS), "the card scores frames 0, 3, 6"
         with patched((E, "SWEEP_GRIDS", dict(perclass=[(0.3, 0.3, 0.5, True), (0.1, 0.1, 0.6, False)]))):          # the record cell and the cell of the variant card below
             tab = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--seed", "0", "--split", "val", "--every", "3", "--max", "3"]), runs, out)))
@@ -540,7 +547,7 @@ def test_every():
         pv = ["score", "--run", "h", "--seed", "0", "--every", "3", "--max", "3", "--link-thr", "0.3", "--link-thr-long", "0.05", "--keep-thr", "0.6", "--no-none-gate"]
         w = E.score(E.parse_args(pv + ["--ref-cell", "0.1,0.2,0.5,on"]), runs, out)
         assert os.path.exists(os.path.join(out, "h_token_card_rec_lt0.3_ltl0.05_kt0.6_nng_every3_n3.json")) and (w["info"]["decode_variant"]["link_thr"], w["info"]["decode_variant"]["link_thr_long"]) == (0.3, 0.05), w["info"]["decode_variant"]
-        direct = lambda lt, ltl, kt, gate: E.score_preds([E.frame_prediction(t, E.decode_variant(f, t["valid"], lt, kt, gate, ltl), "rec", kt) for t, f in zip(toks, d["frames"])], [fr[i] for i in (0, 3, 6)], log=lambda *a, **k: None)  # noqa: E731
+        direct = lambda lt, ltl, kt, gate: E.score_preds([RO.frame_prediction(t, RO.decode_variant(f, t["valid"], lt, kt, gate, ltl), "rec", kt) for t, f in zip(toks, d["frames"])], [fr[i] for i in (0, 3, 6)], log=lambda *a, **k: None)  # noqa: E731
         dw, d1, d0 = direct(0.3, 0.05, 0.6, False), direct(0.3, None, 0.6, False), direct(0.1, 0.2, 0.5, True)
         assert all(abs(w["metrics"][k] - dw["graph"][k]) < 1e-12 for k in E.KEYS) and any(dw["graph"][k] != d1["graph"][k] for k in E.KEYS), "the card is the per-class decode (and differs from one threshold 0.3)"
         assert E.junction_numbers(dw["rec"]["graph"]) == {k: dw["graph"][k] for k in E.JUNCTION_KEYS}, "junction_numbers = the scorer's junction numbers"
@@ -565,7 +572,7 @@ def test_score_max():
         os.makedirs(os.path.join(runs, "h"))
         os.makedirs(out)
         torch.save(torch.load(SMOKE, map_location="cpu", weights_only=False), os.path.join(runs, "h", "model.pt"))
-        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        PR.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
         c = E.score(E.parse_args(["score", "--run", "h", "--seed", "0", "--max", "3"]), runs, out)
         assert c["frames"] == 3 and os.listdir(out) == ["h_token_card_rec_n3.json"] and not os.path.exists(os.path.join(runs, "h", "token_card_rec.json")) and c["protocol"]["reference"].startswith("val")
         assert "plain_b" not in c["info"] and "drop" not in c["info"], sorted(c["info"])
@@ -608,7 +615,7 @@ def test_graphs():
         ck = torch.load(SMOKE, map_location="cpu", weights_only=False)
         ck["state"] = floor_model().state_dict()
         torch.save(ck, os.path.join(runs, "h", "model.pt"))
-        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        PR.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
         out = os.path.join(tmp, "g", "graphs.pkl")
         os.makedirs(os.path.dirname(out))
         g_args = ["graphs", "--run", "h", "--seed", "0", "--max", "3", "--out", out]
@@ -620,10 +627,10 @@ def test_graphs():
         E.check_graphs(doc, frames)
         r0 = doc["frames"][0]
         assert sorted(r0) == ["gt", "k", "man_pts", "n_man", "row", "scene", "sys", "token"] and sorted(r0["sys"]) == ["S1", "S1_v"] and sorted(r0["gt"][0]) == ["kinds", "pts", "tier", "vis"] and r0["gt"][0]["tier"].dtype == np.int8
-        ds = E.open_cache("val", 0)
+        ds = DU.open_cache("val", 0)
         d = pickle.load(open(os.path.join(runs, "h", "token_val_n3.pkl"), "rb"))
-        want = E.score_preds([E.frame_prediction(ds[i]["tokens_np"], f, "rec") for i, f in enumerate(d["frames"])], frames, log=lambda *x, **k: None)["graph"]["topo_F1"]
-        want_v = E.score_preds([E.frame_prediction(ds[i]["tokens_np"], E.decode_variant(f, ds[i]["tokens_np"]["valid"], 0.1, 0.6, False, 0.05), "rec", 0.6) for i, f in enumerate(d["frames"])], frames, log=lambda *x, **k: None)["graph"]["topo_F1"]
+        want = E.score_preds([RO.frame_prediction(ds[i]["tokens_np"], f, "rec") for i, f in enumerate(d["frames"])], frames, log=lambda *x, **k: None)["graph"]["topo_F1"]
+        want_v = E.score_preds([RO.frame_prediction(ds[i]["tokens_np"], RO.decode_variant(f, ds[i]["tokens_np"]["valid"], 0.1, 0.6, False, 0.05), "rec", 0.6) for i, f in enumerate(d["frames"])], frames, log=lambda *x, **k: None)["graph"]["topo_F1"]
         assert abs(tab["sys"]["S1"]["pooled_topo_F1"] - want) < 1e-12 and len(tab["sys"]["S1"]["topo_F1"]) == 3 and tab["sys"]["S1_v"]["decode"] == "rec_lt0.1_ltl0.05_kt0.6_nng", tab["sys"]["S1"]
         assert abs(tab["sys"]["S1_v"]["pooled_topo_F1"] - want_v) < 1e-12, "the variant's graphs are the per-class decode"
         swapped = dict(doc, frames=[doc["frames"][1], doc["frames"][0], doc["frames"][2]])
@@ -681,15 +688,15 @@ def test_ref_run():
         os.makedirs(out)
         for name, seed in (("h", 0), ("g", 0), ("g1", 1)):
             _floor_run(runs, name, seed)
-        E.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
-        toks = [E.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
+        PR.dump(E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        toks = [DU.open_cache("val", 0)[i]["tokens_np"] for i in range(3)]
         d, _ = _plant_pnone(os.path.join(runs, "h", "token_val_n3.pkl"), toks)
         g = pickle.loads(pickle.dumps(d))                                                                  # g: the same frames and tokens, no node kept at any threshold
         g["meta"]["run"] = "g"
         for f, t in zip(g["frames"], toks):
             f["pnone"][:] = 1.0
             f["keep"][:] = False
-            f["rec"] = E.decode_variant(f, t["valid"])["rec"]
+            f["rec"] = RO.decode_variant(f, t["valid"])["rec"]
         pickle.dump(g, open(os.path.join(runs, "g", "token_val_n3.pkl"), "wb"))
         shutil.copy(os.path.join(runs, "h", "token_val_n3.pkl"), os.path.join(runs, "g1", "token_val_n3.pkl"))
         base, var = ["score", "--run", "h", "--seed", "0", "--max", "3"], ["--link-thr", "0.3", "--link-thr-long", "0.05", "--keep-thr", "0.6", "--no-none-gate"]
@@ -717,7 +724,7 @@ def test_ref_run():
         must_fail(E.score, E.parse_args(base + var + ["--ref-run", "g1"]), runs, out)                       # a run of another cache seed
         must_fail(E.score, E.parse_args(base + var + ["--ref-run-cell", "0.1,0.2,0.5,on"]), runs, out)      # a reference cell without a reference run
         _floor_run(runs, "p", 0, cache="runs/other_cache")                                                  # p: a run on a cache root of its own (E383): the option no longer exists, no read-out opens it
-        refused_with(E.dump, "{'cache': 'runs/other_cache'}: options that no longer exist (the tag v1 keeps them)", E.parse_args(["dump", "--run", "p", "--seed", "0", "--cpu", "--max", "3"]), runs)
+        refused_with(PR.dump, "{'cache': 'runs/other_cache'}: options that no longer exist (the tag v1 keeps them)", E.parse_args(["dump", "--run", "p", "--seed", "0", "--cpu", "--max", "3"]), runs)
     print(f"ref_run: same_tokens refuses other frames / idx / cells / valid tokens ({len(muts)} mutants); on 3 cache frames the run itself as reference at a variant cell (not the record's numbers) = its own numbers, diff 0, interval [0, 0]; "
           f"--ref-run-cell at the card's own cell = the default (same name); at another cell (_rc0.1_0.2_0.5_on) = --ref-cell of that cell exactly (numbers and interval); an empty reference = 0, so the diff is the card's own number "
           f"(topo F1 {emp['metrics']['topo_F1']:.4f}; also at the record decode); _vs_<run> beside the card without it, never overwritten; refused: another cache seed, a cell without a run, and a "
@@ -757,8 +764,8 @@ def test_choose_cell():
     with tempfile.TemporaryDirectory() as tmp:
         runs, out = os.path.join(tmp, "runs"), os.path.join(tmp, "out")
         for name, rows in (("h", a_), ("g", d_)):
-            E.JV.write_json(os.path.join(runs, name, "token_sweep_perclass_train_every3.json"), dict(grid="perclass", split="train", every=3, rows=rows))
-        E.JV.write_json(os.path.join(runs, "x", "token_sweep_perclass_train_every3.json"), dict(split="train", every=3, rows=a_))          # a table without the per-class grid
+            E.write_json(os.path.join(runs, name, "token_sweep_perclass_train_every3.json"), dict(grid="perclass", split="train", every=3, rows=rows))
+        E.write_json(os.path.join(runs, "x", "token_sweep_perclass_train_every3.json"), dict(split="train", every=3, rows=a_))          # a table without the per-class grid
         cc = lambda *x: E.choose_cell(E.parse_args(["choose-cell", "--runs", *x]), runs)  # noqa: E731
         assert [cc("h")["cell"], cc("h,g")["cell"], cc("h", "--ref-cell", "0.3,0.05,0.5,off")["cell"]] == ["0.3,0.1,0.6,off", "0.2,0.2,0.6,off", "0.3,0.05,0.5,off"]      # the reference (0.3, 0.05, 0.5): lanes bound 0.67, its own topo F1 0.690 = T
         names = sorted(os.listdir(os.path.join(runs, "h")))
@@ -766,7 +773,7 @@ def test_choose_cell():
         stored = os.path.join(runs, "h", names[0])
         before = open(stored).read()
         assert cc("h")["cell"] == "0.3,0.1,0.6,off" and open(stored).read() == before, "a stored choice is recomputed and printed, not written again"
-        E.JV.write_json(os.path.join(runs, "h", "token_sweep_perclass_train_every3.json"), dict(grid="perclass", split="train", every=3, rows=b_))
+        E.write_json(os.path.join(runs, "h", "token_sweep_perclass_train_every3.json"), dict(grid="perclass", split="train", every=3, rows=b_))
         must_fail(cc, "h")                                                                   # the table now gives another cell than the stored one
         must_fail(cc, "x")
         must_fail(cc, "h,h")
@@ -820,37 +827,36 @@ def test_live():
     x["fr"][1]["token"] = "c"
     refused_with(E.same_tokens, "other frames", r, x)                                                        # other frames: refused, live or not
     sd = {"nodes.w": torch.arange(4.0), "pyr.b": torch.ones(2, dtype=torch.int64)}
-    assert E.state_sha(sd) == E.state_sha(dict(reversed(list(sd.items())))) and E.state_sha(sd, "nodes.") != E.state_sha(sd), "the name order does not count, the prefix does"
+    assert DU.state_sha(sd) == DU.state_sha(dict(reversed(list(sd.items())))) and DU.state_sha(sd, "nodes.") != DU.state_sha(sd), "the name order does not count, the prefix does"
     moved = dict(sd, **{"pyr.b": torch.zeros(2, dtype=torch.int64)})
-    assert E.state_sha(moved, "nodes.") == E.state_sha(sd, "nodes.") and E.state_sha(moved) != E.state_sha(sd) and E.state_sha({"nodes.w": torch.arange(4.0).view(2, 2)}) != E.state_sha({"nodes.w": torch.arange(4.0)})
-    assert E.b_shas(moved)["sha_frozen"] != E.b_shas(sd)["sha_frozen"] and E.b_shas(moved)["sha_nodes"] == E.b_shas(sd)["sha_nodes"]
+    assert DU.state_sha(moved, "nodes.") == DU.state_sha(sd, "nodes.") and DU.state_sha(moved) != DU.state_sha(sd) and DU.state_sha({"nodes.w": torch.arange(4.0).view(2, 2)}) != DU.state_sha({"nodes.w": torch.arange(4.0)})
+    assert DU.b_shas(moved)["sha_frozen"] != DU.b_shas(sd)["sha_frozen"] and DU.b_shas(moved)["sha_nodes"] == DU.b_shas(sd)["sha_nodes"]
     # tokens_exact: every token field (the head's inputs, the cells and the writer's e_p / flags_p / s_p) bit-equal to the cache's; float16 tok against its float32 copy is equal, one flipped value in any field is not
-    assert E.TOKEN_KEYS == ("cell", "tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid", "e_p", "flags_p", "s_p")
+    assert PR.TOKEN_KEYS == ("cell", "tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid", "e_p", "flags_p", "s_p")
     rng = np.random.default_rng(0)
     shapes = dict(cell=(), tok=(6,), pos=(2,), dirv=(2,), e=(), e_raw=(), s=(), uout=(), uin=(), flags=(8,), valid=(), e_p=(), flags_p=(8,), s_p=())
     cache = {k: (np.arange(5, dtype=np.int16) if k == "cell" else np.ones(5, bool) if k == "valid" else rng.random((5,) + s).astype(np.float16 if k == "tok" else np.float32)) for k, s in shapes.items()}
     fake = types.SimpleNamespace(c=types.SimpleNamespace(f={k: v[None] for k, v in cache.items()}))
     live_tk = {k: torch.from_numpy(v.astype(np.float32) if k == "tok" else v.astype(np.int64) if k == "cell" else v)[None] for k, v in cache.items()}
-    assert E.same_tokens_as_cache(live_tk, fake, np.array([0])) == [True]
-    for k in E.TOKEN_KEYS:
+    assert PR.same_tokens_as_cache(live_tk, fake, np.array([0])) == [True]
+    for k in PR.TOKEN_KEYS:
         t = {q: v.clone() for q, v in live_tk.items()}
         t[k].view(-1)[1] = ~t[k].view(-1)[1] if k == "valid" else t[k].view(-1)[1] + 1
-        assert E.same_tokens_as_cache(t, fake, np.array([0])) == [False], k
+        assert PR.same_tokens_as_cache(t, fake, np.array([0])) == [False], k
     for bad, why in ((["score", "--run", "h", "--seed", "0", "--ref-run", "h", "--ref-cache"], "give --live and --ref-run"), (["score", "--run", "h", "--seed", "0", "--live", "--ref-cache"], "give --live and --ref-run")):
         refused_with(E.score, why, E.parse_args(bad))                                                        # refused before anything is read
     for bad, why in ((["--bs", "4"], "give --live"), (["--live", "--bs", "0"], "a batch of at least 1")):
-        refused_with(E.dump, why, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu"] + bad))
+        refused_with(PR.dump, why, E.parse_args(["dump", "--run", "h", "--seed", "0", "--cpu"] + bad))
     base_pt = os.path.join(E.RUNS, "e292_a_s0", "model.pt")
     if not CACHE_OK or not os.path.exists(SMOKE) or not os.path.exists(base_pt):
         print("live: the hand part ok, the cache part SKIPPED (no cache, smoke model or runs/e292_a_s0)")
         return
-    import lane_live_tok as LT
     import lane_tok_data as TD
     import qgraph_eval as QE
-    ds = E.open_cache("val", 0)
+    ds = DU.open_cache("val", 0)
     td = TD.TokData("val", E.LATTICE, feats=False)
     base = torch.load(base_pt, map_location="cpu")["state"]
-    base_sha = E._file_id(base_pt)["sha256"]
+    base_sha = DU.file_id(base_pt)["sha256"]
 
     class Frames(torch.utils.data.Dataset):                                                                  # the stand-in of LiveData: x names the cache frame
         tokens, rows = ds.tokens, ds.rows
@@ -861,7 +867,7 @@ def test_live():
         def __getitem__(self, i):
             return dict(x=torch.full((1, 1, 1), float(i)), token=ds.tokens[i], row=ds.rows[i], table=td.table(i))
 
-    class CacheB:                                                                                            # the stand-in of LiveSource: the CACHE tokens of the frames named by x (shift > 0: pos + shift m and the token order reversed); chunks = the B' batches
+    class CacheB:                                                                                            # the stand-in of LaneNet: the CACHE tokens of the frames named by x (shift > 0: pos + shift m and the token order reversed); chunks = the B' batches
         def __init__(self, shift):
             self.shift, self.chunks = shift, []
 
@@ -870,19 +876,21 @@ def test_live():
 
         def tokens(self, x):
             self.chunks.append(int(x.shape[0]))
-            tk = {k: torch.from_numpy(np.stack([np.array(ds.c.f[k][int(i)]) for i in x.flatten(1)[:, 0]])) for k in E.TOKEN_KEYS}
+            tk = {k: torch.from_numpy(np.stack([np.array(ds.c.f[k][int(i)]) for i in x.flatten(1)[:, 0]])) for k in PR.TOKEN_KEYS}
             tk["tok"] = tk["tok"].float()
             if self.shift:
                 tk = {k: v.flip(1) for k, v in tk.items()}
                 tk["pos"] = tk["pos"] + self.shift
             return None, tk
 
-        def labelled(self, tk, tables, token, row, token_drop=0.0, seed=0, gate=True):
-            return LT.live_batch(tk, tables, token, row, ds.K, token_drop, seed, gate)
-
     def live(shift, frames=Frames):                                                                          # the stub's tokens, the B' identity of the `live_source` in place now (a mutant inside `mutated`)
-        stub, real = CacheB(shift), E.live_source
-        return stub, ((E, "live_source", lambda path, ck, kw, K: (stub, real(path, ck, kw, K)[1])), (E, "live_data", lambda split, seed, ident: frames()))
+        stub, real = CacheB(shift), PR.live_source
+
+        def source(path, ck, kw, K):                                                                         # the real network's head and B' identity, the stub's tokens
+            net, src = real(path, ck, kw, K)
+            stub.head = net.head
+            return stub, src
+        return stub, ((PR, "live_source", source), (PR, "live_data", lambda split, seed, ident: frames()))
 
     def joint(runs, name, b_state, train_nodes=1, b_sha256=base_sha, **extra):                                # a run of jlive_train's format: args train_nodes, live_inputs, b_sha256 (+ E393's b_state_from, b_state_sha256, train_pyr); b_state
         _floor_run(runs, name, 0, train_nodes=train_nodes, live_inputs=True, b_sha256=b_sha256, **extra)
@@ -896,7 +904,7 @@ def test_live():
     def dump_live(runs, name, shift=0.0, extra=(), frames=Frames):
         stub, pt = live(shift, frames)
         with patched(*pt):
-            E.dump(E.parse_args(["dump", "--live", "--run", name, "--cpu"] + base_args + list(extra)), runs)
+            PR.dump(E.parse_args(["dump", "--live", "--run", name, "--cpu"] + base_args + list(extra)), runs)
         return pickle.load(open(os.path.join(runs, name, f"token_val_live_n{base_args[-1]}.pkl"), "rb")), stub.chunks
 
     eq = lambda x, y: x.keys() == y.keys() and all(eq(x[k], y[k]) for k in x) if isinstance(x, dict) else np.array_equal(x, y)  # noqa: E731
@@ -911,24 +919,24 @@ def test_live():
         trained[key] += 0.01                                                                                 # a node head that moved
         jp, jck = joint(runs, "j", trained)
         kw = dict(seed=0, ident="e292_a")
-        src, bs_ = E.live_source(jp, jck, kw, ds.K)
-        assert bs_["kind"] == "b_state" and bs_["sha_nodes"] == E.state_sha(trained, "nodes.") != E.state_sha(base, "nodes.") and torch.equal(src.model.state_dict()[key], trained[key]) and not src.model.nodes.training
+        src, bs_ = PR.live_source(jp, jck, kw, ds.K)
+        assert bs_["kind"] == "b_state" and bs_["sha_nodes"] == DU.state_sha(trained, "nodes.") != DU.state_sha(base, "nodes.") and torch.equal(src.b.state_dict()[key], trained[key]) and not src.b.nodes.training
         hck = torch.load(os.path.join(runs, "h", "model.pt"), map_location="cpu", weights_only=False)
-        assert E.live_source("h", hck, kw, ds.K)[1]["sha_state"] == E.state_sha(base), "a cache-trained run reads runs/e292_a_s0"
-        refused_with(E.live_source, "no fall-back", jp, {k: v for k, v in jck.items() if k != "b_state"}, kw, ds.K)      # train_nodes without b_state
+        assert PR.live_source(os.path.join(runs, "h", "model.pt"), hck, kw, ds.K)[1]["sha_state"] == DU.state_sha(base), "a cache-trained run reads runs/e292_a_s0"
+        refused_with(PR.live_source, "no fall-back", jp, {k: v for k, v in jck.items() if k != "b_state"}, kw, ds.K)      # train_nodes without b_state
         base_args = ["--seed", "0", "--max", "3"]
-        E.dump(E.parse_args(["dump", "--run", "h", "--cpu"] + base_args), runs)
+        PR.dump(E.parse_args(["dump", "--run", "h", "--cpu"] + base_args), runs)
         dl, chunks = dump_live(runs, "h")
         dc = pickle.load(open(os.path.join(runs, "h", "token_val_n3.pkl"), "rb"))
         m = dl["meta"]
         assert chunks == [3] and m["live"] and (m["bs_b"], m["bs_head"], m["device"], m["tokens_exact"], m["tokens_exact_frames"]) == (4, 8, "cpu", True, 3) and m["env"]["torch"] == torch.__version__ and m["env"]["gpu"] is None
-        assert m["b_source"]["kind"] == "base" and {k: m["b_source"][k] for k in E.B_SHAS} == E.b_shas(base) and "live" not in dc["meta"], m["b_source"]
+        assert m["b_source"]["kind"] == "base" and {k: m["b_source"][k] for k in DU.B_SHAS} == DU.b_shas(base) and "live" not in dc["meta"], m["b_source"]
         for i, (f, g) in enumerate(zip(dc["frames"], dl["frames"])):                                     # the live path on the cache's tokens = the cache path: records, tokens, labels
             item = ds[i]
             assert all(eq(f[k], g[k]) for k in f), i
             assert all(np.array_equal(g["tokens_np"][k], item["tokens_np"][k]) for k in item["tokens_np"]) and sorted(set(g) - set(f)) == ["tokens_np"], i
         # 10 frames: two head batches (8 + 2) with B' in chunks of 4 4 2: every record and the tokens still the cache's, frame by frame
-        E.dump(E.parse_args(["dump", "--run", "k", "--cpu", "--seed", "0", "--max", "10"]), runs)
+        PR.dump(E.parse_args(["dump", "--run", "k", "--cpu", "--seed", "0", "--max", "10"]), runs)
         base_args = ["--seed", "0", "--max", "10"]
         dk, chunks = dump_live(runs, "k")
         dkc = pickle.load(open(os.path.join(runs, "k", "token_val_n10.pkl"), "rb"))
@@ -939,12 +947,12 @@ def test_live():
             tokens = list(reversed(ds.tokens))
         base_args = ["--seed", "0", "--max", "3"]
         refused_with(dump_live, "not the frames of the cache", runs, "h2", 0.0, (), Shuffled)
-        with mutated(E.live_dump, "assert list(data.tokens) == list(ds.tokens)", "assert True or list(data.tokens) == list(ds.tokens)"):
+        with mutated(PR.live_dump, "assert list(data.tokens) == list(ds.tokens)", "assert True or list(data.tokens) == list(ds.tokens)"):
             dump_live(runs, "h2", 0.0, (), Shuffled)                                                     # without the guard the shuffled frames are accepted: the refusal above is the test of it
         os.remove(os.path.join(runs, "h2", "token_val_live_n3.pkl"))
         sc = ["score", "--run", "h"] + base_args
         c0, c1 = E.score(E.parse_args(sc), runs, out), E.score(E.parse_args(sc + ["--live"]), runs, out)
-        assert c0["metrics"] == c1["metrics"] and all(c1["info"][k] == m[k] for k in E.LIVE_META) and "live" not in c0["info"] and os.path.exists(os.path.join(out, "h_token_card_rec_live_n3.json"))
+        assert c0["metrics"] == c1["metrics"] and all(c1["info"][k] == m[k] for k in PR.LIVE_META) and "live" not in c0["info"] and os.path.exists(os.path.join(out, "h_token_card_rec_live_n3.json"))
         d115 = ["--link-thr", "0.3", "--link-thr-long", "0.2", "--keep-thr", "0.6", "--no-none-gate"]
         par = E.score(E.parse_args(sc + ["--live", "--ref-run", "h", "--ref-cache"] + d115), runs, out)
         rf, pr = par["info"]["ref_run"], par["info"]["paired_vs_ref_run"]
@@ -953,17 +961,17 @@ def test_live():
         grid1 = dict(E.SWEEP_GRIDS, perclass=[(0.3, 0.2, 0.6, False)])
         with patched((E, "SWEEP_GRIDS", grid1)):
             sw = json.load(open(E.sweep(E.parse_args(["sweep", "--run", "h", "--split", "val", "--grid", "perclass", "--live"] + base_args), runs, out)))
-        assert os.path.basename(sw["dump"]["path"]) == "token_val_live_n3.pkl" and sw["rows"][0]["topo_F1"] == par["metrics"]["topo_F1"] and all(sw[k] == m[k] for k in E.LIVE_META)
+        assert os.path.basename(sw["dump"]["path"]) == "token_val_live_n3.pkl" and sw["rows"][0]["topo_F1"] == par["metrics"]["topo_F1"] and all(sw[k] == m[k] for k in PR.LIVE_META)
         # a joint run whose B' made other tokens (pos + 1 m, the order reversed; B' at bs 2): its own tokens everywhere
         dj, chunks = dump_live(runs, "j", 1.0, ("--bs", "2"))
         mj = dj["meta"]
-        assert chunks == [2, 1] and (mj["bs_b"], mj["bs_head"], mj["tokens_exact"], mj["tokens_exact_frames"]) == (2, 8, False, 0) and mj["b_source"]["kind"] == "b_state" and mj["b_source"]["sha_nodes"] == E.state_sha(trained, "nodes.")
+        assert chunks == [2, 1] and (mj["bs_b"], mj["bs_head"], mj["tokens_exact"], mj["tokens_exact_frames"]) == (2, 8, False, 0) and mj["b_source"]["kind"] == "b_state" and mj["b_source"]["sha_nodes"] == DU.state_sha(trained, "nodes.")
         frames3 = QE.val_frames()[:3]
-        direct = lambda fr, kt=0.5, lt=None: E.score_preds([E.frame_prediction(f_["tokens_np"], f_ if lt is None else E.decode_variant(f_, f_["tokens_np"]["valid"], lt[0], kt, False, lt[1]), "rec", kt) for f_ in fr], frames3, log=lambda *x, **k: None)["graph"]  # noqa: E731
+        direct = lambda fr, kt=0.5, lt=None: E.score_preds([RO.frame_prediction(f_["tokens_np"], f_ if lt is None else RO.decode_variant(f_, f_["tokens_np"]["valid"], lt[0], kt, False, lt[1]), "rec", kt) for f_ in fr], frames3, log=lambda *x, **k: None)["graph"]  # noqa: E731
         own = direct(dj["frames"])
         cj = E.score(E.parse_args(["score", "--run", "j", "--live"] + base_args), runs, out)
         assert all(cj["metrics"][k] == own[k] for k in E.KEYS) and cj["metrics"] != c1["metrics"], "the joint run is scored on its own tokens"
-        with mutated(E.read_dump, 'toks = [f["tokens_np"] for f in fr] if live else', 'toks = [ds[int(i)]["tokens_np"] for i in idx] if live else'):     # a read_dump that takes the cache's tokens: caught
+        with mutated(DU.read_dump, 'toks = [f["tokens_np"] for f in fr] if live else', 'toks = [ds[int(i)]["tokens_np"] for i in idx] if live else'):     # a read_dump that takes the cache's tokens: caught
             os.makedirs(os.path.join(tmp, "out_m"))
             try:
                 cm = E.score(E.parse_args(["score", "--run", "j", "--live"] + base_args), runs, os.path.join(tmp, "out_m"))
@@ -986,7 +994,7 @@ def test_live():
         assert E.score(E.parse_args(["score", "--run", "z0", "--live"] + base_args), runs, out)["info"]["b_source"]["kind"] == "b_state"
         # the cache path refuses a joint run: dump, score (a cache dump under its name), graphs
         for name in ("j", "z0"):
-            refused_with(E.dump, "read only with --live", E.parse_args(["dump", "--run", name, "--cpu"] + base_args), runs)
+            refused_with(PR.dump, "read only with --live", E.parse_args(["dump", "--run", name, "--cpu"] + base_args), runs)
         d = pickle.load(open(os.path.join(runs, "h", "token_val_n3.pkl"), "rb"))
         d["meta"]["run"] = "j"
         pickle.dump(d, open(os.path.join(runs, "j", "token_val_n3.pkl"), "wb"))
@@ -995,8 +1003,14 @@ def test_live():
         # check_b: what ran must be what the run demands
         def refused(name, why):                                                                          # into an empty folder: no stored card of the run answers first
             refused_with(E.score, why, E.parse_args(["score", "--run", name, "--live"] + base_args), runs, os.path.join(tmp, "out_r"))
-        joint(runs, "j2", trained)                                                                       # the joint run read with runs/e292_a_s0: a fall-back of live_source
-        with mutated(E.live_source, '    if own:\n        mb.load_state_dict(ck["b_state"])', '    if False:\n        mb.load_state_dict(ck["b_state"])'):
+        joint(runs, "j2", trained)                                                                       # the joint run read with runs/e292_a_s0: a fall-back of the loader
+        real_load = LN.LaneNet.from_checkpoint
+
+        def base_only(path, device="cpu", K=512, b_run=None):                                            # a loader that leaves the run's own B' out
+            net, ck = real_load(path, device, K, b_run)
+            net.b.load_state_dict(torch.load(os.path.join(b_run, "model.pt"), map_location="cpu")["state"])
+            return net, ck
+        with patched((LN.LaneNet, "from_checkpoint", base_only)):
             dump_live(runs, "j2", 1.0)
         refused("j2", "did not run the run's own B'")
         joint(runs, "j3", {k: v.clone() for k, v in base.items()})                                       # a joint run whose node head did not move
@@ -1014,7 +1028,7 @@ def test_live():
         ok_ = next(k for k in sorted(trained) if not k.startswith(("nodes.", "pyr.")) and trained[k].is_floating_point())
         start = dict(trained, **{pk: trained[pk] + 0.02, ok_: trained[ok_] + 0.02})                       # the start differs from the B' file in the pyramid AND outside node head and pyramid
         joint(runs, "s0", start)
-        s_sha = E._file_id(os.path.join(runs, "s0", "model.pt"))["sha256"]
+        s_sha = DU.file_id(os.path.join(runs, "s0", "model.pt"))["sha256"]
         st_args = dict(b_state_from="s0", b_state_sha256=s_sha)
         nodes_on = dict(start, **{key: start[key] + 0.01})                                               # the node head moved from the start
         for name, sd, extra in (("c1", nodes_on, {}), ("p1", dict(nodes_on, **{pk: nodes_on[pk] + 0.01}), dict(train_pyr=1))):
@@ -1036,7 +1050,7 @@ def test_live():
         refused("z", "did not run the node head of runs/e292_a_s0")
         shutil.copy(os.path.join(runs, "h", "token_val_n3.pkl"), os.path.join(runs, "j", "token_val_live_n3.pkl"))
         refused("j", "not the dump of this read-out")                                                    # the cache dump under the live name: no fall-back to the cache tokens
-    print(f"live: same_tokens pairs a live read-out by frame only (two live ones of one B' batch and device), state_sha and b_shas, tokens_exact field by field over {len(E.TOKEN_KEYS)} fields, the refusals of --ref-cache, --bs "
+    print(f"live: same_tokens pairs a live read-out by frame only (two live ones of one B' batch and device), state_sha and b_shas, tokens_exact field by field over {len(PR.TOKEN_KEYS)} fields, the refusals of --ref-cache, --bs "
           f"(without --live, 0); live_source (the joint run's b_state, runs/e292_a_s0 for a cache-trained run, train_nodes without b_state refused); the stub source with the cache's tokens: 3 frames (chunk 3) and 10 frames "
           f"(two head batches, chunks 4 4 2) = the cache dump's records, tokens_exact, tokens_np = the cache's; the frame-order guard (its mutant accepts shuffled frames); score / sweep --live = the cache read-outs "
           f"with the live meta (topo F1 {c1['metrics']['topo_F1']:.4f}), the parity read with diff 0; the joint run (pos + 1 m, reversed, chunks 2 1): tokens_exact 0, scored on its own tokens (topo F1 {cj['metrics']['topo_F1']:.4f}; "

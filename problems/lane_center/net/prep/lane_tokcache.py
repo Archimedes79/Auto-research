@@ -2,7 +2,6 @@
 of every token (spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`). Derived data, not in git; this tool, its selftest and the manifests are.
 
     python net/prep/lane_tokcache.py build   --run runs/e292_a_s0 --split val|train [--K 384] [--no-f2] [--limit N]   # GPU, resumable; -> runs/e365_cache/b<id>_<S>_K<K>_<GT signature>_<version>/<split>/
-    python net/prep/lane_tokcache.py fixture --cache <dir> --dump runs/kept/e292/predfull_e292_a_s0.pkl [--prefix]         # the cache against B's stored dump, bit for bit (VAL)
     python net/prep/lane_tokcache.py report  --cache <dir> [--write]                                                  # the manifest numbers (--write: manifest.json)
     python net/prep/lane_tokcache.py summary --out experiments/E365_e2e-token-champion-s1/cache_manifest.json                          # all manifests + fixtures as one text record
     python net/prep/lane_tokcache.py same --a <dir> --b <dir of a --limit build> [--n 40]                            # two builds of the same frames equal in every field
@@ -28,10 +27,8 @@ Directory: one .npy per field (memory maps), frames.json, meta.json, progress.js
 """
 import argparse
 import glob
-import hashlib
 import json
 import os
-import pickle
 import sys
 import time
 
@@ -42,6 +39,7 @@ ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirna
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
 import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
+import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
 
 VERSION = "v1"
 CACHE = os.path.join(BP.RUNS, "e365_cache")
@@ -167,60 +165,6 @@ def label_frame(tk, table, r=R_NEAR, cos=COS_NEAR, K=None, allowed=None, ks=KST)
                 cov_nodes_at=np.array([near[:min(k, T)].any(0).sum() for k in ks], np.int32), cov_links_at=np.array([both(near[:min(k, T)].any(0)) for k in ks], np.int32))
 
 
-B_CAP = 512                                                                                        # B's own active set = the top 512 cells (qlinks.LinkHead K), so a stored dump holds at most 512 nodes
-
-
-def compare_dump(cache, dump, e_min=0.2, prefix=False, b_cap=B_CAP):
-    """the cache against a stored B dump (`qgraph_readout.dump_full`: the nodes with sigmoid(e) >= e_min of every frame in the order of the active set): -> (ok, report dict). Per frame the first min(K, n) stored nodes are
-    compared with the cache tokens cell by cell: same set of cells, and e, pos, dirv, flags, s equal bit for bit (the dump holds float64 copies of float32 numbers); the cache must hold no token at or above e_min behind them.
-    One exception, counted and reported: when the stored active set is FULL (n >= b_cap, B's own top-512 cut) the last rank may be a tie of two cells with exactly the same existence that `torch.topk` of the probabilities and the
-    stable sort of the logits order differently; such a cell, and only at the existence of the last stored node, may differ"""
-    if prefix:                                                                                                  # a limited (smoke) cache: its frames are the first ones of the dump
-        dump = dump[:len(cache.rows)]
-    assert len(dump) == len(cache.rows), f"{len(dump)} dump frames, {len(cache.rows)} cache frames"
-    worst, bad, cut, n_nodes, order_diff, ties = dict(e=0.0, pos=0.0, dirv=0.0, flags=0.0, s=0.0), [], 0, 0, 0, 0
-    for i, d in enumerate(dump):
-        if int(d["row"]) != int(cache.rows[i]):
-            return False, dict(error=f"row of frame {i}: dump {d['row']}, cache {cache.rows[i]}")
-        f = cache.f
-        n = int(len(d["e"]))
-        nc = min(n, cache.K)
-        cut += int(n > cache.K)
-        cell_d = np.clip(np.floor((np.asarray(d["pos"][:nc], float) + HALF) / RES).astype(int), 0, N - 1)
-        cell_d = cell_d[:, 0] * N + cell_d[:, 1]
-        cell_c = f["cell"][i, :nc].astype(int)
-        order_diff += int(not np.array_equal(cell_d, cell_c))
-        only_d, only_c = set(cell_d.tolist()) - set(cell_c.tolist()), set(cell_c.tolist()) - set(cell_d.tolist())
-        if only_d or only_c:
-            ed = {int(c_): float(e_) for c_, e_ in zip(cell_d, d["e"][:nc])}
-            ec = {int(c_): float(e_) for c_, e_ in zip(cell_c, f["e_p"][i, :nc])}
-            last = float(d["e"][nc - 1])
-            if n >= b_cap and nc == n and all(ed[c_] == last for c_ in only_d) and all(ec[c_] == last for c_ in only_c):
-                ties += 1
-            else:
-                bad.append((i, "cells differ"))
-                continue
-        if not np.array_equal(np.asarray(d["e"][:nc], np.float64), f["e_p"][i, :nc].astype(np.float64)):             # other cells at a position are fine only where the existence is equal (a tie)
-            bad.append((i, "order differs beyond ties"))
-            continue
-        pc = {int(c): k for k, c in enumerate(cell_c)}
-        for k in range(nc):
-            if int(cell_d[k]) not in pc:                                                                        # the tie cell of the dump
-                continue
-            j = pc[int(cell_d[k])]
-            for name, a, b in (("e", d["e"][k], f["e_p"][i, j]), ("pos", d["pos"][k], f["pos"][i, j]), ("dirv", d["dirv"][k], f["dirv"][i, j]), ("flags", d["flags"][k], f["flags_p"][i, j]), ("s", d["s"][k], f["s_p"][i, j])):
-                a64, b64 = np.asarray(a, np.float64), np.asarray(b, np.float32).astype(np.float64)
-                v = float(np.abs(a64 - b64).max()) if a64.size else 0.0
-                worst[name] = max(worst[name], v) if v == v else float("nan")
-                if v != 0.0:
-                    bad.append((i, name))
-        if n < cache.K and nc == n and n < b_cap and (f["e_p"][i, n:] >= e_min).any():                            # (a full active set is cut by B itself: tokens at or above e_min behind it are expected)
-            bad.append((i, f"a cache token at or above {e_min} behind the {n} stored nodes"))
-        n_nodes += nc
-    ok = not bad and all(v == 0.0 for v in worst.values())
-    return ok, dict(frames=len(dump), nodes_compared=n_nodes, frames_cut_by_K=cut, frames_with_other_order=order_diff, frames_with_boundary_tie=ties, worst=worst, mismatches=len(bad), first=bad[:5])
-
-
 def compare_caches(a, b, n=None):
     """two cache directories of the same run and frames (e.g. a full build and a `--limit N` build): the first n frames equal in EVERY field, bit for bit -> (ok, dict field -> number of frames that differ)"""
     ca, cb = TokCache(a), TokCache(b)
@@ -306,15 +250,12 @@ def _shapes(K, d_tok, d_f2):
 
 
 def _sha(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for b in iter(lambda: fh.read(1 << 22), b""):
-            h.update(b)
-    return h.hexdigest()[:16]
+    """the identity of the checkpoint a cache was made from: the first 16 hex digits of its sha256 (meta.json `run_sha`)"""
+    return BP.file_sha256(path)[:16]
 
 
 def build_env():
-    """the software / device that made a cache (stored in meta.json): the GPU parity of the live token path (`lane_live_tok`) is exact only against a cache of the same stack"""
+    """the software / device that made a cache (stored in meta.json): the GPU parity of the live token path (`lane_net.LaneNet.tokens`) is exact only against a cache of the same stack"""
     cuda = torch.cuda.is_available()
     return dict(torch=torch.__version__, cuda=torch.version.cuda, cudnn=torch.backends.cudnn.version(), device=torch.cuda.get_device_name(0) if cuda else "cpu",
                 tf32_matmul=bool(torch.backends.cuda.matmul.allow_tf32), tf32_cudnn=bool(torch.backends.cudnn.allow_tf32), numpy=np.__version__)
@@ -324,20 +265,20 @@ def _collate(b):
     return dict(x=torch.stack([o["x"] for o in b]), row=[o["row"] for o in b], token=[o["token"] for o in b], table=[{k: o[k] for k in ("pos", "dirv", "cell", "flags", "piece", "sstart", "src", "dst", "long", "scale", "conn")} for o in b])
 
 
-def build(a, load_model, pair_geometry):
-    """one cache of the command line `build`: load_model(run, dev) = the stored lane head B (`qpredict.load_model`), pair_geometry = the gate of the token pairs (`jtok.pair_geometry`).
-    Both come from the caller: preprocessing does not import the model."""
+def build(a, load_net, pair_geometry):
+    """one cache of the command line `build`: load_net(run, dev) = the network of the stored lane head B (`lane_net.LaneNet`: its `tokens(x, K, f2)` is the one copy of
+    features -> tokens), pair_geometry = the gate of the token pairs (`jtok.pair_geometry`). Both come from the caller: preprocessing does not import the model."""
     import lane_tok_data as LT
     import qtargets as QT
     assert tuple(QT.FLAGS) == FLAGS
     split = {"val": "val", "val_clean": "val", "train": "train"}[a.split]
     run = _abs(a.run)
-    sig = os.path.basename(LT.LD.lane_store()[1])
+    sig = GtGenerator.lane_signature()
     out = os.path.join(CACHE, cache_name(os.path.basename(os.path.normpath(run)), a.K, sig) + (f"_first{a.limit}" if a.limit else ""), split)        # a limited build never shares a directory with the full one
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     ds = LT.TokData(split, res=2.0, feats=True)
     n_all = len(ds) if not a.limit else min(a.limit, len(ds))
-    m = load_model(run, dev)
+    m = load_net(run, dev)
     bs, kfull = 4, max(a.K, max(KST))
     prog = os.path.join(out, "progress.json")
     done = json.load(open(prog))["done"] if os.path.exists(prog) else 0
@@ -358,10 +299,7 @@ def build(a, load_model, pair_geometry):
     _atomic_json(os.path.join(out, "frames.json"), dict(rows=ds.rows[:n_all], tokens=ds.tokens[:n_all]))
     for b in dl:
         with torch.no_grad():
-            x = b["x"].to(dev).float()
-            P = m.pyr(x)
-            no = m.node_stage(P)
-            tkt = select_tokens(no, P["feat2"] if a.f2 else None, kfull)                                       # all the tokens the coverage statistics need, K of them are stored
+            tkt = m.tokens(b["x"], kfull, a.f2)[1]                                       # all the tokens the coverage statistics need, K of them are stored
             allowed = pair_geometry(tkt["pos"][:, :a.K], tkt["dirv"][:, :a.K], tkt["valid"][:, :a.K])[1].cpu().numpy()
         tk = {k: v.cpu().numpy() for k, v in tkt.items()}
         for k_ in ("tok", "f2"):
@@ -373,9 +311,9 @@ def build(a, load_model, pair_geometry):
                 for name_, shp in _shapes(a.K, d_tok, d_f2).items():
                     np.lib.format.open_memmap(_path(out, name_), mode="w+", dtype=FIELDS[name_], shape=(n_all,) + shp).flush()
                 _atomic_json(os.path.join(out, "meta.json"), dict(run=a.run, run_sha=_sha(os.path.join(run, "model.pt")), split=split, K=a.K, f2=bool(a.f2), r=R_NEAR, cos=COS_NEAR, version=VERSION, lane_gt=sig,
-                                                                  table_version=LT.TABLE_VERSION, node_stage="mnms" if m.mnms else "plain", kst=list(KST), types=list(TYPES),
+                                                                  table_version=LT.TABLE_VERSION, node_stage="mnms" if m.b.mnms else "plain", kst=list(KST), types=list(TYPES),
                                                                   type_priority="split > merge > stop > exit > boundary (start, end, win_in, win_out) > lane point",
-                                                                  env=build_env()))                                                  # who built it: the live path's GPU parity rule (lane_live_tok) asks
+                                                                  env=build_env()))                                                  # who built it: the GPU parity rule of the live path (net/tests/test_lane_net.py) asks
                 fresh = False
             arrays = {n_: np.load(_path(out, n_), mmap_mode="r+") for n_ in FIELDS if os.path.exists(_path(out, n_))}
         B = tk["cell"].shape[0]
@@ -577,65 +515,6 @@ def selftest():
     e2[0, 0, 0], e2[0, 0, 1] = -1.0, -3.5                                                                    # probabilities 0.269 (valid) and 0.029 (padding)
     t2 = select_tokens(dict({k: v[:1] for k, v in no.items()}, e=e2), None, 3)
     assert t2["valid"][0].tolist() == [True, False, False] and t2["cell"][0].tolist()[:2] == [0, 1] and t2["n_e50"].tolist() == [0] and t2["n_e20"].tolist() == [1]
-    # the dump comparison on a toy cache: equal passes, any difference fails
-    class Toy:
-        K, rows = 4, [7]
-        f = dict(cell=np.array([[53, 5, 1224, 9]], np.int16), e_p=np.array([[0.9, 0.6, 0.3, 0.01]], np.float32), pos=np.array([[[-47.0, -43.0], [-49.5, -39.0], [-1.0, -1.0], [0.0, 0.0]]], np.float32),
-                 dirv=np.array([[[1.0, 0], [0, 1.0], [1.0, 0], [1.0, 0]]], np.float32), flags_p=np.full((1, 4, 8), 0.25, np.float32), s_p=np.full((1, 4), 0.5, np.float32))
-    toy = Toy()
-
-    def dump_of(t):
-        return [dict(row=7, e=t.f["e_p"][0, :3].astype(np.float64), pos=t.f["pos"][0, :3].astype(np.float64), dirv=t.f["dirv"][0, :3].astype(np.float64), flags=t.f["flags_p"][0, :3].astype(np.float64),
-                     s=t.f["s_p"][0, :3].astype(np.float64))]
-    ok, rep = compare_dump(toy, dump_of(toy))
-    assert ok and rep["nodes_compared"] == 3 and rep["worst"]["e"] == 0.0, rep
-    for key, mut in (("e", lambda dd: dd[0]["e"].__setitem__(1, dd[0]["e"][1] + 1e-12)), ("pos", lambda dd: dd[0]["pos"].__setitem__((0, 0), dd[0]["pos"][0, 0] + 1e-9)), ("flags", lambda dd: dd[0]["flags"].__setitem__((2, 3), 0.2500001)),
-                     ("s", lambda dd: dd[0]["s"].__setitem__(0, 0.5000001)), ("dirv", lambda dd: dd[0]["dirv"].__setitem__((1, 1), 0.9999999))):
-        dd = dump_of(toy)
-        mut(dd)
-        ok, rep = compare_dump(toy, dd)
-        assert not ok and rep["mismatches"] > 0 and (key == "e" or rep["worst"][key] > 0), (key, rep)             # a changed existence is caught by the order check before the value check
-    dd = dump_of(toy)
-    dd[0]["row"] = 8
-    assert not compare_dump(toy, dd)[0]
-    dd = dump_of(toy)
-    dd[0]["pos"][1] = [20.0, 20.0]                                                                           # another cell
-    assert not compare_dump(toy, dd)[0]
-    tie = Toy()                                                                                              # two tokens with the same existence may stand in either order; a swap of different existences is an error
-    tie.f = dict(Toy.f, e_p=np.array([[0.6, 0.6, 0.3, 0.01]], np.float32))
-    dd = dump_of(tie)
-    swap = lambda dd_: [dict(dd_[0], **{k: dd_[0][k][[1, 0, 2]] for k in ("e", "pos", "dirv", "flags", "s")})]  # noqa: E731
-    ok, rep = compare_dump(tie, swap(dd))
-    assert ok and rep["frames_with_other_order"] == 1, rep
-    ok, rep = compare_dump(toy, swap(dump_of(toy)))
-    assert not ok, "a swap of two tokens with different existence passed"
-    # a full active set (n >= b_cap): the LAST rank may be another cell of exactly the same existence, nothing else
-    class Cap:
-        K, rows = 3, [7]
-        f = dict(cell=np.array([[53, 5, 1275]], np.int16), e_p=np.array([[0.9, 0.6, 0.3]], np.float32), pos=np.array([[[-47.0, -43.0], [-49.5, -39.0], [1.0, 1.0]]], np.float32),
-                 dirv=np.array([[[1.0, 0], [0, 1.0], [1.0, 0]]], np.float32), flags_p=np.full((1, 3, 8), 0.25, np.float32), s_p=np.full((1, 3), 0.5, np.float32))
-    cap = Cap()
-    dd = dump_of(cap)
-    assert compare_dump(cap, dd, b_cap=3)[0]
-    dd[0]["pos"][2] = [-1.0, -1.0]                                                                           # the dump holds cell 1224 at the last rank, the cache cell 1275, both with the existence 0.3
-    ok, rep = compare_dump(cap, dd, b_cap=3)
-    assert ok and rep["frames_with_boundary_tie"] == 1 and rep["nodes_compared"] == 3, rep
-    assert not compare_dump(cap, dd, b_cap=4)[0], "no tolerance when the active set is not full"
-    dd2 = dump_of(cap)
-    dd2[0]["pos"][1] = [-1.0, -1.0]                                                                          # another cell at rank 1 (existence 0.6, not the last existence 0.3): no tie rule applies
-    assert not compare_dump(cap, dd2, b_cap=3)[0]
-    dd3 = dump_of(cap)
-    dd3[0]["pos"][2] = [-1.0, -1.0]
-    dd3[0]["e"][2] = 0.2999                                                                                  # not a tie any more
-    assert not compare_dump(cap, dd3, b_cap=3)[0]
-    dd4 = dump_of(cap)
-    dd4[0]["pos"][2] = [-1.0, -1.0]
-    dd4[0]["flags"][0, 0] = 0.3                                                                              # a tie in the cell, but the common cells must still agree to the bit
-    assert not compare_dump(cap, dd4, b_cap=3)[0]
-    extra = Toy()                                                                                            # a cache token at e_p >= 0.2 behind the stored nodes
-    extra.f = dict(Toy.f, e_p=np.array([[0.9, 0.6, 0.3, 0.5]], np.float32))
-    assert not compare_dump(extra, dump_of(extra))[0]
-    assert compare_dump(extra, dump_of(extra), b_cap=3)[0], "a full active set is cut by B itself: tokens behind it are expected"
     # the qformat nodes of a frame
     fr = dict(valid=np.array([True, False, True]), cell=np.array([53, 5, 1224], np.int16), pos=np.zeros((3, 2), np.float32), dirv=np.ones((3, 2), np.float32), e_p=np.array([0.9, 0.1, 0.6], np.float32),
               flags_p=np.zeros((3, 8), np.float32), s_p=np.zeros(3, np.float32))
@@ -678,11 +557,6 @@ if __name__ == "__main__":
     s.add_argument("--no-f2", dest="f2", action="store_false")
     s.add_argument("--limit", type=int, default=0)
     s.add_argument("--workers", type=int, default=2)
-    s = sub.add_parser("fixture")
-    s.add_argument("--cache", required=True)
-    s.add_argument("--dump", required=True)
-    s.add_argument("--prefix", action="store_true", help="the cache is a limited build: compare the first frames of the dump only")
-    s.add_argument("--write", action="store_true", help="store the result as fixture.json in the cache directory")
     s = sub.add_parser("summary")
     s.add_argument("--out", required=True, help="the manifests (meta + numbers + fixture) of all finished caches under runs/e365_cache as one JSON file (text record, in git)")
     s = sub.add_parser("report")
@@ -698,8 +572,8 @@ if __name__ == "__main__":
         selftest()
     elif a.cmd == "build":
         import jtok as JT  # the command line runs the stored B' (net/model)
-        import qpredict as QP
-        build(a, QP.load_model, JT.pair_geometry)
+        import lane_net as LN
+        build(a, lambda run, dev: LN.LaneNet(LN.load_b(run, dev), K=a.K), JT.pair_geometry)
     elif a.cmd == "summary":
         out_ = {}
         for d_ in sorted(glob.glob(os.path.join(CACHE, "*", "*", "manifest.json"))):
@@ -723,10 +597,3 @@ if __name__ == "__main__":
             assert c_.done == len(c_), f"{a.cache} is not finished ({c_.done} of {len(c_)} frames): the manifest is the finished marker of `cache_dir`, it is not written"
             p_ = os.path.join(_abs(a.cache), "manifest.json")
             _atomic_json(p_, dict(json.load(open(p_)) if os.path.exists(p_) else json.load(open(os.path.join(_abs(a.cache), "meta.json"))), numbers=rep_))
-    else:
-        c = TokCache(_abs(a.cache))
-        ok, rep = compare_dump(c, pickle.load(open(_abs(a.dump), "rb")), prefix=a.prefix)
-        print(("FIXTURE PASS " if ok else "FIXTURE FAIL ") + json.dumps(rep))
-        if a.write:
-            _atomic_json(os.path.join(_abs(a.cache), "fixture.json"), dict(ok=ok, dump=a.dump, prefix=a.prefix, **rep))
-        sys.exit(0 if ok else 1)

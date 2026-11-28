@@ -9,18 +9,16 @@ The model runs under no_grad with gt=False (no ground truth enters the forward p
 `make_pred_fn(run)` gives a token -> pred callable for the pictures. Run the self-test: python qpredict.py (needs a trained or smoke model: `--run runs/e273_smoke2`)
 """
 import argparse
-import json
 import os
 import sys
 
-import numpy as np
 import torch
 
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub in ("net/prep", "net/model", "net/loss", "training/data", "training"):
     sys.path.insert(0, os.path.join(ROOT, sub))
 import bflc_paths as BP  # noqa: E402  (where code, data and runs are)
-import qgraph as QG  # noqa: E402
+import lane_net as LN  # noqa: E402
 
 
 def predict_from_out(out, batch, keep_maps=False, min_p=0.02):
@@ -65,25 +63,10 @@ def predict(model, batch, keep_maps=False, min_p=0.02):
     return predict_from_out(out, batch, keep_maps=keep_maps, min_p=min_p)
 
 
-def load_model(run_dir, device="cuda"):
-    """a trained run (`model.pt`) or, while it trains, its last checkpoint (`ckpt.pt`)"""
-    mp = os.path.join(run_dir, "model.pt")
-    if os.path.exists(mp):
-        sd = torch.load(mp, map_location="cpu")
-        a, state = sd.get("args") or {}, sd["state"]
-    else:
-        sd = torch.load(os.path.join(run_dir, "ckpt.pt"), map_location="cpu", weights_only=False)
-        cfg = os.path.join(run_dir, "config.json")                                              # the trainer writes the run's args here: a running arm with the Matrix-NMS layer must not load as a plain head
-        a, state = (json.load(open(cfg)).get("args") or {}) if os.path.exists(cfg) else {}, sd["model"]
-    m = QG.from_args(a)                                                                         # the Matrix-NMS layer is a property of the model (args of the checkpoint)
-    m.load_state_dict(state)
-    return m.to(device).eval()
-
-
 def _selftest(run):
     import lane_gt_data as LD
     dev = "cuda" if torch.cuda.is_available() else "cpu"
-    m = load_model(run, dev)
+    m = LN.load_b(run, dev)
     ds, dl = LD.loader("val_clean", bs=2, workers=0, shuffle=False, map_mode="error")
     b = next(iter(dl))
     pr = predict(m, b, keep_maps=True)
@@ -103,7 +86,7 @@ if __name__ == "__main__":
 def make_pred_fn(run, map_mode="error", device="cuda", keep_maps=True):
     """a callable token -> pred dict (with the dense maps for the pictures) for the VAL frames, from a trained run (`runs/<run>/model.pt`): `qgraph_view.py` takes it as its prediction source"""
     import lane_gt_data as LD
-    m = load_model(os.path.join(BP.RUNS, run) if not os.path.isabs(run) else run, device)
+    m = LN.load_b(os.path.join(BP.RUNS, run) if not os.path.isabs(run) else run, device)
     ds = LD.QData("val_clean", map_mode=map_mode, pixels=False)
     by_tok = {ds.tokens[int(ds.bd.rows[k])]: i for i, k in enumerate(ds.ks)}
 

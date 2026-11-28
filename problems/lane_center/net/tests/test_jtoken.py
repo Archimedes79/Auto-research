@@ -39,6 +39,8 @@ for _n, _v in vars(LJK).items():
     if _n not in vars(JK):
         setattr(JK, _n, _v)
 import jtoken_train as JKT  # noqa: E402
+import lane_net as LN  # noqa: E402
+import lane_ptok_data  # noqa: E402  (lane_net reads it; a test that swaps the trainer's loader puts this module back)
 from merged_source import must_fail  # noqa: E402
 
 torch.set_num_threads(2)
@@ -434,13 +436,18 @@ def test_trainer():
         JKT.train(JKT.parse_args(argv), runs=runs, ckpt_every=5, **kw)
         log = open(os.path.join(rd, "train.log"), encoding="utf-8").read()
         assert "resumed from" in log and "at step 10" in log and all(os.path.exists(os.path.join(rd, f)) for f in (".done", "model.pt", "ckpt.pt", "config.json", "log.jsonl", "train.log")), log[-600:]
-        m, args = JKT.load_model("t_s0", "cpu", runs)
+        m, args = LN.load_head("t_s0", "cpu", runs)
         assert (args["seed"], args["steps"], args["bs"]) == (0, 20, 2) and int(m.step) == 20 and m._step_py == 20, "the step buffer of the head must follow the run through the kill and the resume"
         rows = [json.loads(r) for r in open(os.path.join(rd, "log.jsonl"))]
         assert all(k in rows[-1] for k in ("nll_s", "nll_l", "ce1", "ce3", "gpu_gb")), rows[-1]
         for other in (["--lr", "5e-4"], ["--ident", "e273_p"], ["--none-weight", "0.5"]):
             must_fail(JKT.train, JKT.parse_args(argv + other), runs=runs, ckpt_every=5, **kw)                # another recipe in the same folder
-        assert "lane_ptok_data" not in sys.modules, "--smoke must not import the loader"
+        assert "t_s0" in argv
+        sys.modules["lane_ptok_data"] = types.SimpleNamespace()                                              # --smoke must not read the loader: a module without one stands in its place
+        try:
+            JKT.train(JKT.parse_args(["t_noload" if x == "t_s0" else x for x in argv]), runs=runs, ckpt_every=5, **kw)
+        finally:
+            sys.modules["lane_ptok_data"] = lane_ptok_data
         # a non-smoke run through a fake loader that returns (None, batches) like `lane_ptok_data.loader`
         seen = {}
 
@@ -451,16 +458,16 @@ def test_trainer():
         try:
             JKT.train(JKT.parse_args(["--name", "t_real", "--seed", "1", "--steps", "6", "--bs", "2", "--workers", "0", "--ident", "e273_p"]), runs=runs, ckpt_every=3)
         finally:
-            del sys.modules["lane_ptok_data"]
+            sys.modules["lane_ptok_data"] = lane_ptok_data
         assert seen == dict(split="train", seed=1, bs=2, workers=0, ident="e273_p"), seen
-        m2, a2 = JKT.load_model("t_real", "cpu", runs)
+        m2, a2 = LN.load_head("t_real", "cpu", runs)
         assert a2["steps"] == 6 and a2["ident"] == "e273_p" and m2._step_py == 6 and os.path.exists(os.path.join(runs, "t_real", ".done"))
         sys.modules["lane_ptok_data"] = types.SimpleNamespace(loader=fake_loader)
         seen.clear()
         try:
             JKT.train(JKT.parse_args(["--name", "t_def", "--steps", "2", "--bs", "2", "--workers", "0"]), runs=runs, ckpt_every=3)
         finally:
-            del sys.modules["lane_ptok_data"]
+            sys.modules["lane_ptok_data"] = lane_ptok_data
         assert seen == dict(split="train", seed=0, bs=2, workers=0, ident="e292_a"), seen                      # the default: the one cache of the lane head of the seed
     print("trainer: smoke on synthetic batches (20 steps, kill at 12, resume from the checkpoint of step 10, the step buffer = 20), run-directory files, loss parts logged, another recipe (lr / ident / none weight) refused, "
           "no loader import; a non-smoke run through a fake loader (ident passed, (None, batches) unpacked): ok")
@@ -470,14 +477,14 @@ def test_arch_options():
     # defaults = the head of the first build, bit for bit
     dflt = JKT.parse_args(["--name", "x", "--none-weight", "1.0"])
     torch.manual_seed(0)
-    new = JKT.build_head(vars(dflt))
+    new = LN.build_head(vars(dflt))
     torch.manual_seed(0)
     old = JK.JTokenHead()
     torch.manual_seed(0)
     expl = JK.JTokenHead(live_inputs=False)                                                                 # the constructor argument at its default
     for h in (new, expl):
         assert list(h.state_dict()) == list(old.state_dict()) and all(torch.equal(v, old.state_dict()[k]) for k, v in h.state_dict().items()), "default options must build the old head"
-    assert JK.count_params(new) == 127131 and JKT.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
+    assert JK.count_params(new) == 127131 and LN.build_head({}).state_dict().keys() == old.state_dict().keys(), "an old run's args (no options) mean the defaults"
     # 20 synthetic steps with the defaults reproduce what the committed code did (recorded from the committed code before the changes, 2 threads: seed 0, bs 2, K 48). THESE CONSTANTS HOLD IN THIS TEST'S PROCESS ONLY (this file
     # sets 2 threads; a fresh process with another thread count / BLAS order gives 2.8011269 for the same run): the portable check is the same-process one below (defaults against the explicit default arguments)
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
@@ -490,7 +497,7 @@ def test_arch_options():
         rows2 = [json.loads(r) for r in open(os.path.join(runs, "r2", "log.jsonl"))]
         sd2 = torch.load(os.path.join(runs, "r2", "model.pt"), map_location="cpu", weights_only=False)["state"]
         assert [r["total"] for r in rows2] == [json.loads(r)["total"] for r in open(os.path.join(runs, "r", "log.jsonl"))] and list(sd2) == list(sd) and all(torch.equal(v, sd[k]) for k, v in sd2.items()), "explicit default arguments = the defaults, same process, bit for bit"
-        assert JKT.arch({}) == (64, 4, 3, 128), "the champion's architecture"
+        assert LN.arch({}) == (64, 4, 3, 128), "the champion's architecture"
         os.makedirs(os.path.join(runs, "old"))
         json.dump(dict(design="jtoken", args=dict(seed=0, cache=None, ident="e292_a", K=None, bs=2, steps=20, lr=1e-3)), open(os.path.join(runs, "old", "config.json"), "w"))     # a config of before the options
         a_old = vars(JKT.parse_args(["--name", "old", "--bs", "2", "--steps", "20"]))
@@ -500,8 +507,8 @@ def test_arch_options():
         bad = dict(prior="rule", teacher="rule", init="runs/x/model.pt", token_drop=0.1, none_weight_near=0.73, d=96, heads=2, layers=4, ffn=512,
                    pos_loss="max", distill_from="runs/a,runs/b", distill_weight=0.5, distill_sha256=["0"], noise_pos=0.2, noise_e=0.5, cache="runs/k384", K=384,
                    rounds=2, wire_weight=0.5, msg="uniform", pos_head=True, curve_w=0.5, node_w=0.5)
-        off = {k: v for options in JKT.REMOVED.values() for k, v in options.items()}
-        tag = {k: t for t, options in JKT.REMOVED.items() for k in options}
+        off = {k: v for options in LN.REMOVED.values() for k, v in options.items()}
+        tag = {k: t for t, options in LN.REMOVED.items() for k in options}
         assert set(bad) == set(off) and set(tag.values()) == {"v1", "archive/jtoken-before-simplify-2026-11-17"} and tag["rounds"] == "v1", "a refusal test for every removed option"
         for name, extra in [("o_dflt", off)] + [(f"o_{k}", {k: v}) for k, v in bad.items()]:
             os.makedirs(os.path.join(runs, name))
@@ -509,9 +516,9 @@ def test_arch_options():
             torch.save(dict(ck, args=dict(ck["args"], **extra)), os.path.join(runs, name, "model.pt"))
             if name == "o_dflt":
                 JKT.check_start(dict(ck["args"], name=name), os.path.join(runs, name))
-                assert all(torch.equal(v, sd[k]) for k, v in JKT.load_model(name, "cpu", runs)[0].state_dict().items())
+                assert all(torch.equal(v, sd[k]) for k, v in LN.load_head(name, "cpu", runs)[0].state_dict().items())
                 continue
-            for fn in (lambda: JKT.check_start(dict(ck["args"], name=name), os.path.join(runs, name)), lambda: JKT.load_model(name, "cpu", runs)):
+            for fn in (lambda: JKT.check_start(dict(ck["args"], name=name), os.path.join(runs, name)), lambda: LN.load_head(name, "cpu", runs)):
                 try:
                     fn()
                 except AssertionError as e:
@@ -622,8 +629,8 @@ def test_live_inputs():
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         os.makedirs(os.path.join(runs, "live"))
         torch.save(dict(state=JK.JTokenHead().state_dict(), args=dict(live_inputs=True), steps=0), os.path.join(runs, "live", "model.pt"))
-        assert JKT.load_model("live", "cpu", runs)[0].live_inputs is True
-    assert JKT.build_head({}).live_inputs is False and JKT.build_head(vars(JKT.parse_args(["--name", "x"]))).live_inputs is False and JKT.arch(dict(live_inputs=True)) == JKT.arch({})
+        assert LN.load_head("live", "cpu", runs)[0].live_inputs is True
+    assert LN.build_head({}).live_inputs is False and LN.build_head(vars(JKT.parse_args(["--name", "x"]))).live_inputs is False and LN.arch(dict(live_inputs=True)) == LN.arch({})
     assert set(JK.JTokenHead(live_inputs=True).state_dict()) == set(JK.JTokenHead().state_dict())
     print(f"live_inputs: the default = the head of before bit for bit (outputs, every parameter gradient; the champion's loss after the switch), no gradient into the inputs; live_inputs=True: the same outputs and parameter "
           f"gradients, a gradient on every float input (sum |grad|: {', '.join(f'{k} {v:.2e}' for k, v in g.items())}); textual mutants ({', '.join(mutants)}) fail; the full live gradient of every float input against "
@@ -635,22 +642,22 @@ def test_head_seed():
     """--head-seed N: the head's initialisation and the data order use N, --seed keeps choosing the cache (the loader's seed); head_seed in the recipe; --head-seed equal to --seed (and none) = the default run bit for bit"""
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
         base = ["--smoke", "--bs", "2", "--workers", "0"]
-        step0, real_bh = {}, JKT.build_head
+        step0, real_bh = {}, LN.build_head
         for name, extra in (("s0", ["--seed", "0"]), ("s0h0", ["--seed", "0", "--head-seed", "0"]), ("s0h2", ["--seed", "0", "--head-seed", "2"]), ("s2", ["--seed", "2"])):
             def built(args, name=name):                                                                       # the trainer's step-0 head
                 m = real_bh(args)
                 step0[name] = {k: v.clone() for k, v in m.state_dict().items()}
                 return m
-            patched(JKT, "build_head", built, JKT.train, JKT.parse_args(["--name", name] + extra + base), runs, 500, 48)
+            patched(LN, "build_head", built, JKT.train, JKT.parse_args(["--name", name] + extra + base), runs, 500, 48)
         st = lambda n: torch.load(os.path.join(runs, n, "model.pt"), map_location="cpu", weights_only=False)["state"]  # noqa: E731
         same = lambda x, y: all(torch.equal(v, y[k]) for k, v in x.items())  # noqa: E731
-        seeded = lambda hs: (JKT.T.seed_all(hs), JKT.build_head({}).state_dict())[1]  # noqa: E731
+        seeded = lambda hs: (JKT.T.seed_all(hs), LN.build_head({}).state_dict())[1]  # noqa: E731
         tot = lambda n: [json.loads(r)["total"] for r in open(os.path.join(runs, n, "log.jsonl")) if "total" in r]  # noqa: E731
         assert same(step0["s0h2"], seeded(2)) and same(step0["s2"], seeded(2)) and same(step0["s0"], seeded(0)) and not same(step0["s0h2"], step0["s0"]), "the head seed initialises the head (build_head after seed_all)"
         assert tot("s0h2") == tot("s2") and tot("s0h2") != tot("s0"), "the data (smoke: the synthetic batches) follow the head seed"
         assert same(st("s0h0"), st("s0")) and tot("s0h0") == tot("s0"), "--head-seed = --seed is the default run"
-        a = JKT.load_model("s0h2", "cpu", runs)[1]
-        assert (a["seed"], a["head_seed"]) == (0, 2) and JKT.load_model("s0", "cpu", runs)[1]["head_seed"] is None
+        a = LN.load_head("s0h2", "cpu", runs)[1]
+        assert (a["seed"], a["head_seed"]) == (0, 2) and LN.load_head("s0", "cpu", runs)[1]["head_seed"] is None
         must_fail(JKT.check_start, dict(a, head_seed=3), os.path.join(runs, "s0h2"))                           # another head seed in the same folder
         # cache-free: a fake loader that returns a SHUFFLING DataLoader over 16 named synthetic batches; --seed chooses the cache, the head seed the batch order
         seen, order, now, loss_real = {}, {}, [None], LJK.jtoken_loss
@@ -668,7 +675,7 @@ def test_head_seed():
                 now[0] = name
                 patched(LJK, "jtoken_loss", first_batch, JKT.train, JKT.parse_args(["--name", name, "--seed", "0", "--steps", "1", "--bs", "2", "--workers", "0"] + extra), runs, 3)
         finally:
-            del sys.modules["lane_ptok_data"]
+            sys.modules["lane_ptok_data"] = lane_ptok_data
         assert all(s["seed"] == 0 and s["ident"] == "e292_a" for s in seen.values()) and len(seen) == 3, "--seed chooses the cache of B' seed 0"
         assert order["f0h0"] == order["f0"] != order["f0h2"], f"the batch order follows the head seed, --head-seed 0 = the default: {order}"
         log = open(os.path.join(runs, "s0h2", "train.log"), encoding="utf-8").read()
@@ -726,14 +733,14 @@ def _twin_step():
     import lane_ptok_data as LP
     e373 = os.path.join(JKT.T.RUNS, E373)
     try:
-        LP.cache_dir("train", 0, "e292_a")                                        # asserts unless exactly one finished cache is there
+        LP.cache_dir("train", 0, "e292_a")                                        # asserts unless the finished cache is there
     except AssertionError as e:
-        if not str(e).startswith("0 finished caches"):
+        if not str(e).startswith("no finished cache"):
             raise                                                                 # several caches match: a real problem, not a skip
         return "the step on the real cache SKIPPED (no TRAIN cache of B' seed 0)"
     if not os.path.exists(os.path.join(e373, "model.pt")):
         return f"the step on the real cache SKIPPED (no run {E373})"
-    built, tokens, real_bh, real_loss = [], [], JKT.build_head, LJK.jtoken_loss
+    built, tokens, real_bh, real_loss = [], [], LN.build_head, LJK.jtoken_loss
 
     def rec(args):                                                             # the trainer's step-0 head
         m = real_bh(args)
@@ -744,7 +751,7 @@ def _twin_step():
         tokens.append(list(batch["token"]))
         return real_loss(out, batch, **k)
     with tempfile.TemporaryDirectory(dir=SCRATCH) as runs:
-        patched(JKT, "build_head", rec, patched, LJK, "jtoken_loss", first_batch, JKT.train,
+        patched(LN, "build_head", rec, patched, LJK, "jtoken_loss", first_batch, JKT.train,
                 JKT.parse_args(["--name", "twin", "--seed", "0", "--head-seed", "2", "--ident", "e292_a", "--steps", "1", "--bs", "8", "--workers", "0", "--none-weight", "0.25"]), runs, 500)
         log = open(os.path.join(runs, "twin", "train.log"), encoding="utf-8").read()
     JKT.T.seed_all(2)
@@ -774,7 +781,7 @@ def test_champion():
         assert all(abs(g - w) <= 1e-9 * abs(w) for g, w in zip(got, CHAMP_HEAD[step])), (step, got, CHAMP_HEAD[step])
     note = f"the stored head {E373} SKIPPED (run not there)"
     if os.path.exists(os.path.join(JKT.T.RUNS, E373, "model.pt")):
-        m, _ = JKT.load_model(E373, "cpu")
+        m, _ = LN.load_head(E373, "cpu")
         got = _champ_numbers(m.train())
         assert all(abs(g - w) <= 1e-9 * abs(w) for g, w in zip(got, CHAMP_HEAD["e373"])), (got, CHAMP_HEAD["e373"])
         note = f"the stored head {E373} (step {m._step_py - 1}) too"
@@ -793,7 +800,7 @@ def test_champion():
         sd = torch.load(os.path.join(runs, "champ", "model.pt"), map_location="cpu", weights_only=False)["state"]
         row = [json.loads(x) for x in open(os.path.join(runs, "champ", "log.jsonl"))][-1]
     got = (steps[0], steps[-1], row["total"], sum(float(v.double().abs().sum()) for v in sd.values() if v.dtype.is_floating_point))
-    assert len(steps) == 20 and all(abs(g - w) <= 1e-12 * abs(w) for g, w in zip(got, CHAMP)), (len(steps), got, CHAMP)
+    assert len(steps) == 20 and all(g == w for g, w in zip(got, CHAMP)), (len(steps), got, CHAMP)
     print(f"champion: the forward, the loss and the gradient sums of a seeded head at head step 0 / {JK.SWITCH + 5} are the recorded ones to 1e-9, {note}; 127131 parameters, the champion's output keys; the 20 smoke steps of "
           f"the champion recipe: first loss {got[0]:.6f}, last {got[1]:.6f}, the log row and the weights as recorded; {_twin_step()}: ok")
 

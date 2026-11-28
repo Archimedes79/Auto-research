@@ -1,16 +1,13 @@
 """E365 loader of the predicted-node cache (`lane_tokcache.py`, spec: section 2a of `experiments/E365_e2e-token-champion-s1/experiment.md`): the tokens of the frozen lane head B' (or B) of a frame and the GT labels of the tokens.
 
-    ds, dl = loader("train" | "val", seed=0, bs=8, workers=4, token_drop=0.0, ident="e292_a")       # the ONE finished cache of B' seed 0 under runs/e365_cache
+    ds, dl = loader("train" | "val", seed=0, bs=8, workers=4, ident="e292_a")       # the finished cache of B' seed 0 at K = CACHE_K under runs/e365_cache
     batch["tok"] (B, K, 64) f16, ["pos"], ["dirv"] (B, K, 2), ["e"], ["e_raw"], ["s"], ["uout"], ["uin"] (B, K), ["flags"] (B, K, 8) logits, ["valid"] (B, K) bool,
     ["ytype"] (B, K) int64 (0 none .. 6 boundary), ["y"] (B, K, K) uint8 (1 where token j is in G(i)), ["ylong"] (B, K, K) bool = y and the chord |pos_j - pos_i| of the TOKENS above 8 m (not the chord of the GT link), ["yscale"] (B, K, K, 2) NaN outside the long GT links with a fit, ["gt_out"] (B,) the GT links lost,
     ["token"], ["row"], ["tokens_np"] (a list of per-frame dicts, float64 pos / dirv / e_p / flags_p / s_p, int cell, bool valid: what the read-out writer needs; NO GT field), ["label"] (the GT-side fields
     gt_id, gd, gt_flags, gt_aux for the controls and diagnostics: the model must not read them)
     to_pred(tokens_np[b], keep, e_node, links)                                                                       # the qformat prediction of a frame from tokens + the head's output, no GT field
-Token drop: `token_drop` > 0 removes each token with that probability by a generator seeded with (the loader's seed, the frame's token) (`lane_tok_data.keep_nodes`): a removed token is not valid, has type 0 and no target
-pair (the contraction of the targets is NOT recomputed: this is for the degraded read-out only).
 Tests: net/tests/test_lane_tokcache.py
 """
-import glob
 import os
 import sys
 
@@ -20,43 +17,38 @@ import torch
 ROOT = os.environ.get("BFLC_ROOT") or os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 for sub_ in ("training/data", "net/prep", "net/model", "net/loss", "evaluation"):
     sys.path.insert(0, os.path.normpath(os.path.join(ROOT, sub_)))
+import GtGenerator  # noqa: E402  (the ground truth: its public interface only)
 import lane_tokcache as LC  # noqa: E402
 import qtargets as QT  # noqa: E402
 
 TOKEN_FIELDS = ("tok", "pos", "dirv", "e", "e_raw", "s", "uout", "uin", "flags", "valid")
+CACHE_K = 512                 # the tokens per frame of the cache that every run reads: the champion's (a finished cache of another K changes nothing)
 
 
-def cache_dir(split, seed, ident="e292_a"):
-    """the directory of the cache of run `ident`_s`seed` for the split under `lane_tokcache.CACHE`: exactly one finished cache (one K) must exist"""
-    import lane_tok_data as LT
-    sig = os.path.basename(LT.LD.lane_store()[1])
-    pat = os.path.join(LC.CACHE, f"b{ident}_{seed}_K*_{sig}_{LC.VERSION}", split)
-    hits = [h for h in sorted(glob.glob(pat)) if os.path.exists(os.path.join(h, "manifest.json"))]
-    assert len(hits) == 1, f"{len(hits)} finished caches match {pat}: {hits}"
-    return hits[0]
+def cache_dir(split, seed, ident="e292_a", K=CACHE_K):
+    """the directory of the finished cache of run `ident`_s`seed` at K tokens for the split under `lane_tokcache.CACHE` (it must exist)"""
+    d = os.path.join(LC.CACHE, f"b{ident}_{seed}_K{K}_{GtGenerator.lane_signature()}_{LC.VERSION}", split)
+    assert os.path.exists(os.path.join(d, "manifest.json")), f"no finished cache {d}"
+    return d
 
 
-def densify(ypair, ylong, yscale, K, keep=None):
-    """the sparse target pairs of a frame (ypair (P, 2) int, -1 padded) -> y (K, K) uint8, ylong (K, K) bool, yscale (K, K, 2) float32 (NaN where there is no fitted scale); pairs with a removed token (keep (K,) bool) are left out"""
+def densify(ypair, ylong, yscale, K):
+    """the sparse target pairs of a frame (ypair (P, 2) int, -1 padded) -> y (K, K) uint8, ylong (K, K) bool, yscale (K, K, 2) float32 (NaN where there is no fitted scale)"""
     y, yl, ys = np.zeros((K, K), np.uint8), np.zeros((K, K), bool), np.full((K, K, 2), np.nan, np.float32)
     ok = ypair[:, 0] >= 0
     i, j = ypair[ok, 0].astype(int), ypair[ok, 1].astype(int)
-    if keep is not None:
-        k = keep[i] & keep[j]
-        i, j, ok_idx = i[k], j[k], np.flatnonzero(ok)[k]
-    else:
-        ok_idx = np.flatnonzero(ok)
+    ok_idx = np.flatnonzero(ok)
     y[i, j], yl[i, j], ys[i, j] = 1, ylong[ok_idx], yscale[ok_idx]
     return y, yl, ys
 
 
 class PTokData(torch.utils.data.Dataset):
-    def __init__(self, split="train", seed=0, ident="e292_a", token_drop=0.0, dir=None):
+    def __init__(self, split="train", seed=0, ident="e292_a", K=CACHE_K, dir=None):
         assert split in ("train", "val"), split
-        self.dir = dir or cache_dir(split, seed, ident)
+        self.dir = dir or cache_dir(split, seed, ident, K)
         self.c = LC.TokCache(self.dir)
         assert self.c.done == len(self.c), f"{self.dir} is not finished ({self.c.done} of {len(self.c)} frames)"
-        self.K, self.seed, self.drop = self.c.K, int(seed), float(token_drop)
+        self.K = self.c.K
         self.rows, self.tokens = self.c.rows, self.c.tokens
 
     def __len__(self):
@@ -64,16 +56,12 @@ class PTokData(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         f = self.c.f
-        keep = np.ones(self.K, bool)
-        if self.drop > 0:
-            from lane_tok_data import keep_nodes
-            keep = keep_nodes(self.tokens[i], self.K, self.drop, self.seed)
-        valid = np.array(f["valid"][i]) & keep
-        y, _, ys = densify(np.array(f["ypair"][i]), np.array(f["ypair_long"][i]), np.array(f["ypair_scale"][i]), self.K, keep if self.drop > 0 else None)
+        valid = np.array(f["valid"][i])
+        y, _, ys = densify(np.array(f["ypair"][i]), np.array(f["ypair_long"][i]), np.array(f["ypair_scale"][i]), self.K)
         pos = np.array(f["pos"][i], np.float64)
         yl = chord_long(y, pos)                  # the class of a pair = the chord of its TOKENS (> 8 m); the class of the GT link is in the cache (`ypair_long`)
         out = {n: np.array(f[n][i]) for n in TOKEN_FIELDS if n in f}
-        out.update(valid=valid, ytype=np.where(keep, np.array(f["gt_type"][i]), 0).astype(np.int64), y=y, ylong=yl, yscale=ys, gt_out=int(f["gt_out"][i]), token=self.tokens[i], row=int(self.rows[i]),
+        out.update(valid=valid, ytype=np.array(f["gt_type"][i]).astype(np.int64), y=y, ylong=yl, yscale=ys, gt_out=int(f["gt_out"][i]), token=self.tokens[i], row=int(self.rows[i]),
                    tokens_np=dict(pos=np.array(f["pos"][i], np.float64), dirv=np.array(f["dirv"][i], np.float64), e_p=np.array(f["e_p"][i], np.float64), flags_p=np.array(f["flags_p"][i], np.float64),
                                   s_p=np.array(f["s_p"][i], np.float64), cell=np.array(f["cell"][i]).astype(np.int64), valid=valid.copy()),
                    label=dict(gt_id=np.array(f["gt_id"][i]), gd=np.array(f["gd"][i]), gt_flags=np.array(f["gt_flags"][i]), gt_aux=np.array(f["gt_aux"][i])))
@@ -87,9 +75,9 @@ def collate(b):
     return out
 
 
-def loader(split="train", seed=0, bs=8, workers=4, token_drop=0.0, ident="e292_a", shuffle=None, dir=None):
+def loader(split="train", seed=0, bs=8, workers=4, ident="e292_a", shuffle=None, dir=None):
     shuffle = split == "train" if shuffle is None else shuffle
-    ds = PTokData(split, seed, ident, token_drop, dir)
+    ds = PTokData(split, seed, ident, dir=dir)
     return ds, torch.utils.data.DataLoader(ds, batch_size=bs, shuffle=shuffle, num_workers=workers, collate_fn=collate, drop_last=shuffle, persistent_workers=workers > 0,
                                            prefetch_factor=2 if workers > 0 else None)
 
@@ -114,7 +102,7 @@ def to_pred(frame, keep, e_node, links, flags=None):
 
 
 def toy_cache_test():
-    """the loader on a tiny cache written here: shapes, dense targets, the seeded token drop"""
+    """the loader on a tiny cache written here: shapes, dense targets"""
     import json
     import tempfile
     F, K = 3, 32
@@ -145,12 +133,6 @@ def toy_cache_test():
         assert not b["ylong"][0, 3, 0] and np.allclose(b["yscale"][0, 0, 3], [0.3, 0.4]) and np.isnan(b["yscale"][0, 0, 2]).all()
         assert sorted(b["tokens_np"][0]) == ["cell", "dirv", "e_p", "flags_p", "pos", "s_p", "valid"] and sorted(b["label"]) == ["gd", "gt_aux", "gt_flags", "gt_id"], "no GT field in tokens_np"
         assert b["tokens_np"][0]["pos"].dtype == np.float64 and b["tokens_np"][0]["valid"].shape == (K,)
-        dr1, dr2, dr3 = (PTokData("val", seed=s_, token_drop=0.5, dir=d) for s_ in (1, 1, 2))
-        o1, o2, o3 = dr1[0], dr2[0], dr3[0]
-        assert np.array_equal(o1["valid"], o2["valid"]) and not np.array_equal(o1["valid"], o3["valid"]), "the drop is seeded by (seed, frame token)"
-        gone = ~o1["valid"]
-        assert gone.sum() > 5 and (o1["ytype"][gone] == 0).all() and not o1["y"][gone].any() and not o1["y"][:, gone].any() and (o1["ytype"][~gone] == arr["gt_type"][0][~gone]).all()
-        assert PTokData("val", token_drop=0.0, dir=d)[0]["valid"].all()
 
 
 def chord_long(y, pos):
@@ -172,8 +154,8 @@ def selftest():
     ys[1] = [0.3, 0.4]
     y, yl, sc = densify(ypair, ylong, ys, K)
     assert y.sum() == 3 and y[0, 2] == 1 and y[0, 3] == 1 and y[4, 1] == 1 and yl[0, 3] and not yl[0, 2] and np.allclose(sc[0, 3], [0.3, 0.4]) and np.isnan(sc[0, 2]).all() and np.isnan(sc[5]).all() and y[2, 0] == 0
-    y, yl, sc = densify(ypair, ylong, ys, K, keep=np.array([True, True, False, True, True, True]))                  # token 2 removed: the pair (0, 2) goes, the others stay
-    assert y.sum() == 2 and y[0, 2] == 0 and y[0, 3] == 1 and yl[0, 3] and np.allclose(sc[0, 3], [0.3, 0.4])
+    y, yl, sc = densify(ypair[:2], ylong[:2], ys[:2], K)                                                             # two pairs: the class and the scale stay with their own pair
+    assert y.sum() == 2 and yl[0, 3] and not yl[0, 2] and np.allclose(sc[0, 3], [0.3, 0.4]) and np.isnan(sc[0, 2]).all()
     frame = dict(pos=np.arange(12, dtype=float).reshape(6, 2), dirv=np.tile([0.0, 1.0], (6, 1)), e_p=np.linspace(0.9, 0.1, 6), flags_p=np.full((6, 8), 0.2), s_p=np.full(6, 0.3), cell=np.array([53, 5, 1224, 9, 10, 11]),
                  valid=np.ones(6, bool), gt_id=np.arange(6), piece=np.arange(6))
     keep = np.array([True, False, True, True, False, False])
@@ -188,9 +170,6 @@ def selftest():
     assert np.allclose(pr3["nodes"]["flags"], 0.7)
     pr4 = to_pred(dict(frame, valid=np.array([True, False, False, True, True, True])), np.ones(6, bool), np.ones(6), dict(src=[0, 0], dst=[2, 3], p=[0.5, 0.5], long=[False, False], a=[0.3] * 2, b=[0.4] * 2))
     assert len(pr4["nodes"]["pos"]) == 4 and pr4["links"]["src"].tolist() == [0] and pr4["links"]["dst"].tolist() == [1], "a padding token became a node"
-    # the removed SOURCE of a pair goes too (not only a removed target)
-    y, yl, sc = densify(ypair, ylong, ys, K, keep=np.array([True, True, True, True, False, True]))
-    assert y.sum() == 2 and y[4, 1] == 0 and y[0, 2] == 1
     pos6 = np.array([[0.0, 0.0], [8.0, 0.0], [8.0001, 0.0], [20.0, 0.0], [3.0, 4.0], [0.0, 9.0]])
     y6 = np.zeros((6, 6), np.uint8)
     y6[0, 1] = y6[0, 2] = y6[0, 3] = y6[0, 4] = y6[5, 0] = y6[1, 3] = 1

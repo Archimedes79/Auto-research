@@ -6,10 +6,9 @@ Walk BACKWARDS from node n: with probability s(m) the node m is the first node o
 Pb[m, .] = softmax over the incoming link logits of m and a "no predecessor" option (logit 0). With Q = diag(1 - s) Pb and R = diag(s):  M = (I - Q)^-1 R, rows normalised. A linear solve:
 differentiable, no loop over the chain length. Nodes that are not active are absorbing (s = 1).
 `section_loss(M, ...)`: the cross entropy of the true section start of every GT node + the same-section probability sum_k M[i, k] M[j, k] of sampled node pairs against the GT pieces.
-Run the self-test: python sections.py
+Test: net/tests/test_sections.py
 """
 import torch
-import torch.nn.functional as F
 
 
 
@@ -30,44 +29,3 @@ def section_membership(links, s_logit, ridge=1e-3):
     M = torch.linalg.solve(A, torch.diag_embed(s))
     M = M.clamp_min(0)
     return M / M.sum(-1, keepdim=True).clamp_min(1e-9), Pb
-
-
-def _selftest():
-    from loss_sections import section_loss
-    from qnodes import N
-    torch.manual_seed(0)
-    B, K = 1, 12
-    # two chains: nodes 0..5 (section start 0) and 6..11 (section start 6); true links i -> i+1 inside a chain
-    valid = torch.ones(B, K, dtype=torch.bool)
-    pb, pa, pc = [], [], []
-    for a in list(range(0, 5)) + list(range(6, 11)):
-        pb.append(0), pa.append(a), pc.append(a + 1)
-    # false candidate links: 5 -> 6 (chains are not joined), 11 -> 0
-    pb += [0, 0]
-    pa += [5, 11]
-    pc += [6, 0]
-    logit = torch.tensor([4.0] * 10 + [-4.0, -4.0])
-    links = dict(act=torch.arange(K)[None], valid=valid, pb=torch.tensor(pb), pa=torch.tensor(pa), pc=torch.tensor(pc), logit=logit.clone().requires_grad_(True))
-    s_logit = torch.full((B, N, N), -4.0)
-    s_logit.view(B, -1)[0, 0] = 4.0
-    s_logit.view(B, -1)[0, 6] = 4.0
-    M, Pb = section_membership(links, s_logit)
-    start = M.argmax(-1)[0]
-    assert start[:6].eq(0).all() and start[6:].eq(6).all(), start
-    assert float(M[0, 5, 0]) > 0.9, M[0, 5, :8]
-    # a gradient reaches the link logits and the section-start logits
-    gt = dict(piece=torch.full((B, N, N), -1, dtype=torch.long), sstart=torch.zeros(B, N, N))
-    gt["piece"].view(B, -1)[0, :6], gt["piece"].view(B, -1)[0, 6:12] = 0, 1
-    gt["sstart"].view(B, -1)[0, 0], gt["sstart"].view(B, -1)[0, 6] = 1, 1
-    sl = s_logit.clone().requires_grad_(True)
-    M2, _ = section_membership(links, sl)
-    ce, pl = section_loss(M2, gt, links)
-    (ce + pl).backward()
-    assert links["logit"].grad is not None and float(links["logit"].grad.abs().sum()) > 0 and float(sl.grad.abs().sum()) > 0
-    print("start CE", float(ce), "pair loss", float(pl))
-    assert float(ce) < 0.2
-    print("sections selftest ok")
-
-
-if __name__ == "__main__":
-    _selftest()

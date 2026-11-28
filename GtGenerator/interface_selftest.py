@@ -33,14 +33,7 @@ SCANNED = ("problems", "autoresearch", "datasets")            # the folders of t
 # of the interface plan (the files belong to the sessions of the two problems). `selftest --only interface` fails for a use that is not listed AND for a line that is no longer
 # there: the list can only shrink, and it is empty when S2 is done. For S2: no module is handed on as a value either (the scan refuses `return GtGenerator` and cannot see
 # `self.lg.held(...)`): lane_gt_data.py and lane_tok_data.py call GtGenerator.lane_tokens() / GtGenerator.load_lane(token) directly, and `self.lg` goes.
-PENDING = {
-    "problems/lane_center/evaluation/qgraph_eval.py": ("from GtGenerator import lane_gt",),                                       # twice: load_lane(token); lane_tokens() (the file is protected and in the evaluator hash)
-    "problems/lane_center/net/prep/lane_gt_data.py": ("from GtGenerator import lane_gt",),                                        # lane_signature(), lane_tokens(), load_lane(token), called directly
-    "problems/lane_center/net/prep/foundation/gcar_features.py": ("from GtGenerator.light_nusc import light_nuscenes",),          # from GtGenerator import light_nuscenes
-    "problems/lane_center/tools/viz/qgraph_view.py": ("from GtGenerator import lane_gt",                                          # load_lane(token)
-                                                      "from GtGenerator import lane_graph_view as V",                             # lane_camera_image(...)
-                                                      "from GtGenerator.nuscenes_adapter import pose_matrix"),                    # from GtGenerator import pose_matrix
-}
+PENDING = {}                                                    # nothing waits: every problem reaches the folder through the interface
 
 # The lines of the research core that name the folder as a whole and read nothing of it: file -> its source lines. Not violations (check_imports leaves them out); a line
 # that changes has to be looked at again, so the test fails for one that is no longer there.

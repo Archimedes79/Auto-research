@@ -26,7 +26,8 @@
  "protected": ["problem.json", "TEST_LOG.md", "PROBLEM.md", "data/splits.json", "evaluation/adapter.py", "evaluation/qgraph_eval.py", "evaluation/sparse_lanes/", "evaluation/lane_task/"],
  "data": "data/splits.json",
  "pythonpath": ["evaluation", "evaluation/sparse_lanes", "net/prep", "net/model", "net/loss", "training", "training/train", "tools/viz"],
- "tests": ["evaluation/sparse_lanes/selftest.py", "evaluation/jtiming.py", "net/tests/merged_source.py","net/tests/test_jtoken.py", "net/tests/test_lane_tokcache.py", "net/tests/test_lane_live.py",
+ "tests": ["net/tests/test_net_layering.py", "evaluation/tests/test_evaluator_hash.py", "evaluation/sparse_lanes/selftest.py", "evaluation/jtiming.py", "net/tests/merged_source.py", "net/tests/test_qmnms.py", "net/tests/test_sections.py",
+           "net/tests/test_qgraph.py", "net/tests/test_jtoken.py", "net/tests/test_lane_tokcache.py", "net/tests/test_lane_net.py",
            "net/tests/test_jlive_train.py", "net/tests/test_lane_train.py", "net/tests/test_foundation.py", "evaluation/tests/test_jtoken_eval.py"],
  "note": "Spurmitte: a lane-centre-line graph from camera + radar (GaussianCaR features), end to end differentiable; VAL 873 frames in 22 scenes, scored against the graph ground truth of B123"
 }

@@ -1,6 +1,6 @@
 """Pictures of the lane head of E273 (pixel maps, grid-cell nodes, Hermite links, soft sections, map assignment): ONE figure per keyframe, all bird's-eye panels on the
 same 0.5 m canvas (1 m maps scaled x2, 2 m maps x4 by nearest neighbour, so the cells line up). The input is the prediction dict of `net/model/qformat.py` (the contract) and the
-lane GT of the frame (`GtGenerator.lane_gt`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
+lane GT of the frame (`GtGenerator.load_lane`); today the prediction is the ORACLE (`qformat.oracle_prediction`) or a DEGRADED oracle made here to check the error tints, later the network's
 dict through `pred_fn(token)`.
 
     python qgraph_view.py frame <token | scene-0221:12> --out DIR [--pred oracle|degraded] [--no-cams]
@@ -71,9 +71,9 @@ _CACHE = {}
 
 # ------------------------------------------------------------------------------------------------------------------------------------------ data
 def load_gt(token):
-    """the stored lane GT graph of a keyframe (`GtGenerator.lane_gt.load`)"""
-    from GtGenerator import lane_gt
-    return lane_gt.load(token)
+    """the stored lane GT graph of a keyframe (`GtGenerator.load_lane`)"""
+    import GtGenerator
+    return GtGenerator.load_lane(token)
 
 
 def _infos():
@@ -134,19 +134,18 @@ def camera_tiles(token, g, sizes, log=print):
     info = _infos().get(token)
     tiles = {}
     if info is not None:
-        from GtGenerator import lane_graph_view as V
-        from GtGenerator.nuscenes_adapter import pose_matrix
+        import GtGenerator
 
         class _Gt:
             nusc, dataroot = _Nusc(info["cam_infos"]), NUSC
         sample = dict(data={c: c for c in CAMS})
-        T_front = pose_matrix(info["cam_infos"]["CAM_FRONT"]["ego_pose"])
+        T_front = GtGenerator.pose_matrix(info["cam_infos"]["CAM_FRONT"]["ego_pose"])
     for ch in CAMS:
         w, h = sizes[ch]
         if info is not None:
             if not os.path.exists(os.path.join(NUSC, info["cam_infos"][ch]["filename"])):
                 log(f"camera {ch} of {token}: image not on disk (grey tile)")
-            img = V.camera_image(_Gt, sample, g, ch, T_front, scale=1.0)[..., ::-1]
+            img = GtGenerator.lane_camera_image(_Gt, sample, g, ch, T_front, scale=1.0)[..., ::-1]
         else:
             log(f"camera {ch} of {token}: no camera info for this token (grey tile)")
             img = np.full((900, 1600, 3), 60, np.uint8)

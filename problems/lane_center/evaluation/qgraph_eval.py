@@ -30,7 +30,6 @@ A ratio with an empty denominator is 0.0 when the other side is not empty (an em
 Self-test: python qgraph_eval.py (a toy frame); real frames: evaluation/tests/test_qgraph_eval.py (wsl bash tools/env/_py14.sh test_qgraph_eval.py).
 """
 import json
-import os
 import pickle
 import sys
 from dataclasses import dataclass, field
@@ -137,8 +136,8 @@ class Frame:
     def lane(self):
         if self._lane is None:
             sys.path.insert(0, BP.REPO)
-            from GtGenerator import lane_gt
-            self._lane = lane_gt.load(self.token)
+            import GtGenerator
+            self._lane = GtGenerator.load_lane(self.token)
         return self._lane
 
     def ref(self):
@@ -159,8 +158,8 @@ def val_frames():
 def stored_share(frames):
     """share of the frames whose lane GT is in the store of this checkout's lane signature (the store is built in the background)"""
     sys.path.insert(0, BP.REPO)
-    from GtGenerator import lane_gt
-    held = lane_gt.held(os.path.join(lane_gt.DATA, lane_gt.signature()))
+    import GtGenerator
+    held = GtGenerator.lane_tokens()
     return sum(f.token in held for f in frames) / max(len(frames), 1)
 
 

@@ -236,11 +236,11 @@ def frames(module, cfg, tokens, workers=2, device="cuda"):
 
     if BP.REPO not in sys.path:
         sys.path.insert(0, BP.REPO)
-    from GtGenerator.light_nusc import light_nuscenes
+    import GtGenerator
 
     root = need_raw(BP.NUSC)
     mean, base = (torch.from_numpy(x).to(device) for x in basis())
-    nusc = light_nuscenes(root, VERSION, scenes=scene_names(tokens, root), cameras=CAMERAS)
+    nusc = GtGenerator.light_nuscenes(root, VERSION, scenes=scene_names(tokens, root), cameras=CAMERAS)
     data = GcarData(nusc, tokens, OmegaConf.to_container(cfg.data.img_params, resolve=True),
                     OmegaConf.to_container(cfg.data.data_config.bev_aug_conf, resolve=True))
     for b in torch.utils.data.DataLoader(data, batch_size=1, shuffle=False, num_workers=workers, collate_fn=collate):
