@@ -1,0 +1,29 @@
+{
+ "run": "E420.skipgap_s1",
+ "problem": "lane_center",
+ "experiment": "E420",
+ "arm": "skipgap",
+ "seed": 1,
+ "commit": "b93c9c8ec80ac295b39aff312b9358cf912e6140",
+ "tag": "lane_center/E420",
+ "steps": {
+  "predict": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 90.1,
+   "log": "predict.log",
+   "gpu_slot": 0
+  },
+  "evaluate": {
+   "status": "ok",
+   "exit": 0,
+   "seconds": 87.0,
+   "log": "evaluate.log"
+  }
+ },
+ "status": "ok",
+ "created": "2026-11-28 03:28:45",
+ "host": "Desktop-I511600",
+ "started": "2026-11-28 03:29:02",
+ "ended": "2026-11-28 03:31:59"
+}

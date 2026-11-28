@@ -1,0 +1,117 @@
+{
+ "experiment": "E421",
+ "problem": "lane_center",
+ "tag": "lane_center/E421",
+ "snapshot": "1114c88d94673887c8783c6cd8d8b6b3175c91e6",
+ "control": "skip",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "boot": 2000,
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "skipgap": {
+   "verdict": "KEEP",
+   "reason": "gain +0.0207 >= 0.01 and its interval [+0.0179, +0.0239] lies above 0",
+   "gain": 0.020722467488744734,
+   "interval": [
+    0.0179217004643982,
+    0.023948972265043087
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.6932194682739786,
+     "variant": 0.7139419357627234,
+     "diff": 0.020722467488744734,
+     "lo": 0.0179217004643982,
+     "hi": 0.023948972265043087,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.6848815942264014,
+      "variant": 0.7074467137817034,
+      "diff": 0.02256511955530205,
+      "lo": 0.019868200966812986,
+      "hi": 0.025913555327972817
+     },
+     "1": {
+      "control": 0.7014875347933852,
+      "variant": 0.7203929441029772,
+      "diff": 0.018905409309591947,
+      "lo": 0.015625271505541157,
+      "hi": 0.023090961743326803
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.2881540039828616,
+      "variant": 0.28812498136608927,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.839624780599352,
+      "variant": 0.846228058381655,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7058291801035864,
+      "variant": 0.7274992670771034,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.01828544363917723,
+      "variant": 0.018562361834129643,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 22.50545768947605,
+      "variant": 22.155360531077967,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.017,
+   "prediction_hit": true,
+   "guards_broken": []
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "6aacdae8d780",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-28 03:45",
+ "control_check": {
+  "scores": {
+   "0": 0.6848815942264014,
+   "1": 0.7014875347933852
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}

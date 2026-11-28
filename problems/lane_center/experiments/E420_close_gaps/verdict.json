@@ -1,0 +1,197 @@
+{
+ "experiment": "E420",
+ "problem": "lane_center",
+ "tag": "lane_center/E420",
+ "snapshot": "b93c9c8ec80ac295b39aff312b9358cf912e6140",
+ "control": "champ",
+ "score": "graph.topo_F1",
+ "better": "higher",
+ "min_effect": 0.01,
+ "rule": {},
+ "boot": 2000,
+ "seeds": [
+  0,
+  1
+ ],
+ "arms": {
+  "skip": {
+   "verdict": "TIE",
+   "reason": "not adopted: gain +0.0185 >= 0.01 and its interval [+0.0132, +0.0245] lies above 0, but a guard broke: graph.lanes_found worse by 0.0165 > 0.01",
+   "gain": 0.018461963150697147,
+   "interval": [
+    0.013183538717391674,
+    0.024513377693034792
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.6747575051232815,
+     "variant": 0.6932194682739786,
+     "diff": 0.018461963150697147,
+     "lo": 0.013183538717391674,
+     "hi": 0.024513377693034792,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.668172321247442,
+      "variant": 0.6848815942264014,
+      "diff": 0.01670927297895941,
+      "lo": 0.01052984562976885,
+      "hi": 0.023452490979256155
+     },
+     "1": {
+      "control": 0.6812810912549837,
+      "variant": 0.7014875347933852,
+      "diff": 0.02020644353840151,
+      "lo": 0.015254704769644098,
+      "hi": 0.02572318880863172
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.2509537409577019,
+      "variant": 0.2881540039828616,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8467391074067518,
+      "variant": 0.839624780599352,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7222955145118733,
+      "variant": 0.7058291801035864,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.06369088407850881,
+      "variant": 0.01828544363917723,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 23.964357736707864,
+      "variant": 22.50545768947605,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.034,
+   "prediction_hit": false,
+   "guards_broken": [
+    "graph.lanes_found worse by 0.0165 > 0.01"
+   ],
+   "warnings": [
+    "ground truth compared by name only: the records of E396.champ_s0, E396.champ_s1 hold no signature"
+   ]
+  },
+  "skipgap": {
+   "verdict": "KEEP",
+   "reason": "gain +0.0392 >= 0.01 and its interval [+0.0333, +0.0462] lies above 0",
+   "gain": 0.03918443063944188,
+   "interval": [
+    0.033263564481643165,
+    0.046157969161412064
+   ],
+   "seeds": [
+    "0",
+    "1"
+   ],
+   "numbers": {
+    "pooled": {
+     "control": 0.6747575051232815,
+     "variant": 0.7139419357627234,
+     "diff": 0.03918443063944188,
+     "lo": 0.033263564481643165,
+     "hi": 0.046157969161412064,
+     "n_scenes": 22
+    },
+    "seeds": {
+     "0": {
+      "control": 0.668172321247442,
+      "variant": 0.7074467137817034,
+      "diff": 0.03927439253426146,
+      "lo": 0.03209093095602446,
+      "hi": 0.04709588358067503
+     },
+     "1": {
+      "control": 0.6812810912549837,
+      "variant": 0.7203929441029772,
+      "diff": 0.039111852847993456,
+      "lo": 0.03373281392767757,
+      "hi": 0.04567308254296278
+     }
+    },
+    "guards": {
+     "graph.junction_F1": {
+      "control": 0.2509537409577019,
+      "variant": 0.28812498136608927,
+      "better": "high"
+     },
+     "graph.F1@1.0": {
+      "control": 0.8467391074067518,
+      "variant": 0.846228058381655,
+      "better": "high"
+     },
+     "graph.lanes_found": {
+      "control": 0.7222955145118733,
+      "variant": 0.7274992670771034,
+      "better": "high"
+     },
+     "graph.dup_frac": {
+      "control": 0.06369088407850881,
+      "variant": 0.018562361834129643,
+      "better": "low"
+     },
+     "graph.vert100_dp": {
+      "control": 23.964357736707864,
+      "variant": 22.155360531077967,
+      "better": "low"
+     }
+    },
+    "warnings": [
+     "only 22 scenes: a scene bootstrap is too narrow below about 30 scenes"
+    ]
+   },
+   "prediction": 0.034,
+   "prediction_hit": true,
+   "guards_broken": [],
+   "warnings": [
+    "ground truth compared by name only: the records of E396.champ_s0, E396.champ_s1 hold no signature"
+   ]
+  }
+ },
+ "by": "research judge",
+ "judge_code": {
+  "hash": "6aacdae8d780",
+  "files": [
+   "autoresearch/research/judge.py",
+   "autoresearch/research/spec.py",
+   "autoresearch/research/launch.py",
+   "autoresearch/research/paths.py",
+   "autoresearch/research/gitio.py",
+   "autoresearch/research/worker.py"
+  ],
+  "from_snapshot": [
+   "autoresearch/research/compute.py",
+   "autoresearch/Evaluation/stats.py"
+  ]
+ },
+ "date": "2026-11-28 03:32",
+ "control_check": {
+  "scores": {
+   "0": 0.668172321247442,
+   "1": 0.6812810912549837
+  },
+  "floor": 0.5,
+  "max_seed_spread": null,
+  "problems": []
+ },
+ "verdict": "DONE"
+}

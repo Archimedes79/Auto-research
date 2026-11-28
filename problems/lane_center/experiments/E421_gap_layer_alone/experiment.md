@@ -28,4 +28,7 @@ E420 judges `skipgap` against the champion only, and the skip layer alone alread
 TRAIN (291 frames, seeds 0 / 1): +0.020 / +0.015 topo F1 and +0.017 / +0.015 lanes found against the skip layer alone.
 
 ## Conclusion
-After `research judge`: the verdict, the numbers with split and denominator, what was learned, what follows.
+**Verdict** (`research judge`, 2026-11-28, `verdict.json`): `skipgap` KEEP against the skip layer alone. VAL (873 frames, 22 scenes),
+pooled over seeds 0 / 1: topo F1 0.6932 -> 0.7139, +0.0207 [+0.0179, +0.0239] (prediction 0.017, met); lanes found 0.7058 -> 0.7275,
+F1@1 0.8396 -> 0.8462, junction F1 0.2882 -> 0.2881. No run of its own; the card was committed before E420's results were read. Nothing is
+adopted from this card.
