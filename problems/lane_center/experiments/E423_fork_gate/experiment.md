@@ -75,4 +75,4 @@ dropped.
 - Junction F1 gains as hoped; lanes found fall by more than the guard, on VAL nearly twice as far as on TRAIN (-0.008).
 - One frame shows how (scene 39, seed 0, frame 787): the gate cuts a true turn at a node the type softmax does not call a fork, and the
   covered true lane length falls from 0.955 to 0.801; seed 1 keeps it.
-- Follows: a milder gate (p_fork threshold 0.005, chosen on TRAIN after this result, E426).
+- Follows: a milder gate (p_fork threshold 0.005, chosen on TRAIN after this result; not run yet, no number).

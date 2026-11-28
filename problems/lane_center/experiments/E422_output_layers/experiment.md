@@ -103,4 +103,4 @@ Validity: `champ` repeats E396.champ exactly (topo F1 0.668172 / 0.681281). Both
 - Junctions, seed 0, frames with at least four true lanes (825, scratch count): right 3027 -> 2235, false 15834 -> 6552, missed 1654 -> 2446:
   the layers remove most false forks and merges and a quarter of the right ones.
 - Follows: the lanes lost belong to the fork gate (E423), the time to the position layer (E424); a second round with a milder gate and a
-  cheaper position step (E426).
+  cheaper position step (not run yet, no number).
