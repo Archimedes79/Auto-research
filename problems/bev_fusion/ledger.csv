@@ -1,4 +1,4 @@
-experiment,run,arm,seed,status,score_metric,score,verdict,reason,commit,started,ended
-E27,E27.t21_s0,t21,0,ok,board.board7,0.463076,MEASURED,,5d45ce8a500c,2026-11-27 02:06:48,2026-11-27 02:39:23
-E27,E27.t21_s1,t21,1,ok,board.board7,0.463498,MEASURED,,5d45ce8a500c,2026-11-27 02:06:48,2026-11-27 02:39:24
-E28,E28.t20_s0,t20,0,ok,board.board7,0.456869,MEASURED,,471a90f6a2d9,2026-11-27 02:09:35,2026-11-27 02:57:44
+experiment,run,arm,seed,status,score_metric,score,verdict,reason,commit,started,ended,scored_by,comparable
+E27,E27.t21_s0,t21,0,ok,board.board7,0.463076,MEASURED,,5d45ce8a500c,2026-11-27 02:06:48,2026-11-27 02:39:23,12f994ed301d / v13,yes
+E27,E27.t21_s1,t21,1,ok,board.board7,0.463498,MEASURED,,5d45ce8a500c,2026-11-27 02:06:48,2026-11-27 02:39:24,12f994ed301d / v13,yes
+E28,E28.t20_s0,t20,0,ok,board.board7,0.456869,MEASURED,,471a90f6a2d9,2026-11-27 02:09:35,2026-11-27 02:57:44,12f994ed301d / v13,yes
