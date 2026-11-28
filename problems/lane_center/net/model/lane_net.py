@@ -41,7 +41,8 @@ ARCH = dict(d=64, heads=4, layers=3, ffn=128)                               # th
 # Options that no longer exist: the tag that keeps their code -> option -> the value a stored run must hold (or nothing): today's head and loss are then that run's (`check_removed`)
 REMOVED = {"archive/jtoken-before-simplify-2026-11-17": dict(prior="none", teacher="none", init=None, token_drop=0.0, none_weight_near=None, **ARCH),       # D117
            "v1": dict(pos_loss="sum", distill_from=None, distill_weight=1.0, distill_sha256=None, noise_pos=0.0, noise_e=0.0, cache=None, K=512,            # E376, E379, E381, E383 (K: the one cache's)
-                      rounds=0, wire_weight=0.0, msg="real", pos_head=False, curve_w=0.0, node_w=0.0)}                                                       # E392, E395
+                      rounds=0, wire_weight=0.0, msg="real", pos_head=False, curve_w=0.0, node_w=0.0),                                                       # E392, E395
+           "archive/e399-thinning-2026-11-28": dict(min_e=None)}                                                                                             # E399.thin (TIE): a hard token cut
 
 
 def check_removed(args, where):
@@ -56,9 +57,10 @@ def to_device(b, dev):
 
 
 def build_head(args):
-    """the head of a run's args (live_inputs, skip_suppress and min_e (E399), close_gaps (E420): absent = the default; the architecture `arch`): the one place that builds it, for the trainer, `load_model` and the stage-2 trainer"""
+    """the head of a run's args (live_inputs and the soft output layers skip_suppress (E399), close_gaps (E420), fork_gate (E423), refine_positions (E424): absent = the default; the architecture `arch`): the one place that builds it,
+    for the trainer, `load_model` and the stage-2 trainer"""
     d, heads, layers, ffn = arch(args)
-    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, skip=args.get("skip_suppress"), gap=args.get("close_gaps"), min_e=args.get("min_e"),
+    return JK.JTokenHead(d=d, heads=heads, layers=layers, ffn=ffn, skip=args.get("skip_suppress"), gap=args.get("close_gaps"), fork=args.get("fork_gate"), refine=args.get("refine_positions"),
                          live_inputs=bool(args.get("live_inputs", ARCH_DEFAULTS["live_inputs"])))
 
 

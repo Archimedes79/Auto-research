@@ -18,6 +18,8 @@ Wiring layer (on top of layer 3, attention weights only): class c in {short: cho
 Likelihood (`jtoken_loss`): per class c and source i (every valid token with at least one candidate of the class): G(i) = the in-gate tokens with y[i, j] = 1 whose pair lies in the class by the TOKEN chord (ylong is only a statistic and the long scale target), nll_i = -log sum_{j in G(i)} p^c(j|i)
 when G(i) is non-empty, -log p^c(none|i) when it is empty (also when its GT links lie outside the gate: counted in info); per frame the mean over the sources of the class, then over the frames. + 0.5 x (type CE after layer 1
 + type CE after layer 3, per frame the mean over the valid tokens) + 0.5 x L1 on the handle scales of the long GT links. The forward never reads a GT key. Tests: test_jtoken.py
+Soft output layers (off by default; no parameter; a run's args turn them on, `lane_net.build_head`), applied in this order after the wiring: `skip_suppress` (a jump over a node is damped), `close_gaps` (a weak link that is the only way
+on is delivered), `fork_gate` (a second successor only at a node the type softmax calls a fork); `refine_positions` writes the delivered node positions `pos` (the cell offset scaled, neighbours moved onto a common arc: no zig-zag).
 The switches of the closed experiments E376 (pos_loss max, the argmax decode), E379 (distillation), E392 (message rounds, early reads) and E395 (the position head and its curve loss) are in the tag v1.
 """
 import math
@@ -38,7 +40,11 @@ SHORT, NG = JT.SHORT, JT.NG
 NEG = -1e4                                                                  # the fill of a masked logit
 SKIP_KEYS = ("sigma", "hops", "m", "t_short", "t_long", "keep")             # E399: the settings of the soft skip-link layer (`skip_suppress`)
 GAP_KEYS = ("sigma", "sigma_lo", "gamma", "lo", "lo_long", "t_short", "t_long", "keep")    # E420: the settings of the soft gap-closing layer (`close_gaps`)
+FORK_KEYS = ("sigma", "sigma_rel", "tau", "sigma_f", "t_short", "t_long", "keep")          # E423: the settings of the soft fork gate (`fork_gate`)
+POS_KEYS = ("gain", "lam", "sigma", "t_short", "keep")                      # E424: the settings of the soft position layer (`refine_positions`)
+CELL = 2.0                                                                   # the side of B''s node cells (m): a node is its cell's centre plus an offset inside the cell
 TOK, D, NTYPE = 64, 64, 7                                                   # B's node token, the width, the node types (0 none, 1 lane point, 2 fork, 3 merge, 4 entry, 5 exit, 6 boundary)
+FORK = 2
 SWITCH = 1000                                                               # training steps with the key weight sigmoid(e) in every layer; then the head's own 1 - p_none
 BANDS = 4
 NIN = 2 + 4 * BANDS + 2 + 1 + 1 + 8 + 3                                     # pos / HALF, its Fourier features, dirv, e, e_raw, 8 flags, s, uout, uin
@@ -148,18 +154,62 @@ def close_gaps(logp, cand, pnone, chord, cfg):
     return torch.cat([lp, none[..., None]], -1)
 
 
+def fork_gate(logp, cand, ptype, chord, cfg):
+    """E423: the soft fork gate (no parameter, differentiable, never decreasing in a pair's own probability): a source takes a SECOND successor only as far as the head's own type softmax calls it a fork. ptype (B, K, 7); cfg: sigma, sigma_rel, tau,
+    sigma_f, t_short, t_long, keep. With s_ij = P_ij / t (the probability over its class threshold, 0 unless both ends are kept) and m_ij = the largest s of the source's OTHER links, the link is a further link by w_ij =
+    sigmoid((m_ij - s_ij) / sigma_rel) x sigmoid((m_ij - 1) / sigma_rel) (another link is stronger, and delivered); the source is a fork by f_i = sigmoid((p_fork(i) - tau) / sigma_f). p'(i -> j) = p x (1 - (1 - f_i) w_ij); the removed
+    mass goes to the source's none slot of the class. The strongest link of a source and every link of a fork stay as they are"""
+    K = cand.shape[-1]
+    p = logp[..., :K].exp() * cand
+    P = p.sum(1)
+    t = torch.where(chord > SHORT, float(cfg["t_long"]), float(cfg["t_short"])).to(P.dtype)
+    k = torch.sigmoid((float(cfg["keep"]) - ptype[..., 0].to(P.dtype)) / float(cfg["sigma"]))
+    s = P / t * cand.any(1) * k[:, :, None] * k[:, None, :]
+    m = _max_of_others(s, 2)
+    rel = float(cfg["sigma_rel"])
+    w = torch.sigmoid((m - s) / rel) * torch.sigmoid((m - 1.0) / rel)
+    f = torch.sigmoid((ptype[..., FORK].to(P.dtype) - float(cfg["tau"])) / float(cfg["sigma_f"]))
+    p2 = p * (1.0 - (1.0 - f[:, :, None]) * w)[:, None]
+    lp = torch.where(cand, p2.clamp_min(1e-30).log(), logp[..., :K])
+    none = (1.0 - p2.sum(-1)).clamp_min(1e-30).log()
+    return torch.cat([lp, none[..., None]], -1)
+
+
+def refine_positions(pos, dirv, valid, logp, cand, pnone, cfg):
+    """E424: the soft position layer (no parameter, differentiable) against the zig-zag of the delivered lines -> positions (B, K, 2). cfg: gain, lam, sigma, t_short, keep.
+    1. The node head's offset from its 2 m cell centre is shrunk toward the centre; it is scaled by `gain` and held inside the cell (+- 1 m).
+    2. Along every short link, a pair of neighbours on one lane lies on a circular arc when the chord has the mean of the two headings: h = (d_i + d_j) / |d_i + d_j|, n = h turned left, r_ij = n . (pos_j - pos_i) is the sideways miss.
+       Both ends move toward each other by half of it, weighted by the soft delivered strength q_ij = sigmoid((p - t_short) / sigma) k_i k_j, averaged over a node's links (not divided by a weight below 1), times `lam`.
+       Straight lanes and circular arcs are fixed points: curves are not pulled straight"""
+    half = float(JT.HALF)
+    centre = (torch.floor((pos.detach() + half) / CELL) + 0.5) * CELL - half
+    pos = torch.where(valid[..., None], centre + (float(cfg["gain"]) * (pos - centre)).clamp(-CELL / 2, CELL / 2), pos)
+    K = cand.shape[-1]
+    p = (logp[:, 0, :, :K].exp() * cand[:, 0]).to(pos.dtype)                  # the short class
+    k = torch.sigmoid((float(cfg["keep"]) - pnone.to(pos.dtype)) / float(cfg["sigma"]))
+    q = torch.sigmoid((p - float(cfg["t_short"])) / float(cfg["sigma"])) * cand[:, 0] * k[:, :, None] * k[:, None, :]
+    h = F.normalize(dirv[:, :, None] + dirv[:, None], dim=-1)                  # (B, K, K, 2) the mean heading of i and j
+    n = torch.stack([-h[..., 1], h[..., 0]], -1)
+    res = (n * (pos[:, None] - pos[:, :, None])).sum(-1)                       # (B, K, K) n . (pos_j - pos_i)
+    pull = (q * res)[..., None] * n * 0.5
+    delta = pull.sum(2) - pull.sum(1)
+    weight = q.sum(2) + q.sum(1)
+    return pos + float(cfg["lam"]) * delta / weight.clamp_min(1.0)[..., None]
+
+
 class JTokenHead(nn.Module):
     """live_inputs: False = the INPUTS are cut from their graph (`_const`), True = kept (S4)"""
 
-    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, skip=None, min_e=None, gap=None):
+    def __init__(self, d=D, heads=4, layers=3, ffn=128, dq=32, live_inputs=False, skip=None, gap=None, fork=None, refine=None):
         super().__init__()
-        assert skip is None or sorted(skip) == sorted(SKIP_KEYS), (skip, SKIP_KEYS)
-        assert gap is None or sorted(gap) == sorted(GAP_KEYS), (gap, GAP_KEYS)
-        assert min_e is None or 0.0 <= min_e < 1.0, min_e
-        self.min_e = min_e                                                   # E399: only the tokens with existence sigmoid(e) above this take part (None = every valid token)
+        for cfg, keys in ((skip, SKIP_KEYS), (gap, GAP_KEYS), (fork, FORK_KEYS), (refine, POS_KEYS)):
+            assert cfg is None or sorted(cfg) == sorted(keys), (cfg, keys)
         self.dq = dq
-        self.skip = None if skip is None else dict(skip)                     # E399: the soft skip-link layer on the final wiring (no parameter); None = off
-        self.gap = None if gap is None else dict(gap)                        # E420: the soft gap-closing layer, after the skip layer (no parameter); None = off
+        # the soft layers of the output, no parameter, in this order; None = off
+        self.skip = None if skip is None else dict(skip)                     # E399: the skip-link layer on the final wiring (`skip_suppress`)
+        self.gap = None if gap is None else dict(gap)                        # E420: the gap-closing layer (`close_gaps`)
+        self.fork = None if fork is None else dict(fork)                     # E423: the fork gate (`fork_gate`)
+        self.refine = None if refine is None else dict(refine)               # E424: the position layer (`refine_positions`): the output then holds `pos`
         self.proj = nn.Linear(TOK, d)
         self.mlp = nn.Sequential(nn.Linear(NIN, d), nn.GELU(), nn.Linear(d, d))
         self.ln0 = nn.LayerNorm(d)
@@ -200,10 +250,6 @@ class JTokenHead(nn.Module):
         b = {k: batch[k] if self.live_inputs else _const(batch[k]) for k in INPUTS}
         valid, pos, dirv = b["valid"].bool(), b["pos"].float(), b["dirv"].float()
         w_in = b["e"].float().sigmoid()
-        thin = None
-        if self.min_e is not None:                                          # E399: token thinning: the weak tokens leave attention, candidates and the graph
-            thin = valid & (w_in <= self.min_e)
-            valid = valid & ~thin
         g, allowed = JT.pair_geometry(pos, dirv, valid, e=w_in)
         lw = lambda w: (w + 1e-3).log()  # noqa: E731
         learned = self._step_py >= SWITCH
@@ -216,22 +262,23 @@ class JTokenHead(nn.Module):
         for layer in self.layers[1:]:
             x = layer(x, g, lw(w1 if learned else w_in), valid)
         types3, w3 = self.read_types(x)
-        if thin is not None:                                                # E399: a thinned token reads as none (the read-out keeps no such node)
-            none = torch.zeros(NTYPE, device=types3.device, dtype=types3.dtype)
-            none[0] = 30.0
-            types3 = torch.where(thin[..., None], none, types3)
-            w3 = torch.where(thin, torch.zeros_like(w3), w3)
         wb = self.wbias(g).float().permute(0, 3, 1, 2)                              # bias^c(g_ij)
         logp, xn = self.read_wiring(x, wb, lw(w3 if learned else w_in), cand)          # the wiring layer
+        pt = types3.softmax(-1)
         if self.skip is not None:                                           # E399
-            logp = skip_suppress(logp, cand, types3.softmax(-1)[..., 0], chord, self.skip)
+            logp = skip_suppress(logp, cand, pt[..., 0], chord, self.skip)
         if self.gap is not None:                                            # E420
-            logp = close_gaps(logp, cand, types3.softmax(-1)[..., 0], chord, self.gap)
+            logp = close_gaps(logp, cand, pt[..., 0], chord, self.gap)
+        if self.fork is not None:                                           # E423
+            logp = fork_gate(logp, cand, pt, chord, self.fork)
         scale = 0.05 + 1.2 * self.sc_o(F.gelu(self.sc_i(xn)[:, :, None] + self.sc_j(xn)[:, None] + self.sc_g(g))).float().sigmoid()
         if self.training:
             self.step += 1
             self._step_py += 1
-        return dict(logp=logp, cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
+        out = dict(logp=logp, cand=cand, scale=scale, types=types3, types1=types1, valid=valid, chord=chord)
+        if self.refine is not None:                                         # E424: the delivered node positions
+            out["pos"] = refine_positions(pos, dirv, valid, logp, cand, pt[..., 0], self.refine)
+        return out
 
 
 # ------------------------------------------------------------------------------------------------------------------------------ probabilities and decodes

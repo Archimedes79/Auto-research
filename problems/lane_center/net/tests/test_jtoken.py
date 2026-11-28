@@ -42,6 +42,7 @@ for _n, _v in vars(LJK).items():
         setattr(JK, _n, _v)
 import jtoken_train as JKT  # noqa: E402
 import lane_net as LN  # noqa: E402
+import lane_readout as RO  # noqa: E402
 import lane_ptok_data  # noqa: E402  (lane_net reads it; a test that swaps the trainer's loader puts this module back)
 from merged_source import must_fail  # noqa: E402
 
@@ -257,33 +258,6 @@ def test_skip_suppress():
     print("skip_suppress: chain with a jump (only the jump damped, mass to none, gradient flows, a dropped node covers nothing), brute-force walks on a random graph, head off = bit for bit, same state keys, build_head: ok")
 
 
-def test_min_e():
-    """E399 token thinning `min_e`: off = the head bit for bit; on = the head run with the weak tokens marked invalid (types and wiring of the others equal to that run's), the thinned tokens have no candidate and read as none; the
-    head builds it from its args, a value outside [0, 1) is refused"""
-    torch.manual_seed(11)
-    plain = JK.JTokenHead().eval()
-    torch.manual_seed(11)
-    thin = JK.JTokenHead(min_e=0.3).eval()
-    assert list(plain.state_dict()) == list(thin.state_dict())
-    b = JK.synthetic_batch(2, 64, seed=9)
-    gone = b["valid"] & (b["e"].sigmoid() <= 0.3)
-    assert bool(gone.any()) and bool((b["valid"] & ~gone).any()), "the synthetic batch has tokens on both sides of the threshold"
-    with torch.no_grad():
-        o = thin(b)
-        ref = plain(dict(b, valid=b["valid"] & ~gone))
-    keep = ~gone
-    assert torch.equal(o["valid"], ref["valid"]) and torch.equal(o["cand"], ref["cand"]) and torch.equal(o["logp"], ref["logp"]) and torch.equal(o["types"][keep], ref["types"][keep])
-    links = o["cand"].any(1)
-    assert not bool(links.any(-1)[gone].any()) and not bool(links.any(1)[gone].any()), "a thinned token is no source and no destination"
-    assert float(o["types"][gone].softmax(-1)[:, 0].min()) > 0.999, "a thinned token reads as none"
-    torch.manual_seed(11)
-    with torch.no_grad():
-        assert torch.equal(JK.JTokenHead(min_e=None).eval()(b)["logp"], plain(b)["logp"]), "min_e None = the head bit for bit"
-    assert LN.build_head(dict(min_e=0.2)).min_e == 0.2 and LN.build_head({}).min_e is None
-    must_fail(JK.JTokenHead, min_e=1.5)
-    print("min_e: off = the head bit for bit and the same state keys, on = the head with the weak tokens invalid (same wiring and types of the others), thinned tokens are no source and read as none, build_head: ok")
-
-
 def _gap_brute(p, cand, pnone, chord, cfg):
     """`close_gaps` on one frame by hand: p (2, K, K) link probabilities per class, loops over every pair -> (2, K, K)"""
     K = cand.shape[-1]
@@ -395,6 +369,143 @@ def test_close_gaps():
     assert LN.build_head(dict(close_gaps=cfg)).gap == cfg and LN.build_head({}).gap is None
     must_fail(JK.JTokenHead, gap=dict(lo=0.05))
     print("close_gaps: a gap between an open end and an open start is closed (best candidate only; not below the lower threshold, not at a source with a successor, not over a dropped node), rows stay distributions, never falls with the pair's own probability, brute force on a random graph, head off = bit for bit, skip then gaps, build_head: ok")
+
+
+def _fork_brute(p, cand, pt, chord, cfg):
+    """`fork_gate` on one frame by hand: p (2, K, K) link probabilities per class, pt (K, 7), loops over every pair -> (2, K, K)"""
+    K = cand.shape[-1]
+    sg = lambda x: 1 / (1 + np.exp(-np.clip(x, -60, 60)))  # noqa: E731
+    P, any_ = (p * cand).sum(0), cand.any(0)
+    k = sg((cfg["keep"] - pt[:, 0]) / cfg["sigma"])
+    s = np.array([[P[i, j] / (cfg["t_long"] if chord[i, j] > 8 else cfg["t_short"]) * any_[i, j] * k[i] * k[j] for j in range(K)] for i in range(K)])
+    out = np.zeros_like(p)
+    for i in range(K):
+        for j in range(K):
+            m = max(s[i, n] for n in range(K) if n != j)
+            w = sg((m - s[i, j]) / cfg["sigma_rel"]) * sg((m - 1) / cfg["sigma_rel"])
+            f = sg((pt[i, JK.FORK] - cfg["tau"]) / cfg["sigma_f"])
+            out[:, i, j] = p[:, i, j] * cand[:, i, j] * (1 - (1 - f) * w)
+    return out
+
+
+def test_fork_gate():
+    """E423 the soft fork gate: a source that is no fork keeps its strongest successor and loses a further delivered one (its mass to none); a fork keeps both; one successor is never touched; rows stay distributions; never
+    falling in a pair's own probability; the type softmax gets the gradient; brute force on a random graph; the head applies it after the other layers and builds it from its args"""
+    cfg = dict(sigma=0.03, sigma_rel=0.05, tau=0.05, sigma_f=0.01, t_short=0.3, t_long=0.2, keep=0.6)
+    K = 4
+    p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
+    for (i, j), v in {(0, 1): 0.55, (0, 2): 0.40, (1, 3): 0.45}.items():
+        p[0, 0, i, j], cand[0, 0, i, j] = v, True
+    logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1)
+    chord = torch.full((1, K, K), 2.0)
+
+    def types(fork):
+        pt = torch.zeros(1, K, 7)
+        pt[..., 1], pt[..., 2] = 1 - fork, fork
+        return pt
+
+    lone = JK.fork_gate(logp, cand, types(0.0), chord, cfg).exp()[0, 0]
+    assert float(lone[0, 1]) > 0.54 and float(lone[0, 2]) < 0.05 and abs(float(lone[1, 3]) - 0.45) < 1e-3, ("the second successor of a source that is no fork goes, the others stay", lone[0], lone[1])
+    assert torch.allclose(lone.sum(-1), torch.ones(K), atol=1e-5) and abs(float(lone[0, K]) - (1 - float(lone[0, :K].sum()))) < 1e-5, "the removed mass goes to none"
+    forked = JK.fork_gate(logp, cand, types(0.5), chord, cfg).exp()[0, 0]
+    assert abs(float(forked[0, 1]) - 0.55) < 1e-3 and abs(float(forked[0, 2]) - 0.40) < 1e-3, ("a fork keeps both", forked[0])
+    pt = types(0.05).requires_grad_(True)
+    JK.fork_gate(logp, cand, pt, chord, cfg).exp()[0, 0, 0, 2].backward()
+    assert float(pt.grad[0, 0, JK.FORK]) > 0, "the fork probability of the source raises its second successor"
+    last = -1.0
+    for x in (0.05, 0.2, 0.29, 0.31, 0.4, 0.5, 0.54, 0.56, 0.6):
+        q = p.clone()
+        q[0, 0, 0, 2], q[0, 0, 0, 1] = x, 0.38
+        lq = torch.cat([q.clamp_min(1e-30).log(), (1 - q.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1)
+        got = float(JK.fork_gate(lq, cand, types(0.0), chord, cfg).exp()[0, 0, 0, 2])
+        assert got >= last - 1e-6, ("the output falls when the pair's own probability rises", x, got, last)
+        last = got
+    rng = np.random.RandomState(6)
+    K = 7
+    cand = torch.zeros(1, 2, K, K, dtype=torch.bool)
+    pick = rng.rand(K, K)
+    cand[0, 0] = torch.from_numpy((pick < 0.4) & ~np.eye(K, dtype=bool))
+    cand[0, 1] = torch.from_numpy((pick > 0.7) & ~np.eye(K, dtype=bool))
+    chord = torch.from_numpy(np.where(pick > 0.7, 12.0, 3.0).astype(np.float32))[None]
+    soft = dict(cfg, sigma=0.2, sigma_rel=0.5, tau=0.2, sigma_f=0.1)
+    logp = JK.wiring_logp(torch.from_numpy(rng.randn(1, 2, K, K).astype(np.float32) * 2), torch.from_numpy(rng.randn(1, 2, K).astype(np.float32)), cand)
+    pt = torch.from_numpy(rng.dirichlet(np.ones(7), (1, K)).astype(np.float32))
+    got = JK.fork_gate(logp, cand, pt, chord, soft).exp()[0, :, :, :K].numpy()
+    p = (logp.exp()[0, :, :, :K] * cand[0]).numpy().astype(np.float64)
+    want = _fork_brute(p, cand[0].numpy(), pt[0].numpy().astype(np.float64), chord[0].numpy(), soft)
+    assert np.abs(got - want)[cand[0].numpy()].max() < 1e-5 and np.abs(want - p).max() > 1e-3, np.abs(got - want).max()
+    torch.manual_seed(13)
+    plain = JK.JTokenHead().eval()
+    torch.manual_seed(13)
+    gated = JK.JTokenHead(fork=cfg).eval()
+    assert list(plain.state_dict()) == list(gated.state_dict())
+    b = JK.synthetic_batch(2, 64, seed=5)
+    with torch.no_grad():
+        o0, o1 = plain(b), gated(b)
+    assert torch.allclose(o1["logp"], JK.fork_gate(o0["logp"], o0["cand"], o0["types"].softmax(-1), o0["chord"], cfg)) and "pos" not in o1, "the head applies the layer to its final wiring"
+    assert LN.build_head(dict(fork_gate=cfg)).fork == cfg and LN.build_head({}).fork is None
+    must_fail(JK.JTokenHead, fork=dict(tau=0.05))
+    print("fork_gate: a second successor only at a fork (mass to none), one successor untouched, rows stay distributions, never falls with the pair's own probability, gradient to the fork probability, brute force on a random graph, head, build_head: ok")
+
+
+def test_refine_positions():
+    """E424 the soft position layer: straight lanes and circular arcs are fixed points; a zig-zag shrinks; only delivered short links move nodes; the offset is scaled by `gain` inside the cell; padding stays; gradients reach positions and
+    the wiring; the head writes `pos`, the dump record carries it and the delivered graph is written from it"""
+    cfg = dict(gain=1.0, lam=1.0, sigma=0.03, t_short=0.3, keep=0.6)
+    K = 8
+
+    def chain(pos, dirv, p_link=0.9, long=False):
+        p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
+        for i in range(K - 2):
+            p[0, int(long), i, i + 1], cand[0, int(long), i, i + 1] = p_link, True
+        logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1)
+        valid = torch.arange(K)[None] < K - 1
+        return JK.refine_positions(pos[None], dirv[None], valid, logp, cand, torch.zeros(1, K), cfg)[0]
+
+    x = torch.arange(K, dtype=torch.float32) * 2.0 - 7.3
+    straight, up = torch.stack([torch.full((K,), 0.4), x], -1), torch.tensor([[0.0, 1.0]]).expand(K, 2)
+    assert (chain(straight, up) - straight).abs().max() < 1e-5, "a straight lane stays"
+    th = torch.arange(K, dtype=torch.float32) * 0.15
+    arc, tan = 15.0 * torch.stack([th.cos(), th.sin()], -1), torch.stack([-th.sin(), th.cos()], -1)
+    assert (chain(arc, tan) - arc).abs().max() < 1e-4, ("a circular arc stays", (chain(arc, tan) - arc).abs().max())
+    zig = straight.clone()
+    zig[:, 0] += 0.3 * (-1.0) ** torch.arange(K)
+    out = chain(zig, up)
+    amp = lambda q: float((q[1:K - 2, 0] - 0.4).abs().mean())  # noqa: E731
+    assert amp(out) < 0.4 * amp(zig) and (out[:, 1] - zig[:, 1]).abs().max() < 1e-5 and torch.equal(out[K - 1], zig[K - 1]), ("a zig-zag shrinks sideways; the padding token stays", amp(zig), amp(out))
+    assert (chain(zig, up, p_link=0.01) - zig).abs().max() < 1e-4 and (chain(zig, up, long=True) - zig).abs().max() < 1e-6, "an undelivered or a long link moves nothing"
+    node = torch.tensor([[1.4, 1.0], [-0.2, 3.9]])                            # offsets (0.4, 0) in the cell [0, 2) x [0, 2) and (-1.2 + 1, ..) in its cell
+    none = torch.zeros(1, 2, 2, 2, dtype=torch.bool)
+    lp = torch.cat([torch.full((1, 2, 2, 2), -69.0), torch.zeros(1, 2, 2, 1)], -1)
+    got = JK.refine_positions(node[None], up[None, :2], torch.ones(1, 2, dtype=torch.bool), lp, none, torch.zeros(1, 2), dict(cfg, gain=3.0))[0]
+    centre = torch.tensor([[1.0, 1.0], [-1.0, 3.0]])
+    assert torch.allclose(got, centre + (3.0 * (node - centre)).clamp(-1, 1), atol=1e-5) and torch.allclose(got[0], torch.tensor([2.0, 1.0]), atol=1e-5), ("the offset is scaled and stays inside the cell", got)
+    pos = (zig[None] + 0.0).requires_grad_(True)
+    p, cand = torch.zeros(1, 2, K, K), torch.zeros(1, 2, K, K, dtype=torch.bool)
+    for i in range(K - 2):
+        p[0, 0, i, i + 1], cand[0, 0, i, i + 1] = 0.31, True
+    logp = torch.cat([p.clamp_min(1e-30).log(), (1 - p.sum(-1, keepdim=True)).clamp_min(1e-30).log()], -1).requires_grad_(True)
+    JK.refine_positions(pos, up[None], torch.ones(1, K, dtype=torch.bool), logp, cand, torch.zeros(1, K), cfg)[..., 0].square().sum().backward()
+    assert float(pos.grad.abs().sum()) > 0 and float(logp.grad.abs().sum()) > 0, "gradients reach positions and wiring"
+    torch.manual_seed(13)
+    plain = JK.JTokenHead().eval()
+    torch.manual_seed(13)
+    moved = JK.JTokenHead(refine=dict(cfg, gain=1.2)).eval()
+    b = JK.synthetic_batch(2, 64, seed=5)
+    with torch.no_grad():
+        o0, o1 = plain(b), moved(b)
+    assert torch.equal(o0["logp"], o1["logp"]) and "pos" not in o0 and o1["pos"].shape == b["pos"].shape and torch.isfinite(o1["pos"]).all() and (o1["pos"] - b["pos"])[b["valid"]].abs().max() > 1e-3
+    assert torch.equal(o1["pos"][~b["valid"]], b["pos"][~b["valid"]])
+    cell = lambda q: (((q[:, 0] + 50) // 2) * 50 + (q[:, 1] + 50) // 2).astype(np.int64)  # noqa: E731
+    toks = [dict(pos=b["pos"][i].numpy(), dirv=b["dirv"][i].numpy(), e_p=b["e"][i].numpy(), flags_p=b["flags"][i].numpy(), s_p=b["s"][i].numpy(), cell=cell(b["pos"][i].numpy()), valid=b["valid"][i].numpy()) for i in range(2)]
+    recs = RO.batch_dump(o1, dict(token=["a", "b"], row=[0, 1], tokens_np=toks))
+    graph = RO.graph(toks[0], recs[0], toks[0]["valid"], RO.Decode(link_thr=0.05, keep_thr=0.99, none_gate=False))
+    want = np.asarray(recs[0]["pos"], float)[toks[0]["valid"] & (recs[0]["pnone"] < np.float32(0.99))]
+    assert len(want) and np.array_equal(graph["nodes"]["pos"], want), "the delivered graph is written from the refined positions"
+    assert "pos" not in RO.batch_dump(o0, dict(token=["a", "b"], row=[0, 1], tokens_np=toks))[0], "a head without the layer writes the records of before"
+    assert LN.build_head(dict(refine_positions=cfg)).refine == cfg and LN.build_head({}).refine is None
+    must_fail(JK.JTokenHead, refine=dict(gain=1.2))
+    print("refine_positions: straight lanes and arcs stay, a zig-zag shrinks, only delivered short links move nodes, the offset scaled inside its cell, gradients, head / dump / graph carry the refined positions: ok")
 
 
 def test_wiring_logp():
@@ -1013,7 +1124,7 @@ def test_champion():
           f"the champion recipe: first loss {got[0]:.6f}, last {got[1]:.6f}, the log row and the weights as recorded; {_twin_step()}: ok")
 
 
-TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_min_e, test_close_gaps, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options,
+TESTS = [test_likelihood, test_none_weight, test_skip_suppress, test_close_gaps, test_fork_gate, test_refine_positions, test_wiring_logp, test_decode, test_head, test_key_bias, test_writer_free, test_overfit, test_trainer, test_arch_options,
          test_live_inputs, test_head_seed, test_champion]
 if __name__ == "__main__":
     want = [n if n.startswith("test_") else "test_" + n for n in sys.argv[1:]]

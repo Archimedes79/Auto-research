@@ -56,11 +56,13 @@ def batch_dump(out, b):
     npy = lambda t: t.detach().cpu().numpy()  # noqa: E731
     pt, p, cand, longm, scale, none_cls = (npy(x) for x in (pr["pt"], pr["p"], pr["cand"], pr["longm"], out["scale"].float(), out["logp"][..., K].float().exp()))
     keep, lrec = npy(rec["keep"]), npy(rec["link"])
+    pos = npy(out["pos"].float()) if "pos" in out else None                   # the head's refined node positions (`jtoken.refine_positions`)
     frames = []
     for i in range(len(b["token"])):
         cs, cd = np.nonzero((p[i] >= KEEP_P) & cand[i])
         frames.append(dict(token=b["token"][i], row=int(b["row"][i]), cell=np.asarray(b["tokens_np"][i]["cell"], np.int16), pnone=pt[i, :, 0].astype(np.float32), ptype=pt[i].astype(np.float16), keep=keep[i],
-                           none_cls=none_cls[i].astype(np.float32), cand=cand_of(cs, cd, p[i], longm[i], scale[i]), rec=links_of(lrec[i], p[i], longm[i], scale[i])))
+                           none_cls=none_cls[i].astype(np.float32), cand=cand_of(cs, cd, p[i], longm[i], scale[i]), rec=links_of(lrec[i], p[i], longm[i], scale[i]),
+                           **({} if pos is None else dict(pos=pos[i].astype(np.float32)))))
     return frames
 
 
@@ -83,10 +85,12 @@ def node_e(pnone, keep_thr=KEEP_THR):
 
 
 def frame_prediction(tokens, f, decode, keep_thr=KEEP_THR):
-    """the qformat prediction of one frame from its tokens (`tokens_np`) and its dump frame: kept = f['keep'] (the head's p_none < keep_thr), e = `node_e` (1 - p_none at the record's keep_thr 0.5), the links of the decode (p = 1).
+    """the qformat prediction of one frame from its tokens (`tokens_np`) and its dump frame (a record with `pos`: the head's refined positions stand for the tokens'): kept = f['keep'] (the head's p_none < keep_thr), e = `node_e` (1 - p_none at the record's keep_thr 0.5), the links of the decode (p = 1).
     Asserted on every frame: the nodes are the kept tokens' own (`check_writer`), e = `node_e` of the dump's p_none, the links are exactly the dump's links of the decode between kept nodes (renumbered). The real no-GT guarantee is
     upstream: the head reads only `jtoken.INPUTS` (test_jtoken.py)"""
     lk = dict(f[decode], p=np.ones(len(f[decode]["src"])))
+    if "pos" in f:
+        tokens = dict(tokens, pos=f["pos"])
     pred = check_writer(LP.to_pred(tokens, f["keep"], node_e(f["pnone"], keep_thr), lk), tokens, f["keep"])
     keep, idx = np.asarray(f["keep"], bool), np.flatnonzero(f["keep"])
     assert np.array_equal(pred["nodes"]["e"], node_e(f["pnone"], keep_thr)[idx]), f"e is not min(1 - p_none + {keep_thr} - 0.5, 1) of the dump"
