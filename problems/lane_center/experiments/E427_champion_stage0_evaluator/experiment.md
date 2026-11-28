@@ -36,4 +36,8 @@ checkpoint hash or ground-truth signature, another parameter count or peak memor
 The time is measured and reported; it refutes nothing (a time with `cost.quiet` = 0 is not compared).
 
 ## Conclusion
-After `research judge`: the numbers per seed with split and denominator, equal or not to E426.champ.
+MEASURED (`dc3c014b`), VAL, 873 frames in 22 scenes, evaluator d2dfebb49c91. The hypothesis holds: per seed all 18 graph numbers and all
+22 per-scene scores equal E426.champ exactly (topo F1 0.668172 / 0.681281), on the same checkpoints (e9c749d6b3879794 / 56c5c8d951bbdef4)
+and ground truth (5a92e34113f3), with 2.323143 M parameters and 88.91 MB peak memory. Time (reported, not compared): median 21.22 / 18.60 ms
+against E426's 18.97 / 18.64 ms, both quiet; seed 0's 2.3 ms more is inside the spread E426's card names for two runs of one computation.
+E427.champ is the champion run a new lane experiment compares with on this evaluator.
